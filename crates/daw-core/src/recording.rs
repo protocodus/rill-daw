@@ -227,8 +227,8 @@ impl Project {
             "Record MIDI onto a MIDI track"
         );
         ensure!(
-            matches!(&clip.content, ClipContent::Midi { notes } if !notes.is_empty()),
-            "A MIDI recording must contain notes"
+            matches!(&clip.content, ClipContent::Midi { notes } if !notes.is_empty() || !clip.midi_events.is_empty()),
+            "A MIDI recording must contain notes or controller events"
         );
         ensure!(
             clip.link_group.is_none() && clip.audio_take.is_none(),

@@ -1,11 +1,11 @@
-use crate::meter::{ChannelMeter, ChannelMeters, release_factor};
+use crate::meter::{ChannelMeter, ChannelMeters};
 use crate::quality::{self, RenderOptions};
 use anyhow::{Context, Result, bail, ensure};
 use daw_core::{
     AudioData, AutomationLane, AutomationParameter, ClipContent, Effect, FadeCurve, Instrument,
     Project, TrackKind,
 };
-use daw_plugins::{MidiMessage, ProcessingMode, VstEffect, VstInstrument};
+use daw_plugins::{MidiMessage, ProcessingMode, StereoBusInput, VstEffect, VstInstrument};
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
@@ -30,6 +30,10 @@ mod audio_schedule;
 #[path = "live_edit.rs"]
 pub(crate) mod live_edit;
 use live_edit::LiveEditContext;
+
+#[path = "freeze.rs"]
+mod freeze;
+pub use freeze::{FreezeRenderOutput, FreezeRenderReport, FreezeRenderRequest, freeze_track_wav};
 
 #[cfg(test)]
 #[path = "live_edit_tests.rs"]
@@ -59,6 +63,17 @@ mod audio_overlap_tests;
 #[path = "midi_loop_tests.rs"]
 mod midi_loop_tests;
 
+#[cfg(test)]
+#[path = "midi2_render_tests.rs"]
+mod midi2_render_tests;
+#[cfg(test)]
+#[path = "multi_io_master_tests.rs"]
+mod multi_io_master_tests;
+
+#[path = "midi_expression.rs"]
+pub(crate) mod midi_expression;
+use midi_expression::{PreciseNote, Runtime as ExpressionRuntime};
+
 pub(crate) const BLOCK: usize = 256;
 
 #[derive(Clone, Copy)]
@@ -69,6 +84,7 @@ struct ScheduledNote {
     end: u64,
     pitch: u8,
     velocity: u8,
+    precise: Option<PreciseNote>,
 }
 
 #[derive(Clone, Copy)]
@@ -464,7 +480,184 @@ enum Insert {
         id: u64,
         effect: Box<VstEffect>,
         parameters: Vec<PluginAutomation>,
+        inputs: Vec<AuxInput>,
+        arrival_latency: u32,
+        main_delay: CompensationDelay,
     },
+}
+
+/// Every selected native input pair has one retained, double-precision sum.
+/// Multiple sends to the same pair are combined before its single f32 conversion.
+struct AuxInput {
+    bus: usize,
+    first_channel: usize,
+    left: Vec<f32>,
+    right: Vec<f32>,
+    mix_left: Vec<f64>,
+    mix_right: Vec<f64>,
+}
+
+impl AuxInput {
+    fn new(bus: usize, first_channel: usize) -> Self {
+        Self {
+            bus,
+            first_channel,
+            left: vec![0.0; BLOCK],
+            right: vec![0.0; BLOCK],
+            mix_left: vec![0.0; BLOCK],
+            mix_right: vec![0.0; BLOCK],
+        }
+    }
+
+    fn clear(&mut self, count: usize) {
+        self.mix_left[..count].fill(0.0);
+        self.mix_right[..count].fill(0.0);
+    }
+
+    fn prepare(&mut self, count: usize) {
+        for index in 0..count {
+            self.left[index] = self.mix_left[index] as f32;
+            self.right[index] = self.mix_right[index] as f32;
+        }
+    }
+
+    fn borrowed(&self, count: usize) -> StereoBusInput<'_> {
+        StereoBusInput {
+            bus: self.bus,
+            first_channel: self.first_channel,
+            left: &self.left[..count],
+            right: &self.right[..count],
+        }
+    }
+}
+
+fn aux_inputs(
+    routes: &[daw_core::PluginInputRoute],
+    layout: &daw_plugins::AudioBusLayout,
+    main: Option<usize>,
+) -> Result<Vec<AuxInput>> {
+    let mut inputs = Vec::<AuxInput>::new();
+    for route in routes {
+        let bus = route.bus as usize;
+        let first_channel = route.first_channel as usize;
+        let native = layout
+            .inputs
+            .get(bus)
+            .context("Plug-in input bus is unavailable")?;
+        ensure!(
+            native.active && first_channel < native.channel_count,
+            "Plug-in input channel pair is unavailable"
+        );
+        ensure!(
+            main != Some(bus) || first_channel != 0,
+            "Additional input routing cannot replace an insert's main input"
+        );
+        if !inputs
+            .iter()
+            .any(|input| input.bus == bus && input.first_channel == first_channel)
+        {
+            inputs.push(AuxInput::new(bus, first_channel));
+        }
+    }
+    ensure!(
+        inputs.len() <= 128,
+        "Plug-in has too many routed input pairs"
+    );
+    Ok(inputs)
+}
+
+fn unmuted_channel(project: &Project, track: &daw_core::Track) -> bool {
+    if track.mute {
+        return false;
+    }
+    let mut parent = track.parent_folder;
+    while let Some(folder) = parent.and_then(|id| project.track(id)) {
+        if folder.mute {
+            return false;
+        }
+        parent = folder.parent_folder;
+    }
+    true
+}
+
+/// Solo selects audible channels, while sidechain feeds and raw instrument
+/// owners may still need DSP without leaking their ordinary output into Master.
+struct ProcessingAdmission {
+    processors: HashSet<u64>,
+    channels: HashSet<u64>,
+}
+
+fn processing_tracks(project: &Project, audible: &HashSet<u64>) -> ProcessingAdmission {
+    let mut channels = audible.clone();
+    if !project.master.mute {
+        channels.insert(0);
+    }
+    let mut processors = channels.clone();
+    loop {
+        let before = (processors.len(), channels.len());
+        for target in project.channels() {
+            if !processors.contains(&target.id) {
+                continue;
+            }
+            if let Some(output) = target.instrument_output {
+                processors.insert(output.track);
+            }
+            let process_channel = channels.contains(&target.id);
+            for input in target.instrument_inputs.iter().chain(
+                target
+                    .inserts
+                    .iter()
+                    .filter(|slot| process_channel && slot.enabled)
+                    .flat_map(|slot| &slot.inputs),
+            ) {
+                if let Some(source) = project.track(input.source_track)
+                    && unmuted_channel(project, source)
+                {
+                    channels.insert(source.id);
+                    processors.insert(source.id);
+                }
+            }
+            if process_channel && target.id != 0 && !audible.contains(&target.id) {
+                for source in &project.tracks {
+                    if unmuted_channel(project, source)
+                        && (source.output_bus == Some(target.id)
+                            || source.sends.iter().any(|send| {
+                                send.target_bus == target.id
+                                    && send_active(project, source.id, send)
+                            }))
+                    {
+                        channels.insert(source.id);
+                        processors.insert(source.id);
+                    }
+                }
+            }
+        }
+        if (processors.len(), channels.len()) == before {
+            return ProcessingAdmission {
+                processors,
+                channels,
+            };
+        }
+    }
+}
+
+struct RawOutput {
+    bus: usize,
+    first_channel: usize,
+    left: Vec<f32>,
+    right: Vec<f32>,
+}
+
+#[derive(Clone, Copy)]
+enum RouteKind {
+    Audio,
+    PluginInput { effect: Option<usize>, input: usize },
+    InstrumentOutput { output: usize },
+}
+
+struct FreezeTap {
+    delay: CompensationDelay,
+    frames: Vec<[f32; 2]>,
 }
 
 struct Route {
@@ -473,6 +666,9 @@ struct Route {
     pre_fader: bool,
     delay: CompensationDelay,
     output: Vec<[f32; 2]>,
+    kind: RouteKind,
+    signal_latency: u32,
+    send_bus: Option<u64>,
 }
 
 pub(crate) fn audible_tracks(project: &Project, order: &[u64]) -> HashSet<u64> {
@@ -548,8 +744,10 @@ struct RenderTrack {
     note_order: Arc<Vec<usize>>,
     event_cursor: usize,
     processor: Processor,
+    expression: ExpressionRuntime,
     midi: Vec<MidiMessage>,
     chase: Vec<Event>,
+    chase_delay: u32,
     active_notes: Vec<ScheduledNote>,
     active_indices: HashMap<NoteKey, usize>,
     live_midi: Vec<MidiMessage>,
@@ -557,6 +755,7 @@ struct RenderTrack {
     right: Vec<f32>,
     mix_left: Vec<f64>,
     mix_right: Vec<f64>,
+    input_gain: AutomatedValue,
     gain: AutomatedValue,
     pan: AutomatedValue,
     instrument_automation: Vec<PluginAutomation>,
@@ -564,9 +763,19 @@ struct RenderTrack {
     latency: u32,
     input_latency: u32,
     source_latency: u32,
+    source_arrival: u32,
+    instrument_input_latency: u32,
+    instrument_inputs: Vec<AuxInput>,
+    raw_outputs: Vec<RawOutput>,
+    post_fader: Vec<[f32; 2]>,
+    freeze_tap: Option<FreezeTap>,
     tail_samples: u64,
     plugin_failed: bool,
+    channel_failed: bool,
+    processing_channel: bool,
+    processing_frames: usize,
     enabled: bool,
+    channel_active: bool,
     inserts: Vec<Insert>,
     insert_left: Vec<f32>,
     insert_right: Vec<f32>,
@@ -584,7 +793,6 @@ struct BlockContext {
     tempo: f64,
     timeline: bool,
     live_input: bool,
-    meter_decay: f32,
 }
 
 fn finish_processing(track: &mut RenderTrack, result: Result<()>, tolerate: bool) -> Result<u64> {
@@ -592,7 +800,35 @@ fn finish_processing(track: &mut RenderTrack, result: Result<()>, tolerate: bool
         if !tolerate {
             return Err(error);
         }
-        track.plugin_failed = true;
+        if track.processing_channel {
+            // The shared instrument already rendered successfully. Only this
+            // channel's insert path failed; its independently mixed raw outputs
+            // must keep sounding, including the block which exposed the fault.
+            track.channel_failed = true;
+            track.channel_active = false;
+            let count = track.processing_frames;
+            track.left[..count].fill(0.0);
+            track.right[..count].fill(0.0);
+            track.post_fader[..count].fill([0.0; 2]);
+            if let Some(tap) = &mut track.freeze_tap {
+                tap.frames[..count].fill([0.0; 2]);
+            }
+            for route in &mut track.routes {
+                if let RouteKind::InstrumentOutput { output } = route.kind {
+                    for index in 0..count {
+                        route.output[index] = route.delay.process([
+                            track.raw_outputs[output].left[index],
+                            track.raw_outputs[output].right[index],
+                        ]);
+                    }
+                } else {
+                    route.delay.reset();
+                    route.output[..count].fill([0.0; 2]);
+                }
+            }
+        } else {
+            track.plugin_failed = true;
+        }
         track.pending_error = Some(format!(
             "Plugin processing failed on \"{}\"\n\nChannel: \"{}\" (ID {})\n{error:#}",
             track.name, track.name, track.id
@@ -643,6 +879,7 @@ impl RenderTrack {
         let start = context.start;
         let end = start + context.count as u64;
         self.midi.clear();
+        self.expression.messages.clear();
         // Driver clock resets can make a bounded input batch locally unordered.
         // Binary insertion retains equal-offset off/on articulation ordering.
         for index in 1..self.live_midi.len() {
@@ -668,32 +905,65 @@ impl RenderTrack {
                 event.offset -= context.count as u32;
             }
         }
-        if context.timeline {
+        if context.timeline && self.chase_delay < context.count as u32 {
             for event in self.chase.drain(..) {
-                self.midi.push(event.message(0));
+                if let Some(precise) = event.note.precise {
+                    self.expression.push(
+                        precise.channel,
+                        daw_plugins::ExpressiveMidiMessage {
+                            offset: self.chase_delay,
+                            data: precise.data(event.note.pitch, event.on),
+                        },
+                    );
+                } else {
+                    self.midi.push(event.message(self.chase_delay));
+                }
                 record_active_note(&mut self.active_notes, &mut self.active_indices, event);
             }
         }
+        self.chase_delay = self.chase_delay.saturating_sub(context.count as u32);
         while context.timeline
             && let Some(event) = self.events.get(self.event_cursor)
         {
-            if event.sample >= end {
+            let sample = event
+                .sample
+                .saturating_add(u64::from(self.instrument_input_latency));
+            if sample >= end {
                 break;
             }
-            self.midi
-                .push(event.message(event.sample.saturating_sub(start) as u32));
+            if let Some(precise) = event.note.precise {
+                self.expression.push(
+                    precise.channel,
+                    daw_plugins::ExpressiveMidiMessage {
+                        offset: sample.saturating_sub(start) as u32,
+                        data: precise.data(event.note.pitch, event.on),
+                    },
+                );
+            } else {
+                self.midi
+                    .push(event.message(sample.saturating_sub(start) as u32));
+            }
             record_active_note(&mut self.active_notes, &mut self.active_indices, *event);
             self.event_cursor += 1;
         }
         // Input events can land between sequencer events within this block.
         // Stable ordering preserves a retrigger's note-off/note-on edge order.
         merge_midi_events(&mut self.midi, live_count);
+        // Start/chase scheduled voices before their same-sample dimensions.
+        // Live batches already retain their own causal note/pressure ordering.
+        self.expression
+            .collect(context, self.instrument_input_latency);
+        midi_expression::sort_messages(&mut self.expression.messages);
     }
 
     fn process(&mut self, context: BlockContext) -> Result<()> {
         if !self.enabled || self.plugin_failed {
             return Ok(());
         }
+        // Failure containment must describe this invocation, including a panic
+        // at its entry, rather than the last successful block or seek prefill.
+        self.processing_channel = false;
+        self.processing_frames = context.count;
         #[cfg(test)]
         if let Some(observer) = &self.observer {
             observer(self.id);
@@ -707,25 +977,54 @@ impl RenderTrack {
         match &mut self.processor {
             Processor::None => {}
             Processor::Vst(plugin) => {
+                let position = start as i64 - i64::from(self.instrument_input_latency);
+                for input in &mut self.instrument_inputs {
+                    input.prepare(count);
+                }
+                let mut inputs = [StereoBusInput {
+                    bus: 0,
+                    first_channel: 0,
+                    left: &[],
+                    right: &[],
+                }; 128];
+                for (destination, input) in inputs.iter_mut().zip(&self.instrument_inputs) {
+                    *destination = input.borrowed(count);
+                }
                 let process = apply_plugin_automation(
                     &mut self.instrument_automation,
-                    start as f64 * beats_per_sample,
+                    position as f64 * beats_per_sample,
                     |id, value| plugin.set_parameter(id, value),
                 )
                 .and_then(|()| {
                     plugin.set_transport(
-                        start as i64,
-                        start as f64 * beats_per_sample,
+                        position,
+                        position as f64 * beats_per_sample,
                         context.tempo,
                         context.timeline,
                     )
                 })
                 .and_then(|()| {
-                    plugin.process(
+                    plugin.process_bus_inputs_expressive(
                         &self.midi,
+                        &self.expression.messages,
+                        &inputs[..self.instrument_inputs.len()],
+                        count,
+                    )?;
+                    plugin.copy_output_pair(
+                        plugin.main_output_bus(),
+                        0,
                         &mut self.left[..count],
                         &mut self.right[..count],
-                    )
+                    )?;
+                    for output in &mut self.raw_outputs {
+                        plugin.copy_output_pair(
+                            output.bus,
+                            output.first_channel,
+                            &mut output.left[..count],
+                            &mut output.right[..count],
+                        )?;
+                    }
+                    Ok(())
                 });
                 process.with_context(|| {
                     format!(
@@ -739,6 +1038,26 @@ impl RenderTrack {
                     self.mix_right[index] += f64::from(self.right[index]);
                 }
             }
+        }
+        self.processing_channel = true;
+        // A muted primary channel must not stop its independently mixed output
+        // children. Render the shared instrument once, then bypass only this
+        // channel's processing and ordinary routes.
+        if !self.channel_active {
+            for route in &mut self.routes {
+                if let RouteKind::InstrumentOutput { output } = route.kind {
+                    for index in 0..count {
+                        route.output[index] = route.delay.process([
+                            self.raw_outputs[output].left[index],
+                            self.raw_outputs[output].right[index],
+                        ]);
+                    }
+                }
+            }
+            if let Some(meter) = &self.meter {
+                meter.publish_audio(&self.post_fader[..count], context.sample_rate);
+            }
+            return Ok(());
         }
         if context.timeline {
             let first_segment = self
@@ -794,20 +1113,57 @@ impl RenderTrack {
         // Convert once after every source/bus contribution is accumulated.
         // Plug-in buffers and graph edges retain their f32 representation.
         for index in 0..count {
-            self.left[index] = self.mix_left[index] as f32;
-            self.right[index] = self.mix_right[index] as f32;
+            let position = if context.timeline {
+                start as i64 + index as i64 - i64::from(self.source_arrival)
+            } else {
+                start as i64
+            };
+            let gain = self
+                .input_gain
+                .next_value(position as f64 * beats_per_sample);
+            self.left[index] = self.mix_left[index] as f32 * gain;
+            self.right[index] = self.mix_right[index] as f32 * gain;
         }
-        let mut effect_latency = self.input_latency + self.source_latency;
         for insert in &mut self.inserts {
             match insert {
                 Insert::Vst {
-                    effect, parameters, ..
+                    effect,
+                    parameters,
+                    inputs,
+                    main_delay,
+                    arrival_latency,
+                    ..
                 } => {
                     let position = if context.timeline {
-                        start as i64 - effect_latency as i64
+                        start as i64 - i64::from(*arrival_latency)
                     } else {
                         start as i64
                     };
+                    for index in 0..count {
+                        let frame = main_delay.process([self.left[index], self.right[index]]);
+                        self.left[index] = frame[0];
+                        self.right[index] = frame[1];
+                    }
+                    for input in inputs.iter_mut() {
+                        input.prepare(count);
+                    }
+                    let mut borrowed = [StereoBusInput {
+                        bus: 0,
+                        first_channel: 0,
+                        left: &[],
+                        right: &[],
+                    }; 129];
+                    borrowed[0] = StereoBusInput {
+                        bus: effect
+                            .main_input_bus()
+                            .context("Effect lost its primary input bus")?,
+                        first_channel: 0,
+                        left: &self.left[..count],
+                        right: &self.right[..count],
+                    };
+                    for (destination, input) in borrowed[1..].iter_mut().zip(inputs.iter()) {
+                        *destination = input.borrowed(count);
+                    }
                     let process = apply_plugin_automation(
                         parameters,
                         position as f64 * beats_per_sample,
@@ -822,9 +1178,10 @@ impl RenderTrack {
                         )
                     })
                     .and_then(|()| {
-                        effect.process(
-                            &self.left[..count],
-                            &self.right[..count],
+                        effect.process_bus_inputs(&borrowed[..inputs.len() + 1], count)?;
+                        effect.copy_output_pair(
+                            effect.main_output_bus(),
+                            0,
                             &mut self.insert_left[..count],
                             &mut self.insert_right[..count],
                         )
@@ -838,15 +1195,16 @@ impl RenderTrack {
                     })?;
                     std::mem::swap(&mut self.left, &mut self.insert_left);
                     std::mem::swap(&mut self.right, &mut self.insert_right);
-                    effect_latency += effect.latency_samples();
                 }
             }
         }
-        let mut channel_peaks = [0.0_f32; 2];
         for index in 0..count {
             let delayed = self.delay.process([self.left[index], self.right[index]]);
             self.left[index] = delayed[0];
             self.right[index] = delayed[1];
+            if let Some(tap) = &mut self.freeze_tap {
+                tap.frames[index] = tap.delay.process(delayed);
+            }
             let position = if context.timeline {
                 start as i64 + index as i64 - self.latency as i64
             } else {
@@ -859,12 +1217,10 @@ impl RenderTrack {
             // fader factors so multiple sends evaluate the lane only once.
             self.insert_left[index] = gain * (1.0 - pan.max(0.0));
             self.insert_right[index] = gain * (1.0 + pan.min(0.0));
-            if self.meter.is_some() {
-                channel_peaks[0] =
-                    channel_peaks[0].max((self.left[index] * self.insert_left[index]).abs());
-                channel_peaks[1] =
-                    channel_peaks[1].max((self.right[index] * self.insert_right[index]).abs());
-            }
+            self.post_fader[index] = [
+                self.left[index] * self.insert_left[index],
+                self.right[index] * self.insert_right[index],
+            ];
         }
         for route in &mut self.routes {
             for index in 0..count {
@@ -883,14 +1239,21 @@ impl RenderTrack {
                         gain * self.insert_right[index],
                     ]
                 };
-                route.output[index] = route.delay.process([
-                    self.left[index] * factors[0],
-                    self.right[index] * factors[1],
-                ]);
+                let frame = match route.kind {
+                    RouteKind::InstrumentOutput { output } => [
+                        self.raw_outputs[output].left[index],
+                        self.raw_outputs[output].right[index],
+                    ],
+                    _ => [
+                        self.left[index] * factors[0],
+                        self.right[index] * factors[1],
+                    ],
+                };
+                route.output[index] = route.delay.process(frame);
             }
         }
         if let Some(meter) = &self.meter {
-            meter.publish(channel_peaks, context.meter_decay);
+            meter.publish_audio(&self.post_fader[..count], context.sample_rate);
         }
         Ok(())
     }
@@ -917,7 +1280,7 @@ pub(crate) struct Renderer {
     preview: bool,
     audition: Option<(u64, u8, u8)>,
     midi_input_notes: Vec<(u64, u8, u8)>,
-    metering: bool,
+    expressive_input: Vec<(u64, u8, u8, daw_plugins::ExpressiveMidiData)>,
     live_edit_context: Arc<LiveEditContext>,
 }
 
@@ -932,6 +1295,7 @@ impl Renderer {
             RenderOptions::default(),
             None,
             ProcessingMode::Realtime,
+            None,
         )
     }
 
@@ -950,6 +1314,7 @@ impl Renderer {
             options,
             None,
             ProcessingMode::Realtime,
+            None,
         )
     }
 
@@ -968,6 +1333,7 @@ impl Renderer {
             options,
             Some(cancel),
             ProcessingMode::Realtime,
+            None,
         )
     }
 
@@ -985,6 +1351,7 @@ impl Renderer {
             options,
             None,
             ProcessingMode::Offline,
+            None,
         )
     }
 
@@ -1002,6 +1369,7 @@ impl Renderer {
             options,
             Some(cancel),
             ProcessingMode::Offline,
+            None,
         )
     }
 
@@ -1021,6 +1389,7 @@ impl Renderer {
             RenderOptions::default(),
             None,
             ProcessingMode::Realtime,
+            None,
         )
     }
 
@@ -1038,9 +1407,11 @@ impl Renderer {
             RenderOptions::default(),
             None,
             ProcessingMode::Offline,
+            None,
         )
     }
 
+    #[allow(clippy::too_many_arguments)] // Optional freeze taps share the same graph preparation and PDC path.
     fn new_inner(
         project: &Project,
         sample_rate: u32,
@@ -1049,6 +1420,7 @@ impl Renderer {
         options: RenderOptions,
         cancel: Option<&AtomicBool>,
         processing_mode: ProcessingMode,
+        freeze_capture: Option<&[u64]>,
     ) -> Result<Self> {
         let check_cancelled = || {
             ensure!(
@@ -1069,8 +1441,11 @@ impl Renderer {
         );
         let samples_per_beat = sample_rate as f64 * 60.0 / project.tempo;
         let to_sample = |beat: f64| (beat.max(0.0) * samples_per_beat).round() as u64;
-        let order = project.routing_order()?;
+        let mut order = project.routing_order()?;
         let audible = audible_tracks(project, &order);
+        order.push(0);
+        let admission = processing_tracks(project, &audible);
+        let needed = &admission.processors;
         let indices: HashMap<u64, usize> = order
             .iter()
             .enumerate()
@@ -1086,14 +1461,15 @@ impl Renderer {
             let track = project
                 .track(*id)
                 .context("Routing refers to a missing track")?;
-            let enabled = audible.contains(id);
+            let enabled = needed.contains(id);
+            let channel_active = admission.channels.contains(id);
             let mut local_tail = 0_u64;
             ensure!(
                 track.latency_samples <= sample_rate * 10,
                 "Track processing latency exceeds ten seconds"
             );
             for clip in &track.clips {
-                if clip.is_take_source() {
+                if clip.is_take_source() || clip.muted {
                     continue;
                 }
                 end_sample = end_sample.max(to_sample(clip.start + clip.length));
@@ -1115,6 +1491,8 @@ impl Renderer {
                 &mut audio_cache,
                 &mut cache_bytes,
             )?;
+            let mut instrument_inputs = Vec::new();
+            let mut raw_outputs = Vec::new();
             let (processor, plugin_latency) = match &track.instrument {
                 Instrument::Vst3 { path, class_id } if enabled && track.kind == TrackKind::Midi => {
                     check_cancelled()?;
@@ -1133,6 +1511,58 @@ impl Renderer {
                     for parameter in &track.instrument_parameters {
                         check_cancelled()?;
                         plugin.set_parameter(parameter.id, parameter.value)?;
+                    }
+                    let input_buses: Vec<_> = track
+                        .instrument_inputs
+                        .iter()
+                        .map(|route| route.bus as usize)
+                        .collect();
+                    let selected_outputs: Vec<_> = project
+                        .tracks
+                        .iter()
+                        .filter(|child| needed.contains(&child.id))
+                        .filter_map(|child| {
+                            child
+                                .instrument_output
+                                .filter(|output| output.track == track.id)
+                        })
+                        .collect();
+                    ensure!(
+                        selected_outputs.len() <= 128,
+                        "Instrument has too many selected output pairs"
+                    );
+                    let output_buses: Vec<_> = selected_outputs
+                        .iter()
+                        .map(|output| output.bus as usize)
+                        .collect();
+                    plugin.configure_audio_buses(&input_buses, &output_buses)?;
+                    let layout = plugin.audio_bus_layout();
+                    instrument_inputs = aux_inputs(&track.instrument_inputs, &layout, None)?;
+                    for output in selected_outputs {
+                        let bus = output.bus as usize;
+                        let first_channel = output.first_channel as usize;
+                        ensure!(
+                            bus != plugin.main_output_bus() || first_channel != 0,
+                            "Instrument output channel duplicates its primary output"
+                        );
+                        let native = layout
+                            .outputs
+                            .get(bus)
+                            .context("Instrument output bus is unavailable")?;
+                        ensure!(
+                            native.active && first_channel < native.channel_count,
+                            "Instrument output channel pair is unavailable"
+                        );
+                        if !raw_outputs.iter().any(|output: &RawOutput| {
+                            output.bus == bus && output.first_channel == first_channel
+                        }) {
+                            raw_outputs.push(RawOutput {
+                                bus,
+                                first_channel,
+                                left: vec![0.0; BLOCK],
+                                right: vec![0.0; BLOCK],
+                            });
+                        }
                     }
                     check_cancelled()?;
                     let latency = plugin.latency_samples();
@@ -1154,7 +1584,7 @@ impl Renderer {
             let mut latency = track.latency_samples.saturating_add(plugin_latency);
             for slot in &track.inserts {
                 check_cancelled()?;
-                if !enabled || !slot.enabled {
+                if !enabled || !channel_active || !slot.enabled {
                     continue;
                 }
                 inserts.push(match &slot.effect {
@@ -1177,6 +1607,14 @@ impl Renderer {
                             check_cancelled()?;
                             effect.set_parameter(parameter.id, parameter.value)?;
                         }
+                        let input_buses: Vec<_> =
+                            slot.inputs.iter().map(|route| route.bus as usize).collect();
+                        effect.configure_audio_buses(&input_buses, &[])?;
+                        let inputs = aux_inputs(
+                            &slot.inputs,
+                            &effect.audio_bus_layout(),
+                            effect.main_input_bus(),
+                        )?;
                         check_cancelled()?;
                         latency = latency.saturating_add(effect.latency_samples());
                         local_tail += (effect.tail_samples() as u64).min(sample_rate as u64 * 30);
@@ -1186,24 +1624,48 @@ impl Renderer {
                             id: slot.id,
                             effect: Box::new(effect),
                             parameters,
+                            inputs,
+                            arrival_latency: 0,
+                            main_delay: CompensationDelay::new(0),
                         }
                     }
                 });
             }
             let mut routes = Vec::new();
-            if enabled {
-                routes.push(Route {
-                    target: track.output_bus.map(|target| indices[&target]),
-                    gain: AutomatedValue {
-                        manual: 1.0,
-                        smooth_value: 1.0,
-                        smooth_remaining: 0,
-                        lane: None,
-                    },
-                    pre_fader: false,
-                    delay: CompensationDelay::new(0),
-                    output: vec![[0.0; 2]; BLOCK],
-                });
+            if enabled && unmuted_channel(project, track) {
+                let target = if track.id == 0 {
+                    None
+                } else {
+                    Some(
+                        track
+                            .output_bus
+                            .map(|target| indices[&target])
+                            .unwrap_or(indices[&0]),
+                    )
+                };
+                let target_needed = target.is_none_or(|index| needed.contains(&order[index]));
+                let main_audible = track.id == 0
+                    || audible.contains(id)
+                    || track
+                        .output_bus
+                        .is_some_and(|id| needed.contains(&id) && !audible.contains(&id));
+                if target_needed && main_audible {
+                    routes.push(Route {
+                        target,
+                        gain: AutomatedValue {
+                            manual: 1.0,
+                            smooth_value: 1.0,
+                            smooth_remaining: 0,
+                            lane: None,
+                        },
+                        pre_fader: false,
+                        delay: CompensationDelay::new(0),
+                        output: vec![[0.0; 2]; BLOCK],
+                        kind: RouteKind::Audio,
+                        signal_latency: 0,
+                        send_bus: None,
+                    });
+                }
                 for send in &track.sends {
                     let gain = control(
                         AutomationParameter::SendGain {
@@ -1211,17 +1673,29 @@ impl Renderer {
                         },
                         send.gain,
                     );
-                    if send.gain > 0.0 || gain.lane.is_some() {
+                    if (send.gain > 0.0 || gain.lane.is_some())
+                        && needed.contains(&send.target_bus)
+                        && (audible.contains(id) || !audible.contains(&send.target_bus))
+                    {
                         routes.push(Route {
                             target: Some(indices[&send.target_bus]),
                             gain,
                             pre_fader: send.pre_fader,
                             delay: CompensationDelay::new(0),
                             output: vec![[0.0; 2]; BLOCK],
+                            kind: RouteKind::Audio,
+                            signal_latency: 0,
+                            send_bus: Some(send.target_bus),
                         });
                     }
                 }
             }
+            let expression_support = match &processor {
+                Processor::Vst(plugin) => midi_expression::Support::query(plugin)?,
+                Processor::None => midi_expression::Support::default(),
+            };
+            let expression =
+                ExpressionRuntime::new(Arc::clone(&content.expression), expression_support);
             tracks.push(RenderTrack {
                 id: track.id,
                 name: track.name.clone(),
@@ -1235,15 +1709,18 @@ impl Renderer {
                 note_order: content.note_order,
                 event_cursor: 0,
                 processor,
+                expression,
                 midi: Vec::with_capacity(event_capacity),
                 live_midi: Vec::with_capacity(4),
                 chase: Vec::with_capacity(event_capacity),
+                chase_delay: 0,
                 active_notes: Vec::with_capacity(note_capacity),
                 active_indices: HashMap::with_capacity(note_capacity),
                 left: vec![0.0; BLOCK],
                 right: vec![0.0; BLOCK],
                 mix_left: vec![0.0; BLOCK],
                 mix_right: vec![0.0; BLOCK],
+                input_gain: control(AutomationParameter::TrackInputGain, track.input_gain),
                 gain: control(AutomationParameter::TrackGain, track.gain),
                 pan: control(AutomationParameter::TrackPan, track.pan),
                 instrument_automation,
@@ -1251,9 +1728,19 @@ impl Renderer {
                 latency,
                 input_latency: 0,
                 source_latency: plugin_latency,
+                source_arrival: 0,
+                instrument_input_latency: 0,
+                instrument_inputs,
+                raw_outputs,
+                post_fader: vec![[0.0; 2]; BLOCK],
+                freeze_tap: None,
                 tail_samples: local_tail.min(sample_rate as u64 * 30),
                 plugin_failed: false,
+                channel_failed: false,
+                processing_channel: false,
+                processing_frames: 0,
                 enabled,
+                channel_active,
                 inserts,
                 insert_left: vec![0.0; BLOCK],
                 insert_right: vec![0.0; BLOCK],
@@ -1263,28 +1750,176 @@ impl Renderer {
                 observer: None,
             });
         }
+        // Append dependency edges after every native processor has negotiated
+        // its bus layout. These edges never sum into the main input by accident.
+        for target in 0..tracks.len() {
+            if !tracks[target].enabled {
+                continue;
+            }
+            let model = project
+                .track(order[target])
+                .expect("compiled channel exists");
+            let mut input_routes = Vec::new();
+            for input in &model.instrument_inputs {
+                let slot = tracks[target]
+                    .instrument_inputs
+                    .iter()
+                    .position(|buffer| {
+                        buffer.bus == input.bus as usize
+                            && buffer.first_channel == input.first_channel as usize
+                    })
+                    .context("Instrument input pair was not prepared")?;
+                input_routes.push((input, None, slot));
+            }
+            for (effect_index, insert) in tracks[target].inserts.iter().enumerate() {
+                let Insert::Vst { id, inputs, .. } = insert;
+                let model_slot = model
+                    .inserts
+                    .iter()
+                    .find(|slot| slot.id == *id)
+                    .expect("prepared insert exists");
+                for input in &model_slot.inputs {
+                    let slot = inputs
+                        .iter()
+                        .position(|buffer| {
+                            buffer.bus == input.bus as usize
+                                && buffer.first_channel == input.first_channel as usize
+                        })
+                        .context("Effect input pair was not prepared")?;
+                    input_routes.push((input, Some(effect_index), slot));
+                }
+            }
+            for (input, effect, slot) in input_routes {
+                let source = indices[&input.source_track];
+                ensure!(source < target, "Plug-in input dependency is not acyclic");
+                if !tracks[source].enabled
+                    || !unmuted_channel(project, project.track(input.source_track).unwrap())
+                {
+                    continue;
+                }
+                tracks[source].routes.push(Route {
+                    target: Some(target),
+                    gain: AutomatedValue {
+                        manual: input.gain,
+                        smooth_value: input.gain,
+                        smooth_remaining: 0,
+                        lane: None,
+                    },
+                    pre_fader: input.pre_fader,
+                    delay: CompensationDelay::new(0),
+                    output: vec![[0.0; 2]; BLOCK],
+                    kind: RouteKind::PluginInput {
+                        effect,
+                        input: slot,
+                    },
+                    signal_latency: 0,
+                    send_bus: None,
+                });
+            }
+            if let Some(output) = model.instrument_output {
+                let source = indices[&output.track];
+                ensure!(
+                    source < target,
+                    "Instrument output dependency is not acyclic"
+                );
+                let raw = tracks[source]
+                    .raw_outputs
+                    .iter()
+                    .position(|buffer| {
+                        buffer.bus == output.bus as usize
+                            && buffer.first_channel == output.first_channel as usize
+                    })
+                    .context("Instrument output pair was not prepared")?;
+                tracks[source].routes.push(Route {
+                    target: Some(target),
+                    gain: AutomatedValue {
+                        manual: 1.0,
+                        smooth_value: 1.0,
+                        smooth_remaining: 0,
+                        lane: None,
+                    },
+                    pre_fader: true,
+                    delay: CompensationDelay::new(0),
+                    output: vec![[0.0; 2]; BLOCK],
+                    kind: RouteKind::InstrumentOutput { output: raw },
+                    signal_latency: 0,
+                    send_bus: None,
+                });
+            }
+        }
+        // Align at the receiving processor stage: a late sidechain delays the
+        // main signal before that insert, rather than misaligning its detector.
         let mut input_latency = vec![0_u32; tracks.len()];
+        let mut auxiliary_latency = vec![HashMap::<Option<usize>, u32>::new(); tracks.len()];
         let mut input_tail = vec![0_u64; tracks.len()];
         let mut latency = 0;
         for index in 0..tracks.len() {
             if !tracks[index].enabled {
                 continue;
             }
-            tracks[index].latency = tracks[index].latency.saturating_add(input_latency[index]);
-            tracks[index].input_latency = input_latency[index];
+            let track = &mut tracks[index];
+            track.input_latency = input_latency[index];
+            track.instrument_input_latency =
+                auxiliary_latency[index].get(&None).copied().unwrap_or(0);
+            track.source_arrival = input_latency[index].max(
+                track
+                    .instrument_input_latency
+                    .saturating_add(track.source_latency),
+            );
+            let mut arrival = track.source_arrival;
+            for (effect_index, insert) in track.inserts.iter_mut().enumerate() {
+                let Insert::Vst {
+                    effect,
+                    arrival_latency,
+                    main_delay,
+                    ..
+                } = insert;
+                *arrival_latency = arrival.max(
+                    auxiliary_latency[index]
+                        .get(&Some(effect_index))
+                        .copied()
+                        .unwrap_or(0),
+                );
+                *main_delay = CompensationDelay::new((*arrival_latency - arrival) as usize);
+                arrival = arrival_latency.saturating_add(effect.latency_samples());
+            }
+            track.latency = arrival.saturating_add(track.delay.latency_samples() as u32);
             ensure!(
-                tracks[index].latency <= sample_rate * 10,
+                track.latency <= sample_rate * 10,
                 "Processing path latency exceeds ten seconds"
             );
-            tracks[index].tail_samples =
-                (tracks[index].tail_samples + input_tail[index]).min(sample_rate as u64 * 30);
-            for route in &tracks[index].routes {
-                if let Some(target) = route.target {
-                    input_latency[target] = input_latency[target].max(tracks[index].latency);
-                    input_tail[target] = input_tail[target].max(tracks[index].tail_samples);
+            track.tail_samples =
+                (track.tail_samples + input_tail[index]).min(sample_rate as u64 * 30);
+            let raw_latency = track
+                .instrument_input_latency
+                .saturating_add(track.source_latency);
+            for route in &mut track.routes {
+                route.signal_latency = if matches!(route.kind, RouteKind::InstrumentOutput { .. }) {
+                    raw_latency
                 } else {
-                    latency = latency.max(tracks[index].latency);
-                    tail_samples = tail_samples.max(tracks[index].tail_samples);
+                    track.latency
+                };
+                if let Some(target) = route.target {
+                    match route.kind {
+                        RouteKind::PluginInput { effect, .. } => {
+                            let stage = auxiliary_latency[target].entry(effect).or_default();
+                            *stage = (*stage).max(route.signal_latency);
+                        }
+                        _ => {
+                            input_latency[target] = input_latency[target].max(route.signal_latency)
+                        }
+                    }
+                    input_tail[target] = input_tail[target].max(track.tail_samples);
+                } else {
+                    latency = latency.max(track.latency);
+                    tail_samples = tail_samples.max(track.tail_samples);
+                }
+            }
+        }
+        if let Some(capture) = freeze_capture {
+            for track in &tracks {
+                if capture.contains(&track.id) {
+                    latency = latency.max(track.latency);
                 }
             }
         }
@@ -1292,13 +1927,44 @@ impl Renderer {
             latency <= sample_rate * 10,
             "Processing latency exceeds ten seconds"
         );
-        for track in &mut tracks {
-            for route in &mut track.routes {
-                let target_latency = route
-                    .target
-                    .map(|target| input_latency[target])
-                    .unwrap_or(latency);
-                route.delay = CompensationDelay::new((target_latency - track.latency) as usize);
+        for index in 0..tracks.len() {
+            for route_index in 0..tracks[index].routes.len() {
+                let route = &tracks[index].routes[route_index];
+                let target_latency = match (route.target, route.kind) {
+                    (
+                        Some(target),
+                        RouteKind::PluginInput {
+                            effect: Some(effect),
+                            ..
+                        },
+                    ) => {
+                        let Insert::Vst {
+                            arrival_latency, ..
+                        } = &tracks[target].inserts[effect];
+                        *arrival_latency
+                    }
+                    (Some(target), RouteKind::PluginInput { effect: None, .. }) => {
+                        tracks[target].instrument_input_latency
+                    }
+                    (Some(target), _) => input_latency[target],
+                    (None, _) => latency,
+                };
+                ensure!(
+                    target_latency >= route.signal_latency,
+                    "Invalid processing latency alignment"
+                );
+                tracks[index].routes[route_index].delay =
+                    CompensationDelay::new((target_latency - route.signal_latency) as usize);
+            }
+            if freeze_capture.is_some_and(|ids| ids.contains(&tracks[index].id)) {
+                ensure!(
+                    latency >= tracks[index].latency,
+                    "Freeze channel is not connected to the master timing reference"
+                );
+                tracks[index].freeze_tap = Some(FreezeTap {
+                    delay: CompensationDelay::new((latency - tracks[index].latency) as usize),
+                    frames: vec![[0.0; 2]; BLOCK],
+                });
             }
         }
         let loop_range = if looping && project.loop_enabled {
@@ -1372,7 +2038,7 @@ impl Renderer {
             preview: false,
             audition: None,
             midi_input_notes: Vec::with_capacity(4096),
-            metering: false,
+            expressive_input: Vec::with_capacity(16384),
             live_edit_context: Arc::new(LiveEditContext::new(
                 project,
                 sample_rate,
@@ -1390,7 +2056,6 @@ impl Renderer {
         for track in self.tracks.iter_mut().flatten() {
             track.meter = meters.channel(track.id).cloned();
         }
-        self.metering = true;
     }
 
     pub(crate) fn attach_signal_monitor(
@@ -1518,6 +2183,7 @@ impl Renderer {
         if !loop_wrap {
             self.audition = None;
             self.midi_input_notes.clear();
+            self.expressive_input.clear();
         }
         self.source_sample = sample;
         self.logical_sample = sample;
@@ -1527,14 +2193,21 @@ impl Renderer {
                 parameter.previous = None;
             }
             track.delay.reset();
+            if let Some(tap) = &mut track.freeze_tap {
+                tap.delay.reset();
+            }
             for route in &mut track.routes {
                 route.delay.reset();
             }
             for insert in &mut track.inserts {
                 match insert {
                     Insert::Vst {
-                        effect, parameters, ..
-                    } if !track.plugin_failed => {
+                        effect,
+                        parameters,
+                        main_delay,
+                        ..
+                    } if !track.plugin_failed && !track.channel_failed => {
+                        main_delay.reset();
                         for parameter in parameters {
                             parameter.previous = None;
                         }
@@ -1542,7 +2215,8 @@ impl Renderer {
                             if !self.tolerate_plugin_failure {
                                 return Err(error);
                             }
-                            track.plugin_failed = true;
+                            track.channel_failed = true;
+                            track.channel_active = false;
                             track.pending_error = Some(format!(
                                 "Plugin reset failed on \"{}\"\n\nResetting effect \"{}\" ({}) on channel ID {}: {error:#}",
                                 track.name,
@@ -1557,6 +2231,10 @@ impl Renderer {
                 }
             }
             track.event_cursor = track.events.partition_point(|event| event.sample < sample);
+            track.chase_delay = track.instrument_input_latency;
+            track
+                .expression
+                .seek(sample, track.instrument_input_latency, !loop_wrap);
             track.chase.clear();
             if loop_wrap {
                 // Looping restarts sequencer notes, not the independent live
@@ -1680,29 +2358,142 @@ impl Renderer {
     /// Normalize the complete held MIDI input chord on the render worker. A
     /// route or device disappearing releases every voice, and seek/reset clears
     /// the remembered set so currently held keys are restored on the next block.
-    pub(crate) fn release_midi_input_note(&mut self, id: u64, pitch: u8, offset: u32) {
-        if let Some(index) = self
-            .midi_input_notes
+    pub(crate) fn unsupported_midi(&self) -> (u64, u64) {
+        self.tracks
             .iter()
-            .position(|note| note.0 == id && note.1 == pitch)
-        {
-            self.midi_input_notes.remove(index);
-            if let Some(track) = self
+            .flatten()
+            .fold((0, 0), |(events, groups), track| {
+                (
+                    events + track.expression.unsupported_count(),
+                    groups + track.expression.group_count(),
+                )
+            })
+    }
+    pub(crate) fn set_expressive_input(
+        &mut self,
+        state: &[(u64, u8, u8, daw_plugins::ExpressiveMidiData)],
+        releases: &[(u64, daw_plugins::ExpressiveMidiData)],
+        offset: u32,
+    ) -> Result<()> {
+        use daw_plugins::{
+            ExpressiveMidiData as Data, ExpressiveMidiMessage as Message,
+            ExpressiveVelocity as Velocity,
+        };
+        ensure!(state.len() <= 16384, "Too many live MIDI states");
+        let mut controllers_reset = false;
+        for &(id, group, channel, data) in &self.expressive_input {
+            let Some(track) = self
                 .tracks
                 .iter_mut()
                 .flatten()
                 .find(|track| track.id == id)
-            {
-                track.live_midi.push(MidiMessage {
-                    offset,
+            else {
+                continue;
+            };
+            let admitted = track
+                .expression
+                .content
+                .group
+                .is_none_or(|stored| stored == group);
+            match data {
+                Data::Controller { controller, .. } => {
+                    let present=admitted&&state.iter().any(|(target,g,_,new)|*target==id&&*g==group&&matches!(new,Data::Controller{channel:c,controller:address,..}if *c==channel&&*address==controller));
+                    if !present
+                        && let Some(value) = track
+                            .expression
+                            .support
+                            .controller_default(channel, controller)
+                        && track.expression.live.len() < 4096
+                    {
+                        controllers_reset = true;
+                        track.expression.live.push((
+                            channel,
+                            Message {
+                                offset,
+                                data: Data::Controller {
+                                    channel,
+                                    controller,
+                                    value,
+                                },
+                            },
+                        ));
+                    }
+                }
+                Data::NoteOn {
                     pitch,
-                    velocity: 0,
-                    on: false,
-                });
+                    note_id,
+                    tuning,
+                    ..
+                } => {
+                    let present = admitted
+                        && state.iter().any(|(target, _, _, new)| {
+                            *target == id
+                                && matches!(new,Data::NoteOn{note_id:other,..}if *other==note_id)
+                        });
+                    if !present {
+                        let off=releases.iter().find_map(|(target,data)|if *target==id&&matches!(data,Data::NoteOff{note_id:other,..}if *other==note_id){Some(*data)}else{None}).unwrap_or(Data::NoteOff{channel,pitch,velocity:Velocity::Midi2(0),note_id,tuning});
+                        if track.expression.live.len() < 4096 {
+                            track
+                                .expression
+                                .live
+                                .push((channel, Message { offset, data: off }));
+                        }
+                    }
+                }
+                _ => {}
             }
         }
+        for &(id, group, channel, data) in state {
+            let Some(track) = self
+                .tracks
+                .iter_mut()
+                .flatten()
+                .find(|track| track.id == id)
+            else {
+                continue;
+            };
+            if track
+                .expression
+                .content
+                .group
+                .is_some_and(|stored| stored != group)
+            {
+                track.expression.reject_group(group);
+                continue;
+            }
+            if self.expressive_input.contains(&(id, group, channel, data))
+                && !(controllers_reset && matches!(data, Data::Controller { .. }))
+            {
+                continue;
+            }
+            ensure!(
+                track.expression.live.len() < 4096,
+                "Live MIDI event limit reached"
+            );
+            track
+                .expression
+                .live
+                .push((channel, Message { offset, data }));
+        }
+        self.expressive_input.clear();
+        self.expressive_input
+            .extend(state.iter().copied().filter(|(id, group, _, _)| {
+                self.tracks
+                    .iter()
+                    .flatten()
+                    .find(|track| track.id == *id)
+                    .is_some_and(|track| {
+                        track
+                            .expression
+                            .content
+                            .group
+                            .is_none_or(|stored| stored == *group)
+                    })
+            }));
+        Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn set_midi_input_notes(
         &mut self,
         notes: &[(u64, u8, u8)],
@@ -1814,17 +2605,29 @@ impl Renderer {
             tempo: self.tempo,
             timeline: !self.preview,
             live_input,
-            meter_decay: if self.metering {
-                release_factor(output.len(), self.sample_rate)
-            } else {
-                0.0
-            },
         };
         for track in self.tracks.iter_mut().flatten() {
             track.left[..context.count].fill(0.0);
             track.right[..context.count].fill(0.0);
             track.mix_left[..context.count].fill(0.0);
             track.mix_right[..context.count].fill(0.0);
+            track.post_fader[..context.count].fill([0.0; 2]);
+            for input in &mut track.instrument_inputs {
+                input.clear(context.count);
+            }
+            for insert in &mut track.inserts {
+                let Insert::Vst { inputs, .. } = insert;
+                for input in inputs {
+                    input.clear(context.count);
+                }
+            }
+            for raw in &mut track.raw_outputs {
+                raw.left[..context.count].fill(0.0);
+                raw.right[..context.count].fill(0.0);
+            }
+            if let Some(tap) = &mut track.freeze_tap {
+                tap.frames[..context.count].fill([0.0; 2]);
+            }
         }
         for level_index in 0..self.levels.len() {
             let level = &self.levels[level_index];
@@ -1873,10 +2676,7 @@ impl Renderer {
                         && !track.plugin_failed
                     {
                         for (index, frame) in frames[..context.count].iter_mut().enumerate() {
-                            *frame = [
-                                track.left[index] * track.insert_left[index],
-                                track.right[index] * track.insert_right[index],
-                            ];
+                            *frame = track.post_fader[index];
                         }
                     }
                 }
@@ -1908,9 +2708,25 @@ impl Renderer {
                 let destination = remaining[target - track_index - 1]
                     .as_mut()
                     .expect("downstream graph node");
-                for (index, frame) in route.output[..count].iter().enumerate() {
-                    destination.mix_left[index] += f64::from(frame[0]);
-                    destination.mix_right[index] += f64::from(frame[1]);
+                match route.kind {
+                    RouteKind::PluginInput { effect, input } => {
+                        let buffer = if let Some(effect) = effect {
+                            let Insert::Vst { inputs, .. } = &mut destination.inserts[effect];
+                            &mut inputs[input]
+                        } else {
+                            &mut destination.instrument_inputs[input]
+                        };
+                        for (index, frame) in route.output[..count].iter().enumerate() {
+                            buffer.mix_left[index] += f64::from(frame[0]);
+                            buffer.mix_right[index] += f64::from(frame[1]);
+                        }
+                    }
+                    _ => {
+                        for (index, frame) in route.output[..count].iter().enumerate() {
+                            destination.mix_left[index] += f64::from(frame[0]);
+                            destination.mix_right[index] += f64::from(frame[1]);
+                        }
+                    }
                 }
             } else {
                 for (destination, frame) in output.iter_mut().zip(&route.output) {
@@ -2212,6 +3028,8 @@ pub struct ExportReport {
     pub sample_rate: u32,
     pub encoding: WavEncoding,
     pub dither: bool,
+    pub unsupported_midi_events: u64,
+    pub unsupported_midi_groups: u64,
 }
 
 /// Stream a delivery WAV and report actual source peak and integer overloads.
@@ -2389,6 +3207,8 @@ fn write_wav_encoded(
             sample_rate: renderer.sample_rate,
             encoding,
             dither: dither && encoding.is_pcm(),
+            unsupported_midi_events: 0,
+            unsupported_midi_groups: 0,
         };
         let mut block = [[0.0; 2]; BLOCK];
         let mut positions = [0.0; BLOCK];
@@ -2430,6 +3250,10 @@ fn write_wav_encoded(
         sync_file.sync_all()?;
         check_cancelled()?;
         std::fs::rename(&temp, path)?;
+        (
+            report.unsupported_midi_events,
+            report.unsupported_midi_groups,
+        ) = renderer.unsupported_midi();
         Ok(report)
     })();
     if result.is_err() {

@@ -314,7 +314,7 @@ catalogue, while preserving legacy Add9 and scale choices.
 
 `piano_roll_refinement_e2e` checks blue velocity shades and optional red scale
 warnings in both themes, selection outlines, independent green guides, and
-mouse-driven Randomize/Quantize/Legato actions. It verifies preview cancellation,
+mouse-driven Humanize/Quantize/Legato actions. It verifies preview cancellation,
 seeded rerolls, selection scope, stretched source timing, both legato modes,
 single-step Undo/Redo, and semantic tool parity.
 
@@ -1278,6 +1278,20 @@ midpoint handle in Arrangement, reusable patterns and the focused editor.
 Rising/falling up/down bends preserve endpoints and neighboring segments,
 commit one undo action, survive save/reload and match sampled WAV output.
 
+`freeze_e2e` uses the real background renderer and visible clip/track context
+commands. It checks exact placement, pre-insert gain versus live volume/pan,
+pre/post sends and cloned automation, full-mix PCM equivalence, one-step Undo,
+portable media and Return after reopen. Split originals/printed pieces remain
+recoverable; missing originals leave printed work intact. A real native VST3
+fixture prints five mono/stereo output selections together and verifies
+sidechain consumers and Master processing before/after Freeze and Return.
+Cancellation, document replacement, stale edits, unreadable sources and an
+overlapping-audio subset leave the project and history unchanged. A controlled
+native-editor actor holds the state acknowledgement while Cancel or Open is
+requested; neither can start the pending render. Frozen output still exports
+with the original instrument unavailable; a failed Return keeps every print
+active until the missing instrument is restored and Return is retried.
+
 `audio_import_e2e` imports real WAV/MP3/FLAC/OGG fixtures using File and raw native
 drop events. It checks captured placement, one atomic batch/Undo, managed WAV
 independence, portable saving, malformed-file rejection and no empty tracks.
@@ -1286,7 +1300,7 @@ deleted targets and document changes; discarded staging files are removed.
 
 `signal_analysis_e2e` opens each channel's Analyze popup through the running
 app, consumes a known 1 kHz stereo sine through the production renderer and
-virtual audio output, and clicks Spectrum, Loudness, Correlation and Phase.
+virtual audio output, and clicks Spectrum, Levels, Loudness, Correlation and Phase.
 It checks measured frequency, sample peak/RMS, valid LUFS windows, actual
 submitted spectrum/phase meshes, vertical in-phase and horizontal antiphase,
 muted undefined measurements, and post-fader bus/Master levels. Opening,
@@ -1295,3 +1309,74 @@ unchanged. Stop holds readings, Reset clears them, compact footer controls
 remain reachable, and deletion/Undo or a new document cannot reuse stale data.
 Hovering Analyze until its hint overlaps Effects also verifies that a native
 coalesced pointer arrival/press still opens Effects without editing the song.
+The Levels scenario measures a known inter-sample peak through the production
+tap, independent stereo RMS, peak holds and resets. Engine reference tests
+compare oversampled true-peak estimates with FFmpeg and check the 300 ms
+exponential mean-square response. This is tested measurement behavior, not
+meter certification or physical-device calibration.
+
+### Master, native buses and grouped outputs
+
+`mixer_master_outputs_e2e` drives actual **Inspect I/O** and output-enabling
+controls against a native multi-bus VST3 fixture. It verifies named stereo/odd
+mono outputs, one instrument instance, independent folded/expanded strips,
+sibling ordering, Master auxiliary input, portable recall and unchanged PCM
+when changing only mixer presentation. Mouse controls and automation exercise
+Master Gain, inserts, volume and pan. Master strip/Analyze values are taken
+before device clipping, dry monitoring and metronome; the transport device meter
+is tested separately.
+
+`plugin_io_routing_e2e` covers current-state I/O inspection and configurable
+instrument/insert inputs through the app's Routing view. The graph tests in
+`daw-engine/src/multi_io_master_tests.rs` verify receiving-stage sidechain delay
+compensation, nonzero native main-bus indices, independent wide-output mixing,
+and continued healthy auxiliary outputs after a primary insert crash. The
+`daw-plugins` target `multi_bus` checks native layout/state activation, summed
+stereo and final mono inputs, shared output processing, invalid-pair rejection
+and child recovery.
+
+### MIDI editing and expressive data
+
+`midi_clip_actions_e2e` covers mouse-accessible Half/Double time, semitone/octave
+transpose, selected-note flips, whole-audible-clip Quantize/Humanize previews,
+and **Loop this clip** for audio, MIDI and automation. It checks source/ghost
+semantics, trimmed hidden material, bounds rejection, cancellation and exact
+Undo/Redo and portable recall.
+
+`midi_batch_edit_e2e` exercises **Notes → Note lengths…** Fixed/Grow/Shrink
+previews, grouped edge resizing, duplicate/move/delete gestures, and stretched
+source timing. Group deltas preserve length differences and per-note packet
+timing; canceled previews leave song/history unchanged.
+
+`midi_expression_e2e` uses the actual note-expression popup and mouse exact-value
+controls for 16-bit velocities, pitch attributes and 32-bit expression points.
+It verifies a single transaction, shared-source editing, unchanged unrelated
+notes, retained unsupported packets, portable recall and rejection of a draft
+made stale by another edit. Shared `daw-ui` `midi_expression` tests exercise the
+same component independently.
+
+`midi2_export_guard_e2e` verifies the explicit MIDI 1.0 copy warning appears
+before the file picker, Cancel preserves an existing destination, and confirmed
+SMF export leaves the richer `.rill` data/history unchanged. The core `midi2`
+target tests packet/model validation and persistence. Project storage does not
+establish complete VST expression translation or physical UMP-device support;
+the macOS input module is compiler-checked rather than hardware-verified.
+
+`midi2_recording_e2e` drives the Recording popup's input-format, group and channel
+selectors, then injects timestamped UMP into the same production capture queue.
+A compiled native VST3 fixture verifies independent voices and pressure, exact
+16-bit attack/release and Pitch 7.9/32-bit project data, incoming-group changes
+without silencing earlier clips, Undo/portable recall, controller-only takes and
+malformed-packet recovery. It exercises virtual input rather than a physical
+CoreMIDI endpoint. A separate case verifies unsupported-control/extra-group
+advisories, persistent dismissal, WAV completion warnings and exact archive
+recall without changing project history.
+
+```sh
+cargo test --locked -p daw-app --test mixer_master_outputs_e2e --test plugin_io_routing_e2e --test freeze_e2e --test signal_analysis_e2e -- --test-threads=1
+cargo test --locked -p daw-app --test midi_clip_actions_e2e --test midi_batch_edit_e2e --test midi_expression_e2e --test midi2_recording_e2e --test midi2_export_guard_e2e -- --test-threads=1
+cargo test --locked -p daw-core --test midi2 --test midi_batch
+cargo test --locked -p daw-engine midi2 -- --test-threads=1
+cargo test --locked -p daw-plugins --test multi_bus -- --test-threads=1
+cargo test --locked -p daw-ui --test midi_expression --test midi_note_lengths --test meter_statistics --test signal_analyzer
+```

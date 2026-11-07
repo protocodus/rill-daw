@@ -566,6 +566,10 @@ fn handle(command: HostCommand, plugin: &SharedPlugin, sample_rate: &mut f64) ->
             Ok(layout) => HostResponse::AudioBusLayout { layout },
             Err(e) => err("AudioBusLayout", e),
         }),
+        HostCommand::AudioBusDetails => with(plugin, |p| match p.audio_bus_details() {
+            Ok(details) => HostResponse::AudioBusDetails { details },
+            Err(e) => err("AudioBusDetails", e),
+        }),
         HostCommand::SaveState => with(plugin, |p| match p.save_state() {
             Ok(data) => HostResponse::State { data },
             Err(e) => err("SaveState", e),
@@ -624,10 +628,10 @@ fn handle(command: HostCommand, plugin: &SharedPlugin, sample_rate: &mut f64) ->
                 Err(e) => err("SendNoteExpression", e),
             }
         }),
-        // Note: the public API enumerates bus 0 / channel 0 (the conventional MPE bus); the
-        // bus/channel carried by the command is currently always (0, 0) from the client.
-        HostCommand::NoteExpressions { bus: _, channel: _ } => {
-            with(plugin, |p| match p.note_expressions() {
+        HostCommand::NoteExpressions { bus, channel } => {
+            with(plugin, |p| match u8::try_from(channel).ok().filter(|channel|*channel<16)
+                .ok_or_else(|| vst3_host::Error::InvalidParameter("invalid note-expression channel".into()))
+                .and_then(|channel|p.note_expressions_on(bus,channel)) {
                 Ok(expressions) => HostResponse::NoteExpressions { expressions },
                 Err(e) => err("NoteExpressions", e),
             })

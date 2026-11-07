@@ -47,6 +47,7 @@ pub fn tool_effect(name: &str) -> ToolEffect {
         | "list_tracks"
         | "get_track"
         | "get_clip"
+        | "get_note_expressions"
         | "get_selection"
         | "list_plugins"
         | "audio_analyze"
@@ -146,6 +147,17 @@ struct TrackQuery {
 struct ClipQuery {
     track_id: u64,
     clip_id: u64,
+    #[serde(default)]
+    offset: usize,
+    #[serde(default = "page_limit")]
+    limit: usize,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NoteExpressionQuery {
+    track_id: u64,
+    clip_id: u64,
+    note_id: u64,
     #[serde(default)]
     offset: usize,
     #[serde(default = "page_limit")]
@@ -313,10 +325,20 @@ fn bounded_text(value: &str) -> &str {
     &value[..end]
 }
 fn track_summary(track: &Track) -> Value {
-    json!({"id":track.id,"name":bounded_text(&track.name),"name_truncated":track.name.len()>1024,"kind":track.kind,"gain":track.gain,"gain_db":if track.gain > 0.0 {Some(20.0 * f64::from(track.gain).log10())} else {None},"pan":track.pan,"mute":track.mute,"solo":track.solo,"latency_samples":track.latency_samples,"clip_count":track.clips.len(),"output_bus":track.output_bus,"parent_folder":track.parent_folder,"has_instrument":!matches!(track.instrument, Instrument::None),"insert_count":track.inserts.len()})
+    json!({"id":track.id,"name":bounded_text(&track.name),"name_truncated":track.name.len()>1024,"kind":track.kind,"gain":track.gain,"input_gain":track.input_gain,"instrument_output":track.instrument_output,"gain_db":if track.gain > 0.0 {Some(20.0 * f64::from(track.gain).log10())} else {None},"pan":track.pan,"mute":track.mute,"solo":track.solo,"latency_samples":track.latency_samples,"clip_count":track.clips.len(),"output_bus":track.output_bus,"parent_folder":track.parent_folder,"has_instrument":!matches!(track.instrument, Instrument::None),"midi_input_group":track.midi_input_group,"insert_count":track.inserts.len()})
+}
+fn note_summary(note: &Note) -> Value {
+    let mut value = json!({"id":note.id,"pitch":note.pitch,"start":note.start,"length":note.length,"velocity":note.velocity});
+    if let Some(data) = &note.midi2 {
+        value["midi2"] = json!({"protocol":data.protocol,"group":data.group,"channel":data.channel,"note_index":data.note_index,
+            "velocity":data.velocity,"release_velocity":data.release_velocity,"attribute_type":data.attribute_type,
+            "attribute_data":data.attribute_data,"release_attribute_type":data.release_attribute_type,
+            "release_attribute_data":data.release_attribute_data,"expression_count":data.expressions.len()});
+    }
+    value
 }
 fn clip_summary(clip: &Clip) -> Value {
-    json!({"id":clip.id,"name":bounded_text(&clip.name),"name_truncated":clip.name.len()>1024,"start":clip.start,"length":clip.length,"offset":clip.offset,"source_rate":clip.source_rate,"link_group":clip.link_group,"audio_take":clip.audio_take,"kind":match clip.content {ClipContent::Midi{..}=>"midi",ClipContent::Audio{..}=>"audio"}})
+    json!({"id":clip.id,"name":bounded_text(&clip.name),"name_truncated":clip.name.len()>1024,"muted":clip.muted,"start":clip.start,"length":clip.length,"offset":clip.offset,"source_rate":clip.source_rate,"midi_event_count":clip.midi_events.len(),"link_group":clip.link_group,"audio_take":clip.audio_take,"kind":match clip.content {ClipContent::Midi{..}=>"midi",ClipContent::Audio{..}=>"audio"}})
 }
 
 /// The only dispatcher for core song tools. Unknown names are returned to the
@@ -338,7 +360,7 @@ pub fn dispatch_song_tool<H: SongToolHost + ?Sized>(
             let p = host.project();
             let session = host.song_session();
             Ok(
-                json!({"session_id":session.id,"revision":session.revision,"name":bounded_text(&p.name),"name_truncated":p.name.len()>1024,"tempo":p.tempo,"beats_per_bar":p.beats_per_bar,"end_beat":p.end_beat(),"track_count":p.tracks.len(),"loop":{"enabled":p.loop_enabled,"start":p.loop_start,"end":p.loop_end},"metronome":{"enabled":p.metronome_enabled,"gain":p.metronome_gain,"precount_bars":p.precount_bars},"timeline_units":"Quarter-note beats. Arrangement starts at 0; MIDI note positions use clip source beats.","limits":{"edits_per_batch":MAX_BATCH_EDITS,"notes_per_batch":MAX_BATCH_NOTES,"query_items":MAX_QUERY_ITEMS}}),
+                json!({"session_id":session.id,"revision":session.revision,"name":bounded_text(&p.name),"name_truncated":p.name.len()>1024,"tempo":p.tempo,"beats_per_bar":p.beats_per_bar,"end_beat":p.end_beat(),"track_count":p.tracks.len(),"master":track_summary(&p.master),"loop":{"enabled":p.loop_enabled,"start":p.loop_start,"end":p.loop_end},"metronome":{"enabled":p.metronome_enabled,"gain":p.metronome_gain,"precount_bars":p.precount_bars},"timeline_units":"Quarter-note beats. Arrangement starts at 0; MIDI note positions use clip source beats.","limits":{"edits_per_batch":MAX_BATCH_EDITS,"notes_per_batch":MAX_BATCH_NOTES,"growth_bytes_per_batch":MAX_BATCH_GROWTH_BYTES,"query_items":MAX_QUERY_ITEMS}}),
             )
         }
         "list_tracks" => {
@@ -347,7 +369,7 @@ pub fn dispatch_song_tool<H: SongToolHost + ?Sized>(
             let p = host.project();
             let s = host.song_session();
             Ok(
-                json!({"session_id":s.id,"revision":s.revision,"total":p.tracks.len(),"offset":q.offset,"tracks":p.tracks.iter().skip(q.offset).take(q.limit).map(track_summary).collect::<Vec<_>>()}),
+                json!({"session_id":s.id,"revision":s.revision,"total":p.tracks.len(),"offset":q.offset,"tracks":p.tracks.iter().skip(q.offset).take(q.limit).map(track_summary).collect::<Vec<_>>(),"master":track_summary(&p.master)}),
             )
         }
         "get_track" => {
@@ -375,8 +397,9 @@ pub fn dispatch_song_tool<H: SongToolHost + ?Sized>(
                     .collect::<Vec<_>>()
             );
             value["clips_offset"] = json!(q.offset);
+            value["instrument_inputs"] = json!(track.instrument_inputs);
             value["sends"] = json!(track.sends.iter().take(MAX_QUERY_ITEMS).collect::<Vec<_>>());
-            value["inserts"] = json!(track.inserts.iter().take(MAX_QUERY_ITEMS).map(|slot|json!({"id":slot.id,"name":bounded_text(&slot.name),"name_truncated":slot.name.len()>1024,"enabled":slot.enabled,"parameter_count":slot.parameters.len()})).collect::<Vec<_>>());
+            value["inserts"] = json!(track.inserts.iter().take(MAX_QUERY_ITEMS).map(|slot|json!({"id":slot.id,"name":bounded_text(&slot.name),"name_truncated":slot.name.len()>1024,"enabled":slot.enabled,"parameter_count":slot.parameters.len(),"inputs":slot.inputs})).collect::<Vec<_>>());
             // No opaque plugin state, VST paths, or source paths leave this API.
             if let Some(lane) = &track.automation {
                 let clips: Vec<_> = lane
@@ -390,6 +413,27 @@ pub fn dispatch_song_tool<H: SongToolHost + ?Sized>(
                 value["automation"] = json!({"target":lane.target,"interpolation":lane.interpolation,"override_value":lane.override_value,"total_points":lane.points.len(),"points":lane.points.iter().skip(q.offset).take(q.limit).collect::<Vec<_>>(),"clip_count":lane.clips.len(),"clips":clips});
             }
             Ok(value)
+        }
+        "get_note_expressions" => {
+            let q: NoteExpressionQuery = parse_arguments(arguments)?;
+            Page {
+                offset: q.offset,
+                limit: q.limit,
+            }
+            .validate()?;
+            let note = host
+                .project()
+                .midi_notes(q.track_id, q.clip_id)
+                .and_then(|notes| notes.iter().find(|note| note.id == q.note_id))
+                .ok_or_else(|| ToolError::new("not_found", "MIDI note not found"))?;
+            let points = note
+                .midi2
+                .as_ref()
+                .map_or(&[][..], |data| data.expressions.as_slice());
+            let session = host.song_session();
+            Ok(
+                json!({"session_id":session.id,"revision":session.revision,"note":note_summary(note),"total":points.len(),"offset":q.offset,"expressions":points.iter().skip(q.offset).take(q.limit).collect::<Vec<_>>()}),
+            )
         }
         "get_clip" => {
             let q: ClipQuery = parse_arguments(arguments)?;
@@ -406,6 +450,14 @@ pub fn dispatch_song_tool<H: SongToolHost + ?Sized>(
             let s = host.song_session();
             v["session_id"] = json!(s.id);
             v["revision"] = json!(s.revision);
+            v["midi_events_offset"] = json!(q.offset);
+            v["midi_events"] = json!(
+                clip.midi_events
+                    .iter()
+                    .skip(q.offset)
+                    .take(q.limit)
+                    .collect::<Vec<_>>()
+            );
             match &clip.content {
                 ClipContent::Midi { notes } => {
                     v["total_notes"] = json!(notes.len());
@@ -415,6 +467,7 @@ pub fn dispatch_song_tool<H: SongToolHost + ?Sized>(
                             .iter()
                             .skip(q.offset)
                             .take(q.limit)
+                            .map(note_summary)
                             .collect::<Vec<_>>()
                     );
                 }

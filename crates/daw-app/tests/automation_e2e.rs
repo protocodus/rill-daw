@@ -649,7 +649,8 @@ fn parameter_picker_creates_independent_lanes_and_removal_prunes_only_affected_t
             .iter()
             .filter(|label| *label == "Mute")
             .count(),
-        2
+        3,
+        "The two source channels and the real Master each have Mute"
     );
     app.quit();
 }

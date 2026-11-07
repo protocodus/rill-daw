@@ -14,6 +14,7 @@ pub(crate) enum AutomationEdit {
     Paste(AutomationClip, f64),
     Delete(u64),
     Independent(u64),
+    Loop(f64, f64),
 }
 
 pub(crate) struct LaneView {
@@ -273,6 +274,12 @@ pub(crate) fn automation_lane(
         if !view.navigating {
             header.context_menu(|ui| {
                 daw_ui::command_menu_contents(ui, |ui| {
+                    if daw_ui::automation_button(ui, "Loop this clip").clicked() {
+                        result
+                            .edits
+                            .push(AutomationEdit::Loop(clip.start, clip.end()));
+                        ui.close();
+                    }
                     if daw_ui::automation_button(ui, "Copy pattern").clicked() {
                         ui.ctx().data_mut(|data| {
                             data.insert_temp(egui::Id::new("automation_clipboard"), clip.clone())
@@ -342,9 +349,15 @@ pub(crate) fn automation_lane(
                 ) | AutomationEdit::Bounds(..)
             )
         });
-        result.interacted = !result.edits.is_empty();
+        result.interacted = result
+            .edits
+            .iter()
+            .any(|edit| !matches!(edit, AutomationEdit::Loop(..)));
     }
-    result.interacted |= !result.edits.is_empty();
+    result.interacted |= result
+        .edits
+        .iter()
+        .any(|edit| !matches!(edit, AutomationEdit::Loop(..)));
     result.diagnostic = serde_json::json!({"track":view.track,"target":lane.target,"rect":rect_json(view.rect),"clips":clip_diagnostics,
         "segment_handles":segment_diagnostics(&response.segments),
         "points":response.points.into_iter().map(|(id,rect)| serde_json::json!({"id":id,"rect":rect_json(rect)})).collect::<Vec<_>>()});
@@ -359,6 +372,11 @@ impl DawApp {
     ) -> anyhow::Result<()> {
         self.edit_label = Some("Edit automation".into());
         match edit {
+            AutomationEdit::Loop(start, end) => {
+                self.loop_range(start, end);
+                self.edit_label = Some("Loop clip".into());
+                Ok(())
+            }
             AutomationEdit::Clear => {
                 self.project
                     .automation_lane_mut(track)

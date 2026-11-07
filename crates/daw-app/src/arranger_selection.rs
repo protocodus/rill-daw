@@ -1,6 +1,6 @@
 //! Arrangement selection is presentation state; edits operate on one explicit set.
 use crate::app::{DawApp, WorkspaceView};
-use daw_core::{Clip, ClipContent, MAX_BEAT, TrackKind, new_id};
+use daw_core::{Clip, ClipContent, MAX_BEAT, TrackKind};
 use eframe::egui::{self, Pos2, Rect};
 use std::collections::HashSet;
 
@@ -357,13 +357,8 @@ impl DawApp {
                 return false;
             }
             let mut clip = original.clone();
-            clip.id = new_id();
+            clip.refresh_identity();
             clip.start += delta;
-            if let ClipContent::Midi { notes } = &mut clip.content {
-                for note in notes {
-                    note.id = new_id();
-                }
-            }
             additions.push((target, clip));
         }
         let mut next = self.project.clone();
@@ -635,16 +630,9 @@ impl DawApp {
             let mut additions = Vec::new();
             for (track, original) in drag.originals.iter() {
                 let mut clip = original.clone();
-                clip.id = new_id();
-                clip.link_group = None;
-                clip.audio_take = None;
+                clip.refresh_identity();
                 if let ClipContent::Audio { crossfade, .. } = &mut clip.content {
                     *crossfade = None;
-                }
-                if let ClipContent::Midi { notes } = &mut clip.content {
-                    for note in notes {
-                        note.id = new_id();
-                    }
                 }
                 additions.push((*track, clip));
             }

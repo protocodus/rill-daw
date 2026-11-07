@@ -1,6 +1,8 @@
 //! Consolidation keeps source windows and musical timing explicit. Audio is
 //! rendered by the engine; the model only validates and replaces clip regions.
-use crate::{Clip, ClipContent, MAX_BEAT, Note, Project, TrackKind};
+#[cfg(test)]
+use crate::Note;
+use crate::{Clip, ClipContent, MAX_BEAT, Project, TrackKind};
 use anyhow::{Context, Result, ensure};
 use std::collections::HashSet;
 
@@ -92,6 +94,7 @@ impl Project {
     pub fn join_midi_clips(&mut self, track: u64, ids: &[u64]) -> Result<u64> {
         let (start, end, clips) = self.join_selection(track, ids, TrackKind::Midi)?;
         let mut joined_notes = Vec::new();
+        let mut joined_events = Vec::new();
         for clip in clips {
             let ClipContent::Midi { notes } = &clip.content else {
                 unreachable!()
@@ -100,17 +103,36 @@ impl Project {
                 let left = note.start.max(clip.offset);
                 let right = (note.start + note.length).min(clip.source_end());
                 if right > left {
-                    joined_notes.push(Note::new(
-                        note.pitch,
-                        (clip.start + clip.source_to_local(left) - start).max(0.0),
-                        (right - left) / clip.source_rate,
-                        note.velocity,
-                    ));
+                    let mut joined = note.clone();
+                    joined.refresh_identity();
+                    joined.start = (clip.start + clip.source_to_local(left) - start).max(0.0);
+                    joined.length = (right - left) / clip.source_rate;
+                    if let Some(data) = &note.midi2 {
+                        let mut data = data.after_split(left - note.start)?;
+                        for point in &mut data.expressions {
+                            point.beat /= clip.source_rate;
+                        }
+                        joined.midi2 = Some(data);
+                    }
+                    crate::validate_note(&joined)?;
+                    joined_notes.push(joined);
                 }
+            }
+            for event in clip
+                .midi_events
+                .iter()
+                .filter(|event| event.beat >= clip.offset && event.beat < clip.source_end())
+            {
+                joined_events.push(crate::MidiClipEvent::new(
+                    (clip.start + clip.source_to_local(event.beat) - start).max(0.0),
+                    event.packet,
+                ));
             }
         }
         joined_notes.sort_by(|a, b| a.start.total_cmp(&b.start).then(a.pitch.cmp(&b.pitch)));
-        let joined = Clip::midi("Joined MIDI", start, end - start, joined_notes);
+        let mut joined = Clip::midi("Joined MIDI", start, end - start, joined_notes);
+        joined_events.sort_by(|a, b| a.beat.total_cmp(&b.beat).then(a.id.cmp(&b.id)));
+        joined.midi_events = joined_events;
         Ok(self.replace_join_selection(track, ids, joined))
     }
 

@@ -388,6 +388,118 @@ fn published_edit_schema_only_contains_supported_operations() {
 }
 
 #[test]
+fn master_and_pre_insert_controls_are_visible_editable_and_scope_safe() {
+    let mut host = Host::default();
+    let source = host.p.add_audio_track("Source");
+    let master = call(
+        &mut host,
+        "get_track",
+        json!({"track_id":MASTER_CHANNEL_ID}),
+    );
+    assert_eq!(master["name"], "Master");
+    assert_eq!(master["input_gain"], 1.0);
+    let scope = ToolScope::Channel {
+        track_id: MASTER_CHANNEL_ID,
+    };
+    scope.validate_target(&host.p).unwrap();
+    let before = host.p.clone();
+    let session = host.session;
+    let edits = json!({"session_id":session.id,"expected_revision":session.revision,"label":"Master trim","edits":[
+        {"op":"set_mix","channels":[{"track":MASTER_CHANNEL_ID,"input_gain":0.25,"gain":0.5,"pan":0.2}]},
+        {"op":"add_automation","name":"Master input","target":{"track":MASTER_CHANNEL_ID,"parameter":"TrackInputGain"},"value":0.25}
+    ]});
+    scope.validate_call(&host.p, "apply_edits", &edits).unwrap();
+    call(&mut host, "apply_edits", edits);
+    scope.validate_candidate(&before, &host.p).unwrap();
+    assert_eq!(host.p.master.input_gain, 0.25);
+    assert_eq!(host.history.undo_labels().count(), 1);
+    assert!(host.history.undo(&mut host.p));
+    assert_eq!(host.p, before);
+    let mut leaked = before.clone();
+    leaked.master.input_gain = 0.5;
+    let source_scope = ToolScope::Channel { track_id: source };
+    assert!(source_scope.validate_candidate(&before, &leaked).is_err());
+    leaked = before.clone();
+    leaked.track_mut(source).unwrap().input_gain = 2.0;
+    assert!(scope.validate_candidate(&before, &leaked).is_err());
+    let schema = song_edit_schema();
+    let mix = schema["oneOf"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|edit| edit["properties"]["op"]["const"] == "set_mix")
+        .unwrap();
+    assert_eq!(
+        mix["properties"]["channels"]["items"]["properties"]["track"]["oneOf"][0]["minimum"],
+        0
+    );
+    assert!(
+        mix["properties"]["channels"]["items"]["properties"]
+            .get("input_gain")
+            .is_some()
+    );
+}
+
+#[test]
+fn expressive_queries_page_exact_packets_and_keep_ordinary_note_queries_bounded() {
+    assert_eq!(tool_effect("get_note_expressions"), ToolEffect::Read);
+    let mut host = Host::default();
+    let track = host.p.add_midi_track("Expressive");
+    let mut note = Note::new(60, 0.0, 4.0, 64);
+    note.set_velocity16(0x8123);
+    let note_id = note.id;
+    let packet = UmpPacket::from_words(&[0x40a0_3c00, 0x8123_4567]).unwrap();
+    note.midi2.as_mut().unwrap().expressions = (0..300)
+        .map(|index| MidiNoteExpression::new(f64::from(index) / 100.0, packet))
+        .collect();
+    let clip = Clip::midi("Part", 0.0, 4.0, vec![note]);
+    let clip_id = clip.id;
+    host.p.track_mut(track).unwrap().clips.push(clip);
+    host.p.validate().unwrap();
+    let ordinary = call(
+        &mut host,
+        "get_clip",
+        json!({"track_id":track,"clip_id":clip_id,"limit":1}),
+    );
+    assert_eq!(ordinary["notes"][0]["midi2"]["velocity"], 0x8123);
+    assert_eq!(ordinary["notes"][0]["midi2"]["expression_count"], 300);
+    assert!(ordinary["notes"][0]["midi2"].get("expressions").is_none());
+    assert!(ordinary.to_string().len() < 2000);
+    let args = json!({"track_id":track,"clip_id":clip_id,"note_id":note_id,"offset":299,"limit":2});
+    let scope = ToolScope::MidiClip {
+        track_id: track,
+        clip_id,
+    };
+    scope
+        .validate_call(&host.p, "get_note_expressions", &args)
+        .unwrap();
+    let page = call(&mut host, "get_note_expressions", args);
+    assert_eq!(page["total"], 300);
+    assert_eq!(page["expressions"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        page["expressions"][0]["packet"]["words"][1],
+        0x8123_4567_u32
+    );
+    assert!(
+        dispatch_song_tool(
+            &mut host,
+            "get_note_expressions",
+            json!({"track_id":track,"clip_id":clip_id,"note_id":note_id,"limit":257})
+        )
+        .is_err()
+    );
+    assert!(
+        scope
+            .validate_call(
+                &host.p,
+                "get_note_expressions",
+                &json!({"track_id":track,"clip_id":new_id(),"note_id":note_id})
+            )
+            .is_err()
+    );
+}
+
+#[test]
 fn application_capabilities_are_separate_from_canonical_availability() {
     let song = song_tool_specs();
     let all = tool_specs();
@@ -443,7 +555,7 @@ fn schema_example(schema: &Value) -> Value {
 fn every_published_edit_shape_deserializes_to_the_real_command_contract() {
     let schema = song_edit_schema();
     let variants = schema["oneOf"].as_array().unwrap();
-    assert_eq!(variants.len(), 69);
+    assert_eq!(variants.len(), 82);
     for variant in variants {
         let example = schema_example(variant);
         serde_json::from_value::<SongEdit>(example.clone()).unwrap_or_else(|error| {

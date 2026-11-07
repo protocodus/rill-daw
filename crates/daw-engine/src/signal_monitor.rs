@@ -16,10 +16,13 @@ const FFT_SIZE: usize = 4096;
 const PHASE_POINTS: usize = 256;
 const GATE_BINS: usize = 87_001; // -70 to +800 LUFS, including any finite f32 input.
 
+#[path = "signal_true_peak.rs"]
+mod true_peak;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub enum SignalMonitorTarget {
     Channel(u64),
-    /// The renderer's stereo sum, before device monitoring, click and clipping.
+    /// Final master processing, before device monitoring, click and clipping.
     Master,
 }
 
@@ -38,6 +41,18 @@ pub struct SignalMonitorSnapshot {
     /// Peak and RMS over the most recent FFT window, not true-peak estimates.
     pub peak_dbfs: Option<f32>,
     pub rms_dbfs: Option<f32>,
+    /// Exponentially averaged RMS, with a 300 ms mean-square time constant.
+    pub rms_300ms_dbfs: Option<f32>,
+    pub channel_rms_300ms_dbfs: [Option<f32>; 2],
+    pub channel_peak_dbfs: [Option<f32>; 2],
+    pub sample_peak_hold_dbfs: Option<f32>,
+    /// Streaming FIR inter-sample peak estimates. The analyzer oversamples to
+    /// at least 192 kHz; this is not a certified conformance measurement.
+    pub true_peak_dbfs: Option<f32>,
+    pub true_peak_hold_dbfs: Option<f32>,
+    pub true_peak_oversampling: u8,
+    /// Individual input samples whose absolute value exceeded full scale.
+    pub overload_samples: [u64; 2],
     pub correlation: Option<f32>,
     pub phase: Vec<[f32; 2]>,
     pub observed_frames: u64,
@@ -300,7 +315,14 @@ struct Analysis {
     absolute_energy: f64,
     absolute_count: u64,
     recent: Vec<[f32; 2]>,
+    recent_true_peaks: Vec<[f64; 2]>,
     recent_cursor: usize,
+    true_peak: true_peak::TruePeak,
+    sample_peak_hold: [f64; 2],
+    true_peak_hold: [f64; 2],
+    overload_samples: [u64; 2],
+    rms_energy: [f64; 2],
+    rms_decay: f64,
     window: Vec<f64>,
     fft: Arc<dyn Fft<f64>>,
     fft_input: Vec<Complex<f64>>,
@@ -327,7 +349,14 @@ impl Analysis {
             absolute_energy: 0.0,
             absolute_count: 0,
             recent: vec![[0.0; 2]; FFT_SIZE],
+            recent_true_peaks: vec![[0.0; 2]; FFT_SIZE],
             recent_cursor: 0,
+            true_peak: true_peak::TruePeak::new(rate),
+            sample_peak_hold: [0.0; 2],
+            true_peak_hold: [0.0; 2],
+            overload_samples: [0; 2],
+            rms_energy: [0.0; 2],
+            rms_decay: (-1.0 / (f64::from(rate) * 0.3)).exp(),
             window: (0..FFT_SIZE)
                 .map(|index| {
                     0.5 - 0.5 * (2.0 * std::f64::consts::PI * index as f64 / FFT_SIZE as f64).cos()
@@ -351,17 +380,35 @@ impl Analysis {
         self.absolute_energy = 0.0;
         self.absolute_count = 0;
         self.recent.fill([0.0; 2]);
+        self.recent_true_peaks.fill([0.0; 2]);
         self.recent_cursor = 0;
+        self.true_peak.reset();
+        self.sample_peak_hold = [0.0; 2];
+        self.true_peak_hold = [0.0; 2];
+        self.overload_samples = [0; 2];
+        self.rms_energy = [0.0; 2];
     }
 
     fn push(&mut self, frames: &[[f32; 2]]) -> bool {
         let mut publish = false;
         for frame in frames {
             let frame = frame.map(|value| if value.is_finite() { value } else { 0.0 });
+            let true_peaks = self.true_peak.process(frame);
             self.recent[self.recent_cursor] = frame;
+            self.recent_true_peaks[self.recent_cursor] = true_peaks;
             self.recent_cursor = (self.recent_cursor + 1) % FFT_SIZE;
             let mut energy = 0.0;
             for (channel, sample) in frame.into_iter().enumerate() {
+                let raw = f64::from(sample);
+                self.sample_peak_hold[channel] = self.sample_peak_hold[channel].max(raw.abs());
+                self.true_peak_hold[channel] =
+                    self.true_peak_hold[channel].max(true_peaks[channel]);
+                if sample.abs() > 1.0 {
+                    self.overload_samples[channel] =
+                        self.overload_samples[channel].saturating_add(1);
+                }
+                self.rms_energy[channel] =
+                    self.rms_decay * self.rms_energy[channel] + (1.0 - self.rms_decay) * raw * raw;
                 let weighted = self.filters[channel][0].process(f64::from(sample));
                 let weighted = self.filters[channel][1].process(weighted);
                 energy += weighted * weighted;
@@ -428,14 +475,22 @@ impl Analysis {
         let mut right_energy = 0.0;
         let mut product = 0.0;
         let mut peak = 0.0_f64;
+        let mut channel_peaks = [0.0_f64; 2];
+        let mut true_peaks = [0.0_f64; 2];
         let mut phase = Vec::with_capacity(PHASE_POINTS);
         for index in 0..count {
-            let frame = self.recent[(self.recent_cursor + FFT_SIZE - count + index) % FFT_SIZE];
+            let cursor = (self.recent_cursor + FFT_SIZE - count + index) % FFT_SIZE;
+            let frame = self.recent[cursor];
             let [left, right] = frame.map(f64::from);
             left_energy += left * left;
             right_energy += right * right;
             product += left * right;
             peak = peak.max(left.abs()).max(right.abs());
+            channel_peaks[0] = channel_peaks[0].max(left.abs());
+            channel_peaks[1] = channel_peaks[1].max(right.abs());
+            for (channel, value) in self.recent_true_peaks[cursor].iter().enumerate() {
+                true_peaks[channel] = true_peaks[channel].max(*value);
+            }
         }
         // One real sample from each time bucket, with deterministic within-
         // bucket dither. A fixed stride of 16 aliases a 1 kHz / 48 kHz tone to
@@ -515,6 +570,14 @@ impl Analysis {
             rms_dbfs: (count > 0)
                 .then(|| dbfs(((left_energy + right_energy) / (2.0 * count as f64)).sqrt()))
                 .flatten(),
+            rms_300ms_dbfs: dbfs(((self.rms_energy[0] + self.rms_energy[1]) * 0.5).sqrt()),
+            channel_rms_300ms_dbfs: self.rms_energy.map(|energy| dbfs(energy.sqrt())),
+            channel_peak_dbfs: channel_peaks.map(dbfs),
+            sample_peak_hold_dbfs: dbfs(self.sample_peak_hold[0].max(self.sample_peak_hold[1])),
+            true_peak_dbfs: dbfs(true_peaks[0].max(true_peaks[1])),
+            true_peak_hold_dbfs: dbfs(self.true_peak_hold[0].max(self.true_peak_hold[1])),
+            true_peak_oversampling: self.true_peak.factor(),
+            overload_samples: self.overload_samples,
             correlation,
             phase,
             observed_frames: self.observed,

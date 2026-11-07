@@ -147,7 +147,7 @@ fn drawing_controls_keep_their_positions_across_mouse_tools_and_selection() {
                     app.click("Key C · Natural minor");
                     if !selected {
                         // The stable Notes menu keeps unavailable commands visible and inert.
-                        for command in ["Randomize…", "Quantize…"] {
+                        for command in ["Humanize…", "Quantize…"] {
                             app.click("Notes");
                             let state = app.click(command);
                             unchanged(&state, &original);
@@ -173,10 +173,10 @@ fn selection_commands_still_preview_apply_and_undo_from_the_pencil_tool() {
     app.command(json!({"command":"viewport", "width":1100, "height":760}));
     menu(&mut app, "Edit", "Select all notes");
     let before = app.click("Pencil");
-    let preview = menu(&mut app, "Notes", "Randomize…");
+    let preview = menu(&mut app, "Notes", "Humanize…");
     assert!(preview["midi_editor"]["randomize"].is_object());
     unchanged(&preview, &before);
-    unchanged(&app.click("Cancel randomize"), &before);
+    unchanged(&app.click("Cancel humanize"), &before);
 
     let preview = menu(&mut app, "Notes", "Quantize…");
     assert!(preview["midi_editor"]["quantize"].is_object());

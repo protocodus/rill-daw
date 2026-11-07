@@ -168,7 +168,10 @@ fn every_channel_and_master_hold_transients_until_mouse_reset_and_switches_are_c
             );
         }
         assert_eq!(held["mixer"]["master"]["peak_clipped"], true);
-        assert_eq!(held["mixer"]["master"]["peak_hold"][0], 1.0);
+        assert!(
+            (held["mixer"]["master"]["peak_hold"][0].as_f64().unwrap() - 1.44).abs() < 0.001,
+            "The Master strip retains actual headroom before the device clips its output"
+        );
         assert_badge_color(
             &held,
             &held["mixer"]["master"]["meter_readout"],

@@ -89,8 +89,9 @@ and creation/detail actions together.
 
 ### Signal analysis
 
-The four focused mixer analysis views, shown with fixed demonstration readings.
-The running application supplies measured channel audio.
+The gallery shows four mixer analysis views with fixed demonstration readings.
+The running application supplies measured channel audio and also includes the
+Levels view for stereo RMS, sample/true-peak estimates, holds and overs counts.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/signal-analysis-dark.png">
@@ -282,10 +283,12 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Focused workspace structure | `workspace_header`, `workspace_header_with_context`, `toolbar`, `command_group`, `toolbar_group`, `toolbar_group_sized`, `action_menu`, `action_row`, `context_section`, `bounded_columns`, `bounded_panes`, `scroll_body` |
 | Empty workspace next steps | `empty_workspace`, `EmptyWorkspaceAction`, `EmptyWorkspaceResponse` |
 | Mixer channels and metering | `mixer_strip`, `mixer_channel_button`, `stereo_meter`, `channel_controls_at`, `ChannelControlsResponse` |
-| Mixer parameter controls and output level | `mixer_fader`, `gain_taper`/`gain_untaper`, `paint_mixer_scale`, `mixer_pan`, `mixer_pan_row`, `mixer_mute_solo`, `MixerMuteSoloResponse`, `channel_meter`, `channel_meter_with_peak_hold`, `channel_peak_indicator`, `channel_meter_readout` |
+| Mixer parameter controls and output level | `mixer_fader`, `gain_taper`/`gain_untaper`, `paint_mixer_scale`, `mixer_pan`, `mixer_pan_row`, `mixer_master_pan_row`, `mixer_mute_solo`, `mixer_folded_mute_solo`, `MixerMuteSoloResponse`, `channel_meter`, `channel_meter_with_peak_hold`, `channel_peak_indicator`, `channel_meter_readout`, `channel_meter_statistics`, `gain_value_button_named` |
+| Instrument-output groups and input trim | `mixer_output_group_header`, `mixer_output_disclosure`, `mixer_folded_output_name`, `mixer_folded_output_route`, `mixer_input_gain` |
 | Track and channel ordering | `track_reorder_source`, `track_reorder_grip_at`, `track_reorder_grip_tinted_at`, `track_reorder_menu`, `track_reorder_target`, `track_reorder_target_with_after_edge`, `track_reorder_preview_label`, `track_reorder_scroll_delta`, `TrackDropIntent` |
 | Mixer identity, inserts and routing | `mixer_name_plate`, `mixer_name_plate_with_grip`, `MixerNamePlateKind`, `mixer_row`, `MixerRowText`, `mixer_source_caption`, `mixer_effects_button`, `mixer_insert_slot`, `mixer_bus_input_summary`, `mixer_output_button`, `mixer_send_row`, `mixer_more_sends`, `mixer_add_send_button`, `MixerSend`, `MIXER_CHANNEL_WIDTH`, `MIXER_ROW_GAP`, `MIXER_SECTION_GAP` |
 | Live signal analysis | `mixer_analysis_button`, `signal_analyzer_tabs`, `signal_analyzer`, `SignalAnalyzerView`, `SignalAnalyzerData`, `SignalAnalyzerResponse` |
+| Exact note expression | `midi_expression_editor`, `MidiExpressionControls`, `MidiExpressionKind`, `MidiExpressionPoint`, `MidiExpressionAction` |
 | Insert-chain structure | `effect_chain_header`, `effect_slot`, `empty_effect_chain` |
 | Audio recording and raw input level | `record_button`, `record_arm_at`, `input_meter`, `paint_recording_region`, `recording_color` |
 | Boolean button | `toggle` |
@@ -843,7 +846,7 @@ release, including across silent callbacks; pause and stop clear the moving
 meters while retaining each channel's peak badge until reset.
 
 Mixer follows signal order from top to bottom: the name plate, the source
-("Audio · In 1", "MIDI · <instrument>", "Bus · 2 in"), **Analyze**, Effects and its inserts,
+("Audio · In 1", "MIDI · <instrument>", "Bus · 2 in"), input Gain, **Analyze**, Effects and its inserts,
 pan with **Mute**/**Solo**, the gain and peak readouts over the fader unit, then
 the output and sends. Strips are 144-point fill-only cards with 8-point margins
 (`MIXER_CHANNEL_WIDTH`); only the selected strip is outlined. Rows of one section
@@ -855,13 +858,19 @@ an optional 3-point destination rail). Inside a strip only the gain field, the
 pan and fader troughs and the meter troughs carry an outline.
 
 **Analyze** opens a focused read-only popup for that channel, bus, return or
-Master without changing selection or starting playback. Spectrum, Loudness,
-Correlation and Phase share one measurement; switching tabs retains it. The
-channel tap follows inserts, gain, pan and mute; Master uses the unclamped mix
-before dry input monitoring and metronome, as its tooltip explains. Spectrum
+Master without changing selection or starting playback. Spectrum, Levels,
+Loudness, Correlation and Phase share one measurement; switching tabs retains it.
+The channel tap follows inserts, volume, pan and mute; Master uses the actual
+post-Master mix before device clipping, dry input monitoring and metronome, as
+its tooltip explains. Spectrum
 uses a logarithmic frequency scale. Loudness shows 400 ms momentary, 3 s short
 term and gated approximate integrated LUFS; unfilled windows and silence show
-dashes. The level footer explicitly reports sample peak, rather than true peak.
+dashes. Levels adds stereo RMS with a 300 ms exponential mean-square time
+constant, sample-peak markers, independent sample/true-peak holds and overs
+counts. True peak is a FIR oversampling estimate to at least 192 kHz, not a
+certified compliance reading. Overs counts over-full-scale samples rather than
+reconstructed inter-sample peaks. The footer distinguishes sample peak from
+true peak.
 Phase uses a mid/side goniometer: in-phase stereo is vertical and opposite phase
 is horizontal. Actual readings remain visible with a paused/stopped status;
 **Reset measurement** starts fresh, and close/reopen, a new engine or a target
@@ -1251,6 +1260,22 @@ Effect rows use shared `reorder_handle` and `reorder_drop_target` components. Dr
 
 Mixer uses equal-width shared strips with common processing, pan, fader/meter and routing baselines. Bus/return names sit slightly lower beneath their role heading, without shortening their faders. Click a channel name to open its Channel page or its output destination to choose a route; **Routing…** opens the full routing controls. The name plate's context menu provides **Open channel**, Instrument, Effects, and Routing where applicable; the source row's Automation menu holds the channel's automation actions. Channel, Instrument, Effects, and Routing share `utility_header`: one row with the page links in a fixed order (Channel · Instrument · Effects · Routing · Mixer, the current window shown as the selected tab; the Channel page sits under the Properties tabs, so its row omits Channel) leading and **AI for this context** trailing (shortened to **AI** where the full row would wrap), then a 21-point gap, so every body starts at the same height. Closing a utility returns to its caller. Each channel's vertical meter stands beside its fader on the fader's dB scale; Master shows the final stereo output on the same scale. Readings come from the running engine.
 
+Instrument owners show a shared **name · N outputs** disclosure; the primary
+strip remains full width. Auxiliary output strips initially fold to 64 points
+and expand independently. Folded strips retain identity, native bus/pair label,
+peak/RMS, Mute/Solo and output routing. Revealing a selected output expands it.
+This is session presentation state, independent of audio, project history and
+saved routing. Song order keeps output groups contiguous; sibling shifts and
+drag targets cannot split them.
+
+**Gain** is the shared pre-insert trim control (0–16, up to +24.08 dB), separate
+from the post-insert volume fader. `AutomationControl::InputGain` identifies its
+automation status. Master uses the same Gain, inserts, pan, Mute and volume
+controls, with no Solo or sends. Master peaks/holds/RMS and Analyze measure the
+post-Master, pre-device signal; device clipping, dry input monitoring and click
+are outside that tap. `channel_meter_statistics` displays the louder stereo side of
+the engine's 300 ms exponential mean-square RMS detector.
+
 Short mixer workspaces use the existing 21-point compact controls; taller
 windows retain 34-point comfortable rows. Effects and Analyze share one outlined
 processing row. The shared identity band aligns every role's gain travel,
@@ -1267,6 +1292,15 @@ destination, a 55-point ring on the shared gain taper, the level in dB (exact
 entry from −60 to +24.08 dB, the model's 0..16 range), **Pre**/**Post**, the
 Automation menu and a quiet remove icon. **Add send…** lists eligible buses and
 **New bus and send**; the footer offers **New return with effect…**.
+
+Routing's **Plug-in inputs and outputs** uses **Inspect I/O**/**Refresh I/O** to
+read current native state in an isolated helper. Named buses expose stereo
+pairs and an odd last mono channel. Input routes provide **Add source…**,
+**Gain**, **Pre volume** and **Remove**; instrument outputs provide **Enable
+output…**, **Enable all output channels**, **Show in Mixer** and **Remove
+output**. The primary native bus follows its reported main role even when its
+index is nonzero. Inspection changes no project state; configuring routes uses
+normal atomic history and feedback validation.
 
 The Effects window heads its chain with **Inserts** and the active count (the
 processing order is in the count's tooltip). Each insert shows its name on the
@@ -1601,7 +1635,7 @@ paths enter normal clip editing and commit one named history entry.
 
 ### MIDI recording and timing controls
 
-The same **Recording · Track name** popup supports MIDI tracks. **MIDI device** selects the input shared by MIDI tracks, with **Refresh MIDI inputs** beside its channel choices. **All channels**, **Channel 1–16**, and **No input** are per-track project edits. MIDI arming defaults to session-only **Auto** monitoring; audio arming retains **Off**. MIDI monitoring uses the assigned plugin and its effects. An unassigned track offers **Choose instrument…** while still allowing note recording. Every recording creates a new clip; loop passes accumulate without replacing existing notes.
+The same **Recording · Track name** popup supports MIDI tracks. **MIDI device** selects the input shared by MIDI tracks, with **Refresh MIDI inputs** beside its channel choices. **All channels**, **Channel 1–16**, and **No input** are per-track project edits. **Input format** reports MIDI 1.0 or UMP capability and **UMP group** selects Group 1–16; legacy inputs enable only Group 1. This input selector does not rewrite stored performance. MIDI arming defaults to session-only **Auto** monitoring; audio arming retains **Off**. MIDI monitoring uses the assigned plugin and its effects. An unassigned track offers **Choose instrument…** while still allowing note recording. Every recording creates a new clip; loop passes accumulate without replacing existing notes.
 
 Both MIDI and audio track headers reuse `record_arm_at`. Its direct child UI preserves the arranger's parent row geometry. The MIDI instrument selector sits alongside the arm control. **Window → Recording** also opens with no selected track so global timing controls remain available.
 

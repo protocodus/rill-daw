@@ -15,9 +15,41 @@ pub(crate) fn release_factor(frames: usize, sample_rate: u32) -> f32 {
 pub(crate) struct ChannelMeter {
     stereo: AtomicU64,
     held: AtomicU64,
+    rms: AtomicU64,
 }
 
 impl ChannelMeter {
+    /// Post-fader level telemetry. RMS uses an exponential mean-square detector
+    /// with a 300 ms time constant, not a VU calibration or a 300 ms boxcar.
+    /// Single graph writer; coherent stereo atomic publication, no allocation.
+    pub(crate) fn publish_audio(&self, frames: &[[f32; 2]], sample_rate: u32) {
+        if frames.is_empty() {
+            return;
+        }
+        let coefficient = (-1.0 / (f64::from(sample_rate.max(1)) * 0.3)).exp();
+        let previous = self.rms();
+        let mut energy = previous.map(|value| f64::from(value).powi(2));
+        let mut peaks = [0.0_f32; 2];
+        for frame in frames {
+            for channel in 0..2 {
+                let value = if frame[channel].is_finite() {
+                    frame[channel]
+                } else {
+                    0.0
+                };
+                peaks[channel] = peaks[channel].max(value.abs());
+                energy[channel] =
+                    coefficient * energy[channel] + (1.0 - coefficient) * f64::from(value).powi(2);
+            }
+        }
+        let rms = energy.map(|value| value.max(0.0).sqrt().min(f64::from(f32::MAX)) as f32);
+        self.rms.store(
+            u64::from(rms[0].to_bits()) | (u64::from(rms[1].to_bits()) << 32),
+            Ordering::Relaxed,
+        );
+        self.publish(peaks, release_factor(frames.len(), sample_rate.max(1)));
+    }
+
     pub(crate) fn publish(&self, peaks: [f32; 2], decay: f32) {
         let peaks = peaks.map(|peak| if peak.is_finite() { peak.abs() } else { 0.0 });
         // Capture raw block maxima before ballistics. A UI frame may arrive
@@ -53,6 +85,15 @@ impl ChannelMeter {
 
     pub(crate) fn clear(&self) {
         self.stereo.store(0, Ordering::Relaxed);
+        self.rms.store(0, Ordering::Relaxed);
+    }
+
+    pub(crate) fn rms(&self) -> [f32; 2] {
+        let packed = self.rms.load(Ordering::Relaxed);
+        [
+            f32::from_bits(packed as u32),
+            f32::from_bits((packed >> 32) as u32),
+        ]
     }
 
     pub(crate) fn held(&self) -> [f32; 2] {
@@ -76,8 +117,7 @@ pub(crate) struct ChannelMeters {
 impl ChannelMeters {
     pub(crate) fn new(project: &Project) -> Self {
         let mut channels: Vec<_> = project
-            .tracks
-            .iter()
+            .channels()
             .filter(|track| {
                 matches!(
                     track.kind,
@@ -100,6 +140,12 @@ impl ChannelMeters {
     pub(crate) fn peaks(&self, id: u64) -> [f32; 2] {
         self.channel(id)
             .map(|meter| meter.peaks())
+            .unwrap_or([0.0; 2])
+    }
+
+    pub(crate) fn rms(&self, id: u64) -> [f32; 2] {
+        self.channel(id)
+            .map(|meter| meter.rms())
             .unwrap_or([0.0; 2])
     }
 }
@@ -143,5 +189,47 @@ mod tests {
         assert_eq!(meter.peaks(), [1.1, 0.3]);
         meter.publish([1.1, 0.3], 0.0);
         assert_eq!(meter.held(), [1.1, 0.3]);
+    }
+
+    #[test]
+    fn rms_has_a_calibrated_300_ms_time_constant_without_block_size_dependence() {
+        let rate = 48_000;
+        let samples = vec![[0.5, -0.25]; rate as usize];
+        let expected = (1.0 - (-1.0_f64 / 0.3).exp()).sqrt();
+        for block in [1, 64, 256, 511] {
+            let meter = ChannelMeter::default();
+            for frames in samples.chunks(block) {
+                meter.publish_audio(frames, rate);
+            }
+            for (actual, amplitude) in meter.rms().into_iter().zip([0.5, 0.25]) {
+                assert!(
+                    (f64::from(actual) - expected * amplitude).abs() < 2e-6,
+                    "block={block}: {}",
+                    f64::from(actual)
+                );
+            }
+            assert_eq!(meter.peaks(), [0.5, 0.25]);
+            assert_eq!(meter.held(), [0.5, 0.25]);
+            meter.clear();
+            assert_eq!(meter.rms(), [0.0; 2]);
+            assert_eq!(meter.held(), [0.5, 0.25]);
+        }
+    }
+
+    #[test]
+    fn rms_publication_is_allocation_free_and_finite_with_floating_headroom() {
+        let meter = ChannelMeter::default();
+        let frames = [[1.5, 0.75]; 256];
+        assert_eq!(
+            crate::allocation_test_support::count_allocations(|| {
+                meter.publish_audio(&frames, 48_000);
+            }),
+            0
+        );
+        assert_eq!(meter.peaks(), [1.5, 0.75]);
+        assert!(meter.rms()[0] > meter.rms()[1]);
+        meter.publish_audio(&[[f32::NAN, f32::INFINITY], [f32::MAX, -f32::MAX]], 48_000);
+        assert!(meter.rms().iter().all(|value| value.is_finite()));
+        assert!(meter.rms()[0] > 0.0);
     }
 }

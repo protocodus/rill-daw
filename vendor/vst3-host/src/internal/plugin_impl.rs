@@ -2660,6 +2660,53 @@ impl PluginInternal for PluginImpl {
         self.current_audio_bus_layout()
     }
 
+    fn audio_bus_details(&self) -> Result<crate::audio::AudioBusDetailsLayout> {
+        self.ensure_control_thread("audio bus metadata query")?;
+        let layout = self.current_audio_bus_layout()?;
+        let side = |buses: Vec<AudioBusConfig>, direction: i32, label: &str| {
+            buses
+                .into_iter()
+                .enumerate()
+                .map(|(index, bus)| {
+                    let mut info: BusInfo = unsafe { std::mem::zeroed() };
+                    let available = unsafe {
+                        self.component
+                            .getBusInfo(kAudio as i32, direction, index as i32, &mut info)
+                    } == kResultOk;
+                    let name = if available {
+                        let units: Vec<u16> = info
+                            .name
+                            .iter()
+                            .take_while(|&&unit| unit != 0)
+                            .map(|&unit| unit as u16)
+                            .collect();
+                        String::from_utf16_lossy(&units)
+                    } else {
+                        String::new()
+                    };
+                    crate::audio::AudioBusDetails {
+                        name: if name.trim().is_empty() {
+                            format!("{label} {}", index + 1)
+                        } else {
+                            name
+                        },
+                        channels: bus.channel_count,
+                        active: bus.active,
+                        main: if available {
+                            info.busType == BusTypes_::kMain as i32
+                        } else {
+                            index == 0
+                        },
+                    }
+                })
+                .collect()
+        };
+        Ok(crate::audio::AudioBusDetailsLayout {
+            inputs: side(layout.inputs, kInput as i32, "Input"),
+            outputs: side(layout.outputs, kOutput as i32, "Output"),
+        })
+    }
+
     fn process_buses(&mut self, buffers: &mut BusAudioBuffers) -> Result<()> {
         self.validate_bus_buffers(buffers)?;
         self.process_buffer_view(&mut CallerAudioBuffers::Buses(buffers))
@@ -3787,6 +3834,7 @@ impl PluginInternal for PluginImpl {
         };
         unsafe {
             let count = ctrl.getNoteExpressionCount(bus, channel);
+            if !(0..=4096).contains(&count) { return Err(Error::Other("invalid note expression count".into())); }
             let mut out = Vec::with_capacity(count.max(0) as usize);
             for i in 0..count {
                 let mut info: NoteExpressionTypeInfo = std::mem::zeroed();

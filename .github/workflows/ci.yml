@@ -35,6 +35,7 @@ jobs:
       RUSTFLAGS: ${{ matrix.target == 'x86_64-pc-windows-msvc' && '-C target-feature=+crt-static' || '' }}
       RUST_BACKTRACE: "1"
       CARGO_TERM_COLOR: always
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
     steps:
       - uses: actions/checkout@v4
       - name: Isolate application settings

@@ -171,6 +171,43 @@ fn double_click(app: &mut Harness, label: &str) -> Value {
     app.command(json!({"command":"pointer", "phase":"double_click", "x":x, "y":y}))
 }
 
+fn select_automation_parameter(app: &mut Harness, parameter: &str) {
+    app.click("Volume");
+    for _ in 0..8 {
+        let state = app.inspect();
+        if visible(&state, parameter) {
+            app.click(parameter);
+            return;
+        }
+        // The parameter picker is scrollable. Aim the wheel at a visible
+        // option, rather than at the selected-value button behind its popup.
+        let option = state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .rev()
+            .find(|row| {
+                row["text"].as_str().is_some_and(|text| {
+                    matches!(
+                        text,
+                        "Input gain" | "Volume" | "Pan" | "VST instrument parameter"
+                    ) || text.ends_with(" · Parameter")
+                })
+            })
+            .expect("Open automation parameter options");
+        let x = (option["min"][0].as_f64().unwrap() + option["max"][0].as_f64().unwrap()) * 0.5;
+        let y = (option["min"][1].as_f64().unwrap() + option["max"][1].as_f64().unwrap()) * 0.5;
+        app.command(json!({"command":"scroll","x":x,"y":y,"delta":-120.0}));
+        for _ in 0..8 {
+            app.inspect();
+        }
+    }
+    panic!(
+        "Missing automation parameter {parameter:?} after scrolling: {}",
+        app.inspect()["visible_labels"]
+    );
+}
+
 fn drag_parameter_knob(app: &mut Harness, state: &Value, delta_y: f64) -> Value {
     let center = &state["native_editor"]["parameter_control"]["center"];
     let x = center[0].as_f64().expect("parameter knob center");
@@ -336,8 +373,7 @@ fn add_automation_parameter_search_uses_saved_instance_values_and_reuses_existin
     let fixture = Fixture::new();
     let (mut app, track, effects) = fixture.app();
     menu(&mut app, "Automation");
-    app.click("Volume");
-    app.click("VST instrument parameter");
+    select_automation_parameter(&mut app, "VST instrument parameter");
     common::wait_visible(&mut app, "Filter Cutoff");
     query(&mut app, "No such parameter");
     let empty = app.key("Enter");
@@ -352,8 +388,7 @@ fn add_automation_parameter_search_uses_saved_instance_values_and_reuses_existin
     menu(&mut app, "Arranger");
     app.click("Neon phrase");
     menu(&mut app, "Automation");
-    app.click("Volume");
-    app.click("01 · Echo A · Parameter");
+    select_automation_parameter(&mut app, "01 · Echo A · Parameter");
     common::wait_visible(&mut app, "Filter Cutoff");
     query(&mut app, "Filter Cutoff");
     let created = app.key("Enter");
@@ -363,8 +398,7 @@ fn add_automation_parameter_search_uses_saved_instance_values_and_reuses_existin
     menu(&mut app, "Arranger");
     app.click("Neon phrase");
     menu(&mut app, "Automation");
-    app.click("Volume");
-    app.click("02 · Echo B · Parameter");
+    select_automation_parameter(&mut app, "02 · Echo B · Parameter");
     common::wait_visible(&mut app, "Filter Cutoff");
     query(&mut app, "Filter Cutoff");
     let created = app.key("Enter");
@@ -374,8 +408,7 @@ fn add_automation_parameter_search_uses_saved_instance_values_and_reuses_existin
     menu(&mut app, "Arranger");
     app.click("Neon phrase");
     menu(&mut app, "Automation");
-    app.click("Volume");
-    app.click("02 · Echo B · Parameter");
+    select_automation_parameter(&mut app, "02 · Echo B · Parameter");
     common::wait_visible(&mut app, "Filter Cutoff");
     query(&mut app, "Filter Cutoff");
     let reused = app.key("Enter");

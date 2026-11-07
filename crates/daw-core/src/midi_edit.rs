@@ -1,5 +1,5 @@
 //! Atomic, source-time MIDI transformations shared by editor preview and Apply.
-use crate::{MAX_BEAT, Note, new_id};
+use crate::{MAX_BEAT, Note};
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -110,7 +110,10 @@ pub fn randomize_source_notes(
             let width = 2 * u64::from(settings.velocity) + 1;
             let delta = (randomize_bits(settings.seed, note.id, 0) % width) as i16
                 - i16::from(settings.velocity);
-            note.velocity = (i16::from(note.velocity) + delta).clamp(1, 127) as u8;
+            let value = (i16::from(note.velocity) + delta).clamp(1, 127) as u8;
+            if value != note.velocity {
+                note.set_velocity(value);
+            }
         }
         if settings.timing > 0.0 {
             let unit = (randomize_bits(settings.seed, note.id, 1) >> 11) as f64
@@ -254,7 +257,7 @@ pub fn move_midi_notes(
     for note in &mut edited {
         if selected.contains(&note.id) {
             note.start += beats;
-            note.pitch = (i16::from(note.pitch) + semitones) as u8;
+            note.set_pitch((i16::from(note.pitch) + semitones) as u8);
         }
     }
     validate_notes(&edited, selected)?;
@@ -360,7 +363,7 @@ pub fn paste_midi_notes(
     let mut inserted = HashSet::new();
     for original in clipboard {
         let mut note = original.clone();
-        note.id = new_id();
+        note.refresh_identity();
         note.start += at;
         inserted.insert(note.id);
         edited.push(note);
@@ -483,6 +486,8 @@ impl ExistingNoteIntervals {
 /// An edited long note absorbs directly contained notes. An edited short note
 /// inside an existing note is consumed into that note, without normalizing other
 /// pre-existing overlapping notes. No edit is published on invalid input.
+/// Expressive notes are independent voices: their channel, fractional pitch,
+/// attributes and expression streams must never be discarded by automatic cleanup.
 pub fn merge_fully_overlapping_midi_notes(
     notes: &[Note],
     affected: &HashSet<u64>,
@@ -494,6 +499,9 @@ pub fn merge_fully_overlapping_midi_notes(
     let mut pitches: [Vec<usize>; 128] = std::array::from_fn(|_| Vec::new());
     let mut existing: [Vec<usize>; 128] = std::array::from_fn(|_| Vec::new());
     for (index, note) in notes.iter().enumerate() {
+        if note.midi2.is_some() {
+            continue;
+        }
         pitches[usize::from(note.pitch)].push(index);
         if !affected.contains(&note.id) {
             existing[usize::from(note.pitch)].push(index);
@@ -555,7 +563,7 @@ pub fn merge_fully_overlapping_midi_notes(
         }
     };
     for (original, note) in notes.iter().enumerate() {
-        if !affected.contains(&note.id) || !alive[original] {
+        if note.midi2.is_some() || !affected.contains(&note.id) || !alive[original] {
             continue;
         }
         let mut current = original;
@@ -707,6 +715,50 @@ pub fn merge_fully_overlapping_midi_notes(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn automatic_containment_cleanup_keeps_every_expressive_voice_and_payload() {
+        let legacy = Note::new(60, 0.0, 4.0, 91);
+        let mut expressive = Note::new(60, 1.0, 1.0, 100);
+        expressive.set_velocity16(0x8123);
+        expressive.set_release_velocity16(0x1234);
+        expressive.set_pitch_semitones(60.5).unwrap();
+        let data = expressive.midi2.as_mut().unwrap();
+        data.group = 2;
+        data.channel = 4;
+        data.expressions.push(crate::MidiNoteExpression::new(
+            0.25,
+            crate::Midi2ChannelVoice {
+                group: 2,
+                channel: 4,
+                status: 10,
+                index: data.note_index,
+                detail: 0,
+                data: 0x8123_4567,
+            }
+            .packet()
+            .unwrap(),
+        ));
+        let mut second_channel = expressive.clone();
+        second_channel.refresh_identity();
+        second_channel.midi2.as_mut().unwrap().channel = 5;
+        for point in &mut second_channel.midi2.as_mut().unwrap().expressions {
+            point.packet = point.packet.with_note_address(2, 5, 60);
+        }
+        let notes = vec![legacy.clone(), expressive.clone(), second_channel.clone()];
+        for affected in [
+            HashSet::from([legacy.id]),
+            HashSet::from([expressive.id]),
+            HashSet::from([legacy.id, expressive.id, second_channel.id]),
+        ] {
+            let result = merge_fully_overlapping_midi_notes(&notes, &affected).unwrap();
+            assert_eq!(
+                result.notes, notes,
+                "Cleanup must not combine expressive voices or absorb them into legacy notes"
+            );
+            assert!(result.remapped.is_empty());
+        }
+    }
+
     #[test]
     fn containment_merge_keeps_existing_identity_velocity_and_unrelated_overlaps() {
         let first = Note::new(60, 2.0, 0.5, 77);

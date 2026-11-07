@@ -29,6 +29,9 @@ fn randomize_seed() -> Value {
 fn id() -> Value {
     json!({"type":"integer","minimum":1})
 }
+fn channel_reference() -> Value {
+    json!({"oneOf":[{"type":"integer","minimum":0,"description":"Channel ID; 0 is the Master channel."},key()]})
+}
 fn reference() -> Value {
     json!({"oneOf":[id(),key()]})
 }
@@ -52,7 +55,7 @@ fn note() -> Value {
 }
 fn mix() -> Value {
     object(
-        json!({"track":reference(),"gain":{"type":"number","minimum":0,"maximum":16,"description":"Linear gain, including exact zero; omit gain_db when using gain."},"gain_db":{"type":"number","minimum":-120,"maximum":24,"description":"Gain in dB; omit gain when using gain_db."},"pan":{"type":"number","minimum":-1,"maximum":1},"mute":boolean(),"solo":boolean()}),
+        json!({"track":channel_reference(),"gain":{"type":"number","minimum":0,"maximum":16,"description":"Linear gain, including exact zero; omit gain_db when using gain."},"gain_db":{"type":"number","minimum":-120,"maximum":24,"description":"Gain in dB; omit gain when using gain_db."},"input_gain":{"type":"number","minimum":0,"maximum":16,"description":"Pre-insert linear trim; omit input_gain_db."},"input_gain_db":{"type":"number","minimum":-120,"maximum":24,"description":"Pre-insert trim in dB; omit input_gain."},"pan":{"type":"number","minimum":-1,"maximum":1},"mute":boolean(),"solo":boolean()}),
         &["track"],
     )
 }
@@ -93,41 +96,103 @@ pub fn song_edit_schema() -> Value {
         json!({"kind":choices(&["audio","midi","bus","folder"]),"name":string(),"key":key()}),
         ["kind", "name"]
     );
-    add!("delete_track", json!({"track":reference()}), ["track"]);
-    add!("clear_track_input", json!({"track":reference()}), ["track"]);
+    add!(
+        "delete_track",
+        json!({"track":channel_reference()}),
+        ["track"]
+    );
+    add!(
+        "clear_track_input",
+        json!({"track":channel_reference()}),
+        ["track"]
+    );
     add!(
         "join_midi_clips",
-        json!({"track":reference(),"clips":array(reference(),128),"key":key()}),
+        json!({"track":channel_reference(),"clips":array(reference(),128),"key":key()}),
         ["track", "clips"]
     );
     add!(
         "reorder_track",
-        json!({"track":reference(),"index":integer()}),
+        json!({"track":channel_reference(),"index":integer()}),
         ["track", "index"]
     );
     add!(
         "move_track",
-        json!({"track":reference(),"target":reference(),"placement":choices(&["before","after","into_folder"])}),
+        json!({"track":channel_reference(),"target":reference(),"placement":choices(&["before","after","into_folder"])}),
         ["track", "target", "placement"]
     );
     add!(
         "set_audio_input",
-        json!({"track":reference(),"input":{"oneOf":[object(json!({"Mono":object(json!({"channel":integer()}),&["channel"])}),&["Mono"]),object(json!({"Stereo":object(json!({"left":integer(),"right":integer()}),&["left","right"])}),&["Stereo"])]}}),
+        json!({"track":channel_reference(),"input":{"oneOf":[object(json!({"Mono":object(json!({"channel":integer()}),&["channel"])}),&["Mono"]),object(json!({"Stereo":object(json!({"left":integer(),"right":integer()}),&["left","right"])}),&["Stereo"])]}}),
         ["track", "input"]
     );
     add!(
         "set_midi_input",
-        json!({"track":reference(),"input":{"oneOf":[choices(&["All"]),object(json!({"Channel":object(json!({"channel":{"type":"integer","minimum":0,"maximum":15}}),&["channel"])}),&["Channel"])]}}),
+        json!({"track":channel_reference(),"input":{"oneOf":[choices(&["All"]),object(json!({"Channel":object(json!({"channel":{"type":"integer","minimum":0,"maximum":15}}),&["channel"])}),&["Channel"])]}}),
         ["track", "input"]
     );
     add!(
+        "set_midi_input_group",
+        json!({"track":channel_reference(),"group":{"type":"integer","minimum":0,"maximum":15}}),
+        ["track", "group"]
+    );
+    let ump = object(
+        json!({"words":{"type":"array","items":{"type":"integer","minimum":0,"maximum":4294967295_u64},"minItems":4,"maxItems":4},"word_count":{"type":"integer","minimum":1,"maximum":4}}),
+        &["words", "word_count"],
+    );
+    add!(
+        "edit_midi_note_lengths",
+        json!({"track":channel_reference(),"clip":reference(),"note_ids":array(id(),8192),"change":{"oneOf":[object(json!({"mode":{"type":"string","const":"set"},"length":{"type":"number","minimum":0.015625,"maximum":1000000}}),&["mode","length"]),object(json!({"mode":{"type":"string","const":"add"},"delta":{"type":"number","minimum":-1000000,"maximum":1000000}}),&["mode","delta"])]}}),
+        ["track", "clip", "note_ids", "change"]
+    );
+    add!(
+        "set_note_pitch_semitones",
+        json!({"track":channel_reference(),"clip":reference(),"note":id(),"value":{"type":"number","minimum":0,"exclusiveMaximum":128}}),
+        ["track", "clip", "note", "value"]
+    );
+    add!(
+        "set_note_velocity16",
+        json!({"track":channel_reference(),"clip":reference(),"note":id(),"velocity":{"type":"integer","minimum":0,"maximum":65535}}),
+        ["track", "clip", "note", "velocity"]
+    );
+    add!(
+        "set_note_release_velocity16",
+        json!({"track":channel_reference(),"clip":reference(),"note":id(),"velocity":{"type":"integer","minimum":0,"maximum":65535}}),
+        ["track", "clip", "note", "velocity"]
+    );
+    add!(
+        "upsert_note_expression",
+        json!({"track":channel_reference(),"clip":reference(),"note":id(),"beat":number(),"packet":ump,"key":key()}),
+        ["track", "clip", "note", "beat", "packet"]
+    );
+    add!(
+        "update_note_expression",
+        json!({"track":channel_reference(),"clip":reference(),"note":id(),"point":reference(),"beat":number(),"packet":ump}),
+        ["track", "clip", "note", "point", "beat", "packet"]
+    );
+    add!(
+        "remove_note_expression",
+        json!({"track":channel_reference(),"clip":reference(),"note":id(),"point":reference()}),
+        ["track", "clip", "note", "point"]
+    );
+    add!(
+        "set_midi_event",
+        json!({"track":channel_reference(),"clip":reference(),"event":nullable(reference()),"beat":number(),"packet":ump,"key":key()}),
+        ["track", "clip", "event", "beat", "packet"]
+    );
+    add!(
+        "remove_midi_event",
+        json!({"track":channel_reference(),"clip":reference(),"event":reference()}),
+        ["track", "clip", "event"]
+    );
+    add!(
         "rename_track",
-        json!({"track":reference(),"name":string()}),
+        json!({"track":channel_reference(),"name":string()}),
         ["track", "name"]
     );
     add!(
         "set_track_color",
-        json!({"track":reference(),"color":{"type":"array","minItems":3,"maxItems":3,"items":{"type":"integer","minimum":0,"maximum":255}}}),
+        json!({"track":channel_reference(),"color":{"type":"array","minItems":3,"maxItems":3,"items":{"type":"integer","minimum":0,"maximum":255}}}),
         ["track", "color"]
     );
     add!(
@@ -137,134 +202,134 @@ pub fn song_edit_schema() -> Value {
     );
     add!(
         "set_output",
-        json!({"track":reference(),"bus":nullable(reference())}),
+        json!({"track":channel_reference(),"bus":nullable(reference())}),
         ["track", "bus"]
     );
     add!(
         "set_folder",
-        json!({"track":reference(),"folder":nullable(reference())}),
+        json!({"track":channel_reference(),"folder":nullable(reference())}),
         ["track", "folder"]
     );
     for op in ["add_send", "update_send"] {
         v.push(edit(
             op,
-            json!({"track":reference(),"bus":reference(),"gain":number(),"pre_fader":boolean()}),
+            json!({"track":channel_reference(),"bus":reference(),"gain":number(),"pre_fader":boolean()}),
             &["track", "bus", "gain", "pre_fader"],
         ));
     }
     add!(
         "remove_send",
-        json!({"track":reference(),"bus":reference()}),
+        json!({"track":channel_reference(),"bus":reference()}),
         ["track", "bus"]
     );
     add!(
         "add_midi_clip",
-        json!({"track":reference(),"name":string(),"start":number(),"length":number(),"notes":array(note(),8192),"key":key()}),
+        json!({"track":channel_reference(),"name":string(),"start":number(),"length":number(),"notes":array(note(),8192),"key":key()}),
         ["track", "name", "start", "length", "notes"]
     );
     add!(
         "rename_clip",
-        json!({"track":reference(),"clip":reference(),"name":{"type":"string","maxLength":1024,"description":"Clip display name. Empty or whitespace-only names hide the title band; the clip remains editable and can be named again."}}),
+        json!({"track":channel_reference(),"clip":reference(),"name":{"type":"string","maxLength":1024,"description":"Clip display name. Empty or whitespace-only names hide the title band; the clip remains editable and can be named again."}}),
         ["track", "clip", "name"]
     );
     add!(
         "move_clip",
-        json!({"track":reference(),"clip":reference(),"start":number()}),
+        json!({"track":channel_reference(),"clip":reference(),"start":number()}),
         ["track", "clip", "start"]
     );
     add!(
         "move_clip_to_track",
-        json!({"track":reference(),"clip":reference(),"destination":reference(),"start":number()}),
+        json!({"track":channel_reference(),"clip":reference(),"destination":reference(),"start":number()}),
         ["track", "clip", "destination", "start"]
     );
     add!(
         "trim_clip",
-        json!({"track":reference(),"clip":reference(),"start":number(),"length":number()}),
+        json!({"track":channel_reference(),"clip":reference(),"start":number(),"length":number()}),
         ["track", "clip", "start", "length"]
     );
     add!(
         "stretch_clip",
-        json!({"track":reference(),"clip":reference(),"length":number()}),
+        json!({"track":channel_reference(),"clip":reference(),"length":number()}),
         ["track", "clip", "length"]
     );
     add!(
         "split_clip",
-        json!({"track":reference(),"clip":reference(),"beat":number(),"key":key()}),
+        json!({"track":channel_reference(),"clip":reference(),"beat":number(),"key":key()}),
         ["track", "clip", "beat"]
     );
     add!(
         "duplicate_clip",
-        json!({"track":reference(),"clip":reference(),"start":number(),"key":key()}),
+        json!({"track":channel_reference(),"clip":reference(),"start":number(),"key":key()}),
         ["track", "clip", "start"]
     );
     add!(
         "ghost_clip",
-        json!({"track":reference(),"clip":reference(),"key":key()}),
+        json!({"track":channel_reference(),"clip":reference(),"key":key()}),
         ["track", "clip"]
     );
     for op in ["make_independent", "delete_clip", "reverse_audio"] {
         v.push(edit(
             op,
-            json!({"track":reference(),"clip":reference()}),
+            json!({"track":channel_reference(),"clip":reference()}),
             &["track", "clip"],
         ));
     }
     add!(
         "add_notes",
-        json!({"track":reference(),"clip":reference(),"notes":array(note(),8192)}),
+        json!({"track":channel_reference(),"clip":reference(),"notes":array(note(),8192)}),
         ["track", "clip", "notes"]
     );
     add!(
         "update_notes",
-        json!({"track":reference(),"clip":reference(),"notes":array(object(json!({"id":id(),"pitch":integer(),"start":number(),"length":number(),"velocity":integer()}),&["id"]),8192)}),
+        json!({"track":channel_reference(),"clip":reference(),"notes":array(object(json!({"id":id(),"pitch":integer(),"start":number(),"length":number(),"velocity":integer()}),&["id"]),8192)}),
         ["track", "clip", "notes"]
     );
     for op in ["delete_notes", "glue_notes"] {
         v.push(edit(
             op,
-            json!({"track":reference(),"clip":reference(),"note_ids":array(id(),8192)}),
+            json!({"track":channel_reference(),"clip":reference(),"note_ids":array(id(),8192)}),
             &["track", "clip", "note_ids"],
         ));
     }
     add!(
         "legato_notes",
-        json!({"track":reference(),"clip":reference(),"note_ids":array(id(),8192),"mode":{"type":"string","enum":["next_onset","top_to_bottom"],"default":"next_onset","description":"next_onset connects each note to the next distinct onset. top_to_bottom ranks simultaneous notes from high to low and connects matching ranks across later onset groups."}}),
+        json!({"track":channel_reference(),"clip":reference(),"note_ids":array(id(),8192),"mode":{"type":"string","enum":["next_onset","top_to_bottom"],"default":"next_onset","description":"next_onset connects each note to the next distinct onset. top_to_bottom ranks simultaneous notes from high to low and connects matching ranks across later onset groups."}}),
         ["track", "clip"]
     );
     add!(
         "transform_notes",
-        json!({"track":reference(),"clip":reference(),"note_ids":array(id(),8192),"beats":number(),"semitones":{"type":"integer"}}),
+        json!({"track":channel_reference(),"clip":reference(),"note_ids":array(id(),8192),"beats":number(),"semitones":{"type":"integer"}}),
         ["track", "clip", "beats", "semitones"]
     );
     add!(
         "quantize_notes",
-        json!({"track":reference(),"clip":reference(),"note_ids":array(id(),8192),"grid":number(),"strength":number(),"swing":number(),"ends":boolean()}),
+        json!({"track":channel_reference(),"clip":reference(),"note_ids":array(id(),8192),"grid":number(),"strength":number(),"swing":number(),"ends":boolean()}),
         ["track", "clip", "grid", "strength", "swing", "ends"]
     );
     add!(
         "randomize_notes",
-        json!({"track":reference(),"clip":reference(),"note_ids":array(id(),8192),"velocity":randomize_velocity(),"timing":randomize_timing(),"seed":randomize_seed()}),
+        json!({"track":channel_reference(),"clip":reference(),"note_ids":array(id(),8192),"velocity":randomize_velocity(),"timing":randomize_timing(),"seed":randomize_seed()}),
         ["track", "clip"]
     );
     add!(
         "split_note",
-        json!({"track":reference(),"clip":reference(),"note":id(),"beat":number()}),
+        json!({"track":channel_reference(),"clip":reference(),"note":id(),"beat":number()}),
         ["track", "clip", "note", "beat"]
     );
     add!(
         "duplicate_note",
-        json!({"track":reference(),"clip":reference(),"note":id()}),
+        json!({"track":channel_reference(),"clip":reference(),"note":id()}),
         ["track", "clip", "note"]
     );
     add!(
         "set_audio_gain",
-        json!({"track":reference(),"clip":reference(),"gain":number()}),
+        json!({"track":channel_reference(),"clip":reference(),"gain":number()}),
         ["track", "clip", "gain"]
     );
     let fade = choices(&["Linear", "EqualPower", "SCurve"]);
     add!(
         "set_audio_fades",
-        json!({"track":reference(),"clip":reference(),"fade_in":{"type":"number","minimum":0,"description":"Fade duration in source quarter-note beats."},"fade_out":{"type":"number","minimum":0,"description":"Fade duration in source quarter-note beats."},"in_curve":fade,"out_curve":fade}),
+        json!({"track":channel_reference(),"clip":reference(),"fade_in":{"type":"number","minimum":0,"description":"Fade duration in source quarter-note beats."},"fade_out":{"type":"number","minimum":0,"description":"Fade duration in source quarter-note beats."},"in_curve":fade,"out_curve":fade}),
         [
             "track",
             "clip",
@@ -276,7 +341,7 @@ pub fn song_edit_schema() -> Value {
     );
     add!(
         "set_audio_processing",
-        json!({"track":reference(),"clip":reference(),"processing":object(json!({"algorithm":choices(&["Signalsmith","Bungee"]),"transpose_semitones":{"type":"number","minimum":-24,"maximum":24}}),&["algorithm","transpose_semitones"])}),
+        json!({"track":channel_reference(),"clip":reference(),"processing":object(json!({"algorithm":choices(&["Signalsmith","Bungee"]),"transpose_semitones":{"type":"number","minimum":-24,"maximum":24}}),&["algorithm","transpose_semitones"])}),
         ["track", "clip", "processing"]
     );
     let pair = json!({"type":"array","items":number(),"minItems":2,"maxItems":2});
@@ -286,75 +351,98 @@ pub fn song_edit_schema() -> Value {
     );
     add!(
         "set_crossfade",
-        json!({"track":reference(),"clip":reference(),"crossfade":nullable(object(json!({"duration":number(),"curve":curve}),&["duration","curve"]))}),
+        json!({"track":channel_reference(),"clip":reference(),"crossfade":nullable(object(json!({"duration":number(),"curve":curve}),&["duration","curve"]))}),
         ["track", "clip", "crossfade"]
     );
     add!(
         "slip_audio",
-        json!({"track":reference(),"clip":reference(),"delta":number(),"source_beats":{"type":"number","description":"Optional advisory bound for trusted offline callers; the live host resolves the actual source duration."}}),
+        json!({"track":channel_reference(),"clip":reference(),"delta":number(),"source_beats":{"type":"number","description":"Optional advisory bound for trusted offline callers; the live host resolves the actual source duration."}}),
         ["track", "clip", "delta"]
     );
     add!(
         "delete_audio_range",
-        json!({"track":reference(),"clip":reference(),"start":number(),"end":number()}),
+        json!({"track":channel_reference(),"clip":reference(),"start":number(),"end":number()}),
         ["track", "clip", "start", "end"]
     );
     add!(
         "ripple_delete_audio",
-        json!({"track":reference(),"start":number(),"end":number()}),
+        json!({"track":channel_reference(),"start":number(),"end":number()}),
         ["track", "start", "end"]
     );
     add!(
         "copy_audio_range",
-        json!({"track":reference(),"clip":reference(),"start":number(),"end":number(),"destination":reference(),"at":number()}),
+        json!({"track":channel_reference(),"clip":reference(),"start":number(),"end":number(),"destination":reference(),"at":number()}),
         ["track", "clip", "start", "end", "destination", "at"]
     );
     add!(
         "split_audio_transients",
-        json!({"track":reference(),"clip":reference(),"beats":array(number(),2048)}),
+        json!({"track":channel_reference(),"clip":reference(),"beats":array(number(),2048)}),
         ["track", "clip", "beats"]
     );
     add!(
         "strip_audio_silence",
-        json!({"track":reference(),"clip":reference(),"start":number(),"end":number(),"retained":array(pair.clone(),2048)}),
+        json!({"track":channel_reference(),"clip":reference(),"start":number(),"end":number(),"retained":array(pair.clone(),2048)}),
         ["track", "clip", "start", "end", "retained"]
     );
-    add!("remove_instrument", json!({"track":reference()}), ["track"]);
+    add!(
+        "set_clip_muted",
+        json!({"track":channel_reference(),"clip":reference(),"muted":boolean()}),
+        ["track", "clip", "muted"]
+    );
+    let plugin_input = object(
+        json!({"source_track":id(),"bus":{"type":"integer","minimum":0,"maximum":63},"first_channel":{"type":"integer","minimum":0,"maximum":126,"multipleOf":2},"gain":{"type":"number","minimum":0,"maximum":16},"pre_fader":boolean()}),
+        &["source_track", "bus", "first_channel", "gain", "pre_fader"],
+    );
+    add!(
+        "set_plugin_inputs",
+        json!({"track":channel_reference(),"effect":nullable(id()),"inputs":array(plugin_input,128)}),
+        ["track", "effect", "inputs"]
+    );
+    add!(
+        "add_instrument_output",
+        json!({"track":channel_reference(),"name":string(),"bus":{"type":"integer","minimum":0,"maximum":63},"first_channel":{"type":"integer","minimum":0,"maximum":126,"multipleOf":2},"key":key()}),
+        ["track", "name", "bus", "first_channel"]
+    );
+    add!(
+        "remove_instrument",
+        json!({"track":channel_reference()}),
+        ["track"]
+    );
     add!(
         "remove_insert",
-        json!({"track":reference(),"effect":id()}),
+        json!({"track":channel_reference(),"effect":id()}),
         ["track", "effect"]
     );
     add!(
         "set_insert_enabled",
-        json!({"track":reference(),"effect":id(),"enabled":boolean()}),
+        json!({"track":channel_reference(),"effect":id(),"enabled":boolean()}),
         ["track", "effect", "enabled"]
     );
     add!(
         "reorder_insert",
-        json!({"track":reference(),"effect":id(),"index":integer()}),
+        json!({"track":channel_reference(),"effect":id(),"index":integer()}),
         ["track", "effect", "index"]
     );
     add!(
         "set_plugin_parameters",
-        json!({"track":reference(),"effect":nullable(id()),"parameters":array(object(json!({"id":integer(),"value":{"type":"number","minimum":0,"maximum":1}}),&["id","value"]),4096)}),
+        json!({"track":channel_reference(),"effect":nullable(id()),"parameters":array(object(json!({"id":integer(),"value":{"type":"number","minimum":0,"maximum":1}}),&["id","value"]),4096)}),
         ["track", "effect", "parameters"]
     );
-    let parameter = json!({"oneOf":[choices(&["TrackGain","TrackPan"]),object(json!({"SendGain":object(json!({"bus":id()}),&["bus"])}),&["SendGain"]),object(json!({"VstParameter":object(json!({"effect":nullable(id()),"id":integer()}),&["effect","id"])}),&["VstParameter"])]});
-    let normalized = json!({"type":"number","minimum":0,"maximum":1,"description":"Normalized automation value: TrackGain=linear_gain/1.5, TrackPan=(pan+1)/2, SendGain=linear_gain/16, VST already normalized."});
+    let parameter = json!({"oneOf":[choices(&["TrackGain","TrackInputGain","TrackPan"]),object(json!({"SendGain":object(json!({"bus":id()}),&["bus"])}),&["SendGain"]),object(json!({"VstParameter":object(json!({"effect":nullable(id()),"id":integer()}),&["effect","id"])}),&["VstParameter"])]});
+    let normalized = json!({"type":"number","minimum":0,"maximum":1,"description":"Normalized automation value: TrackGain=linear_gain/1.5, TrackInputGain=input_gain/16, TrackPan=(pan+1)/2, SendGain=linear_gain/16, VST already normalized."});
     add!(
         "add_automation",
-        json!({"name":string(),"target":object(json!({"track":id(),"parameter":parameter}),&["track","parameter"]),"value":normalized,"key":key()}),
+        json!({"name":string(),"target":object(json!({"track":integer(),"parameter":parameter}),&["track","parameter"]),"value":normalized,"key":key()}),
         ["name", "target", "value"]
     );
     add!(
         "set_automation_interpolation",
-        json!({"track":reference(),"interpolation":choices(&["Step","Linear","Smooth","Spline"])}),
+        json!({"track":channel_reference(),"interpolation":choices(&["Step","Linear","Smooth","Spline"])}),
         ["track", "interpolation"]
     );
     add!(
         "set_automation_point_curve",
-        json!({"track":reference(),"point":id(),"curve":{"type":"number","minimum":-1,"maximum":1,"description":"Outgoing cubic spline segment shape: -1 logarithmic, 0 linear, +1 exponential. Intermediate values smoothly blend the shape. Bends only this point's outgoing segment; zero restores a straight line. Neighboring segment modes and endpoint holds remain unchanged."}}),
+        json!({"track":channel_reference(),"point":id(),"curve":{"type":"number","minimum":-1,"maximum":1,"description":"Outgoing cubic spline segment shape: -1 logarithmic, 0 linear, +1 exponential. Intermediate values smoothly blend the shape. Bends only this point's outgoing segment; zero restores a straight line. Neighboring segment modes and endpoint holds remain unchanged."}}),
         ["track", "point", "curve"]
     );
     let mut override_value = nullable(normalized.clone());
@@ -363,7 +451,7 @@ pub fn song_edit_schema() -> Value {
     );
     add!(
         "set_automation_override",
-        json!({"track":reference(),"value":override_value}),
+        json!({"track":channel_reference(),"value":override_value}),
         ["track", "value"]
     );
     let mut automation_points = array(pair.clone(), 4096);
@@ -372,37 +460,37 @@ pub fn song_edit_schema() -> Value {
     );
     add!(
         "upsert_automation_points",
-        json!({"track":reference(),"points":automation_points}),
+        json!({"track":channel_reference(),"points":automation_points}),
         ["track", "points"]
     );
     add!(
         "move_automation_point",
-        json!({"track":reference(),"point":id(),"beat":number(),"value":normalized}),
+        json!({"track":channel_reference(),"point":id(),"beat":number(),"value":normalized}),
         ["track", "point", "beat", "value"]
     );
     add!(
         "remove_automation_points",
-        json!({"track":reference(),"point_ids":array(id(),4096)}),
+        json!({"track":channel_reference(),"point_ids":array(id(),4096)}),
         ["track", "point_ids"]
     );
     add!(
         "group_audio_takes",
-        json!({"track":reference(),"clip_ids":array(id(),64),"key":key()}),
+        json!({"track":channel_reference(),"clip_ids":array(id(),64),"key":key()}),
         ["track", "clip_ids"]
     );
     add!(
         "add_audio_take",
-        json!({"track":reference(),"group":reference(),"clip":reference()}),
+        json!({"track":channel_reference(),"group":reference(),"clip":reference()}),
         ["track", "group", "clip"]
     );
     add!(
         "select_audio_take",
-        json!({"track":reference(),"group":reference(),"source":reference(),"range":nullable(pair),"crossfade_beats":number()}),
+        json!({"track":channel_reference(),"group":reference(),"source":reference(),"range":nullable(pair),"crossfade_beats":number()}),
         ["track", "group", "source", "range", "crossfade_beats"]
     );
     add!(
         "detach_audio_takes",
-        json!({"track":reference(),"group":reference()}),
+        json!({"track":channel_reference(),"group":reference()}),
         ["track", "group"]
     );
     json!({"oneOf":v})
@@ -411,7 +499,7 @@ pub fn song_edit_schema() -> Value {
 pub fn song_tool_specs() -> Vec<ToolSpec> {
     let page = json!({"offset":integer(),"limit":{"type":"integer","minimum":1,"maximum":256}});
     let mut track = page.clone();
-    track["track_id"] = id();
+    track["track_id"] = integer();
     let mut clip = track.clone();
     clip["clip_id"] = id();
     let mut part = json!({"session_id":id(),"expected_revision":integer(),"track_id":id(),"name":string(),"start":number(),"length":number(),"notes":array(note(),8192)});
@@ -475,6 +563,14 @@ pub fn song_tool_specs() -> Vec<ToolSpec> {
             "get_track",
             "Read a track's clips, sends, inserts and automation. No filesystem paths or opaque states are disclosed.",
             object(track, &["track_id"]),
+        ),
+        (
+            "get_note_expressions",
+            "Read exact per-note MIDI 2.0 packets with bounded offset/limit paging. Expression beats are relative source beats from the note start. Ordinary get_clip notes include only exact scalar metadata and expression counts.",
+            object(
+                json!({"track_id":id(),"clip_id":id(),"note_id":id(),"offset":integer(),"limit":{"type":"integer","minimum":1,"maximum":256}}),
+                &["track_id", "clip_id", "note_id"],
+            ),
         ),
         (
             "get_clip",
@@ -644,7 +740,7 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
             "assign_plugin",
             "Assign a scanned catalog instrument, or add an insert when insert is true, to the current song. The host resolves plugin_id; paths and opaque plugin states are not accepted.",
             object(
-                json!({"session_id":id(),"expected_revision":integer(),"track_id":id(),"plugin_id":string(),"insert":boolean()}),
+                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"plugin_id":string(),"insert":boolean()}),
                 &["session_id", "expected_revision", "track_id", "plugin_id"],
             ),
         ),
@@ -660,7 +756,7 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
             "plugin_describe_parameters",
             "Read paginated parameter names, IDs, normalized values, units and writeability from the assigned instrument or optional insert. Discover actual IDs before parameter editing.",
             object(
-                json!({"track_id":id(),"insert_id":id(),"query":{"type":"string","maxLength":256},"offset":integer(),"limit":{"type":"integer","minimum":1,"maximum":200}}),
+                json!({"track_id":integer(),"insert_id":id(),"query":{"type":"string","maxLength":256},"offset":integer(),"limit":{"type":"integer","minimum":1,"maximum":200}}),
                 &["track_id"],
             ),
         ),

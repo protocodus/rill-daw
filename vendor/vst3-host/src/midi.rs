@@ -488,7 +488,7 @@ pub enum NoteExpressionType {
 
 impl NoteExpressionType {
     /// The VST3 `NoteExpressionTypeID` for this dimension.
-    pub(crate) fn type_id(self) -> u32 {
+    pub fn type_id(self) -> u32 {
         match self {
             NoteExpressionType::Volume => 0,
             NoteExpressionType::Pan => 1,

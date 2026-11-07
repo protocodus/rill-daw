@@ -43,6 +43,7 @@ pub(super) struct CompiledContent {
     pub notes: Arc<Vec<ScheduledNote>>,
     pub events: Arc<Vec<Event>>,
     pub note_order: Arc<Vec<usize>>,
+    pub expression: Arc<midi_expression::Content>,
 }
 
 type ParameterState = HashMap<(u64, Option<u64>), Vec<PluginParameterValue>>;
@@ -63,7 +64,7 @@ impl LiveEditContext {
         tail_samples: u64,
     ) -> Self {
         let mut parameters = HashMap::new();
-        for track in &project.tracks {
+        for track in project.channels() {
             parameters.insert((track.id, None), track.instrument_parameters.clone());
             for slot in &track.inserts {
                 parameters.insert((track.id, Some(slot.id)), slot.parameters.clone());
@@ -86,6 +87,7 @@ pub(crate) struct LiveEditPreparer {
     /// The compiled graph keeps its topology and buffers when workspace rows
     /// move. Every later plan must retain this exact processor order.
     track_order: Vec<u64>,
+    send_buses: HashMap<u64, Vec<u64>>,
     previous: Arc<Project>,
     content: HashMap<u64, CompiledContent>,
     maximum_notes: HashMap<u64, usize>,
@@ -96,8 +98,10 @@ struct TrackEdit {
     id: u64,
     name: String,
     gain: f32,
+    input_gain: f32,
     pan: f32,
     gain_lane: Option<AutomationLane>,
+    input_gain_lane: Option<AutomationLane>,
     pan_lane: Option<AutomationLane>,
     send_gains: Vec<AutomatedValue>,
     instrument_automation: Vec<PluginAutomation>,
@@ -110,6 +114,8 @@ struct TrackEdit {
     unmatched: Vec<ScheduledNote>,
     active_flags: Vec<bool>,
     pitch_next: Vec<usize>,
+    expression_messages: Vec<daw_plugins::ExpressiveMidiMessage>,
+    expression_chase: Vec<midi_expression::Timed>,
 }
 
 pub(crate) struct PreparedLiveEdit {
@@ -145,11 +151,7 @@ impl LiveEditCompatibility {
 
     fn check(&self, project: &Project, compare_parameters: bool) -> bool {
         let baseline = &self.context.baseline;
-        let tracks: HashMap<_, _> = project
-            .tracks
-            .iter()
-            .map(|track| (track.id, track))
-            .collect();
+        let tracks: HashMap<_, _> = project.channels().map(|track| (track.id, track)).collect();
         let parameters = self
             .context
             .parameters
@@ -167,14 +169,16 @@ impl LiveEditCompatibility {
             && (1..=16).contains(&project.beats_per_bar)
             && loop_valid
             && baseline.tracks.len() == project.tracks.len()
-            && tracks.len() == project.tracks.len()
-            && baseline.tracks.iter().all(|a| {
+            && tracks.len() == project.tracks.len() + 1
+            && baseline.channels().all(|a| {
                 tracks.get(&a.id).is_some_and(|b| {
                     a.kind == b.kind
                         && (a.mute == b.mute || a.kind == daw_core::TrackKind::Automation)
                         && a.solo == b.solo
                         && a.instrument == b.instrument
                         && a.instrument_state == b.instrument_state
+                        && a.instrument_inputs == b.instrument_inputs
+                        && a.instrument_output == b.instrument_output
                         && (!compare_parameters
                             || parameters.get(&(a.id, None)) == Some(&b.instrument_parameters))
                         && a.latency_samples == b.latency_samples
@@ -195,6 +199,7 @@ impl LiveEditCompatibility {
                                 && a_slot.enabled == b_slot.enabled
                                 && a_slot.effect == b_slot.effect
                                 && a_slot.state == b_slot.state
+                                && a_slot.inputs == b_slot.inputs
                                 && (!compare_parameters
                                     || parameters.get(&(a.id, Some(a_slot.id)))
                                         == Some(&b_slot.parameters))
@@ -279,15 +284,13 @@ impl LiveEditPreparer {
         let mut next_content = HashMap::new();
         let mut tracks = Vec::with_capacity(self.content.len());
         let audible = audible_tracks(project, &self.track_order);
-        let project_tracks: HashMap<_, _> = project
-            .tracks
-            .iter()
-            .map(|track| (track.id, track))
-            .collect();
+        let admission = processing_tracks(project, &audible);
+        let needed = &admission.processors;
+        let project_tracks: HashMap<_, _> =
+            project.channels().map(|track| (track.id, track)).collect();
         let previous_tracks: HashMap<_, _> = self
             .previous
-            .tracks
-            .iter()
+            .channels()
             .map(|track| (track.id, track))
             .collect();
         for &id in &self.track_order {
@@ -315,7 +318,7 @@ impl LiveEditPreparer {
                 let mut compilation_bytes = 0;
                 compile_content(
                     track,
-                    audible.contains(&id),
+                    needed.contains(&id),
                     CompileSettings {
                         tempo: project.tempo,
                         sample_rate: self.context.sample_rate,
@@ -362,22 +365,33 @@ impl LiveEditPreparer {
                 id,
                 name: track.name.clone(),
                 gain: track.gain,
+                input_gain: track.input_gain,
                 pan: track.pan,
                 gain_lane: active_automation_lane(project, id, AutomationParameter::TrackGain)
                     .cloned(),
+                input_gain_lane: active_automation_lane(
+                    project,
+                    id,
+                    AutomationParameter::TrackInputGain,
+                )
+                .cloned(),
                 pan_lane: active_automation_lane(project, id, AutomationParameter::TrackPan)
                     .cloned(),
-                send_gains: track
-                    .sends
-                    .iter()
-                    .filter(|send| audible.contains(&id) && send_active(project, id, send))
-                    .map(|send| {
+                send_gains: self
+                    .send_buses
+                    .get(&id)
+                    .into_iter()
+                    .flatten()
+                    .map(|bus| {
+                        let send = track
+                            .sends
+                            .iter()
+                            .find(|send| send.target_bus == *bus)
+                            .expect("compatible send remains");
                         AutomatedValue::new(
                             project,
                             id,
-                            AutomationParameter::SendGain {
-                                bus: send.target_bus,
-                            },
+                            AutomationParameter::SendGain { bus: *bus },
                             send.gain,
                         )
                     })
@@ -386,7 +400,7 @@ impl LiveEditPreparer {
                 insert_automation: track
                     .inserts
                     .iter()
-                    .filter(|slot| audible.contains(&id) && slot.enabled)
+                    .filter(|slot| admission.channels.contains(&id) && slot.enabled)
                     .map(|slot| (slot.id, plugin_automation(project, id, Some(slot.id))))
                     .collect(),
                 content: content.clone(),
@@ -400,6 +414,10 @@ impl LiveEditPreparer {
                 unmatched: Vec::with_capacity(*maximum),
                 active_flags: vec![false; content.notes.len()],
                 pitch_next: vec![usize::MAX; content.notes.len()],
+                expression_messages: Vec::with_capacity(
+                    content.expression.events.len() + content.events.len() + 8192,
+                ),
+                expression_chase: Vec::with_capacity(content.expression.events.len() + 8192),
             });
             next_content.insert(id, content);
         }
@@ -455,12 +473,28 @@ impl Renderer {
                     notes: Arc::clone(&track.notes),
                     events: Arc::clone(&track.events),
                     note_order: Arc::clone(&track.note_order),
+                    expression: Arc::clone(&track.expression.content),
                 },
             );
         }
         LiveEditPreparer {
             context: Arc::clone(&self.live_edit_context),
             track_order: self.tracks.iter().flatten().map(|track| track.id).collect(),
+            send_buses: self
+                .tracks
+                .iter()
+                .flatten()
+                .map(|track| {
+                    (
+                        track.id,
+                        track
+                            .routes
+                            .iter()
+                            .filter_map(|route| route.send_bus)
+                            .collect(),
+                    )
+                })
+                .collect(),
             previous: Arc::clone(&self.live_edit_context.baseline),
             content,
             maximum_notes,
@@ -480,7 +514,7 @@ impl Renderer {
                     .zip(&self.tracks)
                     .all(|(next, old)| old.as_ref().is_some_and(|old| {
                         old.id == next.id
-                            && old.routes.len() == next.send_gains.len() + usize::from(old.enabled)
+                            && old.routes.iter().filter(|route| route.send_bus.is_some()).count() == next.send_gains.len()
                             && old.inserts.len() == next.insert_automation.len()
                             && old.inserts.iter().zip(&next.insert_automation).all(|(old, (id, _))| {
                                 matches!(old, Insert::Vst { id: old_id, .. } if old_id == id)
@@ -493,10 +527,19 @@ impl Renderer {
             let track = old.as_mut().unwrap();
             std::mem::swap(&mut track.name, &mut next.name);
             track.gain.set_manual(next.gain, self.sample_rate);
+            track
+                .input_gain
+                .set_manual(next.input_gain, self.sample_rate);
             track.pan.set_manual(next.pan, self.sample_rate);
             std::mem::swap(&mut track.gain.lane, &mut next.gain_lane);
+            std::mem::swap(&mut track.input_gain.lane, &mut next.input_gain_lane);
             std::mem::swap(&mut track.pan.lane, &mut next.pan_lane);
-            for (route, gain) in track.routes.iter_mut().skip(1).zip(&mut next.send_gains) {
+            for (route, gain) in track
+                .routes
+                .iter_mut()
+                .filter(|route| route.send_bus.is_some())
+                .zip(&mut next.send_gains)
+            {
                 route.gain.set_manual(gain.manual, self.sample_rate);
                 std::mem::swap(&mut route.gain.lane, &mut gain.lane);
             }
@@ -522,10 +565,13 @@ impl Renderer {
             next.active_indices.clear();
             next.unmatched.clear();
             next.active_flags.fill(false);
+            let note_frontier = self
+                .source_sample
+                .saturating_sub(u64::from(track.instrument_input_latency));
             if !self.preview {
                 let mut heads = [usize::MAX; 128];
                 for (index, note) in next.content.notes.iter().enumerate() {
-                    if note.start < self.source_sample && note.end > self.source_sample {
+                    if note.start < note_frontier && note.end > note_frontier {
                         next.active_flags[index] = true;
                         next.pitch_next[index] = heads[note.pitch as usize];
                         heads[note.pitch as usize] = index;
@@ -545,7 +591,11 @@ impl Renderer {
                         })
                         .ok()
                         .map(|index| next.content.note_order[index])
-                        .filter(|&index| next.active_flags[index]);
+                        .filter(|&index| {
+                            next.active_flags[index]
+                                && old_note.precise.is_none()
+                                && next.content.notes[index].precise.is_none()
+                        });
                     if let Some(index) = exact {
                         next.active_flags[index] = false;
                         next.active.push(next.content.notes[index]);
@@ -558,7 +608,10 @@ impl Renderer {
                     while *head != usize::MAX && !next.active_flags[*head] {
                         *head = next.pitch_next[*head];
                     }
-                    if *head != usize::MAX {
+                    if *head != usize::MAX
+                        && old_note.precise.is_none()
+                        && next.content.notes[*head].precise.is_none()
+                    {
                         let index = *head;
                         *head = next.pitch_next[index];
                         next.active_flags[index] = false;
@@ -624,14 +677,24 @@ impl Renderer {
             std::mem::swap(&mut track.notes, &mut next.content.notes);
             std::mem::swap(&mut track.events, &mut next.content.events);
             std::mem::swap(&mut track.note_order, &mut next.content.note_order);
+            std::mem::swap(&mut track.expression.content, &mut next.content.expression);
+            std::mem::swap(
+                &mut track.expression.messages,
+                &mut next.expression_messages,
+            );
+            std::mem::swap(&mut track.expression.chase, &mut next.expression_chase);
+            track.expression.seek(note_frontier, 0, false);
+            self.expressive_input.retain(|(id, _, _, data)| {
+                *id != track.id || matches!(data, daw_plugins::ExpressiveMidiData::NoteOn { .. })
+            });
             std::mem::swap(&mut track.midi, &mut next.midi);
             std::mem::swap(&mut track.chase, &mut next.chase);
+            track.chase_delay = 0;
             std::mem::swap(&mut track.active_notes, &mut next.active);
             // Reconciliation already handles notes ending exactly at the new
             // frontier. Notes starting there remain normal sample-offset events.
             track.event_cursor = track.events.partition_point(|event| {
-                event.sample < self.source_sample
-                    || (event.sample == self.source_sample && !event.on)
+                event.sample < note_frontier || (event.sample == note_frontier && !event.on)
             });
         }
         self.timeline_end_sample = edit.end_sample;
@@ -788,10 +851,13 @@ pub(super) fn compile_content(
     let samples_per_beat = sample_rate as f64 * 60.0 / tempo;
     let to_sample = |beat: f64| (beat.max(0.0) * samples_per_beat).round() as u64;
     let mut notes = Vec::new();
+    let mut expression = midi_expression::Builder::default();
+    let group = midi_expression::stored_group(track);
+    let mut note_ids = std::collections::HashSet::new();
     let mut audio = Vec::new();
     for clip in &track.clips {
         check_cancelled()?;
-        if !enabled || clip.is_take_source() {
+        if !enabled || clip.is_take_source() || clip.muted {
             continue;
         }
         ensure!(
@@ -804,21 +870,136 @@ pub(super) fn compile_content(
             "Invalid clip timing on {}",
             track.name
         );
+        let mut channel_events: Vec<_> = clip.midi_events.iter().collect();
+        channel_events.sort_by(|a, b| a.beat.total_cmp(&b.beat));
+        let mut carry = HashMap::new();
+        for event in &channel_events {
+            let local = clip.source_to_local(event.beat);
+            if local >= 0.0 {
+                break;
+            }
+            if event
+                .packet
+                .group()
+                .is_some_and(|value| Some(value) != group)
+            {
+                continue;
+            }
+            if let Some(key) = midi_expression::controller_state_key(event.packet) {
+                carry.insert(key, *event);
+            }
+        }
+        let mut carry: Vec<_> = carry.into_values().collect();
+        carry.sort_by(|a, b| a.beat.total_cmp(&b.beat));
+        for event in carry {
+            expression.add(to_sample(clip.start), event.packet, None, None);
+        }
+        for event in channel_events {
+            let local = clip.source_to_local(event.beat);
+            if local < 0.0 || local >= clip.length {
+                continue;
+            }
+            if event
+                .packet
+                .group()
+                .is_some_and(|value| Some(value) != group)
+            {
+                expression
+                    .unsupported
+                    .insert(0x100000000 | u64::from(event.packet.group().unwrap()));
+                continue;
+            }
+            expression.add(to_sample(clip.start + local), event.packet, None, None);
+        }
         match &clip.content {
             ClipContent::Midi { notes: clip_notes } => {
                 for note in clip_notes {
                     let relative_start = clip.source_to_local(note.start);
                     let relative_end = relative_start + note.length / clip.source_rate;
-                    if relative_end <= 0.0 || relative_start >= clip.length || note.velocity == 0 {
+                    if relative_end <= 0.0
+                        || relative_start >= clip.length
+                        || (note.midi2.is_none() && note.velocity == 0)
+                    {
                         continue;
                     }
+                    if let Some(data) = &note.midi2 {
+                        data.validate()?;
+                        if Some(data.group) != group {
+                            expression
+                                .unsupported
+                                .insert(0x100000000 | u64::from(data.group));
+                            continue;
+                        }
+                    }
+                    let start = to_sample(clip.start + relative_start.max(0.0));
+                    let end = to_sample(clip.start + relative_end.min(clip.length));
+                    let precise = if let Some(data) = &note.midi2 {
+                        let mut id = ((clip.id.wrapping_mul(0x9e3779b97f4a7c15) ^ note.id)
+                            & 0x3fffffff) as i32;
+                        while !note_ids.insert(id) {
+                            id = (id + 1) & 0x3fffffff;
+                        }
+                        let precise = midi_expression::precise(data, note.velocity, id);
+                        let offset = (clip.offset - note.start).max(0.0);
+                        let visible_data = data.after_split(offset)?;
+                        for point in &visible_data.expressions {
+                            if point.beat + offset >= note.length {
+                                continue;
+                            }
+                            let local = relative_start.max(0.0) + point.beat / clip.source_rate;
+                            if local >= clip.length {
+                                continue;
+                            }
+                            let sample = to_sample(clip.start + local);
+                            if sample < end {
+                                expression.add(
+                                    sample,
+                                    point.packet,
+                                    Some((id, note.pitch)),
+                                    Some((start, end)),
+                                );
+                            }
+                        }
+                        if data.attribute_type != 0 && data.attribute_type != 3 {
+                            expression.events.push((
+                                midi_expression::Timed {
+                                    sample: start,
+                                    channel: data.channel,
+                                    data: daw_plugins::ExpressiveMidiData::NoteExpressionInt {
+                                        type_id: 203000 + u32::from(data.attribute_type),
+                                        note_id: id,
+                                        value: u64::from(data.attribute_data),
+                                    },
+                                },
+                                Some((start, end)),
+                            ));
+                        }
+                        if data.release_attribute_type != 0 {
+                            expression.events.push((
+                                midi_expression::Timed {
+                                    sample: end.saturating_sub(1).max(start),
+                                    channel: data.channel,
+                                    data: daw_plugins::ExpressiveMidiData::NoteExpressionInt {
+                                        type_id: 204000 + u32::from(data.release_attribute_type),
+                                        note_id: id,
+                                        value: u64::from(data.release_attribute_data),
+                                    },
+                                },
+                                Some((start, end)),
+                            ));
+                        }
+                        Some(precise)
+                    } else {
+                        None
+                    };
                     notes.push(ScheduledNote {
                         clip: clip.id,
                         id: note.id,
-                        start: to_sample(clip.start + relative_start.max(0.0)),
-                        end: to_sample(clip.start + relative_end.min(clip.length)),
+                        start,
+                        end,
                         pitch: note.pitch.min(127),
                         velocity: note.velocity.min(127),
+                        precise,
                     });
                 }
             }
@@ -974,5 +1155,6 @@ pub(super) fn compile_content(
         notes: Arc::new(notes),
         events: Arc::new(events),
         note_order: Arc::new(note_order),
+        expression: Arc::new(expression.finish(group)),
     })
 }

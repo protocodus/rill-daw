@@ -185,7 +185,7 @@ fn number(app: &mut Harness, field: &str, value: &str) -> Value {
     let (x, y) = center(&state["midi_editor"]["randomize"][field]);
     app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
     app.command(json!({"command":"text","text":value}));
-    app.click("Randomize preview")
+    app.click("Humanize preview")
 }
 
 #[test]
@@ -302,7 +302,7 @@ fn randomize_preview_reroll_cancel_and_selected_source_timing_match_the_semantic
         ],
     );
     unchanged(&narrow, &before);
-    let first = menu(&mut app, "Notes", "Randomize…");
+    let first = menu(&mut app, "Notes", "Humanize…");
     assert_eq!(first["midi_editor"]["randomize"]["velocity"], 16);
     assert_eq!(first["midi_editor"]["randomize"]["timing"], 0.0);
     assert_eq!(first["midi_editor"]["randomize"]["seed"], 1);
@@ -310,7 +310,7 @@ fn randomize_preview_reroll_cancel_and_selected_source_timing_match_the_semantic
     let narrow = app.command(json!({"command":"viewport","width":900,"height":700}));
     assert_compact_editor(
         &narrow,
-        &["Apply randomize", "Cancel randomize", "New variation"],
+        &["Apply humanize", "Cancel humanize", "New variation"],
     );
     unchanged(&narrow, &before);
     app.command(json!({"command":"viewport","width":1440,"height":1000}));
@@ -336,9 +336,9 @@ fn randomize_preview_reroll_cancel_and_selected_source_timing_match_the_semantic
     );
     assert_ne!(preview_as_source(&rerolled), velocity_preview);
     unchanged(&rerolled, &before);
-    unchanged(&app.click("Cancel randomize"), &before);
+    unchanged(&app.click("Cancel humanize"), &before);
 
-    menu(&mut app, "Notes", "Randomize…");
+    menu(&mut app, "Notes", "Humanize…");
     number(&mut app, "velocity_rect", "12");
     number(&mut app, "seed_rect", "42");
     let timed = number(&mut app, "timing_rect", "0.125");
@@ -371,7 +371,7 @@ fn randomize_preview_reroll_cancel_and_selected_source_timing_match_the_semantic
         }
     }
     unchanged(&timed, &before);
-    let applied = app.click("Apply randomize");
+    let applied = app.click("Apply humanize");
     assert_eq!(notes(&applied), expected);
     assert!(applied["midi_editor"]["preview_notes"].is_null());
     assert_eq!(history_len(&applied), history_len(&before) + 1);
@@ -613,7 +613,7 @@ fn final_note_transform_previews_grow_the_original_clip_only_when_applied() {
     let (mut app, _, clip) = fixture_with_clip(source_clip);
     menu(&mut app, "Edit", "Select all notes");
     let before = app.inspect();
-    menu(&mut app, "Notes", "Randomize…");
+    menu(&mut app, "Notes", "Humanize…");
     let mut preview = number(&mut app, "timing_rect", "0.25");
     // Audition variations until the final note moves later. This uses the
     // user's reroll action rather than duplicating the deterministic RNG.
@@ -635,7 +635,7 @@ fn final_note_transform_previews_grow_the_original_clip_only_when_applied() {
     );
     assert_eq!(preview["project"], before["project"]);
     let before_apply = app.inspect();
-    let randomized = app.click("Apply randomize");
+    let randomized = app.click("Apply humanize");
     assert_eq!(notes(&randomized), expected);
     near(
         randomized["project"]["tracks"][0]["clips"][0]["length"]
@@ -668,9 +668,9 @@ fn editing_folded_notes_does_not_restore_the_hidden_old_selection_when_unfolding
     assert_eq!(folded["midi_editor"]["hidden_notes"], 1);
     assert_eq!(painted(&folded, inside_id)["selected"], true);
     unchanged(&folded, &before);
-    let preview = menu(&mut app, "Notes", "Randomize…");
+    let preview = menu(&mut app, "Notes", "Humanize…");
     unchanged(&preview, &before);
-    let applied = app.click("Apply randomize");
+    let applied = app.click("Apply humanize");
     assert_eq!(note(&applied, outside_id), note(&before, outside_id));
     assert_eq!(history_len(&applied), history_len(&before) + 1);
     let unfolded = menu(&mut app, "View", "Only scale keys");
@@ -712,11 +712,11 @@ fn velocity_only_randomize_preserves_an_existing_trimmed_note_tail() {
     let (mut app, _, _) = fixture_with_length(vec![held], false, 1.0);
     menu(&mut app, "Edit", "Select all notes");
     let before = app.inspect();
-    let preview = menu(&mut app, "Notes", "Randomize…");
+    let preview = menu(&mut app, "Notes", "Humanize…");
     unchanged(&preview, &before);
     assert_eq!(preview["midi_editor"]["randomize"]["timing"], 0.0);
     let expected = preview_as_source(&preview);
-    let applied = app.click("Apply randomize");
+    let applied = app.click("Apply humanize");
     assert_eq!(notes(&applied), expected);
     assert_ne!(
         note(&applied, id)["velocity"],

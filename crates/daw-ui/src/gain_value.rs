@@ -27,14 +27,38 @@ pub fn gain_value_button(
     maximum_gain: f32,
     name: &str,
 ) -> Response {
+    gain_value_button_named(ui, id_salt, gain, maximum_gain, name, name)
+}
+
+/// Separate a bounded visible caption from the contextual exact-editor name.
+pub fn gain_value_button_named(
+    ui: &mut Ui,
+    id_salt: impl Hash,
+    gain: &mut f32,
+    maximum_gain: f32,
+    caption: &str,
+    name: &str,
+) -> Response {
     ui.push_id(id_salt, |ui| {
-        let mut response =
-            crate::button(ui, format!("{name} {}", crate::channel_gain_label(*gain)))
-                .on_hover_text("Edit gain in dB · 0 dB is unity · −60 dB is silence");
+        let height = ui
+            .spacing()
+            .interact_size
+            .y
+            .clamp(crate::tokens::COMPACT_HEIGHT, crate::tokens::CONTROL_HEIGHT);
+        let mut response = ui
+            .add(
+                crate::button_widget(
+                    format!("{caption} {}", crate::channel_gain_label(*gain)).trim(),
+                )
+                .min_size(egui::vec2(0.0, height))
+                .truncate(),
+            )
+            .on_hover_text("Edit gain in dB · 0 dB is unity · −60 dB is silence");
         let current = f64::from(crate::channel_gain_to_db(*gain));
         let maximum_db = f64::from(crate::channel_gain_to_db(maximum_gain));
         let mut silence = false;
         let popup = egui::Popup::menu(&response)
+            .id(response.id.with("exact_gain_popup"))
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
             .show(|ui| {
                 let next = crate::value_entry::value_entry_with_footer(

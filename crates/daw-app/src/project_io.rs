@@ -248,6 +248,7 @@ impl DawApp {
             DocumentRequest::New | DocumentRequest::Open(..) | DocumentRequest::Quit
         ) {
             self.cancel_audio_import();
+            self.cancel_freeze();
         }
         if self.recording_busy() {
             self.finish_recording(crate::recording_ui::AfterRecording::Pause);
@@ -259,6 +260,7 @@ impl DawApp {
                 && !self.state_sync_pending()
                 && self.export_job.is_none())
                 && !self.audio_import_busy()
+                && !self.freeze_busy()
         {
             return false;
         }
@@ -412,6 +414,7 @@ impl DawApp {
         }
         if !self.recording_busy()
             && !self.audio_import_busy()
+            && !self.freeze_busy()
             && self.project_io.job.is_none()
             && !self.recovery_pending()
             && !self.state_sync_pending()

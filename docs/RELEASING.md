@@ -12,6 +12,11 @@ The CI workflow builds native distributions after formatting, workspace unit/int
 
 Runner labels and CPU architectures follow [GitHub's hosted-runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners). Archives are separate native builds; macOS packages are not universal binaries. The app and any installed VST3 plug-ins must use matching architectures.
 
+macOS builds require macOS 11 or newer, including Intel builds. CI and the native
+packaging script set `MACOSX_DEPLOYMENT_TARGET=11.0` for the CoreMIDI UMP input
+API. A higher local deployment target is reflected in the app bundle's minimum
+system version; packaging rejects targets below 11.0.
+
 Each archive contains the application, its adjacent `daw-plugin-host` helper, `LICENSE`, `README.md`, documentation, platform installation instructions, `THIRD_PARTY_NOTICES.md`, and dependency license texts where supplied by the dependency packages. The generated inventory records the entire locked Cargo dependency graph, including platform-specific and development dependencies that may not be linked into a given binary. It records package licenses and source URLs, plus checksums for copied license files. Plug-in binaries are not included.
 
 Native application branding comes from `crates/daw-ui/assets/brand/`. macOS bundles select `rill.icns` through `CFBundleIconFile`; Windows builds embed the multi-resolution ICO and version metadata using the Windows SDK resource compiler through pinned `winresource`. Linux archives include a standard `dev.rill.daw.desktop` entry, a 256-pixel hicolor icon and an optional `install-desktop.py` user launcher installer. Run that installer only after moving the extracted archive to its final location; `--remove` removes the launcher. Packaging runs `scripts/verify-branding.py` to check the actual bundle metadata, desktop assets or default Windows icon resource against the canonical artwork. The Linux launcher test uses isolated temporary directories and never installs into the developer's desktop.

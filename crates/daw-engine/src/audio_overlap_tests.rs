@@ -175,7 +175,9 @@ fn cancelled_wav_render_stops_between_blocks_and_preserves_existing_file() {
         }));
         let error = write_wav_cancelled(renderer, &path, frames, &cancel).unwrap_err();
         assert!(error.to_string().contains("cancelled"));
-        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        // One source node plus the real Master node complete the in-flight
+        // graph block; cancellation prevents a second block from starting.
+        assert_eq!(calls.load(Ordering::Relaxed), 2);
         assert_eq!(std::fs::read(&path).unwrap(), b"previous audio");
         assert!(std::fs::read_dir(directory.path()).unwrap().all(|entry| {
             !entry

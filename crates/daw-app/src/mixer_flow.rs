@@ -4,6 +4,29 @@ use daw_core::{Project, TrackKind};
 use eframe::egui;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+/// Output disclosure is presentation only. New instrument outputs start folded;
+/// no channel is removed from the project or the engine while it is folded.
+#[derive(Clone, Default)]
+pub(crate) struct MixerOutputView {
+    generation: u64,
+    pub(crate) expanded: HashSet<u64>,
+}
+
+impl MixerOutputView {
+    pub(crate) fn read(ctx: &egui::Context, generation: u64) -> Self {
+        ctx.data(|data| data.get_temp::<Self>(egui::Id::new("mixer_output_view")))
+            .filter(|state| state.generation == generation)
+            .unwrap_or_else(|| Self {
+                generation,
+                ..Self::default()
+            })
+    }
+
+    pub(crate) fn store(self, ctx: &egui::Context) {
+        ctx.data_mut(|data| data.insert_temp(egui::Id::new("mixer_output_view"), self));
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum MixerOrder {
     SignalFlow,
@@ -90,6 +113,11 @@ impl DawApp {
     }
 
     pub(crate) fn show_channel_in_arranger(&mut self, track: u64) {
+        if track == daw_core::MASTER_CHANNEL_ID {
+            self.selected_track = Some(track);
+            self.open_popup(crate::app::PopupKind::Inspector);
+            return;
+        }
         if self.project.track(track).is_none() {
             return;
         }
@@ -107,6 +135,7 @@ impl DawApp {
         if let Some(track) = self
             .selected_track
             .filter(|id| self.project.track(*id).is_some())
+            .filter(|id| *id != daw_core::MASTER_CHANNEL_ID)
             && ui
                 .add(if ui.ctx().content_rect().width() < 1200.0 {
                     daw_ui::IconButton::icon_only(daw_ui::Icon::Editor, "Show in Arranger").quiet()
@@ -126,8 +155,8 @@ impl DawApp {
         daw_ui::view_menu(ui, order.label(), |ui| {
             for choice in [MixerOrder::SignalFlow, MixerOrder::Song] {
                 let help = match choice {
-                    MixerOrder::SignalFlow => "Sources first, then downstream buses and Master. Includes main outputs and sends.",
-                    MixerOrder::Song => "Follow Arrangement order. Drag channel names to reorder the song.",
+                    MixerOrder::SignalFlow => "Sources first, then downstream channels and Master. Includes main outputs, sends and plug-in inputs; instrument outputs stay grouped.",
+                    MixerOrder::Song => "Follow Arrangement order, keeping instrument outputs together. Drag channel names to reorder the song.",
                 };
                 if daw_ui::selectable_value(ui, &mut order, choice, choice.label())
                     .on_hover_text(help)
@@ -169,7 +198,7 @@ pub(crate) fn ordered_channels(project: &Project, order: MixerOrder) -> Vec<u64>
         .filter(|id| channels.contains_key(id))
         .collect();
     if order == MixerOrder::Song {
-        return song_order;
+        return grouped_instrument_outputs(project, song_order);
     }
 
     let position: HashMap<_, _> = song_order
@@ -192,6 +221,21 @@ pub(crate) fn ordered_channels(project: &Project, order: MixerOrder) -> Vec<u64>
             *incoming.get_mut(target).unwrap() += 1;
         }
         outgoing.insert(track.id, targets);
+    }
+    for track in channels.values() {
+        for source in track
+            .instrument_inputs
+            .iter()
+            .chain(track.inserts.iter().flat_map(|slot| &slot.inputs))
+            .map(|input| input.source_track)
+            .chain(track.instrument_output.map(|output| output.track))
+        {
+            if let Some(targets) = outgoing.get_mut(&source)
+                && targets.insert(track.id)
+            {
+                *incoming.get_mut(&track.id).unwrap() += 1;
+            }
+        }
     }
     let priority = |id: u64| (channels[&id].kind == TrackKind::Bus, position[&id], id);
     let mut ready: BTreeSet<_> = song_order
@@ -220,6 +264,85 @@ pub(crate) fn ordered_channels(project: &Project, order: MixerOrder) -> Vec<u64>
             .collect();
         remaining.sort_by_key(|id| priority(*id));
         result.extend(remaining);
+    }
+    grouped_instrument_outputs(project, result)
+}
+
+/// Mixer groups define visible adjacency: auxiliary outputs move among their
+/// siblings, while ordinary channels move past complete instrument groups.
+type MixerShiftTargets = HashMap<
+    u64,
+    (
+        Option<daw_ui::TrackDropIntent>,
+        Option<daw_ui::TrackDropIntent>,
+    ),
+>;
+
+pub(crate) fn mixer_shift_targets(project: &Project) -> MixerShiftTargets {
+    let mut siblings: HashMap<(Option<u64>, Option<u64>), Vec<u64>> = HashMap::new();
+    for id in project.ordered_track_ids() {
+        let Some(track) = project.track(id) else {
+            continue;
+        };
+        if matches!(
+            track.kind,
+            TrackKind::Audio | TrackKind::Midi | TrackKind::Bus
+        ) {
+            siblings
+                .entry((
+                    track.parent_folder,
+                    track.instrument_output.map(|output| output.track),
+                ))
+                .or_default()
+                .push(id);
+        }
+    }
+    siblings
+        .values()
+        .flat_map(|ids| {
+            ids.iter().enumerate().map(move |(index, source)| {
+                let intent = |target, placement| daw_ui::TrackDropIntent {
+                    source: *source,
+                    target,
+                    placement,
+                };
+                (
+                    *source,
+                    (
+                        index
+                            .checked_sub(1)
+                            .map(|index| intent(ids[index], daw_ui::TrackDropPlacement::Before)),
+                        ids.get(index + 1)
+                            .map(|target| intent(*target, daw_ui::TrackDropPlacement::After)),
+                    ),
+                )
+            })
+        })
+        .collect()
+}
+
+fn grouped_instrument_outputs(project: &Project, channels: Vec<u64>) -> Vec<u64> {
+    let mut result = Vec::with_capacity(channels.len());
+    for id in &channels {
+        if project
+            .track(*id)
+            .is_some_and(|track| track.instrument_output.is_some())
+        {
+            continue;
+        }
+        result.push(*id);
+        result.extend(channels.iter().copied().filter(|child| {
+            project
+                .track(*child)
+                .and_then(|track| track.instrument_output.as_ref())
+                .is_some_and(|output| output.track == *id)
+        }));
+    }
+    // Keep an externally supplied incomplete graph repairable in the mixer.
+    for id in channels {
+        if !result.contains(&id) {
+            result.push(id);
+        }
     }
     result
 }

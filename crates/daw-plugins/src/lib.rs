@@ -9,7 +9,8 @@
 //! IPC is synchronous and allocates while serializing blocks, so render on a worker/control
 //! thread and give the device callback prepared audio. Never call this adapter on a hard
 //! real-time device callback. A hung command is bounded by a timeout and the child is killed.
-//! Only the first active output bus is routed, with mono duplicated to stereo.
+//! Bus-aware processing preserves native bus indices and stereo pairs; legacy calls route
+//! the first active output bus, with mono duplicated to stereo.
 //!
 //! API references: <https://docs.rs/vst3-host/0.10.0/vst3_host/> and
 //! <https://github.com/steinbergmedia/vst3_pluginterfaces>.
@@ -19,10 +20,16 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
+pub use vst3_host::audio::{AudioBusDetails, AudioBusDetailsLayout};
 use vst3_host::process_isolation::{HostCommand, HostResponse, PluginHostProcess};
+pub use vst3_host::{AudioBusConfig, AudioBusLayout};
 use vst3_host::{BusAudioBuffers, MidiChannel, MidiEvent, Plugin, TransportPosition, Vst3Host};
 
 pub mod catalog;
+mod expressive;
+pub use expressive::{
+    ExpressiveController, ExpressiveMidiData, ExpressiveMidiMessage, ExpressiveVelocity,
+};
 mod editor;
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 mod editor_context_menu;
@@ -42,7 +49,10 @@ mod inspection;
 pub mod sync;
 pub use catalog::{CatalogEntry, PluginCatalog, ThumbnailStatus};
 pub use editor::{EditorEvent, EditorSession, capture_editor, capture_editor_info, launch_editor};
-pub use inspection::{PluginAudioBus, PluginInspection, PluginParameterMetadata, inspect_plugin};
+pub use inspection::{
+    PluginAudioBus, PluginInspection, PluginParameterMetadata, inspect_plugin,
+    inspect_plugin_with_configuration, inspect_plugin_with_state,
+};
 
 /// Leaves headroom in the host's 4,096-event queue for panic note-offs.
 pub const MAX_MIDI_EVENTS_PER_BLOCK: usize = 2_048;
@@ -309,6 +319,138 @@ pub struct ParameterInfo {
     pub read_only: bool,
 }
 
+/// One stereo pair (or the final mono channel) on an indexed native input bus.
+/// `first_channel` must be even. Mono destinations receive an equal-weight downmix.
+#[derive(Clone, Copy)]
+pub struct StereoBusInput<'a> {
+    pub bus: usize,
+    pub first_channel: usize,
+    pub left: &'a [f32],
+    pub right: &'a [f32],
+}
+
+/// Destination for one indexed native output pair. A final mono channel is duplicated.
+pub struct StereoBusOutput<'a> {
+    pub bus: usize,
+    pub first_channel: usize,
+    pub left: &'a mut [f32],
+    pub right: &'a mut [f32],
+}
+
+#[derive(Clone)]
+struct BusActivation {
+    default_inputs: Vec<usize>,
+    default_outputs: Vec<usize>,
+    inputs: Vec<usize>,
+    outputs: Vec<usize>,
+}
+
+const MAX_AUDIO_BUSES: usize = 64;
+const MAX_AUDIO_CHANNELS: usize = 256;
+const MAX_BUS_BUFFER_BYTES: usize = 64 * 1024 * 1024;
+
+fn validate_audio_bus_layout(layout: &AudioBusLayout, frames: usize) -> Result<()> {
+    ensure!(
+        layout.inputs.len() <= MAX_AUDIO_BUSES && layout.outputs.len() <= MAX_AUDIO_BUSES,
+        "Plug-in exceeds the 64 audio buses per direction limit"
+    );
+    let channels = layout
+        .inputs
+        .iter()
+        .chain(&layout.outputs)
+        .try_fold(0usize, |sum, bus| {
+            ensure!(
+                bus.channel_count <= MAX_AUDIO_CHANNELS,
+                "Plug-in audio bus has too many channels"
+            );
+            sum.checked_add(bus.channel_count)
+                .context("Plug-in channel count overflow")
+        })?;
+    ensure!(
+        channels <= MAX_AUDIO_CHANNELS,
+        "Plug-in exceeds the 256 audio channels limit"
+    );
+    let bytes = channels
+        .checked_mul(frames)
+        .and_then(|count| count.checked_mul(std::mem::size_of::<f32>()))
+        .context("Plug-in audio buffer size overflow")?;
+    ensure!(
+        bytes <= MAX_BUS_BUFFER_BYTES,
+        "Plug-in audio buffers exceed 64 MiB"
+    );
+    Ok(())
+}
+
+fn allocate_bus_buffers(
+    plugin: &mut Plugin,
+    frames: usize,
+    sample_rate: f64,
+) -> Result<(BusAudioBuffers, Option<usize>, usize)> {
+    let layout = plugin.audio_bus_layout()?;
+    validate_audio_bus_layout(&layout, frames)?;
+    let details = plugin.audio_bus_details()?;
+    ensure!(
+        details.inputs.len() == layout.inputs.len()
+            && details.outputs.len() == layout.outputs.len(),
+        "Plug-in bus layout changed during configuration"
+    );
+    let main_input = details
+        .inputs
+        .iter()
+        .enumerate()
+        .position(|(index, bus)| bus.main && layout.inputs[index].channel_count > 0);
+    let main_output = details
+        .outputs
+        .iter()
+        .enumerate()
+        .position(|(index, bus)| bus.main && layout.outputs[index].channel_count > 0);
+    for (direction, buses, main) in [
+        (
+            vst3_host::audio::BusDirection::Input,
+            &layout.inputs,
+            main_input,
+        ),
+        (
+            vst3_host::audio::BusDirection::Output,
+            &layout.outputs,
+            main_output,
+        ),
+    ] {
+        if let Some(index) = main
+            && !buses[index].active
+        {
+            plugin.set_bus_active(
+                vst3_host::audio::MediaType::Audio,
+                direction,
+                index as i32,
+                true,
+            )?;
+        }
+    }
+    let layout = plugin.audio_bus_layout()?;
+    validate_audio_bus_layout(&layout, frames)?;
+    let active = |buses: &[AudioBusConfig], main: Option<usize>| {
+        main.filter(|&index| {
+            buses
+                .get(index)
+                .is_some_and(|bus| bus.active && bus.channel_count > 0)
+        })
+        .or_else(|| {
+            buses
+                .iter()
+                .position(|bus| bus.active && bus.channel_count > 0)
+        })
+    };
+    let input = active(&layout.inputs, main_input);
+    let output =
+        active(&layout.outputs, main_output).context("Plug-in has no active audio output bus")?;
+    Ok((
+        BusAudioBuffers::new(&layout, frames, sample_rate),
+        input,
+        output,
+    ))
+}
+
 /// A proxy to a native VST3 instance in its own crash-isolated child process.
 pub struct VstInstrument {
     plugin: Plugin,
@@ -324,6 +466,9 @@ pub struct VstInstrument {
     cached_tempo: Option<f64>,
     cached_playing: Option<bool>,
     next_position: Option<TransportPosition>,
+    bus_activation: Option<BusActivation>,
+    expressive_notes: Vec<expressive::Voice>,
+    next_expressive_notes: Vec<expressive::Voice>,
 }
 
 impl VstInstrument {
@@ -410,20 +555,12 @@ impl VstInstrument {
             "{} does not accept MIDI input",
             plugin.info().name
         );
-        let buffers = plugin.create_bus_audio_buffers(max_block)?;
-        let input_bus = buffers
-            .inputs
-            .iter()
-            .position(|bus| bus.active && !bus.channels.is_empty());
+        let (buffers, input_bus, output_bus) =
+            allocate_bus_buffers(&mut plugin, max_block, sample_rate)?;
         ensure!(
             require_midi || input_bus.is_some(),
             "Effect has no active audio input bus"
         );
-        let output_bus = buffers
-            .outputs
-            .iter()
-            .position(|bus| bus.active && !bus.channels.is_empty())
-            .context("Plugin has no active audio output bus")?;
         let raw = plugin.info();
         let info = PluginInfo {
             name: raw.name.clone(),
@@ -457,6 +594,9 @@ impl VstInstrument {
             cached_tempo: None,
             cached_playing: None,
             next_position: None,
+            bus_activation: None,
+            expressive_notes: Vec::with_capacity(MAX_MIDI_EVENTS_PER_BLOCK),
+            next_expressive_notes: Vec::with_capacity(MAX_MIDI_EVENTS_PER_BLOCK),
         })
     }
 
@@ -476,26 +616,157 @@ impl VstInstrument {
         self.plugin.isolation_pid()
     }
 
+    pub fn main_input_bus(&self) -> Option<usize> {
+        self.input_bus
+    }
+
+    pub fn main_output_bus(&self) -> usize {
+        self.output_bus
+    }
+
+    /// Current native bus indices and channel counts. Query on a control thread.
+    pub fn audio_bus_layout(&self) -> AudioBusLayout {
+        AudioBusLayout {
+            inputs: self
+                .buffers
+                .inputs
+                .iter()
+                .map(|bus| AudioBusConfig {
+                    channel_count: bus.channels.len(),
+                    active: bus.active,
+                })
+                .collect(),
+            outputs: self
+                .buffers
+                .outputs
+                .iter()
+                .map(|bus| AudioBusConfig {
+                    channel_count: bus.channels.len(),
+                    active: bus.active,
+                })
+                .collect(),
+        }
+    }
+    pub fn audio_bus_details(&self) -> Result<AudioBusDetailsLayout> {
+        Ok(self.plugin.audio_bus_details()?)
+    }
+
+    /// Activate additional audio buses without disabling the plug-in's original main/default
+    /// buses. Reconfiguration belongs on the control thread and is retained across state and
+    /// child-process recovery. Callers replace the render graph if native activation fails.
+    pub fn configure_audio_buses(&mut self, inputs: &[usize], outputs: &[usize]) -> Result<()> {
+        ensure!(
+            inputs.len() <= MAX_AUDIO_CHANNELS && outputs.len() <= MAX_AUDIO_CHANNELS,
+            "Too many requested plug-in audio buses"
+        );
+        let layout = self.plugin.audio_bus_layout()?;
+        validate_audio_bus_layout(&layout, self.max_block)?;
+        for (&index, buses) in inputs
+            .iter()
+            .map(|i| (i, &layout.inputs))
+            .chain(outputs.iter().map(|i| (i, &layout.outputs)))
+        {
+            ensure!(
+                buses.get(index).is_some_and(|bus| bus.channel_count > 0),
+                "Invalid plug-in audio bus index {index}"
+            );
+        }
+        let baseline = self
+            .bus_activation
+            .clone()
+            .unwrap_or_else(|| BusActivation {
+                default_inputs: layout
+                    .inputs
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, bus)| bus.active.then_some(index))
+                    .collect(),
+                default_outputs: layout
+                    .outputs
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, bus)| bus.active.then_some(index))
+                    .collect(),
+                inputs: Vec::new(),
+                outputs: Vec::new(),
+            });
+        self.plugin.stop_processing()?;
+        self.bus_activation = Some(BusActivation {
+            inputs: inputs.to_vec(),
+            outputs: outputs.to_vec(),
+            ..baseline
+        });
+        self.refresh_bus_buffers()?;
+        self.plugin.start_processing()?;
+        self.latency = self.plugin.latency_samples();
+        self.tail = self.plugin.tail_samples();
+        self.next_position = None;
+        Ok(())
+    }
+
+    fn refresh_bus_buffers(&mut self) -> Result<()> {
+        let restart = self.plugin.service_host_requests()?;
+        ensure!(
+            !restart.reload_component(),
+            "Plug-in requested a component reload while configuring audio buses"
+        );
+        let layout = self.plugin.audio_bus_layout()?;
+        validate_audio_bus_layout(&layout, self.max_block)?;
+        if let Some(activation) = &self.bus_activation {
+            for (direction, buses, baseline, selected) in [
+                (
+                    vst3_host::audio::BusDirection::Input,
+                    &layout.inputs,
+                    &activation.default_inputs,
+                    &activation.inputs,
+                ),
+                (
+                    vst3_host::audio::BusDirection::Output,
+                    &layout.outputs,
+                    &activation.default_outputs,
+                    &activation.outputs,
+                ),
+            ] {
+                for &index in baseline.iter().chain(selected) {
+                    ensure!(
+                        buses.get(index).is_some_and(|bus| bus.channel_count > 0),
+                        "Configured plug-in audio bus {index} disappeared"
+                    );
+                }
+                for (index, bus) in buses.iter().enumerate() {
+                    let active = baseline.contains(&index) || selected.contains(&index);
+                    if active || bus.active != active {
+                        self.plugin.set_bus_active(
+                            vst3_host::audio::MediaType::Audio,
+                            direction,
+                            index as i32,
+                            active,
+                        )?;
+                    }
+                }
+            }
+        }
+        let (buffers, input_bus, output_bus) =
+            allocate_bus_buffers(&mut self.plugin, self.max_block, self.buffers.sample_rate)?;
+        self.input_bus = input_bus;
+        self.output_bus = output_bus;
+        self.buffers = buffers;
+        Ok(())
+    }
+
     /// Restart a failed child on a worker/control thread. The plugin returns to its default
     /// preset; call `load_state` with the saved session state to restore its settings.
     pub fn recover(&mut self) -> Result<()> {
         self.plugin.recover()?;
-        self.buffers = self.plugin.create_bus_audio_buffers(self.max_block)?;
-        self.input_bus = self
-            .buffers
-            .inputs
-            .iter()
-            .position(|bus| bus.active && !bus.channels.is_empty());
-        self.output_bus = self
-            .buffers
-            .outputs
-            .iter()
-            .position(|bus| bus.active && !bus.channels.is_empty())
-            .context("Recovered plugin has no active output bus")?;
+        self.plugin.stop_processing()?;
+        self.refresh_bus_buffers()?;
+        self.plugin.start_processing()?;
         self.latency = self.plugin.latency_samples();
         self.tail = self.plugin.tail_samples();
         self.panic_pending = false;
         self.active_notes.fill(0);
+        self.expressive_notes.clear();
+        self.next_expressive_notes.clear();
         self.cached_tempo = None;
         self.cached_playing = None;
         self.next_position = None;
@@ -584,22 +855,96 @@ impl VstInstrument {
     ) -> Result<()> {
         left.fill(0.0);
         right.fill(0.0);
-        validate_block(events, left.len(), right.len(), self.max_block)?;
-        if let Some((input_left, input_right)) = inputs {
+        let mut outputs = [StereoBusOutput {
+            bus: self.output_bus,
+            first_channel: 0,
+            left,
+            right,
+        }];
+        if let Some((left, right)) = inputs {
+            let bus = self
+                .input_bus
+                .context("Plugin has no active audio input bus")?;
+            self.process_buses(
+                events,
+                &[StereoBusInput {
+                    bus,
+                    first_channel: 0,
+                    left,
+                    right,
+                }],
+                &mut outputs,
+            )
+        } else {
+            self.process_buses(events, &[], &mut outputs)
+        }
+    }
+
+    /// Process all active native buses once and copy only the requested output pairs.
+    /// Omitted input pairs are silent. Duplicate pairs, inactive buses, invalid lengths,
+    /// and odd pair offsets are rejected before any MIDI is sent. Destinations stay silent
+    /// on error. This synchronous IPC operation belongs on the render/control worker.
+    pub fn process_buses(
+        &mut self,
+        events: &[MidiMessage],
+        inputs: &[StereoBusInput<'_>],
+        outputs: &mut [StereoBusOutput<'_>],
+    ) -> Result<()> {
+        for output in outputs.iter_mut() {
+            output.left.fill(0.0);
+            output.right.fill(0.0);
+        }
+        ensure!(
+            outputs.len() <= MAX_AUDIO_CHANNELS,
+            "Too many requested plug-in output pairs"
+        );
+        let frames = outputs
+            .first()
+            .map(|bus| bus.left.len())
+            .or_else(|| inputs.first().map(|bus| bus.left.len()))
+            .unwrap_or(0);
+        for (index, output) in outputs.iter().enumerate() {
+            validate_block(&[], output.left.len(), output.right.len(), self.max_block)?;
             ensure!(
-                input_left.len() == left.len() && input_right.len() == left.len(),
-                "Plugin input and output lengths differ"
+                output.left.len() == frames,
+                "Plug-in bus block lengths differ"
             );
+            validate_pair(&self.buffers.outputs, output.bus, output.first_channel)?;
             ensure!(
-                self.input_bus.is_some(),
-                "Plugin has no active audio input bus"
+                !outputs[..index]
+                    .iter()
+                    .any(|other| other.bus == output.bus
+                        && other.first_channel == output.first_channel),
+                "Duplicate plug-in output pair"
             );
         }
-        if left.is_empty() {
-            return Ok(());
+        self.process_bus_inputs(events, inputs, frames)?;
+        for output in outputs {
+            self.copy_output_pair(output.bus, output.first_channel, output.left, output.right)?;
         }
-        let next_active = track_active_notes(&self.active_notes, self.panic_pending, events)?;
-        self.buffers.block_size = left.len();
+        Ok(())
+    }
+
+    /// Render into retained native bus storage. Read any number of output pairs afterward
+    /// with `copy_output_pair`; this does not run the plug-in more than once.
+    pub fn process_bus_inputs(
+        &mut self,
+        events: &[MidiMessage],
+        inputs: &[StereoBusInput<'_>],
+        frames: usize,
+    ) -> Result<()> {
+        self.process_bus_inputs_expressive(events, &[], inputs, frames)
+    }
+
+    /// Render ordinary and high-resolution musical events in one native block.
+    /// Both event lists must be ordered; offsets are merged before sending to the child.
+    pub fn process_bus_inputs_expressive(
+        &mut self,
+        events: &[MidiMessage],
+        expressive: &[ExpressiveMidiMessage],
+        inputs: &[StereoBusInput<'_>],
+        frames: usize,
+    ) -> Result<()> {
         for bus in self
             .buffers
             .inputs
@@ -607,19 +952,64 @@ impl VstInstrument {
             .chain(&mut self.buffers.outputs)
         {
             for channel in &mut bus.channels {
-                // Capacity was reserved to max_block while loading, including after a short block.
-                channel.resize(left.len(), 0.0);
                 channel.fill(0.0);
             }
         }
-        if let Some((input_left, input_right)) = inputs {
-            let bus_index = self
-                .input_bus
-                .context("Plugin has no active audio input bus")?;
+        ensure!(
+            inputs.len() <= MAX_AUDIO_CHANNELS,
+            "Too many requested plug-in input pairs"
+        );
+        validate_block(events, frames, frames, self.max_block)?;
+        ensure!(
+            events.len() + expressive.len() <= MAX_MIDI_EVENTS_PER_BLOCK,
+            "Too many combined MIDI events in one block"
+        );
+        self.prepare_expressive(expressive, frames)?;
+        for (index, input) in inputs.iter().enumerate() {
+            ensure!(
+                input.left.len() == frames && input.right.len() == frames,
+                "Plug-in bus block lengths differ"
+            );
+            validate_pair(&self.buffers.inputs, input.bus, input.first_channel)?;
+            ensure!(
+                !inputs[..index]
+                    .iter()
+                    .any(|other| other.bus == input.bus
+                        && other.first_channel == input.first_channel),
+                "Duplicate plug-in input pair"
+            );
+        }
+        if frames == 0 {
+            self.buffers.block_size = 0;
+            return Ok(());
+        }
+        let next_active = track_active_notes(&self.active_notes, self.panic_pending, events)?;
+        ensure!(
+            next_active
+                .iter()
+                .map(|&count| usize::from(count))
+                .sum::<usize>()
+                + self.next_expressive_notes.len()
+                <= MAX_MIDI_EVENTS_PER_BLOCK,
+            "Too many held MIDI notes"
+        );
+        self.buffers.block_size = frames;
+        for bus in self
+            .buffers
+            .inputs
+            .iter_mut()
+            .chain(&mut self.buffers.outputs)
+        {
+            for channel in &mut bus.channels {
+                channel.resize(frames, 0.0);
+                channel.fill(0.0);
+            }
+        }
+        for input in inputs {
             copy_stereo_input(
-                &mut self.buffers.inputs[bus_index].channels,
-                input_left,
-                input_right,
+                &mut self.buffers.inputs[input.bus].channels[input.first_channel..],
+                input.left,
+                input.right,
             );
         }
         if self.panic_pending {
@@ -636,23 +1026,78 @@ impl VstInstrument {
                 }
                 *active = 0;
             }
+            for voice in &self.expressive_notes {
+                ExpressiveMidiMessage {
+                    offset: 0,
+                    data: ExpressiveMidiData::NoteOff {
+                        channel: voice.channel,
+                        pitch: voice.pitch,
+                        velocity: ExpressiveVelocity::Midi2(0),
+                        note_id: voice.note_id,
+                        tuning: 0.0,
+                    },
+                }
+                .queue(&mut self.plugin)?;
+            }
             self.panic_pending = false;
         }
-        for event in events {
-            self.plugin
-                .send_midi_event_at(event.as_host_event(), event.offset as i32)?;
+        let (mut legacy_index, mut expressive_index) = (0, 0);
+        while legacy_index < events.len() || expressive_index < expressive.len() {
+            if legacy_index < events.len()
+                && (expressive_index == expressive.len()
+                    || events[legacy_index].offset <= expressive[expressive_index].offset)
+            {
+                let event = events[legacy_index];
+                self.plugin
+                    .send_midi_event_at(event.as_host_event(), event.offset as i32)?;
+                legacy_index += 1;
+            } else {
+                expressive[expressive_index].queue(&mut self.plugin)?;
+                expressive_index += 1;
+            }
         }
         self.active_notes = next_active;
-        self.plugin.process_bus_audio(&mut self.buffers)?;
+        std::mem::swap(&mut self.expressive_notes, &mut self.next_expressive_notes);
+        if let Err(error) = self.plugin.process_bus_audio(&mut self.buffers) {
+            for bus in &mut self.buffers.outputs {
+                for channel in &mut bus.channels {
+                    channel.fill(0.0);
+                }
+            }
+            return Err(error.into());
+        }
         if self.cached_playing == Some(true)
             && let (Some(position), Some(tempo)) = (&mut self.next_position, self.cached_tempo)
         {
-            position.samples = position.samples.saturating_add(left.len() as i64);
-            position.quarter_notes += left.len() as f64 / self.buffers.sample_rate * (tempo / 60.0);
+            position.samples = position.samples.saturating_add(frames as i64);
+            position.quarter_notes += frames as f64 / self.buffers.sample_rate * (tempo / 60.0);
         }
-        let output = &self.buffers.outputs[self.output_bus].channels;
-        left.copy_from_slice(&output[0]);
-        right.copy_from_slice(output.get(1).unwrap_or(&output[0]));
+        Ok(())
+    }
+
+    /// Copy one stereo pair or a duplicated final mono output without further processing.
+    pub fn copy_output_pair(
+        &self,
+        bus: usize,
+        first_channel: usize,
+        left: &mut [f32],
+        right: &mut [f32],
+    ) -> Result<()> {
+        left.fill(0.0);
+        right.fill(0.0);
+        validate_block(&[], left.len(), right.len(), self.max_block)?;
+        ensure!(
+            left.len() == self.buffers.block_size,
+            "Plug-in output length differs from last rendered block"
+        );
+        validate_pair(&self.buffers.outputs, bus, first_channel)?;
+        let channels = &self.buffers.outputs[bus].channels;
+        left.copy_from_slice(&channels[first_channel][..left.len()]);
+        right.copy_from_slice(
+            &channels
+                .get(first_channel + 1)
+                .unwrap_or(&channels[first_channel])[..right.len()],
+        );
         Ok(())
     }
 
@@ -739,22 +1184,9 @@ impl VstInstrument {
     /// Restore state on the original control thread while the audio callback is stopped.
     pub fn load_state(&mut self, state: &[u8]) -> Result<()> {
         self.plugin.stop_processing()?;
-        let result = self.plugin.load_state(state);
+        self.plugin.load_state(state)?;
+        self.refresh_bus_buffers()?;
         self.plugin.start_processing()?;
-        result?;
-        // A preset may change bus layout. Reallocate only here on the control thread.
-        self.buffers = self.plugin.create_bus_audio_buffers(self.max_block)?;
-        self.input_bus = self
-            .buffers
-            .inputs
-            .iter()
-            .position(|bus| bus.active && !bus.channels.is_empty());
-        self.output_bus = self
-            .buffers
-            .outputs
-            .iter()
-            .position(|bus| bus.active && !bus.channels.is_empty())
-            .context("Restored plugin has no active output bus")?;
         self.panic_pending = true;
         self.latency = self.plugin.latency_samples();
         self.tail = self.plugin.tail_samples();
@@ -764,7 +1196,7 @@ impl VstInstrument {
 }
 
 /// A stereo VST3 insert or send effect, isolated exactly like an instrument.
-/// Additional/sidechain buses are silent. Calls belong on the engine worker, never the
+/// Unrouted additional/sidechain buses are silent. Calls belong on the engine worker, never the
 /// audio device callback, because each block uses synchronous IPC.
 pub struct VstEffect {
     processor: VstInstrument,
@@ -826,6 +1258,45 @@ impl VstEffect {
     pub fn isolation_pid(&self) -> Option<u32> {
         self.processor.isolation_pid()
     }
+    pub fn main_input_bus(&self) -> Option<usize> {
+        self.processor.main_input_bus()
+    }
+    pub fn main_output_bus(&self) -> usize {
+        self.processor.main_output_bus()
+    }
+    pub fn audio_bus_layout(&self) -> AudioBusLayout {
+        self.processor.audio_bus_layout()
+    }
+    pub fn audio_bus_details(&self) -> Result<AudioBusDetailsLayout> {
+        self.processor.audio_bus_details()
+    }
+    pub fn configure_audio_buses(&mut self, inputs: &[usize], outputs: &[usize]) -> Result<()> {
+        self.processor.configure_audio_buses(inputs, outputs)
+    }
+    pub fn process_bus_inputs(
+        &mut self,
+        inputs: &[StereoBusInput<'_>],
+        frames: usize,
+    ) -> Result<()> {
+        self.processor.process_bus_inputs(&[], inputs, frames)
+    }
+    pub fn copy_output_pair(
+        &self,
+        bus: usize,
+        first_channel: usize,
+        left: &mut [f32],
+        right: &mut [f32],
+    ) -> Result<()> {
+        self.processor
+            .copy_output_pair(bus, first_channel, left, right)
+    }
+    pub fn process_buses(
+        &mut self,
+        inputs: &[StereoBusInput<'_>],
+        outputs: &mut [StereoBusOutput<'_>],
+    ) -> Result<()> {
+        self.processor.process_buses(&[], inputs, outputs)
+    }
     pub fn parameters(&self) -> Result<Vec<ParameterInfo>> {
         self.processor.parameters()
     }
@@ -883,6 +1354,26 @@ fn copy_stereo_input(channels: &mut [Vec<f32>], left: &[f32], right: &[f32]) {
         channels[0].copy_from_slice(left);
         channels[1].copy_from_slice(right);
     }
+}
+
+fn validate_pair(
+    buses: &[vst3_host::audio::AudioBusBuffer],
+    bus: usize,
+    first_channel: usize,
+) -> Result<()> {
+    ensure!(
+        first_channel.is_multiple_of(2),
+        "Plug-in stereo pair must begin at an even channel"
+    );
+    let config = buses
+        .get(bus)
+        .context("Plug-in audio bus index is out of range")?;
+    ensure!(config.active, "Plug-in audio bus is inactive");
+    ensure!(
+        first_channel < config.channels.len(),
+        "Plug-in audio channel index is out of range"
+    );
+    Ok(())
 }
 
 /// Keep panic releases plus a maximum new block below the SDK's 4,096-event queue.
@@ -945,6 +1436,41 @@ fn validate_block(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_bus_layout_admission_rejects_unbounded_allocations() {
+        let bus = AudioBusConfig {
+            channel_count: 2,
+            active: true,
+        };
+        let normal = AudioBusLayout {
+            inputs: vec![bus; 2],
+            outputs: vec![bus; 16],
+        };
+        assert!(validate_audio_bus_layout(&normal, 512).is_ok());
+        let too_many = AudioBusLayout {
+            inputs: vec![bus; 65],
+            outputs: vec![bus],
+        };
+        assert!(validate_audio_bus_layout(&too_many, 64).is_err());
+        let huge = AudioBusLayout {
+            inputs: vec![],
+            outputs: vec![AudioBusConfig {
+                channel_count: usize::MAX,
+                active: true,
+            }],
+        };
+        assert!(validate_audio_bus_layout(&huge, 64).is_err());
+        assert!(validate_audio_bus_layout(&normal, usize::MAX).is_err());
+        let aggregate = AudioBusLayout {
+            inputs: vec![AudioBusConfig {
+                channel_count: 256,
+                active: true,
+            }],
+            outputs: vec![bus],
+        };
+        assert!(validate_audio_bus_layout(&aggregate, 512).is_err());
+    }
 
     #[test]
     fn overlapping_notes_preserve_release_counts_and_bound_reset_queue() {

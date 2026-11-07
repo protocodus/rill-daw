@@ -73,7 +73,9 @@ pub enum PopupKind {
     Recording,
     Join,
     Export,
+    ExportMidi,
     Analysis,
+    MidiExpression,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -133,6 +135,8 @@ pub(crate) enum ClipCommand {
 
 pub struct DawApp {
     pub(crate) analysis: crate::analysis_ui::SignalAnalysis,
+    pub(crate) midi_expression: Option<crate::midi_expression::MidiExpressionDraft>,
+    pub(crate) midi_expression_open: bool,
     render_context: egui::Context,
     pub(crate) assistant: crate::assistant::Assistant,
     pub(crate) tool_joins: crate::join_tools::JoinTools,
@@ -158,6 +162,7 @@ pub struct DawApp {
     retiring: Option<std::sync::mpsc::Receiver<()>>,
     pub(crate) project_io: crate::project_io::ProjectIo,
     pub(crate) audio_import: crate::audio_import::AudioImportState,
+    pub(crate) freeze: crate::freeze_ui::FreezeState,
     pub(crate) document_guard: Option<crate::document_ui::DocumentGuard>,
     pub(crate) next_document_dialog: Option<crate::document_ui::DocumentDialogSelection>,
     pub export_job:
@@ -166,6 +171,7 @@ pub struct DawApp {
     pub(crate) finishing: crate::finishing_actions::FinishingActions,
     pub(crate) exported_file: Option<PathBuf>,
     pub(crate) export_open: bool,
+    pub(crate) midi_export_open: bool,
     pub revision: u64,
     pub desired_playing: bool,
     pub cursor: f64,
@@ -205,6 +211,7 @@ pub struct DawApp {
     pub last_render_errors: u64,
     render_diagnostic_engine: Option<u64>,
     output_dropout_notice: Option<u64>,
+    midi_advisory_ack: Option<(u64, u64, u64)>,
     live_edit_error: Option<(u64, String)>,
     pub devices: Vec<DeviceInfo>,
     pub status: String,
@@ -281,6 +288,8 @@ impl DawApp {
             .map(|c| c.id);
         let mut app = Self {
             analysis: Default::default(),
+            midi_expression: None,
+            midi_expression_open: false,
             render_context: ctx.clone(),
             assistant: Default::default(),
             tool_joins: Default::default(),
@@ -305,6 +314,7 @@ impl DawApp {
             retiring: None,
             project_io: Default::default(),
             audio_import: Default::default(),
+            freeze: Default::default(),
             document_guard: None,
             next_document_dialog: None,
             export_job: None,
@@ -312,6 +322,7 @@ impl DawApp {
             finishing: Default::default(),
             exported_file: None,
             export_open: false,
+            midi_export_open: false,
             revision: 0,
             desired_playing: false,
             cursor: 0.0,
@@ -351,6 +362,7 @@ impl DawApp {
             last_render_errors: 0,
             render_diagnostic_engine: None,
             output_dropout_notice: None,
+            midi_advisory_ack: None,
             live_edit_error: None,
             devices: Vec::new(),
             status: "Ready · Space to play · Drop audio anywhere in the arrangement".into(),
@@ -459,7 +471,9 @@ impl DawApp {
             (self.audio_takes_open, PopupKind::AudioTakes),
             (self.recording_open, PopupKind::Recording),
             (self.export_open, PopupKind::Export),
+            (self.midi_export_open, PopupKind::ExportMidi),
             (self.analysis.open, PopupKind::Analysis),
+            (self.midi_expression_open, PopupKind::MidiExpression),
         ] {
             if open {
                 return FocusedView::Popup(kind);
@@ -469,6 +483,8 @@ impl DawApp {
     }
 
     fn hide_focused_view(&mut self) {
+        self.midi_expression_open = false;
+        self.midi_expression = None;
         self.stop_signal_analysis();
         self.assistant.clear_key_draft();
         self.assistant.open = false;
@@ -491,6 +507,7 @@ impl DawApp {
         self.audio_takes_open = false;
         self.recording_open = false;
         self.export_open = false;
+        self.midi_export_open = false;
         self.view = WorkspaceView::Arrangement;
     }
 
@@ -604,7 +621,9 @@ impl DawApp {
                 self.recording_open = true;
             }
             PopupKind::Export => self.export_open = true,
+            PopupKind::ExportMidi => self.midi_export_open = true,
             PopupKind::Analysis => self.analysis.open = true,
+            PopupKind::MidiExpression => self.midi_expression_open = true,
         }
     }
 
@@ -666,6 +685,8 @@ impl DawApp {
                     PopupKind::AudioTakes => "Audio takes",
                     PopupKind::Recording => "Recording",
                     PopupKind::Export => "Export WAV",
+                    PopupKind::ExportMidi => "Export MIDI 1.0 copy",
+                    PopupKind::MidiExpression => "Note expression",
                 };
                 self.selected_track
                     .and_then(|id| self.project.track(id))
@@ -835,7 +856,9 @@ impl DawApp {
             | PopupKind::Automation
             | PopupKind::History
             | PopupKind::Export
+            | PopupKind::ExportMidi
             | PopupKind::Analysis
+            | PopupKind::MidiExpression
             | PopupKind::About => {}
         }
     }
@@ -1037,6 +1060,7 @@ impl DawApp {
                 && !self.automation_open
                 && !self.history_open
                 && !self.export_open
+                && !self.midi_export_open
                 && !self.analysis.open
                 && !self.about_open
         });
@@ -1605,7 +1629,8 @@ impl DawApp {
             || self.export_job.is_some()
             || self.state_sync_pending()
             || self.project_io_pending()
-            || self.audio_import_busy();
+            || self.audio_import_busy()
+            || self.freeze_busy();
         let export_report = self.export_error_report().cloned();
         let show_export_failure = export_report
             .as_ref()
@@ -1617,6 +1642,8 @@ impl DawApp {
             } else if self.state_sync_pending() {
                 "Finishing instrument changes…".into()
             } else if let Some(message) = self.audio_import_message() {
+                message
+            } else if let Some(message) = self.freeze_progress_message() {
                 message
             } else if self.loading.is_some() {
                 "Preparing audio…".into()
@@ -1633,6 +1660,21 @@ impl DawApp {
             })
             .map(|snapshot| snapshot.output_dropouts);
         let mut showing_output_dropout = false;
+        let midi_advisory = self
+            .engine
+            .as_ref()
+            .map(|engine| {
+                let midi = engine.midi_snapshot();
+                (
+                    engine.snapshot().engine_id,
+                    midi.unsupported_events,
+                    midi.unsupported_groups,
+                )
+            })
+            .filter(|notice| {
+                (notice.1 > 0 || notice.2 > 0) && self.midi_advisory_ack != Some(*notice)
+            });
+        let mut showing_midi_advisory = false;
         let clipped_samples = self
             .exported_file
             .as_deref()
@@ -1641,6 +1683,10 @@ impl DawApp {
             .exported_file
             .as_deref()
             .and_then(|path| self.completed_export_summary(path));
+        let export_midi_advisories = self
+            .exported_file
+            .as_deref()
+            .map_or((0, 0), |path| self.completed_export_midi_advisories(path));
         let showing_completion = self.exported_file.is_some() && !self.error && !busy;
         let (kind, message) = if show_export_failure {
             (
@@ -1668,6 +1714,11 @@ impl DawApp {
                     NoticeKind::Warning,
                     format!("Exported · {name} · {clipped_samples} clipped samples"),
                 )
+            } else if export_midi_advisories != (0, 0) {
+                (
+                    NoticeKind::Warning,
+                    format!("Exported · {name} · Some MIDI controls are unsupported"),
+                )
             } else {
                 (NoticeKind::Success, format!("Exported · {name}"))
             }
@@ -1679,6 +1730,19 @@ impl DawApp {
             )
         } else if let Some(warning) = &self.waveform_warning {
             (NoticeKind::Warning, warning.clone())
+        } else if let Some((_, events, groups)) = midi_advisory {
+            showing_midi_advisory = true;
+            (
+                NoticeKind::Warning,
+                if groups > 0 {
+                    "Extra MIDI groups require separate tracks · Performance data retained"
+                        .to_owned()
+                } else {
+                    format!(
+                        "Instrument does not support {events} MIDI control type(s) · Data retained"
+                    )
+                },
+            )
         } else {
             return;
         };
@@ -1694,6 +1758,7 @@ impl DawApp {
         let mut audio_setup = false;
         let mut edit_export = false;
         let mut cancel_import = false;
+        let mut cancel_freeze = false;
         let has_audio_recovery = showing_output_dropout
             || kind == NoticeKind::Error
                 && self
@@ -1712,6 +1777,9 @@ impl DawApp {
                 let response = daw_ui::notice(ui, kind, &message, |ui| {
                     if self.audio_import_busy() {
                         cancel_import = daw_ui::button(ui, "Cancel import").clicked();
+                    }
+                    if self.freeze_busy() {
+                        cancel_freeze = daw_ui::button(ui, "Cancel Freeze").clicked();
                     }
                     if show_export_failure {
                         retry_export = ui.add_enabled(
@@ -1741,7 +1809,7 @@ impl DawApp {
                             self.show_status_error_details();
                         }
                     }
-                    if showing_output_dropout || showing_completion || matches!(kind, NoticeKind::Error | NoticeKind::Success) {
+                    if showing_output_dropout || showing_midi_advisory || showing_completion || matches!(kind, NoticeKind::Error | NoticeKind::Success) {
                         dismiss = daw_ui::small_button(ui, "Dismiss").clicked();
                     }
                     if showing_completion
@@ -1764,10 +1832,12 @@ impl DawApp {
                     response.response.on_hover_text(completion_summary.as_ref().map_or_else(
                         || path.display().to_string(),
                         |summary| format!("{summary}\n{}", path.display())));
+                } else if showing_midi_advisory {
+                    response.response.on_hover_text("The original MIDI data remains in the project. Use separate tracks for different UMP groups, or choose an instrument that advertises support for these controls.");
                 }
                 if let Some(path) = &secondary_completion {
                     let name = path.file_name().unwrap_or(path.as_os_str()).to_string_lossy();
-                    let result_kind = if clipped_samples > 0 { NoticeKind::Warning } else { NoticeKind::Success };
+                    let result_kind = if clipped_samples > 0 || export_midi_advisories != (0, 0) { NoticeKind::Warning } else { NoticeKind::Success };
                     let result_message = if clipped_samples > 0 {
                         format!("Exported · {name} · {clipped_samples} clipped samples")
                     } else { format!("Exported · {name}") };
@@ -1788,6 +1858,9 @@ impl DawApp {
         if cancel_import {
             self.cancel_audio_import();
         }
+        if cancel_freeze {
+            self.cancel_freeze();
+        }
         if edit_export {
             self.export();
         }
@@ -1801,6 +1874,8 @@ impl DawApp {
         if dismiss {
             if showing_output_dropout {
                 self.output_dropout_notice = None;
+            } else if showing_midi_advisory {
+                self.midi_advisory_ack = midi_advisory;
             } else if kind == NoticeKind::Error {
                 self.error = false;
                 if show_export_failure {
@@ -1880,7 +1955,7 @@ impl DawApp {
                     .fold(0.0, f64::max);
                 let mut ids = HashSet::new();
                 for mut n in chosen {
-                    n.id = new_id();
+                    n.refresh_identity();
                     n.start += end - start;
                     ids.insert(n.id);
                     notes.push(n);
@@ -1988,6 +2063,15 @@ impl DawApp {
     }
     fn keyboard(&mut self, ctx: &egui::Context) {
         self.sync_workspace_tool();
+        if self.midi_expression_open {
+            if !egui::Popup::is_any_open(ctx)
+                && ctx
+                    .input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+            {
+                self.close_popup();
+            }
+            return;
+        }
         if self.document_guard.is_some()
             || self.error_details.is_some()
             || crate::plugin_details::is_open(ctx)
@@ -2115,7 +2199,9 @@ impl DawApp {
             || self.audio_takes_open
             || self.recording_open
             || self.export_open
+            || self.midi_export_open
             || self.analysis.open
+            || self.midi_expression_open
             || self.about_open
             || self.midi_editor.generate_active()
         {
@@ -2427,7 +2513,7 @@ impl DawApp {
                 daw_ui::tokens::SPACE_XS as i8,
             )).corner_radius(0))
             .show(ctx, |ui| {
-                if self.document_guard.is_some() { ui.disable(); }
+                if self.document_guard.is_some() || self.midi_expression_open { ui.disable(); }
                 daw_ui::menu_bar(ui, |ui| {
                     daw_ui::brand_lockup(ui, daw_ui::BrandSize::Compact);
                     // A gap, not a rule: the mark and the menus already differ.
@@ -3333,6 +3419,7 @@ impl DawApp {
         self.poll_recording(ctx);
         self.poll_project_io(ctx);
         self.poll_audio_import(ctx);
+        self.poll_freeze(ctx);
         self.poll_export();
         self.poll_join(ctx);
         self.update_note_audition(ctx);
@@ -3410,7 +3497,9 @@ impl DawApp {
             || self.audio_takes_open
             || self.recording_open
             || self.export_open
+            || self.midi_export_open
             || self.analysis.open
+            || self.midi_expression_open
             || self.about_open;
         let focused_before_draw = self.focused_view();
         let workspace = self.view;
@@ -3613,6 +3702,7 @@ impl DawApp {
         self.about_popup(ctx);
         self.assistant_popup(ctx);
         self.signal_analysis_popup(ctx);
+        self.midi_expression_popup(ctx);
         self.audio_silence_dialog(ctx);
         self.audio_batch_fades_dialog(ctx);
         self.rename_overlay(ctx);
@@ -3699,6 +3789,27 @@ impl DawApp {
                 }
             }
             "clip" => self.view = WorkspaceView::Clip,
+            "expression" => {
+                let target = self.project.tracks.iter().find_map(|track| {
+                    track
+                        .clips
+                        .iter()
+                        .filter(|clip| !clip.is_take_source())
+                        .find_map(|clip| {
+                            let ClipContent::Midi { notes } = &clip.content else {
+                                return None;
+                            };
+                            notes.first().map(|note| (track.id, clip.id, note.id))
+                        })
+                });
+                if let Some((track, clip, note)) = target {
+                    self.selected_track = Some(track);
+                    self.selected_clip = Some(clip);
+                    self.selected_notes = HashSet::from([note]);
+                    self.view = WorkspaceView::Clip;
+                    self.open_midi_expression(track, clip, note);
+                }
+            }
             "library" => self.open_popup(PopupKind::Library),
             "automation" => self.open_popup(PopupKind::Automation),
             "crossfade" => self.open_popup(PopupKind::Crossfade),
@@ -3760,17 +3871,18 @@ pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
     // Track order belongs to the workspace. Compare stable channel identities
     // so rearranging headers cannot restart a running graph or its plug-ins.
     let tracks: std::collections::HashMap<_, _> =
-        b.tracks.iter().map(|track| (track.id, track)).collect();
+        b.channels().map(|track| (track.id, track)).collect();
     a.tempo == b.tempo
         && a.beats_per_bar == b.beats_per_bar
         && a.loop_enabled == b.loop_enabled
         && a.loop_start == b.loop_start
         && a.loop_end == b.loop_end
         && a.tracks.len() == b.tracks.len()
-        && tracks.len() == b.tracks.len()
-        && a.tracks.iter().all(|a| {
+        && tracks.len() == b.tracks.len() + 1
+        && a.channels().all(|a| {
             tracks.get(&a.id).is_some_and(|b| {
                 a.kind == b.kind
+                    && a.input_gain == b.input_gain
                     && a.gain == b.gain
                     && a.pan == b.pan
                     && a.mute == b.mute
@@ -3778,6 +3890,8 @@ pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
                     && a.instrument == b.instrument
                     && a.instrument_state == b.instrument_state
                     && a.instrument_parameters == b.instrument_parameters
+                    && a.instrument_inputs == b.instrument_inputs
+                    && a.instrument_output == b.instrument_output
                     && a.latency_samples == b.latency_samples
                     && a.automation == b.automation
                     && a.inserts.len() == b.inserts.len()
@@ -3787,6 +3901,7 @@ pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
                             && a.effect == b.effect
                             && a.state == b.state
                             && a.parameters == b.parameters
+                            && a.inputs == b.inputs
                     })
                     && a.sends == b.sends
                     && a.output_bus == b.output_bus
@@ -3794,10 +3909,12 @@ pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
                     && a.clips.len() == b.clips.len()
                     && a.clips.iter().zip(&b.clips).all(|(a, b)| {
                         a.start == b.start
+                            && a.muted == b.muted
                             && a.length == b.length
                             && a.offset == b.offset
                             && a.source_rate == b.source_rate
                             && a.audio_take == b.audio_take
+                            && a.midi_events == b.midi_events
                             && match (&a.content, &b.content) {
                                 (
                                     ClipContent::Midi { notes: a },
@@ -3809,6 +3926,7 @@ pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
                                                 && a.start == b.start
                                                 && a.length == b.length
                                                 && a.velocity == b.velocity
+                                                && a.midi2 == b.midi2
                                         })
                                 }
                                 (a, b) => a == b,
@@ -3856,6 +3974,8 @@ mod export_feedback_tests {
                 sample_rate: 48_000,
                 encoding: daw_engine::WavEncoding::Float32,
                 dither: false,
+                unsupported_midi_events: 0,
+                unsupported_midi_groups: 0,
             },
         }))
         .unwrap();

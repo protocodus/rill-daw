@@ -417,3 +417,124 @@ fn relative_track_commands_use_batch_references_and_reject_cycles_atomically() {
     assert!(!no_op.changed);
     assert_eq!(project, before);
 }
+
+#[test]
+fn expressive_duration_batches_are_atomic_linked_and_one_undoable_action() {
+    let mut p = Project::new();
+    let track = p.add_midi_track("Expressive lengths");
+    let mut note = Note::new(60, 0.5, 0.5, 64);
+    note.set_velocity16(0x8123);
+    note.set_release_velocity16(0x3456);
+    note.midi2
+        .as_mut()
+        .unwrap()
+        .expressions
+        .push(MidiNoteExpression::new(
+            0.75,
+            UmpPacket::from_words(&[0x40a0_3c00, 0xdead_beef]).unwrap(),
+        ));
+    let note_id = note.id;
+    let precision = note.midi2.clone();
+    let mut clip = Clip::midi("Source", 2.0, 4.0, vec![note]);
+    clip.source_rate = 0.5;
+    let clip_id = clip.id;
+    p.track_mut(track).unwrap().clips.push(clip);
+    let ghost = p.clone_clip(track, clip_id).unwrap();
+    p.clip_mut(track, ghost).unwrap().source_rate = 2.0;
+    let before = p.clone();
+    let edit = batch(json!([
+        {"op":"edit_midi_note_lengths","track":track,"clip":clip_id,"note_ids":[note_id],"change":{"mode":"set","length":0.25}},
+        {"op":"edit_midi_note_lengths","track":track,"clip":clip_id,"note_ids":[note_id],"change":{"mode":"add","delta":0.125}}
+    ]));
+    assert!(edit.apply(&mut p).unwrap().changed);
+    for id in [clip_id, ghost] {
+        let note = &p.midi_notes(track, id).unwrap()[0];
+        assert_eq!(note.length, 0.1875);
+        assert_eq!(note.start, 0.5);
+        assert_eq!(note.midi2, precision);
+        assert_eq!(
+            p.clip(track, id).unwrap().length,
+            before.clip(track, id).unwrap().length
+        );
+        assert_eq!(
+            p.clip(track, id).unwrap().source_rate,
+            before.clip(track, id).unwrap().source_rate
+        );
+    }
+    let after = p.clone();
+    let mut history = History::new();
+    history.commit_named(&before, "Batch note lengths");
+    assert!(history.undo(&mut p));
+    assert_eq!(p, before);
+    assert!(history.redo(&mut p));
+    assert_eq!(p, after);
+    let invalid = batch(json!([
+        {"op":"rename_song","name":"Must not persist"},
+        {"op":"edit_midi_note_lengths","track":track,"clip":clip_id,"note_ids":[note_id],"change":{"mode":"set","length":0.0}}
+    ]));
+    assert!(invalid.apply(&mut p).is_err());
+    assert_eq!(p, after);
+}
+
+#[test]
+fn expressive_clip_duplication_is_bounded_without_rejecting_large_existing_states() {
+    let mut p = Project::new();
+    let track = p.add_midi_track("Dense performance");
+    let mut note = Note::new(60, 0.0, 4.0, 64);
+    note.set_velocity16(0x8123);
+    let packet = UmpPacket::from_words(&[0x40a0_3c00, 0xdead_beef]).unwrap();
+    note.midi2.as_mut().unwrap().expressions = (0..MAX_NOTE_EXPRESSIONS)
+        .map(|i| MidiNoteExpression::new(i as f64 / MAX_NOTE_EXPRESSIONS as f64, packet))
+        .collect();
+    let clip = Clip::midi("Dense source", 0.0, 4.0, vec![note]);
+    let clip_id = clip.id;
+    p.track_mut(track).unwrap().clips.push(clip);
+    p.validate().unwrap();
+    let before = p.clone();
+    let edits = EditBatch {
+        label: "Excessive copies".into(),
+        edits: (0..MAX_BATCH_EDITS)
+            .map(|i| SongEdit::DuplicateClip {
+                track: track.into(),
+                clip: clip_id.into(),
+                start: 4.0 * (i + 1) as f64,
+                key: None,
+            })
+            .collect(),
+    };
+    assert!(
+        edits
+            .apply(&mut p)
+            .unwrap_err()
+            .to_string()
+            .contains("32 MiB")
+    );
+    assert_eq!(p, before);
+
+    p.set_instrument(
+        track,
+        Instrument::Vst3 {
+            path: "large.vst3".into(),
+            class_id: None,
+        },
+    )
+    .unwrap();
+    p.track_mut(track).unwrap().instrument_state = vec![0x5a; MAX_BATCH_GROWTH_BYTES + 1];
+    p.validate().unwrap();
+    assert!(
+        batch(json!([
+            {"op":"rename_song","name":"Large state remains editable"},
+            {"op":"set_mix","channels":[{"track":track,"gain":0.5},{"track":0,"input_gain":0.75}]}
+        ]))
+        .apply(&mut p)
+        .unwrap()
+        .changed
+    );
+    assert_eq!(p.name, "Large state remains editable");
+    assert_eq!(p.track(track).unwrap().gain, 0.5);
+    assert_eq!(p.master.input_gain, 0.75);
+    assert_eq!(
+        p.track(track).unwrap().instrument_state.len(),
+        MAX_BATCH_GROWTH_BYTES + 1
+    );
+}

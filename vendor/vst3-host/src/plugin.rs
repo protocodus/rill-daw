@@ -831,6 +831,26 @@ pub(crate) trait PluginInternal: Send {
             "bus-aware audio processing is not supported for this plugin".to_string(),
         ))
     }
+    /// Query native bus names and main/aux classification on the control thread.
+    fn audio_bus_details(&self) -> Result<crate::audio::AudioBusDetailsLayout> {
+        let layout = self.audio_bus_layout()?;
+        let side = |buses: Vec<crate::audio::AudioBusConfig>, label: &str| {
+            buses
+                .into_iter()
+                .enumerate()
+                .map(|(index, bus)| crate::audio::AudioBusDetails {
+                    name: format!("{label} {}", index + 1),
+                    channels: bus.channel_count,
+                    active: bus.active,
+                    main: index == 0,
+                })
+                .collect()
+        };
+        Ok(crate::audio::AudioBusDetailsLayout {
+            inputs: side(layout.inputs, "Input"),
+            outputs: side(layout.outputs, "Output"),
+        })
+    }
     /// Process buffers while preserving VST3 bus boundaries.
     fn process_buses(&mut self, _buffers: &mut BusAudioBuffers) -> Result<()> {
         Err(Error::Other(
@@ -2015,10 +2035,18 @@ impl Plugin {
     /// bus / channel (defaults: bus 0, channel 0), via `INoteExpressionController`. Empty if the
     /// plugin doesn't implement it.
     pub fn note_expressions(&self) -> Result<Vec<crate::midi::NoteExpressionInfo>> {
+        self.note_expressions_on(0,0)
+    }
+
+    /// Query advertised note-expression dimensions for a particular event bus/channel.
+    pub fn note_expressions_on(&self, bus:i32,channel:u8) -> Result<Vec<crate::midi::NoteExpressionInfo>> {
+        if bus<0 || channel>=16 {
+            return Err(Error::InvalidParameter("invalid note-expression bus/channel".into()));
+        }
         self.internal
             .as_ref()
             .ok_or_else(|| Error::Other("Plugin not initialized".to_string()))?
-            .note_expressions(0, 0)
+            .note_expressions(bus, channel as i16)
     }
 
     /// Start audio processing
@@ -2086,6 +2114,14 @@ impl Plugin {
             .as_ref()
             .ok_or_else(|| Error::Other("Plugin not initialized".to_string()))?
             .audio_bus_layout()
+    }
+
+    /// Query native bus names and main/aux classification. Call on the control thread.
+    pub fn audio_bus_details(&self) -> Result<crate::audio::AudioBusDetailsLayout> {
+        self.internal
+            .as_ref()
+            .ok_or_else(|| Error::Other("Plugin not initialized".into()))?
+            .audio_bus_details()
     }
 
     /// Allocate a bus-aware silent buffer set matching the plug-in's current configuration.

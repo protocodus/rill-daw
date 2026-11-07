@@ -91,7 +91,12 @@ fn source_conversion_is_shared_and_processing_remains_allocation_free() {
     )
     .unwrap();
     let first = &renderer.tracks[0].as_ref().unwrap().audio[0].data;
-    for track in renderer.tracks.iter().flatten() {
+    for track in renderer
+        .tracks
+        .iter()
+        .flatten()
+        .filter(|track| track.id != 0)
+    {
         assert!(Arc::ptr_eq(first, &track.audio[0].data));
         assert_eq!(track.audio[0].data.sample_rate, 48_000);
     }

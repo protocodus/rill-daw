@@ -76,3 +76,39 @@ fn recorded_midi_adds_independent_layer_and_invalid_publication_is_atomic() {
     assert_eq!(project, current);
     assert!(matches!(&recording.content,ClipContent::Midi{notes} if notes.len()==2));
 }
+
+#[test]
+fn controller_only_recording_preserves_exact_cc_and_bend_packets_and_rejects_empty_capture() {
+    use daw_core::{MidiClipEvent, UmpPacket};
+    let mut project = Project::new();
+    let track = project.add_midi_track("Controller performance");
+    let mut recording = Clip::midi("Controllers", 8.0, 4.0, Vec::new());
+    recording.midi_events = vec![
+        MidiClipEvent::new(
+            0.25,
+            UmpPacket::from_words(&[0x4bb4_0b00, 0x8123_abcd]).unwrap(),
+        ),
+        MidiClipEvent::new(
+            1.75,
+            UmpPacket::from_words(&[0x4be4_0000, 0x8000_0001]).unwrap(),
+        ),
+    ];
+    let id = recording.id;
+    project
+        .insert_recorded_midi(track, recording.clone())
+        .unwrap();
+    assert_eq!(project.clip(track, id), Some(&recording));
+    project.validate().unwrap();
+    let before = project.clone();
+    assert!(
+        project
+            .insert_recorded_midi(track, Clip::midi("Empty", 12.0, 4.0, Vec::new()))
+            .is_err()
+    );
+    assert_eq!(project, before);
+    let mut malformed = recording;
+    malformed.refresh_identity();
+    malformed.midi_events[0].packet.word_count = 4;
+    assert!(project.insert_recorded_midi(track, malformed).is_err());
+    assert_eq!(project, before);
+}

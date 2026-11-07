@@ -4,7 +4,10 @@
 use super::{AudioEngine, Controls};
 use crate::render::Renderer;
 use anyhow::{Context, Result, ensure};
-use daw_core::{Note, Project, TrackKind};
+use daw_core::{Note, Project, TrackKind, UmpPacket};
+#[cfg(target_os = "macos")]
+#[path = "native_midi_macos.rs"]
+mod native_midi_macos;
 use std::{
     sync::{
         Arc,
@@ -23,11 +26,16 @@ const VIRTUAL_PORT: &str = "rill-virtual-midi";
 pub struct MidiPortInfo {
     pub id: String,
     pub name: String,
+    /// Protocol reported by the physical endpoint, when available (1 or 2).
+    pub source_protocol: Option<u8>,
+    /// Whether this input backend transports complete Universal MIDI Packets.
+    pub ump_input: bool,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MidiRoute {
     pub track: u64,
     pub channel: Option<u8>,
+    pub group: u8,
     pub monitor: bool,
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -45,6 +53,8 @@ pub struct MidiSnapshot {
     pub recording: bool,
     pub events: u64,
     pub held_notes: u32,
+    pub unsupported_events: u64,
+    pub unsupported_groups: u64,
 }
 #[derive(Clone, Debug)]
 pub struct RecordedMidiTrack {
@@ -52,6 +62,7 @@ pub struct RecordedMidiTrack {
     pub start_beat: f64,
     pub length_beats: f64,
     pub notes: Vec<Note>,
+    pub midi_events: Vec<daw_core::MidiClipEvent>,
 }
 #[derive(Clone, Debug, Default)]
 pub struct MidiRecordingResult {
@@ -60,18 +71,33 @@ pub struct MidiRecordingResult {
 }
 
 pub fn list_midi_inputs() -> Result<Vec<MidiPortInfo>> {
-    let input =
-        midir::MidiInput::new("RILL MIDI discovery").context("Initialize MIDI input discovery")?;
-    input
-        .ports()
-        .iter()
-        .map(|port| {
-            Ok(MidiPortInfo {
-                id: port.id(),
-                name: input.port_name(port).context("Read MIDI input name")?,
-            })
+    #[cfg(target_os = "macos")]
+    return Ok(native_midi_macos::inputs()?
+        .into_iter()
+        .map(|port| MidiPortInfo {
+            id: port.id,
+            name: port.name,
+            source_protocol: port.source_protocol,
+            ump_input: true,
         })
-        .collect()
+        .collect());
+    #[cfg(not(target_os = "macos"))]
+    {
+        let input = midir::MidiInput::new("RILL MIDI discovery")
+            .context("Initialize MIDI input discovery")?;
+        input
+            .ports()
+            .iter()
+            .map(|port| {
+                Ok(MidiPortInfo {
+                    id: port.id(),
+                    name: input.port_name(port).context("Read MIDI input name")?,
+                    source_protocol: None,
+                    ump_input: false,
+                })
+            })
+            .collect()
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -79,11 +105,14 @@ struct Event {
     time: u64,
     data: u32,
     epoch: u64,
+    ump: Option<UmpPacket>,
 }
 struct Slot {
     time: AtomicU64,
     data: AtomicU32,
     epoch: AtomicU64,
+    words: [AtomicU32; 4],
+    word_count: AtomicU32,
 }
 struct Queue {
     slots: Box<[Slot]>,
@@ -98,6 +127,8 @@ impl Queue {
                     time: AtomicU64::new(0),
                     data: AtomicU32::new(0),
                     epoch: AtomicU64::new(0),
+                    words: std::array::from_fn(|_| AtomicU32::new(0)),
+                    word_count: AtomicU32::new(0),
                 })
                 .collect(),
             read: AtomicUsize::new(0),
@@ -113,6 +144,17 @@ impl Queue {
         slot.time.store(event.time, Ordering::Relaxed);
         slot.data.store(event.data, Ordering::Relaxed);
         slot.epoch.store(event.epoch, Ordering::Relaxed);
+        for (slot, value) in slot
+            .words
+            .iter()
+            .zip(event.ump.map_or([0; 4], |packet| packet.words))
+        {
+            slot.store(value, Ordering::Relaxed);
+        }
+        slot.word_count.store(
+            event.ump.map_or(0, |packet| u32::from(packet.word_count)),
+            Ordering::Relaxed,
+        );
         self.write.store(write.wrapping_add(1), Ordering::Release);
         true
     }
@@ -126,6 +168,7 @@ impl Queue {
             time: slot.time.load(Ordering::Relaxed),
             data: slot.data.load(Ordering::Relaxed),
             epoch: slot.epoch.load(Ordering::Relaxed),
+            ump: load_packet(slot),
         })
     }
     fn pop(&self) -> Option<Event> {
@@ -144,9 +187,18 @@ impl Queue {
                 time: slot.time.load(Ordering::Relaxed),
                 data: slot.data.load(Ordering::Relaxed),
                 epoch: slot.epoch.load(Ordering::Relaxed),
+                ump: load_packet(slot),
             }
         })
     }
+}
+
+fn load_packet(slot: &Slot) -> Option<UmpPacket> {
+    let word_count = slot.word_count.load(Ordering::Relaxed) as u8;
+    (word_count > 0).then(|| UmpPacket {
+        word_count,
+        words: std::array::from_fn(|index| slot.words[index].load(Ordering::Relaxed)),
+    })
 }
 
 /// The callback normally owns the input consumer. After Stop, finalization may
@@ -180,9 +232,13 @@ pub(super) struct MidiShared {
     sample_rate: AtomicU32,
     events: AtomicU64,
     held: AtomicU32,
+    pub(super) unsupported_input: AtomicU64,
+    pub(super) unsupported_playback: AtomicU64,
+    pub(super) unsupported_groups: AtomicU64,
     route_count: AtomicUsize,
     route_tracks: [AtomicU64; 32],
     route_channels: [AtomicU32; 32],
+    route_groups: [AtomicU32; 32],
     route_monitor: [AtomicBool; 32],
 }
 impl MidiShared {
@@ -209,9 +265,13 @@ impl MidiShared {
             sample_rate: AtomicU32::new(48000),
             events: AtomicU64::new(0),
             held: AtomicU32::new(0),
+            unsupported_input: AtomicU64::new(0),
+            unsupported_playback: AtomicU64::new(0),
+            unsupported_groups: AtomicU64::new(0),
             route_count: AtomicUsize::new(0),
             route_tracks: std::array::from_fn(|_| AtomicU64::new(0)),
             route_channels: std::array::from_fn(|_| AtomicU32::new(16)),
+            route_groups: std::array::from_fn(|_| AtomicU32::new(0)),
             route_monitor: std::array::from_fn(|_| AtomicBool::new(false)),
         }
     }
@@ -312,10 +372,20 @@ impl MidiShared {
             5 => Some(
                 "Audio output failed during MIDI recording; captured notes were retained".into(),
             ),
+            6 => Some("Malformed MIDI UMP input; recording was stopped and the captured prefix was retained".into()),
             _ => Some("MIDI input failed; captured notes were retained".into()),
         }
     }
     fn enqueue(&self, data: u32, time: u64, epoch: u64) {
+        self.enqueue_event(Event {
+            time,
+            data,
+            epoch,
+            ump: None,
+        });
+    }
+    fn enqueue_event(&self, event: Event) {
+        let epoch = event.epoch;
         if !self.ready.load(Ordering::Acquire) || epoch != self.epoch.load(Ordering::Acquire) {
             return;
         }
@@ -329,11 +399,54 @@ impl MidiShared {
         }
         if self.ready.load(Ordering::Acquire)
             && epoch == self.epoch.load(Ordering::Acquire)
-            && !self.incoming.push(Event { time, data, epoch })
+            && !self.incoming.push(event)
         {
             self.fail(1);
         }
         self.producer.store(false, Ordering::Release);
+    }
+    fn enqueue_ump(&self, packet: UmpPacket, time: u64, epoch: u64) {
+        let count = self.route_count.load(Ordering::Acquire).min(32);
+        if count > 0
+            && packet.group().is_some_and(|group| {
+                !(0..count).any(|index| {
+                    self.route_groups[index].load(Ordering::Relaxed) == u32::from(group)
+                })
+            })
+        {
+            return;
+        }
+        let data = if packet.message_type() == 2 {
+            let word = packet.words[0];
+            let bytes = [(word >> 16) as u8, (word >> 8) as u8, word as u8];
+            message(&bytes).unwrap_or(0)
+        } else {
+            0
+        };
+        self.enqueue_event(Event {
+            time,
+            data,
+            epoch,
+            ump: Some(packet),
+        });
+    }
+    #[cfg(any(target_os = "macos", test))]
+    fn enqueue_ump_words(&self, words: &[u32], time: u64, epoch: u64) {
+        let mut index = 0;
+        while index < words.len() && self.fault.load(Ordering::Acquire) == 0 {
+            let count = UmpPacket::words_for_message_type((words[index] >> 28) as u8);
+            if count > words.len() - index {
+                self.fail(6);
+                return;
+            }
+            let mut packet = UmpPacket {
+                words: [0; 4],
+                word_count: count as u8,
+            };
+            packet.words[..count].copy_from_slice(&words[index..index + count]);
+            self.enqueue_ump(packet, time, epoch);
+            index += count;
+        }
     }
     pub(super) fn observe_frame(
         &self,
@@ -426,225 +539,39 @@ impl MidiTimestampClock {
 }
 
 fn message(bytes: &[u8]) -> Option<u32> {
-    if bytes.len() != 3 || bytes[1] > 127 || bytes[2] > 127 {
+    let status = *bytes.first()?;
+    let length = match status & 0xf0 {
+        0xc0 | 0xd0 => 2,
+        0x80 | 0x90 | 0xa0 | 0xb0 | 0xe0 => 3,
+        _ => return None,
+    };
+    if bytes.len() != length || bytes[1..].iter().any(|byte| *byte > 127) {
         return None;
     }
-    match bytes[0] & 0xf0 {
-        0x80 | 0x90 => {
-            Some(u32::from(bytes[0]) | (u32::from(bytes[1]) << 8) | (u32::from(bytes[2]) << 16))
-        }
-        0xb0 if matches!(bytes[1], 64 | 120 | 123) => {
-            Some(u32::from(bytes[0]) | (u32::from(bytes[1]) << 8) | (u32::from(bytes[2]) << 16))
-        }
-        _ => None,
-    }
+    Some(
+        u32::from(status)
+            | (u32::from(bytes[1]) << 8)
+            | (u32::from(*bytes.get(2).unwrap_or(&0)) << 16),
+    )
 }
-#[derive(Clone, Copy)]
-struct Voice {
-    start: u64,
-    velocity: u8,
-    down: bool,
-}
-struct NoteState {
-    voices: Vec<Option<Voice>>,
-    sustain: [bool; 16],
-}
-impl NoteState {
-    fn new() -> Self {
-        Self {
-            voices: vec![None; 2048],
-            sustain: [false; 16],
-        }
-    }
-    fn apply(&mut self, event: Event, mut finish: impl FnMut(u8, u8, Voice, u64)) {
-        let status = (event.data & 255) as u8;
-        let channel = status & 15;
-        let pitch = ((event.data >> 8) & 127) as u8;
-        let value = ((event.data >> 16) & 127) as u8;
-        let index = usize::from(channel) * 128 + usize::from(pitch);
-        match status & 0xf0 {
-            0x90 if value > 0 => {
-                if let Some(old) = self.voices[index].take() {
-                    finish(channel, pitch, old, event.time);
-                }
-                self.voices[index] = Some(Voice {
-                    start: event.time,
-                    velocity: value,
-                    down: true,
-                });
-            }
-            0x80 | 0x90 => {
-                if let Some(mut old) = self.voices[index].take() {
-                    if self.sustain[usize::from(channel)] {
-                        old.down = false;
-                        self.voices[index] = Some(old);
-                    } else {
-                        finish(channel, pitch, old, event.time);
-                    }
-                }
-            }
-            0xb0 if pitch == 64 => {
-                let down = value >= 64;
-                self.sustain[usize::from(channel)] = down;
-                if !down {
-                    for pitch in 0..128 {
-                        let index = usize::from(channel) * 128 + pitch;
-                        if self.voices[index].is_some_and(|voice| !voice.down) {
-                            finish(
-                                channel,
-                                pitch as u8,
-                                self.voices[index].take().unwrap(),
-                                event.time,
-                            );
-                        }
-                    }
-                }
-            }
-            0xb0 if matches!(pitch, 120 | 123) => {
-                self.sustain[usize::from(channel)] = false;
-                for pitch in 0..128 {
-                    if let Some(old) = self.voices[usize::from(channel) * 128 + pitch].take() {
-                        finish(channel, pitch as u8, old, event.time);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-}
+#[path = "midi_live.rs"]
+mod midi_live;
+pub(super) use midi_live::MidiMonitor;
 
-pub(super) struct MidiMonitor {
-    state: NoteState,
-    reset: u64,
-    notes: Vec<(u64, u8, u8)>,
-    dirty: bool,
-}
-impl MidiMonitor {
-    pub(super) fn new() -> Self {
-        Self {
-            state: NoteState::new(),
-            reset: 0,
-            notes: Vec::with_capacity(4096),
-            dirty: true,
-        }
-    }
-    fn refresh(&mut self, shared: &MidiShared, renderer: &mut Renderer, offset: u32) -> Result<()> {
-        let epoch = shared.epoch.load(Ordering::Acquire);
-        let reset = shared.reset.load(Ordering::Acquire);
-        if reset != self.reset {
-            self.state.voices.fill(None);
-            self.state.sustain.fill(false);
-            self.reset = reset;
-        }
-        self.notes.clear();
-        if shared.monitoring_requested() {
-            for route in 0..shared.route_count.load(Ordering::Acquire).min(32) {
-                if !shared.route_monitor[route].load(Ordering::Relaxed) {
-                    continue;
-                }
-                let track = shared.route_tracks[route].load(Ordering::Relaxed);
-                let channel = shared.route_channels[route].load(Ordering::Relaxed);
-                for pitch in 0..128 {
-                    let velocity = (0..16)
-                        .filter(|ch| channel == 16 || *ch == channel as usize)
-                        .filter_map(|ch| {
-                            self.state.voices[ch * 128 + pitch].map(|voice| voice.velocity)
-                        })
-                        .max();
-                    if let Some(velocity) = velocity {
-                        self.notes.push((track, pitch as u8, velocity));
-                    }
-                }
-            }
-        }
-        if epoch != shared.epoch.load(Ordering::Acquire) || !shared.ready.load(Ordering::Acquire) {
-            self.notes.clear();
-        }
-        self.notes.sort_unstable();
-        shared
-            .held
-            .store(self.notes.len() as u32, Ordering::Relaxed);
-        renderer.set_midi_input_notes(&self.notes, offset)
-    }
-    pub(super) fn update_suspended(&mut self, shared: &MidiShared) {
-        let reset = shared.reset.load(Ordering::Acquire);
-        if reset != self.reset {
-            self.state.voices.fill(None);
-            self.state.sustain.fill(false);
-            self.reset = reset;
-        }
-        let epoch = shared.epoch.load(Ordering::Acquire);
-        for _ in 0..256 {
-            let Some(event) = shared.monitoring.pop() else {
-                break;
-            };
-            if event.epoch == epoch && shared.ready.load(Ordering::Acquire) {
-                self.state.apply(event, |_, _, _, _| {});
-            }
-        }
-        self.dirty = true;
-        shared.held.store(0, Ordering::Relaxed);
-    }
-    pub(super) fn update(&mut self, shared: &MidiShared, renderer: &mut Renderer) -> Result<()> {
-        let reset = shared.reset.load(Ordering::Acquire);
-        if reset != self.reset {
-            self.state.voices.fill(None);
-            self.state.sustain.fill(false);
-            self.reset = reset;
-            self.dirty = true;
-        }
-        if self.dirty {
-            self.refresh(shared, renderer, 0)?;
-            self.dirty = false;
-        }
-        // Restore held keys after an explicit transport seek or preview change;
-        // unchanged snapshots return immediately without scanning all MIDI keys.
-        renderer.set_midi_input_notes(&self.notes, 0)?;
-        let epoch = shared.epoch.load(Ordering::Acquire);
-        let mut first = None;
-        for _ in 0..256 {
-            let Some(event) = shared.monitoring.pop() else {
-                break;
-            };
-            if event.epoch != epoch || !shared.ready.load(Ordering::Acquire) {
-                continue;
-            }
-            let anchor = *first.get_or_insert(event.time);
-            let frames = u128::from(event.time.saturating_sub(anchor))
-                * u128::from(shared.sample_rate.load(Ordering::Relaxed))
-                / 1_000_000_000;
-            let offset = frames.min((crate::render::BLOCK - 1) as u128) as u32;
-            let status = (event.data & 255) as u8;
-            let pitch = ((event.data >> 8) & 127) as u8;
-            let velocity = ((event.data >> 16) & 127) as u8;
-            if status & 0xf0 == 0x90 && velocity > 0 {
-                for route in 0..shared.route_count.load(Ordering::Acquire).min(32) {
-                    let channel = shared.route_channels[route].load(Ordering::Relaxed);
-                    if shared.route_monitor[route].load(Ordering::Relaxed)
-                        && (channel == 16 || channel == u32::from(status & 15))
-                    {
-                        renderer.release_midi_input_note(
-                            shared.route_tracks[route].load(Ordering::Relaxed),
-                            pitch,
-                            offset,
-                        );
-                    }
-                }
-            }
-            self.state.apply(event, |_, _, _, _| {});
-            // Apply every edge, not only the final chord. Short notes and repeated
-            // presses keep their articulation even when one render poll sees both.
-            self.refresh(shared, renderer, offset)?;
-        }
-        Ok(())
-    }
-}
-
+#[cfg(not(target_os = "macos"))]
 struct NativeInput {
     _connection: midir::MidiInputConnection<()>,
     probe: midir::MidiInput,
     port_id: String,
 }
+#[cfg(not(target_os = "macos"))]
+impl NativeInput {
+    fn available(&self) -> bool {
+        self.probe.find_port_by_id(&self.port_id).is_some()
+    }
+}
+#[cfg(target_os = "macos")]
+type NativeInput = native_midi_macos::NativeInput;
 struct Recording {
     routes: Vec<MidiRoute>,
     events: Vec<Event>,
@@ -728,7 +655,7 @@ impl MidiController {
             if self
                 .native
                 .as_ref()
-                .is_some_and(|native| native.probe.find_port_by_id(&native.port_id).is_none())
+                .is_some_and(|native| !native.available())
             {
                 self.controls.midi.fail(2);
                 self.close();
@@ -777,6 +704,7 @@ impl AudioEngine {
                 route.channel.is_none_or(|channel| channel < 16),
                 "MIDI channel must be 1 through 16"
             );
+            ensure!(route.group < 16, "MIDI group must be 1 through 16");
         }
         self.midi.tempo = project.tempo;
         let samples_per_beat = f64::from(self.sample_rate) * 60.0 / project.tempo;
@@ -811,6 +739,7 @@ impl AudioEngine {
             shared.route_tracks[index].store(route.track, Ordering::Relaxed);
             shared.route_channels[index]
                 .store(route.channel.map_or(16, u32::from), Ordering::Relaxed);
+            shared.route_groups[index].store(u32::from(route.group), Ordering::Relaxed);
             shared.route_monitor[index].store(route.monitor, Ordering::Relaxed);
         }
         shared.monitor_requested.store(
@@ -841,6 +770,15 @@ impl AudioEngine {
         let (tx, rx) = mpsc::channel();
         self.midi.opening = Some(rx);
         thread::spawn(move || {
+            #[cfg(target_os = "macos")]
+            let result = {
+                let mut clock = MidiTimestampClock::default();
+                NativeInput::open(&port_id, move |timestamp, words| {
+                    let time = clock.map(timestamp, controls.input.now_ns());
+                    controls.midi.enqueue_ump_words(words, time, epoch);
+                })
+            };
+            #[cfg(not(target_os = "macos"))]
             let result = (|| -> Result<NativeInput> {
                 let mut input =
                     midir::MidiInput::new("RILL MIDI input").context("Initialize MIDI input")?;
@@ -897,6 +835,9 @@ impl AudioEngine {
             recording: s.started.load(Ordering::Acquire) && s.capture_requested(),
             events: s.events.load(Ordering::Relaxed),
             held_notes: s.held.load(Ordering::Relaxed),
+            unsupported_events: s.unsupported_input.load(Ordering::Relaxed)
+                + s.unsupported_playback.load(Ordering::Relaxed),
+            unsupported_groups: s.unsupported_groups.load(Ordering::Relaxed),
         }
     }
     pub fn take_midi_error(&mut self) -> Option<String> {
@@ -994,6 +935,40 @@ impl AudioEngine {
     pub fn inject_virtual_midi(&mut self, bytes: &[u8], offset_frames: u32) -> Result<()> {
         self.inject_virtual_midi_offset(bytes, i64::from(offset_frames))
     }
+    /// Inject one structurally valid UMP packet through the actual fixed-size input queue.
+    pub fn inject_virtual_ump(&mut self, words: &[u32], offset_frames: u32) -> Result<()> {
+        self.inject_virtual_ump_offset(words, i64::from(offset_frames))
+    }
+    pub fn inject_virtual_ump_delayed(&mut self, words: &[u32], delay_frames: u32) -> Result<()> {
+        self.inject_virtual_ump_offset(words, -i64::from(delay_frames))
+    }
+    fn inject_virtual_ump_offset(&mut self, words: &[u32], offset_frames: i64) -> Result<()> {
+        ensure!(
+            self.midi.virtual_input,
+            "UMP injection requires virtual audio mode"
+        );
+        let packet = UmpPacket::from_words(words)?;
+        let shared = &self.controls.midi;
+        ensure!(
+            shared.ready.load(Ordering::Acquire),
+            "Virtual MIDI input is not ready"
+        );
+        ensure!(
+            offset_frames.unsigned_abs() <= u64::from(self.sample_rate) * 60,
+            "MIDI offset exceeds one minute"
+        );
+        let delta = (u128::from(offset_frames.unsigned_abs()) * 1_000_000_000
+            / u128::from(self.sample_rate)) as u64;
+        let now = self.controls.input.output_time(None);
+        let time = if offset_frames < 0 {
+            now.checked_sub(delta)
+                .context("MIDI delay precedes the virtual device clock")?
+        } else {
+            now.saturating_add(delta)
+        };
+        shared.enqueue_ump(packet, time, shared.epoch.load(Ordering::Acquire));
+        Ok(())
+    }
     /// Simulate a driver callback arriving after its timestamped performance.
     pub fn inject_virtual_midi_delayed(&mut self, bytes: &[u8], delay_frames: u32) -> Result<()> {
         self.inject_virtual_midi_offset(bytes, -i64::from(delay_frames))
@@ -1036,108 +1011,15 @@ impl AudioEngine {
     }
 }
 
+#[path = "midi2_recording.rs"]
+mod midi2_recording;
 fn assemble(
-    mut recording: Recording,
+    recording: Recording,
     frames: u64,
     start: u64,
     sample_rate: u32,
 ) -> MidiRecordingResult {
-    if frames == 0 {
-        return MidiRecordingResult::default();
-    }
-    recording.events.sort_by_key(|event| event.time);
-    let mut state = NoteState::new();
-    let mut completed = Vec::new();
-    for event in recording
-        .events
-        .iter()
-        .copied()
-        .filter(|event| event.time < frames)
-    {
-        state.apply(event, |channel, pitch, voice, end| {
-            if end > voice.start {
-                completed.push((channel, pitch, voice, end));
-            }
-        });
-    }
-    for (index, voice) in state.voices.into_iter().enumerate() {
-        if let Some(voice) = voice
-            && frames > voice.start
-        {
-            completed.push(((index / 128) as u8, (index % 128) as u8, voice, frames));
-        }
-    }
-    let factor = recording.tempo / 60.0 / f64::from(sample_rate);
-    let map = |at: u64| -> (u64, u64) {
-        if let Some((left, right)) = recording.loop_range {
-            let first = right.saturating_sub(start);
-            if at >= first {
-                let within = (at - first) % (right - left);
-                return (left + within, right - left - within);
-            }
-            (start + at, first - at)
-        } else {
-            (start + at, u64::MAX)
-        }
-    };
-    let clip_start = if recording
-        .loop_range
-        .is_some_and(|(_, right)| frames > right.saturating_sub(start))
-    {
-        recording.loop_range.unwrap().0.min(start)
-    } else {
-        start
-    };
-    let end_position = if let Some((_, right)) = recording.loop_range {
-        if frames >= right.saturating_sub(start) {
-            right
-        } else {
-            start + frames
-        }
-    } else {
-        start + frames
-    };
-    let mut result = MidiRecordingResult::default();
-    for route in recording.routes {
-        let mut notes = Vec::new();
-        for &(channel, pitch, voice, end) in &completed {
-            if notes.len() >= MAX_EVENTS {
-                break;
-            }
-            if route.channel.is_some_and(|selected| selected != channel) {
-                continue;
-            }
-            let mut at = voice.start;
-            while at < end {
-                let (position, remaining) = map(at);
-                let length = (end - at).min(remaining);
-                if length == 0 {
-                    break;
-                }
-                if notes.len() == MAX_EVENTS {
-                    result.error = Some("MIDI recording note limit reached; the bounded recorded prefix was retained".into());
-                    break;
-                }
-                notes.push(Note::new(
-                    pitch,
-                    (position - clip_start) as f64 * factor,
-                    length as f64 * factor,
-                    voice.velocity,
-                ));
-                at += length;
-            }
-        }
-        if !notes.is_empty() {
-            notes.sort_by(|a, b| a.start.total_cmp(&b.start).then(a.pitch.cmp(&b.pitch)));
-            result.tracks.push(RecordedMidiTrack {
-                track: route.track,
-                start_beat: clip_start as f64 * factor,
-                length_beats: (end_position - clip_start) as f64 * factor,
-                notes,
-            });
-        }
-    }
-    result
+    midi2_recording::assemble(recording, frames, start, sample_rate)
 }
 
 #[cfg(test)]
@@ -1186,6 +1068,7 @@ mod tests {
         MidiRoute {
             track,
             channel,
+            group: 0,
             monitor: true,
         }
     }
@@ -1401,8 +1284,8 @@ mod tests {
     fn unsupported_messages_do_not_turn_into_notes_and_epoch_discards_retired_device_events() {
         assert!(message(&[0x90, 60, 128]).is_none());
         assert!(message(&[0xf8]).is_none());
-        assert!(message(&[0xb0, 7, 100]).is_none());
-        assert!(message(&[0xe0, 0, 64]).is_none());
+        assert!(message(&[0xb0, 7, 100]).is_some());
+        assert!(message(&[0xe0, 0, 64]).is_some());
         let shared = shared();
         send(&shared, 0, [0x90, 60, 100]);
         shared.epoch.store(2, Ordering::Release);
@@ -1414,3 +1297,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "midi2_tests.rs"]
+mod midi2_tests;

@@ -1,7 +1,7 @@
 //! Small selection commands that reuse the existing document and routing paths.
 use crate::app::{DawApp, WorkspaceView};
 use anyhow::{Context, Result, ensure};
-use daw_core::{Clip, ClipContent, Project, TrackKind, new_id};
+use daw_core::{Clip, ClipContent, Project, TrackKind};
 use eframe::egui;
 use std::{
     collections::{HashMap, HashSet},
@@ -130,8 +130,16 @@ impl DawApp {
                     daw_ui::parameter_value_text(range.end_beat + 1.0)
                 )
             });
+        let midi = if report.unsupported_midi_events > 0 || report.unsupported_midi_groups > 0 {
+            format!(
+                " · Unsupported MIDI controls: {} · Extra groups: {} · Original performance data retained in the project",
+                report.unsupported_midi_events, report.unsupported_midi_groups
+            )
+        } else {
+            String::new()
+        };
         Some(format!(
-            "{} · {}{} · Rendered sample peak {peak}",
+            "{} · {}{} · Rendered sample peak {peak}{midi}",
             target.specification.summary(),
             daw_ui::format_clock_time(report.frames as f64 / f64::from(report.sample_rate), 3),
             range
@@ -147,6 +155,20 @@ impl DawApp {
             .map_or(0, |report| report.clipped_samples)
     }
 
+    pub(crate) fn completed_export_midi_advisories(&self, path: &Path) -> (u64, u64) {
+        self.finishing
+            .last_export
+            .as_ref()
+            .filter(|target| target.path == path)
+            .and_then(|target| target.report.as_ref())
+            .map_or((0, 0), |report| {
+                (
+                    report.unsupported_midi_events,
+                    report.unsupported_midi_groups,
+                )
+            })
+    }
+
     pub(crate) fn finishing_diagnostics(&self) -> serde_json::Value {
         serde_json::json!({
             "selected_channels": self.finishing_selected_channels(),
@@ -156,6 +178,7 @@ impl DawApp {
                 diagnostic["report"] = target.report.map(|report| serde_json::json!({
                     "sample_peak":report.sample_peak,"clipped_samples":report.clipped_samples,"frames":report.frames,
                     "sample_rate":report.sample_rate,"encoding":report.encoding,"dither":report.dither,
+                    "unsupported_midi_events":report.unsupported_midi_events,"unsupported_midi_groups":report.unsupported_midi_groups,
                 })).unwrap_or(serde_json::Value::Null);
                 diagnostic
             }),
@@ -547,15 +570,28 @@ fn repeat_regions(
     );
     let source_bytes = regions.iter().fold(0usize, |bytes, (_, clip)| {
         let content = match &clip.content {
-            ClipContent::Midi { notes } => notes
-                .len()
-                .saturating_mul(std::mem::size_of::<daw_core::Note>()),
+            ClipContent::Midi { notes } => notes.iter().fold(0usize, |bytes, note| {
+                bytes
+                    .saturating_add(std::mem::size_of::<daw_core::Note>())
+                    .saturating_add(note.midi2.as_ref().map_or(0, |data| {
+                        std::mem::size_of::<daw_core::Midi2NoteData>().saturating_add(
+                        data.expressions
+                            .len()
+                            .saturating_mul(std::mem::size_of::<daw_core::MidiNoteExpression>()),
+                    )
+                    }))
+            }),
             ClipContent::Audio { path, .. } => path.len(),
         };
         bytes
             .saturating_add(std::mem::size_of::<Clip>())
             .saturating_add(clip.name.len())
             .saturating_add(content)
+            .saturating_add(
+                clip.midi_events
+                    .len()
+                    .saturating_mul(std::mem::size_of::<daw_core::MidiClipEvent>()),
+            )
     });
     ensure!(
         source_bytes.saturating_mul(repeats) <= MAX_REPEAT_BYTES,
@@ -569,14 +605,7 @@ fn repeat_regions(
                 continue;
             }
             let mut clip = source.clone();
-            clip.id = new_id();
-            clip.link_group = None;
-            clip.audio_take = None;
-            if let ClipContent::Midi { notes } = &mut clip.content {
-                for note in notes {
-                    note.id = new_id();
-                }
-            }
+            clip.refresh_identity();
             clip.start = position;
             let id = clip.id;
             project

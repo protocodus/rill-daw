@@ -157,7 +157,7 @@ fn edit_name(before: &Project, after: &Project) -> &'static str {
     {
         return "Change loop";
     }
-    for (before, after) in before.tracks.iter().zip(&after.tracks) {
+    for (before, after) in before.channels().zip(after.channels()) {
         if before.id != after.id {
             return "Move track";
         }
@@ -182,8 +182,15 @@ fn edit_name(before: &Project, after: &Project) -> &'static str {
         if before.inserts != after.inserts {
             return "Edit effect chain";
         }
-        if before.output_bus != after.output_bus || before.sends != after.sends {
+        if before.output_bus != after.output_bus
+            || before.sends != after.sends
+            || before.instrument_inputs != after.instrument_inputs
+            || before.instrument_output != after.instrument_output
+        {
             return "Change routing";
+        }
+        if before.input_gain != after.input_gain {
+            return "Channel input gain";
         }
         if before.gain != after.gain {
             return "Track volume";

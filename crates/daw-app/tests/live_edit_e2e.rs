@@ -168,7 +168,9 @@ impl Fixture {
             .into_iter()
             .flat_map(|(_, lines)| lines)
             .filter(|line| {
-                line["SendMidiAt"]["event"][if on { "NoteOn" } else { "NoteOff" }]["note"] == pitch
+                let kind = if on { "NoteOn" } else { "NoteOff" };
+                line["SendMidiAt"]["event"][kind]["note"] == pitch
+                    || line["SendPluginEvent"]["event"]["data"][kind]["pitch"] == pitch
             })
             .count()
     }

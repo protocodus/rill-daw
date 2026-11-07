@@ -753,6 +753,9 @@ impl AudioEngine {
                         thread::sleep(Duration::from_micros(250));
                         continue;
                     }
+                    let (unsupported_midi,unsupported_groups)=renderer.unsupported_midi();
+                    worker_controls.midi.unsupported_playback.store(unsupported_midi,Ordering::Relaxed);
+                    worker_controls.midi.unsupported_groups.store(unsupported_groups,Ordering::Relaxed);
                     if renderer.plugin_errors > 0 {
                         while let Some(error) = renderer.take_plugin_error() {
                             worker_controls.set_render_error(error);
@@ -1189,6 +1192,18 @@ impl AudioEngine {
             self.channel_meters.peaks(track)
         }
     }
+    /// Post-insert, post-volume/pan RMS amplitude with a 300 ms exponential
+    /// mean-square time constant. Zero is silence; use 20 log10 for dBFS.
+    pub fn channel_rms(&self, track: u64) -> [f32; 2] {
+        if self.controls.output_failed.load(Ordering::Acquire)
+            || (!self.controls.playing.load(Ordering::Relaxed)
+                && !self.controls.auditioning.load(Ordering::Relaxed))
+        {
+            [0.0; 2]
+        } else {
+            self.channel_meters.rms(track)
+        }
+    }
     /// Highest post-fader channel samples since reset, including transients
     /// observed while its strip was offscreen. Silence and Pause retain them.
     pub fn channel_peak_hold(&self, track: u64) -> [f32; 2] {
@@ -1619,6 +1634,7 @@ mod tests {
             routes: vec![MidiRoute {
                 track,
                 channel: Some(1),
+                group: 0,
                 monitor: true,
             }],
         };

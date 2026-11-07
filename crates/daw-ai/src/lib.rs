@@ -66,6 +66,7 @@ pub fn tool_activity(name: &str) -> &'static str {
         "list_tracks" => "Reviewing tracks…",
         "get_track" => "Inspecting a track…",
         "get_clip" => "Inspecting a clip…",
+        "get_note_expressions" => "Reading note expression…",
         "get_selection" => "Reading the selection…",
         "set_selection" => "Selecting musical material…",
         "history" => "Working with edit history…",

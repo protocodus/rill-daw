@@ -11,8 +11,44 @@ pub struct EditorProbeFixture {
 }
 
 impl EditorProbeFixture {
+    /// Polyphonic test-only instrument: channels are separated in stereo and
+    /// precise note velocity / targeted expression values affect actual audio.
+    #[allow(dead_code)]
+    pub fn build_expressive() -> Self {
+        Self::build_with_expression(
+            Duration::ZERO,
+            Duration::ZERO,
+            false,
+            false,
+            false,
+            false,
+            true,
+        )
+    }
     pub fn build() -> Self {
         Self::build_with_delays(Duration::ZERO, Duration::ZERO)
+    }
+
+    /// Main and auxiliary inputs, multiple outputs, a wide five-channel output,
+    /// and a final mono output, all routed through real VST3 bus activation.
+    #[allow(dead_code)]
+    pub fn build_multi_bus() -> Self {
+        Self::build_configured_buses(Duration::ZERO, Duration::ZERO, false, true)
+    }
+
+    /// Fx-category variant. Main output is the routed main/sidechain mix multiplied
+    /// by the saved Level parameter (0.5 by default); no MIDI is required for audio.
+    #[allow(dead_code)]
+    pub fn build_multi_bus_effect() -> Self {
+        Self::build_configured_kind(Duration::ZERO, Duration::ZERO, false, true, true, false)
+    }
+    #[allow(dead_code)]
+    pub fn build_multi_bus_nonzero_main() -> Self {
+        Self::build_configured_kind(Duration::ZERO, Duration::ZERO, false, true, false, true)
+    }
+    #[allow(dead_code)]
+    pub fn build_multi_bus_effect_nonzero_main() -> Self {
+        Self::build_configured_kind(Duration::ZERO, Duration::ZERO, false, true, true, true)
     }
 
     pub fn build_with_lifecycle_delay(delay: Duration) -> Self {
@@ -35,9 +71,72 @@ impl EditorProbeFixture {
         process_delay: Duration,
         offline_only: bool,
     ) -> Self {
+        Self::build_configured_buses(lifecycle_delay, process_delay, offline_only, false)
+    }
+
+    fn build_configured_buses(
+        lifecycle_delay: Duration,
+        process_delay: Duration,
+        offline_only: bool,
+        multi_bus: bool,
+    ) -> Self {
+        Self::build_configured_kind(
+            lifecycle_delay,
+            process_delay,
+            offline_only,
+            multi_bus,
+            false,
+            false,
+        )
+    }
+
+    fn build_configured_kind(
+        lifecycle_delay: Duration,
+        process_delay: Duration,
+        offline_only: bool,
+        multi_bus: bool,
+        effect: bool,
+        nonzero_main: bool,
+    ) -> Self {
+        Self::build_with_expression(
+            lifecycle_delay,
+            process_delay,
+            offline_only,
+            multi_bus,
+            effect,
+            nonzero_main,
+            false,
+        )
+    }
+
+    fn build_with_expression(
+        lifecycle_delay: Duration,
+        process_delay: Duration,
+        offline_only: bool,
+        multi_bus: bool,
+        effect: bool,
+        nonzero_main: bool,
+        expressive: bool,
+    ) -> Self {
         let directory = tempfile::tempdir().unwrap();
         let source = directory.path().join("editor_probe_plugin.rs");
         let code = include_str!("editor_probe_plugin.rs")
+            .replace(
+                "const EXPRESSIVE: bool = false;",
+                &format!("const EXPRESSIVE: bool = {expressive};"),
+            )
+            .replace(
+                "const MULTI_BUS: bool = false;",
+                &format!("const MULTI_BUS: bool = {multi_bus};"),
+            )
+            .replace(
+                "const MULTI_EFFECT: bool = false;",
+                &format!("const MULTI_EFFECT: bool = {effect};"),
+            )
+            .replace(
+                "const NONZERO_MAIN: bool = false;",
+                &format!("const NONZERO_MAIN: bool = {nonzero_main};"),
+            )
             .replace(
                 "const LIFECYCLE_DELAY_MS: u64 = 0;",
                 &format!(
@@ -75,7 +174,15 @@ impl EditorProbeFixture {
     "SDKVersion": "VST 3.7", "Class Flags": 0, "Cardinality": 2147483647,
     "Sub Categories": ["Instrument", "Synth"]
   }]
-}"#,
+}"#
+            .replace(
+                "[\"Instrument\", \"Synth\"]",
+                if effect {
+                    "[\"Fx\"]"
+                } else {
+                    "[\"Instrument\", \"Synth\"]"
+                },
+            ),
         )
         .unwrap();
         let binary = if cfg!(target_os = "macos") {

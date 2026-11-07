@@ -117,6 +117,46 @@ impl Worker {
                 self.max_block = block_size as usize;
             }
             HostCommand::SetProcessMode { mode } => plugin.set_process_mode(mode)?,
+            HostCommand::ServiceHostRequests => {
+                return Ok(HostResponse::RestartFlags {
+                    bits: plugin.service_host_requests()?.bits(),
+                });
+            }
+            HostCommand::NoteExpressions { bus, channel } => {
+                ensure!(
+                    (0..16).contains(&channel),
+                    "Invalid note-expression channel"
+                );
+                return Ok(HostResponse::NoteExpressions {
+                    expressions: plugin.note_expressions_on(bus, channel as u8)?,
+                });
+            }
+            HostCommand::MidiControllerAssignments { direction } => {
+                return Ok(HostResponse::MidiControllerAssignments {
+                    assignments: plugin.midi_controller_assignments(direction)?,
+                });
+            }
+            HostCommand::SendMidiControllerAt {
+                bus,
+                channel,
+                controller,
+                value,
+                sample_offset,
+            } => plugin.send_midi_controller_at(bus, channel, controller, value, sample_offset)?,
+            HostCommand::SetBusActive {
+                media_type,
+                direction,
+                bus_index,
+                active,
+            } => plugin.set_bus_active(media_type, direction, bus_index, active)?,
+            HostCommand::BusArrangements => {
+                return Ok(HostResponse::BusArrangements {
+                    arrangements: plugin.bus_arrangements()?,
+                });
+            }
+            HostCommand::SetBusArrangements { inputs, outputs } => {
+                plugin.set_bus_arrangements(&inputs, &outputs)?
+            }
             HostCommand::SetTransportPosition { position } => {
                 plugin.set_transport_position(position)?
             }
@@ -160,6 +200,11 @@ impl Worker {
             HostCommand::AudioBusLayout => {
                 return Ok(HostResponse::AudioBusLayout {
                     layout: plugin.audio_bus_layout()?,
+                });
+            }
+            HostCommand::AudioBusDetails => {
+                return Ok(HostResponse::AudioBusDetails {
+                    details: plugin.audio_bus_details()?,
                 });
             }
             HostCommand::LatencySamples => {

@@ -92,6 +92,7 @@ impl ToolSpec {
                 Automation,
             ],
             "get_clip" => &[Song, MidiClip, AudioClip],
+            "get_note_expressions" => &[Song, MidiClip],
             "transform_phrase"
             | "composer_catalog"
             | "composer_scale"
@@ -206,6 +207,7 @@ impl ToolScope {
         match name {
             "get_song_context" | "get_track" | "apply_edits" => true,
             "get_clip" => self.clip_id().is_some(),
+            "get_note_expressions" => matches!(self, Self::MidiClip { .. }),
             "transform_phrase" => matches!(self, Self::MidiClip { .. }),
             "audio_analyze_clip" | "audio_process_clip" => matches!(self, Self::AudioClip { .. }),
             "plugin_describe_parameters" => matches!(
@@ -232,6 +234,15 @@ impl ToolScope {
                         "add_notes"
                             | "update_notes"
                             | "delete_notes"
+                            | "edit_midi_note_lengths"
+                            | "set_note_pitch_semitones"
+                            | "set_note_velocity16"
+                            | "set_note_release_velocity16"
+                            | "upsert_note_expression"
+                            | "update_note_expression"
+                            | "remove_note_expression"
+                            | "set_midi_event"
+                            | "remove_midi_event"
                             | "transform_notes"
                             | "quantize_notes"
                             | "randomize_notes"
@@ -250,6 +261,7 @@ impl ToolScope {
                             | "reverse_audio"
                             | "set_audio_processing"
                             | "set_crossfade"
+                            | "set_clip_muted"
                             | "slip_audio"
                     )
             }
@@ -270,7 +282,7 @@ impl ToolScope {
             Self::Routing { .. } => {
                 matches!(
                     op,
-                    "set_output" | "add_send" | "update_send" | "remove_send"
+                    "set_output" | "add_send" | "update_send" | "remove_send" | "set_plugin_inputs"
                 ) || automation_op(op)
             }
             Self::Automation { .. } => automation_op(op) && op != "add_automation",
@@ -299,7 +311,9 @@ impl ToolScope {
             }
             Self::Channel { .. } => matches!(
                 target.parameter,
-                AutomationParameter::TrackGain | AutomationParameter::TrackPan
+                AutomationParameter::TrackGain
+                    | AutomationParameter::TrackInputGain
+                    | AutomationParameter::TrackPan
             ),
             Self::Routing { .. } => {
                 matches!(target.parameter, AutomationParameter::SendGain { .. })
@@ -354,7 +368,11 @@ impl ToolScope {
                     return Err(denied("Read only the pinned target and its automation"));
                 }
             }
-            "get_clip" | "transform_phrase" | "audio_analyze_clip" | "audio_process_clip" => {
+            "get_clip"
+            | "get_note_expressions"
+            | "transform_phrase"
+            | "audio_analyze_clip"
+            | "audio_process_clip" => {
                 check_track()?;
                 if args.get("clip_id").and_then(Value::as_u64) != self.clip_id() {
                     return Err(denied("Use the pinned clip ID"));
@@ -520,7 +538,7 @@ impl ToolScope {
             }
         }
         restored.tracks.retain(|t| !new_lanes.contains(&t.id));
-        for (index, old) in before.tracks.iter().enumerate() {
+        for (index, old) in before.channels().enumerate() {
             let Some(track) = restored.track_mut(old.id) else {
                 let removable = old.automation.as_ref().is_some_and(|l| {
                     self.allows_automation(before, Some(old.id), l.target)
@@ -584,11 +602,18 @@ impl ToolScope {
                 Self::EffectChain { .. } => track.inserts = old.inserts.clone(),
                 Self::Channel { .. } => {
                     track.gain = old.gain;
+                    track.input_gain = old.input_gain;
                     track.pan = old.pan;
                     track.mute = old.mute;
                     track.solo = old.solo;
                 }
                 Self::Routing { .. } => {
+                    track.instrument_inputs = old.instrument_inputs.clone();
+                    for (effect, original) in track.inserts.iter_mut().zip(&old.inserts) {
+                        if effect.id == original.id {
+                            effect.inputs = original.inputs.clone();
+                        }
+                    }
                     track.sends = old.sends.clone();
                     track.output_bus = old.output_bus;
                 }
@@ -614,7 +639,7 @@ impl ToolScope {
         song_tool_specs().into_iter().filter(|s| self.allows_tool(&s.name)).map(|mut spec| {
             let properties = &mut spec.input_schema["properties"];
             if spec.name == "get_track" {
-                properties["track_id"] = json!({"type":"integer","minimum":1,"description":"Pinned track ID, or an automation lane ID whose target belongs to this context."});
+                properties["track_id"] = json!({"type":"integer","minimum":0,"description":"Pinned channel ID (0 is Master), or an automation lane ID whose target belongs to this context."});
                 spec.description = "Read this context, or page a matching automation lane by its lane track ID. offset/limit page automation points, instrument parameter overrides, or chain inserts. get_clip and plugin_describe_parameters page notes and plug-in controls.".into();
             }
             if properties.get("track_id").is_some() && spec.name != "get_track" { properties["track_id"] = json!({"type":"integer","const":self.track_id()}); }
@@ -673,7 +698,9 @@ impl ToolScope {
 
     fn automation_parameter_schema(&self, project: &Project) -> Value {
         match self {
-            Self::Channel { .. } => json!({"type":"string","enum":["TrackGain","TrackPan"]}),
+            Self::Channel { .. } => {
+                json!({"type":"string","enum":["TrackGain","TrackInputGain","TrackPan"]})
+            }
             Self::Routing { .. } => {
                 json!({"type":"object","properties":{"SendGain":{"type":"object","properties":{"bus":{"type":"integer","enum":project.tracks.iter().filter(|t|t.kind == TrackKind::Bus).map(|t|t.id).collect::<Vec<_>>()}},"required":["bus"],"additionalProperties":false}},"required":["SendGain"],"additionalProperties":false})
             }
@@ -826,8 +853,7 @@ impl ToolScope {
                 result["inserts"] = json!(track.inserts.iter().take(64).map(|e|json!({"id":e.id,"name":crate::bounded_text(&e.name),"enabled":e.enabled,"parameter_count":e.parameters.len()})).collect::<Vec<_>>());
             }
             Self::Channel { .. } => {
-                result["mix"] =
-                    json!({"gain":track.gain,"pan":track.pan,"mute":track.mute,"solo":track.solo})
+                result["mix"] = json!({"gain":track.gain,"input_gain":track.input_gain,"pan":track.pan,"mute":track.mute,"solo":track.solo})
             }
             Self::Routing { .. } => {
                 result["output_bus"] = json!(track.output_bus);

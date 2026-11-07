@@ -73,10 +73,22 @@ fn play(app: &mut Harness) {
 
 fn measure(app: &mut Harness, frames: u64) -> Value {
     // Pace a bounded production queue while consuming actual rendered audio.
-    // Each 4096-frame pump is several renderer blocks, never a fake snapshot.
-    for _ in 0..frames.div_ceil(4096) {
-        app.command(json!({"command":"pump_audio","frames":4096}));
-        std::thread::sleep(std::time::Duration::from_millis(3));
+    // Backpressure this accelerated virtual sink against real analysis progress.
+    // A 100ms publication hop plus one2048-frame pump stays below the bounded
+    // 8192-frame analysis queue; debug FIR work must not turn test acceleration
+    // into a synthetic dropout or invent elapsed loudness time.
+    let hop = u64::from(RATE) / 10;
+    let target_frames = frames.div_ceil(hop) * hop;
+    for block in 0..target_frames.div_ceil(2048) {
+        app.command(json!({"command":"pump_audio","frames":2048}));
+        let minimum = ((block + 1) * 2048).saturating_sub(hop);
+        if minimum > 0 {
+            wait_until(app, |state| {
+                state["signal_analysis"]["snapshot"]["observed_frames"]
+                    .as_u64()
+                    .is_some_and(|count| count >= minimum)
+            });
+        }
     }
     wait_until(app, |state| {
         state["signal_analysis"]["snapshot"]["observed_frames"]
@@ -322,7 +334,7 @@ fn target_deletion_undo_and_compact_views_never_restore_stale_measurements() {
     app.command(json!({"command":"viewport","width":800,"height":600}));
     open(&mut app, Some(tone));
     let baseline = app.inspect();
-    for view in ["Spectrum", "Loudness", "Correlation", "Phase"] {
+    for view in ["Spectrum", "Levels", "Loudness", "Correlation", "Phase"] {
         let state = app.click(view);
         assert!(state["signal_analysis"]["snapshot"].is_null());
         let reset = state["label_rects"]
@@ -357,6 +369,95 @@ fn target_deletion_undo_and_compact_views_never_restore_stale_measurements() {
     app.key("Escape");
     assert_eq!(app.inspect()["popups"]["analysis"], false);
     app.quit();
+}
+
+#[test]
+fn levels_measure_real_intersample_peaks_stereo_rms_and_reset_without_song_edits() {
+    for dark in [false, true] {
+        let mut app = Harness::with_virtual_audio(None, None);
+        let path = app.directory.path().join("inter-sample.wav");
+        AudioData {
+            sample_rate: RATE,
+            channels: 2,
+            samples: (0..RATE * 8)
+                .flat_map(|frame| {
+                    let ramp = 0.5
+                        - 0.5
+                            * (std::f64::consts::PI
+                                * (f64::from(frame) / (f64::from(RATE) * 0.25)).min(1.0))
+                            .cos();
+                    let sample = (1.2
+                        * ramp
+                        * (std::f64::consts::FRAC_PI_2 * f64::from(frame)
+                            + std::f64::consts::FRAC_PI_4)
+                            .sin()) as f32;
+                    [sample, sample * 0.5]
+                })
+                .collect(),
+        }
+        .write_wav(&path)
+        .unwrap();
+        let mut project = Project::new();
+        let track = project.add_audio_track("Stereo ISP");
+        project.track_mut(track).unwrap().gain = 1.0;
+        project.track_mut(track).unwrap().clips.push(Clip::audio(
+            "Real samples",
+            0.0,
+            16.0,
+            path.to_string_lossy(),
+        ));
+        let session = app.directory.path().join("levels.rill");
+        project.save(&session).unwrap();
+        app.command(json!({"command":"open","path":session}));
+        app.command(json!({"command":"system_theme","dark":dark}));
+        app.command(json!({"command":"viewport","width":1280,"height":800}));
+        app.click("Mixer");
+        let baseline = app.inspect();
+        open(&mut app, Some(track));
+        app.click("Levels");
+        play(&mut app);
+        let measured = measure(&mut app, u64::from(RATE) * 2);
+        let snapshot = &measured["signal_analysis"]["snapshot"];
+        let sample = snapshot["peak_dbfs"].as_f64().unwrap();
+        let true_peak = snapshot["true_peak_dbfs"].as_f64().unwrap();
+        assert!((sample + 1.427).abs() < 0.03, "{sample}");
+        assert!((true_peak - 1.6).abs() < 0.35, "{true_peak}");
+        assert!(
+            sample < 0.0 && true_peak > 0.0,
+            "An inter-sample overload must not be labelled a sample overload"
+        );
+        assert_eq!(snapshot["overload_samples"], json!([0, 0]));
+        assert_eq!(snapshot["true_peak_oversampling"], 4);
+        let rms = &snapshot["channel_rms_300ms_dbfs"];
+        assert!((rms[0].as_f64().unwrap() - rms[1].as_f64().unwrap() - 6.0206).abs() < 0.02);
+        assert!((rms[0].as_f64().unwrap() + 1.427).abs() < 0.15);
+        assert!(snapshot["true_peak_hold_dbfs"].as_f64().unwrap() >= true_peak - 0.01);
+        for label in [
+            "Sample peak",
+            "Peak hold",
+            "True peak",
+            "TP hold",
+            "RMS 300 ms",
+            "Overs · L/R",
+        ] {
+            assert!(
+                measured["visible_labels"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|value| value == label),
+                "Missing{label}"
+            );
+        }
+        let stopped = app.click("Stop");
+        assert!(stopped["signal_analysis"]["snapshot"]["true_peak_hold_dbfs"].is_number());
+        unchanged(&stopped, &baseline);
+        let reset = app.click("Reset measurement");
+        assert!(reset["signal_analysis"]["snapshot"].is_null());
+        unchanged(&reset, &baseline);
+        app.click("Done");
+        app.quit();
+    }
 }
 
 #[test]

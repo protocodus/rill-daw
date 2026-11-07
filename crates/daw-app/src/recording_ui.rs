@@ -162,6 +162,8 @@ impl DawApp {
             self.recording.midi_ports = vec![MidiPortInfo {
                 id: "rill-virtual-midi".into(),
                 name: "Rill virtual MIDI input".into(),
+                source_protocol: Some(2),
+                ump_input: true,
             }];
         } else if !self.audio_device_enabled {
             self.recording.midi_ports.clear();
@@ -210,6 +212,7 @@ impl DawApp {
             if monitor || (self.recording_busy() && self.recording.armed.contains(&track.id)) {
                 routes.push(MidiRoute {
                     track: track.id,
+                    group: track.midi_input_group,
                     channel: match input {
                         MidiInputChannel::All => None,
                         MidiInputChannel::Channel { channel } => Some(channel),
@@ -279,6 +282,13 @@ impl DawApp {
                 Err(anyhow::anyhow!(
                     "Finish or cancel audio import before recording"
                 )),
+                "",
+            );
+            return;
+        }
+        if self.freeze_busy() {
+            self.message(
+                Err(anyhow::anyhow!("Finish or cancel Freeze before recording")),
                 "",
             );
             return;
@@ -805,7 +815,7 @@ impl DawApp {
             }
             let midi_count = midi.tracks.len();
             for recorded in &midi.tracks {
-                if recorded.notes.is_empty() {
+                if recorded.notes.is_empty() && recorded.midi_events.is_empty() {
                     continue;
                 }
                 let Some(source) = session
@@ -826,12 +836,14 @@ impl DawApp {
                     track.instrument_state = source.instrument_state.clone();
                     track.instrument_parameters = source.instrument_parameters.clone();
                     track.gain = source.gain;
+                    track.input_gain = source.input_gain;
                     track.pan = source.pan;
                     track.output_bus = bus;
                     track.midi_input = source.midi_input;
+                    track.midi_input_group = source.midi_input_group;
                     id
                 };
-                let clip = Clip::midi(
+                let mut clip = Clip::midi(
                     format!(
                         "{} · Recording {}",
                         source.name,
@@ -841,6 +853,7 @@ impl DawApp {
                     recorded.length_beats,
                     recorded.notes.clone(),
                 );
+                clip.midi_events = recorded.midi_events.clone();
                 let clip = project.insert_recorded_midi(target, clip)?;
                 commits.push(daw_core::RecordedAudioCommit {
                     track: target,
@@ -990,6 +1003,7 @@ impl DawApp {
                     let field = daw_ui::tokens::FORM_FIELD_WIDTH;
                     let mut device = self.settings.midi_input_device.clone();
                     let mut midi_input = track.midi_input;
+                    let mut midi_group = track.midi_input_group;
                     let mut audio_input = track.audio_input;
                     let mut armed = self.recording.armed.contains(&track.id);
                     let mut toggle_arm = false;
@@ -1017,6 +1031,32 @@ impl DawApp {
                                 for channel in 0..16 { let choice = Some(MidiInputChannel::Channel { channel }); daw_ui::selectable_value(ui, &mut midi_input, choice, midi_input_label(choice)); }
                             }).response.labelled_by(label.id);
                             ui.end_row();
+                            let port = device.as_ref().and_then(|id| self.recording.midi_ports.iter().find(|port| &port.id == id));
+                            daw_ui::form_label(ui, "Input format");
+                            let format = match port.map(|port| (port.ump_input, port.source_protocol)) {
+                                Some((true, Some(2))) => "MIDI 2.0 · UMP",
+                                Some((true, Some(1))) => "MIDI 1.0 · UMP transport",
+                                Some((true, _)) => "UMP · endpoint protocol unknown",
+                                Some((false, _)) => "MIDI 1.0",
+                                None => "No input selected",
+                            };
+                            daw_ui::text::label(ui, format);
+                            ui.end_row();
+                            let legacy_only = port.is_some_and(|port| !port.ump_input || port.source_protocol == Some(1));
+                            let label = daw_ui::form_label(ui, "UMP group");
+                            daw_ui::select("track_midi_group", format!("Group {}", midi_group + 1)).width(field).show_ui(ui, |ui| {
+                                for group in 0..16 {
+                                    ui.add_enabled_ui(!legacy_only || group == 0, |ui| {
+                                        daw_ui::selectable_value(ui, &mut midi_group, group, format!("Group {}", group + 1));
+                                    });
+                                }
+                            }).response.labelled_by(label.id).on_hover_text("Receive one Universal MIDI Packet group on this track. Use separate tracks for other groups.");
+                            ui.end_row();
+                            if legacy_only && midi_group != 0 {
+                                ui.label("");
+                                daw_ui::text::note(ui, "This input carries Group 1. Select Group 1 to receive its notes.");
+                                ui.end_row();
+                            }
                         } else {
                             daw_ui::form_label(ui, "Device");
                             ui.horizontal(|ui| {
@@ -1060,6 +1100,7 @@ impl DawApp {
                         }
                         if refresh_midi { self.refresh_midi_devices(); }
                         if midi_input != track.midi_input { self.begin_edit(); self.project.track_mut(track.id).unwrap().midi_input = midi_input; self.edit_label = Some("Choose MIDI input channel".into()); self.changed(); self.recording.failed_input = false; }
+                        if midi_group != track.midi_input_group { self.begin_edit(); self.project.track_mut(track.id).unwrap().midi_input_group = midi_group; self.edit_label = Some("Choose MIDI input group".into()); self.changed(); self.recording.failed_input = false; }
                     } else {
                         if audio_setup { self.setup_page = SetupPage::Audio; self.open_popup(PopupKind::Setup); }
                         if audio_input != track.audio_input { self.begin_edit(); self.project.track_mut(track.id).unwrap().audio_input = audio_input; self.edit_label = Some("Choose recording input".into()); self.changed(); self.recording.failed_input = false; }
@@ -1139,8 +1180,9 @@ impl DawApp {
             "idle"
         };
         serde_json::json!({"phase":phase,
-            "midi":{"input_ready":midi.input_ready,"input_opening":midi.input_opening,"active":midi.active,"recording":midi.recording,"events":midi.events,"held_notes":midi.held_notes},
+            "midi":{"input_ready":midi.input_ready,"input_opening":midi.input_opening,"active":midi.active,"recording":midi.recording,"events":midi.events,"held_notes":midi.held_notes,"unsupported_events":midi.unsupported_events,"unsupported_groups":midi.unsupported_groups},
             "midi_input_device":self.settings.midi_input_device,
+            "midi_ports":self.recording.midi_ports.iter().map(|port| serde_json::json!({"id":port.id,"name":port.name,"source_protocol":port.source_protocol,"ump_input":port.ump_input})).collect::<Vec<_>>(),
             "timing":{"armed":timing.armed,"counting":timing.counting,"capturing":timing.capturing,"remaining_beats":timing.remaining_beats,"remaining_frames":timing.remaining_frames,"captured_frames":timing.captured_frames},
             "armed":self.recording.armed,"monitors":self.recording.monitors.iter().map(|(id,mode)| (id.to_string(),mode.label())).collect::<HashMap<_,_>>(),
             "input_ready":snapshot.input_ready,"input_opening":snapshot.input_opening,"input_channels":snapshot.input_channels,

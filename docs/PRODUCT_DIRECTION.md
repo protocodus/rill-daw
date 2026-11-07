@@ -1,7 +1,7 @@
 # Rill feature comparison and development direction
 
-Research date: **6 November 2026**. This report supersedes the historical
-25 October comparison, whose implementation claims no longer describe Rill.
+Market sources checked: **6 November 2026**. Rill implementation updated:
+**7 November 2026**. This report supersedes the historical 25 October comparison.
 
 ## Product focus
 
@@ -24,13 +24,12 @@ for the mature production systems below. Its strongest opportunity is a focused,
 open-source arrangement workstation where ordinary musical work is quick,
 understandable and reversible.
 
-The latest refinements close everyday gaps: WAV/MP3/FLAC/OGG import, standard PCM
-delivery, exact loop export, compact track layouts, better mixer alignment and
-optional clip names with quiet fade previews. These improve the complete import,
-edit, mix and delivery workflow more than another isolated feature would. The
-next most valuable functional addition is a genuine Master processing path,
-followed by reversible
-freeze/commit. Both extend existing capabilities and help users finish songs.
+The latest refinements close ordinary production gaps: standard audio import and
+PCM delivery, compact layouts, a real Master processing path, routable VST3 input
+buses, grouped multi-output instruments, reversible Freeze and richer MIDI
+performance data. These extend the existing import, edit, mix and delivery
+workflow. The next high-value work is dependable media management and streaming,
+performed automation, and measured reference sessions on the intended hardware.
 
 ## Evidence and limitations
 
@@ -94,9 +93,25 @@ support and integrated workflow are more durable distinctions.
 
 Rill combines non-destructive audio/MIDI arrangement, recording, loop takes and
 comping, clip gain/reverse/fades, stretch/pitch, piano-roll editing, composition
-generators, folders, buses, pre/post-fader sends, ordered inserts and delay
-compensation. Those are meaningful production foundations, not feature parity
+generators, folders, buses, pre/post-fader sends, ordered inserts, sidechain
+inputs, independently mixed instrument outputs and stage-aware delay
+compensation. Master has its own trim, inserts, pan and volume automation.
+These are meaningful production foundations, not feature parity
 with every mature implementation of those categories.
+
+Freeze prints source/channel processing to managed audio while retaining the
+original clips, instrument state and editable mix controls. A multi-output
+instrument prints all configured outputs in one graph pass. Return keeps the
+printed media and edits. Failed/canceled/stale jobs leave originals untouched;
+missing originals prevent Return from muting the remaining prints. This closes
+an important CPU/recall workflow, with tested bounds rather than a promise that
+every third-party processor is transparent or deterministic.
+
+Project version 6 stores high-resolution note velocity/pitch attributes and UMP
+controller/per-note data. Native UMP input targets macOS 11 and newer; other
+platforms currently use MIDI 1.0 input. This is not universal MIDI 2.0 device,
+profile or plug-in compatibility. The `.rill` project preserves the richer data;
+Standard MIDI delivery requires an explicit MIDI 1.0 copy/downgrade decision.
 
 The current import pipeline supports WAV, MP3, FLAC and OGG/Vorbis through a
 separate decoder process. Files become managed WAV assets; originals remain
@@ -126,24 +141,42 @@ claiming exclusive ownership of AI.
 
 ## Important remaining gaps
 
-Rill's Master meters and analyzes the output but has no genuine insert chain or
-gain fader. Routing everything through a bus is a workaround, not an adequate
-finished mixing workflow. There is also no reversible track freeze or instrument
-commit. This affects CPU use, plugin dependency, recall and the transition from
-composition to mixing. Clip consolidation is not equivalent to rendering a
-complete instrument/effect path while retaining its editable origin.
+Playback sources are prepared in RAM rather than streamed from disk. Freeze
+reduces native processing dependencies but does not remove this media ceiling.
+Missing-media relink, explicit asset lifetime/cleanup and sustained reference
+sessions remain important finishing-workflow gaps. Live latency changes still
+require graph rebuilding; broad plug-in/driver compatibility needs real testing.
 
-Routing remains stereo and acyclic, without sidechains or multi-output
-instrument routing. MIDI clips primarily preserve note pitch, timing, length and
-velocity; sustain is represented in recorded note lengths, not retained as
-general controller data. CC, bend, pressure and MPE need a richer event model.
-Tempo and meter are constant, and playback sources are prepared in RAM rather
-than streamed from disk.
+The channel graph is stereo and acyclic. Wide plug-in buses are exposed as
+independent stereo/mono pairs, not a surround/immersive mixing model. Tempo and
+meter remain constant. Gesture-recording modes such as Read/Touch/Write remain
+separate from drawing curves and overriding/resuming them.
+
+Expressive project storage and target translation do not equal a complete MIDI
+2.0 ecosystem. Hardware UMP behavior has not been verified here; MIDI-CI/profile
+negotiation and standard MIDI Clip File/SMF2 interchange are not supplied.
+VST3 supports only the musical mappings exposed by the destination plug-in.
+Keep these boundaries visible when comparing Rill with established expressive
+performance and controller workflows.
 
 VST3 support does not imply AU, CLAP, AAX, LV2 or ARA compatibility. A few tested
 plugins do not establish a broad vendor matrix. Conversely, Cubase 16 no longer
 supports VST2, so a stale checklist would unfairly overstate its advantage.
 [Steinberg format guidance](https://helpcenter.steinberg.de/hc/en-us/articles/22554401894162-Using-VST-2-Plug-ins-in-Cubase-Nuendo-14-and-15).
+
+### Additional plug-in formats
+
+Rust is not the principal obstacle; each format needs discovery, identity,
+bus/events, automation, state recall, native editors, isolation and fault tests.
+No safe dependency-only addition was verified during this audit.
+
+| Format | Practical assessment |
+| --- | --- |
+| CLAP | The strongest next candidate. [`clack-host` 0.2](https://docs.rs/clack-host/0.2.0/clack_host/) supplies Rust wrappers, but Rill must implement host callbacks, lifecycle and isolated processing/editor adapters. |
+| AU v2/v3 | Feasible on macOS through [Apple Audio Units](https://developer.apple.com/documentation/AudioToolbox/AUAudioUnit) and Rust bindings. It needs AU-specific identities/parameters and real Mac validation. |
+| LV2 | Feasible with current Rust hosting libraries such as [`livi`](https://docs.rs/livi/0.9.0/livi/). State/worker/URI handling, native UI toolkits and portable assets still need a complete Rill integration. |
+| AAX | No practical generic host path was verified. [Avid's public SDK](https://developer.avid.com/aax/) primarily supports producing plug-ins for Avid products; public SDK availability/licensing does not establish arbitrary commercial AAX hosting. |
+| ARA | A deeper document/random-access extension, not another ordinary loader. [Celemony's SDK](https://github.com/Celemony/ARA_SDK) is Apache-2.0; integration needs source readers, region/modification graphs, archive state and edit/Undo lifecycle coordination. |
 
 Rill does not provide the score, video, timecode, ADR, immersive, AAF/OMF/ADM and
 hardware-control ecosystems of specialist products. These are substantive
@@ -193,6 +226,22 @@ headings sit lower without shortening faders; full “Music bus” and “Reverb
 return” names remain readable. Sends are reachable in the initial laptop-height
 view. These address the earlier hierarchy and vertical-space problems.
 
+The following native Linux/Xvfb captures were inspected at 1280×800. Folded
+auxiliary outputs keep the instrument group and Master visible; expanded outputs
+show their independent controls but require horizontal scrolling in this
+fixture. This is a useful density tradeoff, not evidence of Mac rendering speed
+or a claim that every long name remains visible.
+
+![Rill mixer with folded instrument outputs and visible Master in dark appearance](assets/product-direction/mixer-folded-outputs-dark.png)
+
+![Rill mixer with expanded instrument outputs in light appearance](assets/product-direction/mixer-expanded-outputs-light.png)
+
+Channel analysis now includes a calibrated sample-peak scale, 300 ms exponential
+RMS and a separate oversampled true-peak estimate, alongside approximate gated
+LUFS, spectrum, correlation and phase. These make the existing mixer more
+informative. They are tested estimates rather than certified broadcast
+compliance meters; Stop, Reset and seek/restart lifetimes are explicit.
+
 Further work should increase usable musical canvas and preserve selected-track
 continuity. The toolbar/ruler stack still consumes substantial height. Keep
 common tools stable and move uncommon processing into contextual menus.
@@ -220,26 +269,20 @@ Official screenshot references, **not firsthand pixel comparisons**:
 
 ## Recommended order of work
 
-1. **Finish the Master path.** Add real gain/inserts to the project model,
-   live/offline engine, automation, history and state recall. Validate delay
-   compensation and clear meter-tap semantics. This closes an ordinary mixing
-   blocker without creating a new product category.
-2. **Add reversible freeze/commit.** Render existing instrument/effect paths
-   while retaining the original track, plugin state and media. Provide explicit
-   invalidation/unfreeze behavior. Measure CPU and recall benefits; coordinate
-   long rendered media with the current RAM limits and future streaming.
-3. **Strengthen production trust continuously.** Add missing-media relink and
-   explicit media-lifetime handling, verify recovery across native failures, and
-   maintain long-session M1 reference projects. Signing/notarization and tested
-   plugin compatibility matter more to adoption than decorative controls.
-4. **Extend routing with sidechains.** Start with source/tap selection, graph
-   validation and tested plugin bus handling. Multi-output instruments can follow
-   once that contract is stable. Preserve clear destinations and safe Undo.
-5. **Preserve expressive performance.** Extend MIDI/controller storage and
-   predictable automation recording before adding more generators. Start with
-   dependable Read/Touch semantics. Performance should survive capture,
-   playback, editing, undo and export.
-6. **Continue measured interface refinement.** Reduce secondary toolbar height,
+1. **Make media management dependable.** Add missing-media relink, clear asset
+   ownership/lifetime and safe cleanup for extracted/imported/frozen media.
+   Coordinate disk streaming with existing cache limits and long frozen tracks.
+2. **Verify complete sessions on reference hardware.** Measure sustained base
+   M-series playback/recording, memory, dropout deadlines, native state recall
+   and recovery. Publish the tested plug-in/device set; improve release signing
+   and notarization as part of making the existing product trustworthy.
+3. **Record automation performances predictably.** Add deliberate Read/Touch
+   behavior before expanding modes, preserving override/resume and one-gesture
+   Undo. Test capture, playback, editing and recovery together.
+4. **Deepen timing and expressive interoperability.** Evaluate tempo/meter maps
+   and controller/MIDI 2.0 device interoperability against producer sessions.
+   Preserve rich source data and make every delivery downgrade explicit.
+5. **Continue measured interface refinement.** Reduce secondary toolbar height,
    preserve mixer/arranger selection, improve analysis context and test dense
    sessions. Use screenshots to identify hierarchy problems, then interaction
    tests to verify that tasks became easier.

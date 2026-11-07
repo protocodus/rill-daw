@@ -70,6 +70,21 @@ fn decode(encoded: &str) -> Vec<f32> {
         .map(|v| f32::from_le_bytes(v.try_into().unwrap()))
         .collect()
 }
+#[derive(Clone, Copy)]
+struct Voice {
+    velocity: f32,
+    channel: i16,
+    note_id: Option<i32>,
+}
+#[derive(Clone, Copy)]
+struct Event {
+    offset: usize,
+    pitch: u8,
+    velocity: f32,
+    on: bool,
+    channel: i16,
+    note_id: Option<i32>,
+}
 fn main() {
     assert_eq!(
         std::env::args().len(),
@@ -82,9 +97,9 @@ fn main() {
     let mut log = std::fs::File::create(log_path).unwrap();
     let mut output = std::io::stdout().lock();
     let mut effect = false;
-    let mut voices: [Vec<u8>; 128] = std::array::from_fn(|_| Vec::new());
+    let mut voices: [Vec<Voice>; 128] = std::array::from_fn(|_| Vec::new());
     let mut synth_value = 0.0;
-    let mut events: Vec<(usize, u8, u8, bool)> = Vec::new();
+    let mut events: Vec<Event> = Vec::new();
     let mut delay = [[0.0_f32; 2]; 32];
     let mut delay_cursor = 0;
     let mut processed = 0_u64;
@@ -118,6 +133,29 @@ fn main() {
                     "[]"
                 }
             )
+        } else if line == "\"AudioBusDetails\"" {
+            format!(
+                r#"{{"AudioBusDetails":{{"details":{{"inputs":{},"outputs":[{{"name":"Main output","channels":2,"active":true,"main":true}}]}}}}}}"#,
+                if effect {
+                    r#"[{"name":"Main input","channels":2,"active":true,"main":true}]"#
+                } else {
+                    "[]"
+                }
+            )
+        } else if line.contains("\"NoteExpressions\"") {
+            r#"{"NoteExpressions":{"expressions":[]}}"#.to_owned()
+        } else if line.contains("\"MidiControllerAssignments\"") {
+            r#"{"MidiControllerAssignments":{"assignments":[]}}"#.to_owned()
+        } else if matches!(
+            line.as_str(),
+            "\"ServiceHostRequests\"" | "\"TakeRestartFlags\""
+        ) {
+            r#"{"RestartFlags":{"bits":0}}"#.to_owned()
+        } else if line == "\"BusArrangements\"" {
+            format!(
+                r#"{{"BusArrangements":{{"arrangements":{{"inputs":{},"outputs":[3]}}}}}}"#,
+                if effect { "[3]" } else { "[]" }
+            )
         } else if line == "\"LatencySamples\"" {
             format!(
                 r#"{{"LatencySamples":{{"samples":{}}}}}"#,
@@ -133,12 +171,28 @@ fn main() {
         } else if line == "\"GetAllParameters\"" {
             r#"{"Parameters":{"params":[]}}"#.to_owned()
         } else if line.contains("\"SendMidiAt\"") {
-            events.push((
-                number(&line, "sample_offset") as usize,
-                number(&line, "note") as u8,
-                number(&line, "velocity") as u8,
-                line.contains("\"NoteOn\""),
-            ));
+            events.push(Event {
+                offset: number(&line, "sample_offset") as usize,
+                pitch: number(&line, "note") as u8,
+                velocity: number(&line, "velocity") as f32,
+                on: line.contains("\"NoteOn\""),
+                channel: 0,
+                note_id: None,
+            });
+            r#"{"Success":{"message":""}}"#.to_owned()
+        } else if line.contains("\"SendPluginEvent\"") {
+            if line.contains("\"NoteOn\"") || line.contains("\"NoteOff\"") {
+                // Native note velocities are normalized floats. Preserve their
+                // precision while retaining the fixture's historical DC scale.
+                events.push(Event {
+                    offset: number(&line, "sample_offset") as usize,
+                    pitch: number(&line, "pitch") as u8,
+                    velocity: number(&line, "velocity") as f32 * 127.0,
+                    on: line.contains("\"NoteOn\""),
+                    channel: number(&line, "channel") as i16,
+                    note_id: Some(number(&line, "note_id") as i32),
+                });
+            }
             r#"{"Success":{"message":""}}"#.to_owned()
         } else if line == "\"MidiPanic\"" {
             voices.iter_mut().for_each(Vec::clear);
@@ -165,12 +219,19 @@ fn main() {
             let mut right = Vec::with_capacity(frames);
             for frame in 0..frames {
                 let mut changed = false;
-                for &(_, pitch, velocity, on) in events.iter().filter(|e| e.0 == frame) {
-                    let active = &mut voices[usize::from(pitch)];
-                    if on && velocity > 0 {
-                        active.push(velocity);
-                    } else if !active.is_empty() {
-                        active.remove(0);
+                for event in events.iter().filter(|event| event.offset == frame) {
+                    let active = &mut voices[usize::from(event.pitch)];
+                    if event.on && (event.note_id.is_some() || event.velocity > 0.0) {
+                        active.push(Voice {
+                            velocity: event.velocity,
+                            channel: event.channel,
+                            note_id: event.note_id,
+                        });
+                    } else if let Some(at) = active.iter().position(|voice| {
+                        voice.channel == event.channel
+                            && (event.note_id.is_none() || voice.note_id == event.note_id)
+                    }) {
+                        active.remove(at);
                     }
                     changed = true;
                 }
@@ -183,8 +244,8 @@ fn main() {
                         .iter()
                         .enumerate()
                         .flat_map(|(pitch, velocities)| {
-                            velocities.iter().map(move |velocity| {
-                                (0.2 + (pitch as f32 - 60.0) * 0.01) * f32::from(*velocity) / 100.0
+                            velocities.iter().map(move |voice| {
+                                (0.2 + (pitch as f32 - 60.0) * 0.01) * voice.velocity / 100.0
                             })
                         })
                         .sum::<f32>();

@@ -253,6 +253,14 @@ impl DawApp {
         if !self.export_midi_ready() {
             return;
         }
+        if self.project.contains_midi2() {
+            self.open_popup(PopupKind::ExportMidi);
+            return;
+        }
+        self.finish_midi_export_dialog();
+    }
+
+    fn finish_midi_export_dialog(&mut self) {
         if let Some(path) = self.pick_document_path(DocumentDialog::ExportMidi) {
             let result = self.project.export_midi(&path);
             match result {
@@ -267,6 +275,36 @@ impl DawApp {
                 }
                 Err(error) => self.message(Err(error.context("MIDI export failed")), ""),
             }
+        }
+    }
+
+    fn midi_export_confirmation(&mut self, ctx: &egui::Context) {
+        let mut open = self.midi_export_open;
+        if !open {
+            return;
+        }
+        let mut export = false;
+        let mut cancel = false;
+        daw_ui::popup("Export MIDI 1.0 copy", ctx)
+            .id(egui::Id::new("midi_export_confirmation"))
+            .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
+            .vscroll(false).open(&mut open).show(ctx, |ui| {
+                let mut footer = daw_ui::popup_footer(ui, "midi_export_confirmation_actions");
+                let window_ui = ui;
+                daw_ui::popup_scroll_body(footer.body(), "midi_export_confirmation_body", 0.0, |ui| {
+                    daw_ui::text::body(ui, "Standard MIDI (.mid) exports MIDI 1.0 notes. High-resolution pitch and velocity are reduced; UMP messages and per-note expression are omitted.");
+                    ui.add_space(daw_ui::tokens::SPACE_MD);
+                    daw_ui::text::note(ui, "Your RILL project keeps the original performance data. Save a .rill project to preserve it.");
+                });
+                footer.show(window_ui, |ui| {
+                    daw_ui::dialog_actions(ui, |ui| {
+                        export = ui.add_enabled(self.export_midi_ready(), daw_ui::primary_button_widget(ui, "Export MIDI 1.0 copy…")).clicked();
+                    }, |ui| { cancel = daw_ui::button(ui, "Cancel").clicked(); });
+                });
+            });
+        self.midi_export_open = open && !cancel && !export;
+        if export {
+            self.finish_midi_export_dialog();
         }
     }
 
@@ -317,6 +355,7 @@ impl DawApp {
     }
 
     pub(crate) fn export_popup(&mut self, ctx: &egui::Context) {
+        self.midi_export_confirmation(ctx);
         let mut open = self.export_open;
         if !open {
             return;

@@ -4,7 +4,7 @@ use crate::{
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs::{self, OpenOptions},
     io::{BufReader, BufWriter, Write},
     path::Path,
@@ -18,6 +18,20 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 pub const MAX_BEAT: f64 = 1_000_000.0;
 pub const MIN_SOURCE_RATE: f64 = 0.25;
 pub const MAX_SOURCE_RATE: f64 = 4.0;
+/// Reserved identity outside the arranger. Legacy document object IDs are positive.
+pub const MASTER_CHANNEL_ID: u64 = 0;
+pub const MAX_PLUGIN_AUDIO_BUSES: u32 = 64;
+pub const MAX_PLUGIN_AUDIO_CHANNELS: u32 = 128;
+
+fn unity_gain() -> f32 {
+    1.0
+}
+
+fn default_master() -> Track {
+    let mut master = Track::new("Master", TrackKind::Bus);
+    master.id = MASTER_CHANNEL_ID;
+    master
+}
 
 fn default_source_rate() -> f64 {
     1.0
@@ -45,6 +59,9 @@ pub struct Project {
     pub tempo: f64,
     pub beats_per_bar: u8,
     pub tracks: Vec<Track>,
+    /// Final stereo channel. It is never an arranger row or routing source.
+    #[serde(default = "default_master")]
+    pub master: Track,
     pub loop_enabled: bool,
     pub loop_start: f64,
     pub loop_end: f64,
@@ -67,6 +84,9 @@ pub struct Track {
     pub kind: TrackKind,
     pub color: [u8; 3],
     pub gain: f32,
+    /// Linear input/trim gain before inserts; `gain` remains the output fader.
+    #[serde(default = "unity_gain")]
+    pub input_gain: f32,
     pub pan: f32,
     pub mute: bool,
     pub solo: bool,
@@ -79,6 +99,11 @@ pub struct Track {
     /// Normalized values applied after restoring opaque state.
     #[serde(default)]
     pub instrument_parameters: Vec<PluginParameterValue>,
+    #[serde(default)]
+    pub instrument_inputs: Vec<PluginInputRoute>,
+    /// One extra stereo pair (or final mono channel) from the owning instrument.
+    #[serde(default)]
+    pub instrument_output: Option<InstrumentOutput>,
     pub clips: Vec<Clip>,
     /// Additional path latency, added to latency reported by the instrument.
     pub latency_samples: u32,
@@ -101,6 +126,9 @@ pub struct Track {
     pub audio_input: Option<crate::AudioInputChannels>,
     #[serde(default)]
     pub midi_input: Option<crate::MidiInputChannel>,
+    /// Native UMP input group. This filter does not rewrite stored performance data.
+    #[serde(default)]
+    pub midi_input_group: u8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -123,6 +151,25 @@ pub struct EffectSlot {
     pub state: Vec<u8>,
     #[serde(default)]
     pub parameters: Vec<PluginParameterValue>,
+    #[serde(default)]
+    pub inputs: Vec<PluginInputRoute>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PluginInputRoute {
+    pub source_track: u64,
+    /// Destination plug-in audio bus and first channel of its stereo pair.
+    pub bus: u32,
+    pub first_channel: u32,
+    pub gain: f32,
+    pub pre_fader: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct InstrumentOutput {
+    pub track: u64,
+    pub bus: u32,
+    pub first_channel: u32,
 }
 
 impl EffectSlot {
@@ -134,6 +181,7 @@ impl EffectSlot {
             effect,
             state: Vec::new(),
             parameters: Vec::new(),
+            inputs: Vec::new(),
         }
     }
 }
@@ -194,6 +242,14 @@ fn validate_plugin_state(state: &[u8], parameters: &[PluginParameterValue]) -> R
 pub struct Clip {
     pub id: u64,
     pub name: String,
+    /// Non-destructive source mute, used when retaining a frozen original.
+    #[serde(default)]
+    pub muted: bool,
+    /// Occurrence-local provenance for a reversible printed source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub freeze: Option<FreezeLink>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub midi_events: Vec<crate::MidiClipEvent>,
     /// Shared source identity. Arrangement bounds remain local to this instance.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link_group: Option<u64>,
@@ -209,6 +265,31 @@ pub struct Clip {
     #[serde(default = "default_source_rate")]
     pub source_rate: f64,
     pub content: ClipContent,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FreezeLink {
+    pub group: u64,
+    pub source_track: u64,
+    pub source_clips: Vec<u64>,
+    pub muted_tracks: Vec<FreezeTrackMute>,
+    #[serde(default)]
+    pub input_copies: Vec<FreezeInputCopy>,
+    pub active: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FreezeInputCopy {
+    /// Consumer channel; zero identifies a Master insert.
+    pub track: u64,
+    pub effect: Option<u64>,
+    pub route: PluginInputRoute,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FreezeTrackMute {
+    pub track: u64,
+    pub muted: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -247,6 +328,8 @@ pub struct Note {
     pub start: f64,
     pub length: f64,
     pub velocity: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub midi2: Option<crate::Midi2NoteData>,
 }
 
 impl Note {
@@ -257,6 +340,7 @@ impl Note {
             start,
             length,
             velocity,
+            midi2: None,
         }
     }
 }
@@ -266,6 +350,9 @@ impl Clip {
         Self {
             id: new_id(),
             name: name.into(),
+            muted: false,
+            freeze: None,
+            midi_events: Vec::new(),
             link_group: None,
             audio_take: None,
             start,
@@ -285,6 +372,9 @@ impl Clip {
         Self {
             id: new_id(),
             name: name.into(),
+            muted: false,
+            freeze: None,
+            midi_events: Vec::new(),
             link_group: None,
             audio_take: None,
             start,
@@ -330,9 +420,18 @@ impl Clip {
         self.audio_take = None;
         if let ClipContent::Midi { notes } = &mut self.content {
             for note in notes {
-                note.id = new_id();
+                note.refresh_identity();
             }
         }
+        for event in &mut self.midi_events {
+            event.id = new_id();
+        }
+    }
+
+    /// Make an independent copied occurrence, including all MIDI event identities.
+    /// Freeze provenance remains occurrence metadata and is intentionally retained.
+    pub fn refresh_identity(&mut self) {
+        self.refresh_ids();
     }
 
     fn constrain_fades(&mut self) {
@@ -352,6 +451,13 @@ impl Clip {
 }
 
 impl Track {
+    /// Output channels stay visually grouped beneath their instrument owner.
+    pub fn group_parent(&self) -> Option<u64> {
+        self.instrument_output
+            .map(|output| output.track)
+            .or(self.parent_folder)
+    }
+
     pub fn new(name: impl Into<String>, kind: TrackKind) -> Self {
         Self {
             id: new_id(),
@@ -363,6 +469,7 @@ impl Track {
             } else {
                 0.75
             },
+            input_gain: 1.0,
             pan: 0.0,
             mute: false,
             solo: false,
@@ -370,6 +477,8 @@ impl Track {
             instrument_name: String::new(),
             instrument_state: Vec::new(),
             instrument_parameters: Vec::new(),
+            instrument_inputs: Vec::new(),
+            instrument_output: None,
             clips: Vec::new(),
             latency_samples: 0,
             inserts: Vec::new(),
@@ -380,6 +489,7 @@ impl Track {
             automation: None,
             audio_input: (kind == TrackKind::Audio).then(crate::AudioInputChannels::default),
             midi_input: (kind == TrackKind::Midi).then_some(crate::MidiInputChannel::All),
+            midi_input_group: 0,
         }
     }
 }
@@ -397,6 +507,7 @@ impl Project {
             tempo: 120.0,
             beats_per_bar: 4,
             tracks: Vec::new(),
+            master: default_master(),
             loop_enabled: false,
             loop_start: 0.0,
             loop_end: 16.0,
@@ -415,10 +526,28 @@ impl Project {
     }
 
     pub fn track(&self, id: u64) -> Option<&Track> {
-        self.tracks.iter().find(|track| track.id == id)
+        if id == MASTER_CHANNEL_ID {
+            Some(&self.master)
+        } else {
+            self.tracks.iter().find(|track| track.id == id)
+        }
     }
     pub fn track_mut(&mut self, id: u64) -> Option<&mut Track> {
-        self.tracks.iter_mut().find(|track| track.id == id)
+        if id == MASTER_CHANNEL_ID {
+            Some(&mut self.master)
+        } else {
+            self.tracks.iter_mut().find(|track| track.id == id)
+        }
+    }
+
+    pub fn channels(&self) -> impl Iterator<Item = &Track> {
+        self.tracks.iter().chain(std::iter::once(&self.master))
+    }
+
+    pub fn channels_mut(&mut self) -> impl Iterator<Item = &mut Track> {
+        self.tracks
+            .iter_mut()
+            .chain(std::iter::once(&mut self.master))
     }
 
     pub fn clip(&self, track_id: u64, clip_id: u64) -> Option<&Clip> {
@@ -433,6 +562,12 @@ impl Project {
             .clips
             .iter_mut()
             .find(|clip| clip.id == clip_id)
+    }
+
+    /// Occurrence-local: linked clips keep their own mute state.
+    pub fn set_clip_muted(&mut self, track: u64, clip: u64, muted: bool) -> Result<()> {
+        self.clip_mut(track, clip).context("Clip not found")?.muted = muted;
+        Ok(())
     }
 
     pub fn midi_notes(&self, track_id: u64, clip_id: u64) -> Option<&[Note]> {
@@ -470,12 +605,13 @@ impl Project {
                 && at_source_beat < note.start + note.length,
             "Split must be inside the note"
         );
-        let right = Note::new(
-            note.pitch,
-            at_source_beat,
-            note.start + note.length - at_source_beat,
-            note.velocity,
-        );
+        let mut right = note.clone();
+        right.refresh_identity();
+        right.start = at_source_beat;
+        right.length = note.start + note.length - at_source_beat;
+        if let Some(data) = &note.midi2 {
+            right.midi2 = Some(data.after_split(at_source_beat - note.start)?);
+        }
         note.length = at_source_beat - note.start;
         let id = right.id;
         notes.insert(index + 1, right);
@@ -494,7 +630,7 @@ impl Project {
             .clone();
         duplicate.start += duplicate.length;
         validate_note(&duplicate)?;
-        duplicate.id = new_id();
+        duplicate.refresh_identity();
         let id = duplicate.id;
         notes.push(duplicate);
         self.synchronize_linked_clip(track_id, clip_id)?;
@@ -542,7 +678,45 @@ impl Project {
             .iter()
             .map(|note| note.start + note.length)
             .fold(first.start, f64::max);
-        let glued = Note::new(first.pitch, first.start, end - first.start, first.velocity);
+        let address = |note: &Note| {
+            note.midi2
+                .as_ref()
+                .map_or((0, 0), |data| (data.group, data.channel))
+        };
+        ensure!(
+            selected_notes
+                .iter()
+                .all(|note| address(note) == address(first)
+                    && note.pitch_semitones() == first.pitch_semitones()),
+            "Glue requires notes with the same MIDI address and exact pitch"
+        );
+        let mut glued = (**first).clone();
+        glued.id = new_id();
+        glued.length = end - first.start;
+        if selected_notes.iter().any(|note| note.midi2.is_some()) {
+            let mut data = first
+                .midi2
+                .clone()
+                .unwrap_or_else(|| crate::Midi2NoteData::from_legacy(first));
+            data.expressions.clear();
+            for source in &selected_notes {
+                if let Some(original) = &source.midi2 {
+                    for point in &original.expressions {
+                        data.expressions.push(crate::MidiNoteExpression::new(
+                            point.beat + source.start - first.start,
+                            point.packet.with_note_address(
+                                data.group,
+                                data.channel,
+                                data.note_index,
+                            ),
+                        ));
+                    }
+                }
+            }
+            data.expressions
+                .sort_by(|a, b| a.beat.total_cmp(&b.beat).then(a.id.cmp(&b.id)));
+            glued.midi2 = Some(data);
+        }
         validate_note(&glued)?;
         let id = glued.id;
         notes.retain(|note| !selected.contains(&note.id));
@@ -585,6 +759,27 @@ impl Project {
 
     /// Split at an absolute arrangement beat, keeping the source intact on both sides.
     pub fn split_clip(&mut self, track_id: u64, clip_id: u64, at_beat: f64) -> Result<u64> {
+        // Retain occurrence lineage when editing a frozen original. Every print
+        // in the same group must keep identical return-to-original metadata.
+        let extend_freeze = self.clip(track_id, clip_id).is_some_and(|clip| clip.muted);
+        if extend_freeze {
+            for freeze in self
+                .tracks
+                .iter()
+                .flat_map(|track| &track.clips)
+                .filter_map(|clip| clip.freeze.as_ref())
+                .filter(|freeze| {
+                    freeze.active
+                        && freeze.source_track == track_id
+                        && freeze.source_clips.contains(&clip_id)
+                })
+            {
+                ensure!(
+                    freeze.source_clips.len() < 8192,
+                    "Frozen original has too many split pieces"
+                );
+            }
+        }
         let track = self.track_mut(track_id).context("Track not found")?;
         let index = track
             .clips
@@ -660,6 +855,21 @@ impl Project {
         clip.constrain_fades();
         let id = right.id;
         track.clips.insert(index + 1, right);
+        if extend_freeze {
+            for freeze in self
+                .tracks
+                .iter_mut()
+                .flat_map(|track| &mut track.clips)
+                .filter_map(|clip| clip.freeze.as_mut())
+                .filter(|freeze| {
+                    freeze.active
+                        && freeze.source_track == track_id
+                        && freeze.source_clips.contains(&clip_id)
+                })
+            {
+                freeze.source_clips.push(id);
+            }
+        }
         Ok(id)
     }
 
@@ -828,12 +1038,31 @@ impl Project {
             self.metronome_gain.is_finite() && (0.0..=1.0).contains(&self.metronome_gain),
             "Invalid metronome level"
         );
+        ensure!(
+            self.master.id == MASTER_CHANNEL_ID && self.master.kind == TrackKind::Bus,
+            "Invalid Master channel identity"
+        );
+        ensure!(
+            self.master.clips.is_empty()
+                && self.master.sends.is_empty()
+                && self.master.output_bus.is_none()
+                && self.master.parent_folder.is_none()
+                && self.master.instrument == Instrument::None
+                && self.master.instrument_inputs.is_empty()
+                && self.master.instrument_output.is_none()
+                && self.master.automation.is_none()
+                && self.master.audio_input.is_none()
+                && self.master.midi_input.is_none(),
+            "Master cannot contain clips, an instrument, input assignments, or outgoing routing"
+        );
+        ensure!(!self.master.solo, "Master cannot be soloed");
         self.validate_linked_clips()?;
         self.validate_audio_takes()?;
         let mut ids = HashSet::new();
         let mut link_groups = HashSet::new();
         let mut take_groups = HashSet::new();
         let mut midi_groups = HashSet::new();
+        let mut freeze_groups: HashMap<u64, &FreezeLink> = HashMap::new();
         let mut automation_targets = HashSet::new();
         let mut check_id = |id| -> Result<()> {
             ensure!(
@@ -842,8 +1071,15 @@ impl Project {
             );
             Ok(())
         };
-        for track in &self.tracks {
-            check_id(track.id)?;
+        for (is_master, track) in self
+            .tracks
+            .iter()
+            .map(|track| (false, track))
+            .chain(std::iter::once((true, &self.master)))
+        {
+            if !is_master {
+                check_id(track.id)?;
+            }
             if let Some(input) = track.audio_input {
                 ensure!(
                     track.kind == TrackKind::Audio,
@@ -858,6 +1094,11 @@ impl Project {
                 );
                 input.validate()?;
             }
+            ensure!(
+                track.midi_input_group < 16
+                    && (track.kind == TrackKind::Midi || track.midi_input_group == 0),
+                "Invalid MIDI input group"
+            );
             if let Some(lane) = &track.automation {
                 ensure!(
                     track.kind == TrackKind::Automation,
@@ -889,6 +1130,10 @@ impl Project {
                 "Invalid track gain"
             );
             ensure!(
+                track.input_gain.is_finite() && (0.0..=16.0).contains(&track.input_gain),
+                "Input gain must be between 0 and 16"
+            );
+            ensure!(
                 track.pan.is_finite() && (-1.0..=1.0).contains(&track.pan),
                 "Invalid track pan"
             );
@@ -912,6 +1157,64 @@ impl Project {
             }
             for clip in &track.clips {
                 check_id(clip.id)?;
+                if let Some(freeze) = &clip.freeze {
+                    ensure!(
+                        matches!(clip.content, ClipContent::Audio { .. }),
+                        "Only printed audio clips contain freeze provenance"
+                    );
+                    ensure!(
+                        freeze.group > 0
+                            && freeze.group < u64::MAX
+                            && freeze.source_track > 0
+                            && freeze.source_track < u64::MAX
+                            && freeze.source_clips.len() <= 8192
+                            && freeze.muted_tracks.len() <= 1024
+                            && freeze.input_copies.len() <= 4096,
+                        "Invalid or oversized freeze provenance"
+                    );
+                    let mut sources = HashSet::new();
+                    for &id in &freeze.source_clips {
+                        ensure!(
+                            id > 0 && id < u64::MAX && sources.insert(id),
+                            "Invalid or duplicate frozen source clip"
+                        );
+                    }
+                    let mut muted = HashSet::new();
+                    for state in &freeze.muted_tracks {
+                        ensure!(
+                            state.track > 0 && state.track < u64::MAX && muted.insert(state.track),
+                            "Invalid or duplicate frozen channel state"
+                        );
+                    }
+                    let mut copies = HashSet::new();
+                    for copy in &freeze.input_copies {
+                        let route = &copy.route;
+                        ensure!(
+                            copy.track < u64::MAX
+                                && copy.effect.is_none_or(|id| id > 0 && id < u64::MAX)
+                                && route.source_track > 0
+                                && route.source_track < u64::MAX
+                                && route.bus < MAX_PLUGIN_AUDIO_BUSES
+                                && route.first_channel < MAX_PLUGIN_AUDIO_CHANNELS
+                                && route.first_channel.is_multiple_of(2)
+                                && route.gain.is_finite()
+                                && (0.0..=16.0).contains(&route.gain)
+                                && copies.insert((
+                                    copy.track,
+                                    copy.effect,
+                                    route.source_track,
+                                    route.bus,
+                                    route.first_channel
+                                )),
+                            "Invalid or duplicate frozen sidechain copy"
+                        );
+                    }
+                    if let Some(previous) = freeze_groups.insert(freeze.group, freeze) {
+                        ensure!(previous == freeze, "Inconsistent freeze group provenance");
+                    } else {
+                        check_id(freeze.group)?;
+                    }
+                }
                 if let Some(group) = clip.take_group()
                     && take_groups.insert(group)
                 {
@@ -941,10 +1244,27 @@ impl Project {
                         let shared_notes = clip
                             .link_group
                             .is_some_and(|group| !midi_groups.insert(group));
+                        let total_events = crate::midi2::midi_event_count(clip);
+                        ensure!(
+                            total_events <= crate::MAX_MIDI_EVENTS,
+                            "Too many MIDI performance events in one clip"
+                        );
+                        for event in &clip.midi_events {
+                            event.validate()?;
+                            if !shared_notes {
+                                check_id(event.id)?;
+                            }
+                        }
                         for note in notes {
                             if !shared_notes {
                                 check_id(note.id)?;
+                                if let Some(data) = &note.midi2 {
+                                    for point in &data.expressions {
+                                        check_id(point.id)?;
+                                    }
+                                }
                             }
+                            validate_note(note)?;
                             ensure!(
                                 note.pitch <= 127 && (1..=127).contains(&note.velocity),
                                 "Invalid MIDI pitch or velocity"
@@ -966,6 +1286,10 @@ impl Project {
                         crossfade,
                         ..
                     } => {
+                        ensure!(
+                            clip.midi_events.is_empty(),
+                            "Only MIDI clips contain MIDI performance events"
+                        );
                         ensure!(
                             track.kind == TrackKind::Audio,
                             "Audio clip is on a MIDI track"
@@ -1036,7 +1360,7 @@ impl Project {
             serde_json::to_writer_pretty(
                 &mut writer,
                 &ProjectFile {
-                    version: 4,
+                    version: 6,
                     project: self.clone(),
                 },
             )?;
@@ -1075,7 +1399,7 @@ impl Project {
         let envelope: ProjectFile =
             serde_json::from_reader(BufReader::new(file)).context("Read project JSON")?;
         ensure!(
-            (1..=4).contains(&envelope.version),
+            (1..=6).contains(&envelope.version),
             "Unsupported project version {}",
             envelope.version
         );
@@ -1093,7 +1417,7 @@ impl Project {
     ) -> Result<Self> {
         self.validate()?;
         let mut max_id = 0;
-        for track in &mut self.tracks {
+        for track in self.channels_mut() {
             max_id = max_id.max(track.id);
             if let Some(lane) = &track.automation {
                 for point in &lane.points {
@@ -1121,10 +1445,33 @@ impl Project {
                     .max(clip.id)
                     .max(clip.link_group.unwrap_or(0))
                     .max(clip.take_group().unwrap_or(0));
+                for event in &clip.midi_events {
+                    max_id = max_id.max(event.id);
+                }
+                if let Some(freeze) = &clip.freeze {
+                    max_id = max_id.max(freeze.group).max(freeze.source_track);
+                    for &id in &freeze.source_clips {
+                        max_id = max_id.max(id);
+                    }
+                    for state in &freeze.muted_tracks {
+                        max_id = max_id.max(state.track);
+                    }
+                    for copy in &freeze.input_copies {
+                        max_id = max_id
+                            .max(copy.track)
+                            .max(copy.effect.unwrap_or(0))
+                            .max(copy.route.source_track);
+                    }
+                }
                 match &mut clip.content {
                     ClipContent::Midi { notes } => {
                         for note in notes {
                             max_id = max_id.max(note.id);
+                            if let Some(data) = &note.midi2 {
+                                for point in &data.expressions {
+                                    max_id = max_id.max(point.id);
+                                }
+                            }
                         }
                     }
                     ClipContent::Audio { path, .. } => absolutize(path, base),
@@ -1476,6 +1823,13 @@ pub fn validate_note(note: &Note) -> Result<()> {
         || !valid_range(note.start, note.length)
     {
         bail!("Invalid MIDI note");
+    }
+    if let Some(data) = &note.midi2 {
+        data.validate()?;
+        ensure!(
+            note.pitch == data.preview_pitch() && note.velocity == data.preview_velocity(),
+            "MIDI note preview differs from its high-resolution data; use the note setters"
+        );
     }
     Ok(())
 }

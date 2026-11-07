@@ -9,6 +9,7 @@ use std::{collections::HashSet, ops::RangeInclusive};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AutomationParameter {
     TrackGain,
+    TrackInputGain,
     TrackPan,
     SendGain { bus: u64 },
     VstParameter { effect: Option<u64>, id: u32 },
@@ -18,6 +19,7 @@ impl AutomationParameter {
     pub fn name(self) -> &'static str {
         match self {
             Self::TrackGain => "Track gain",
+            Self::TrackInputGain => "Input gain",
             Self::TrackPan => "Track pan",
             Self::SendGain { .. } => "Send gain",
             Self::VstParameter { .. } => "VST parameter",
@@ -27,6 +29,7 @@ impl AutomationParameter {
     pub fn range(self) -> RangeInclusive<f32> {
         match self {
             Self::TrackGain => 0.0..=1.5,
+            Self::TrackInputGain => 0.0..=16.0,
             Self::TrackPan => -1.0..=1.0,
             Self::SendGain { .. } => 0.0..=16.0,
             Self::VstParameter { .. } => 0.0..=1.0,
@@ -73,7 +76,9 @@ impl AutomationTarget {
                 .context("Automation target insert is missing")
         };
         match self.parameter {
-            AutomationParameter::TrackGain | AutomationParameter::TrackPan => {}
+            AutomationParameter::TrackGain
+            | AutomationParameter::TrackInputGain
+            | AutomationParameter::TrackPan => {}
             AutomationParameter::SendGain { bus } => {
                 ensure!(
                     track.sends.iter().any(|send| send.target_bus == bus),
@@ -108,6 +113,7 @@ impl AutomationTarget {
         let track = project.track(self.track).expect("validated track");
         let value = match self.parameter {
             AutomationParameter::TrackGain => track.gain,
+            AutomationParameter::TrackInputGain => track.input_gain,
             AutomationParameter::TrackPan => track.pan,
             AutomationParameter::SendGain { bus } => {
                 track
@@ -134,6 +140,7 @@ impl AutomationTarget {
         let track = project.track(self.track)?;
         let value = match self.parameter {
             AutomationParameter::TrackGain => track.gain,
+            AutomationParameter::TrackInputGain => track.input_gain,
             AutomationParameter::TrackPan => track.pan,
             AutomationParameter::SendGain { bus } => {
                 track.sends.iter().find(|send| send.target_bus == bus)?.gain
@@ -561,6 +568,26 @@ impl Project {
     /// old and new instruments are VST3. Insert and native automation survive.
     pub fn set_instrument(&mut self, track: u64, instrument: Instrument) -> Result<()> {
         let mut candidate = self.clone();
+        let changed = candidate
+            .track(track)
+            .context("Track not found")?
+            .instrument
+            != instrument;
+        if changed {
+            let children: Vec<_> = candidate
+                .tracks
+                .iter()
+                .filter(|channel| {
+                    channel
+                        .instrument_output
+                        .is_some_and(|output| output.track == track)
+                })
+                .map(|channel| channel.id)
+                .collect();
+            for child in children {
+                candidate.delete_track(child)?;
+            }
+        }
         let channel = candidate.track_mut(track).context("Track not found")?;
         ensure!(
             channel.kind == TrackKind::Midi,
@@ -571,6 +598,7 @@ impl Project {
             channel.instrument_name.clear();
             channel.instrument_state.clear();
             channel.instrument_parameters.clear();
+            channel.instrument_inputs.clear();
             candidate.tracks.retain(|lane_track| {
                 !lane_track.automation.as_ref().is_some_and(|lane| {
                     lane.target.track == track

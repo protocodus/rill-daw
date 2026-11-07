@@ -274,7 +274,7 @@ fn compact_header_and_channel_properties_keep_the_same_mouse_entry() {
     app.click("Mixer");
     let before = app.click("Mouse channel");
     assert_eq!(before["popups"]["properties"], true);
-    let (_, gain_y) = center(label(&before, "Gain"));
+    let (_, gain_y) = center(label(&before, "Volume"));
     let gain = before["label_rects"]
         .as_array()
         .unwrap()

@@ -27,11 +27,12 @@ the arranger remain available; the starting actions disappear once a track exist
 - Piano roll with scale/chord highlighting, chord database, octave-stack drawing, both note edges, velocity painting, and held-note plugin audition; randomize and quantize previews, voice-aware legato, transpose, and note clipboard.
 - Generate sustained chords, seven arpeggio patterns, and seeded melodies with optional counterpoint or tintinnabuli voices; preview notes in an editable whole-bar range before adding them in one undoable step.
 - Large searchable instrument/effect browser with developer filters and cached native previews; drag-reorder insert chains and create send returns.
-- Pre/post-fader sends, buses, nested bus routing, gain/pan/mute/solo, and automatic path delay compensation. Feedback cycles are rejected.
+- Pre/post-fader sends, buses, sidechain/multi-input routing, grouped instrument outputs and automatic path delay compensation. Every audio channel, including Master, has automatable input gain, volume and pan. Feedback cycles are rejected.
+- Reversible clip/track Freeze creates managed audio below the source, preserves originals and supports Return to originals.
 - Drag-and-drop track/channel ordering, nested folders, track colors, folder collapse, compact tracks, and safe track deletion.
 - System-following light/dark themes, bundled Inter typography with Unicode fallbacks, shared text components, and vector toolbar icons.
 - Audio input recording with mono/stereo selection, dry monitoring, loop passes retained as separate takes, and independent overdub layers.
-- MIDI note recording with channel selection, plugin monitoring, loop overdubs, optional pre-count and an output-only metronome.
+- MIDI performance recording with channel/group selection, plugin monitoring, loop overdubs, optional pre-count and an output-only metronome; high-resolution note/expression data remains in `.rill` projects.
 - Audio take selection and non-destructive range comping, smooth boundary crossfades, imported alternatives, and retained sources in portable projects.
 - Responsive audio move/trim/stretch gestures, time selections, transient/edge snapping, and quick live previews that refine in the background; exports retain full quality.
 - Source slip, sample/millisecond/grid nudging, zero-crossing snap, track-local ripple deletion, and previewed Strip silence.
@@ -172,8 +173,9 @@ Clip names are optional. Use the clip's context menu **Rename…**, clear its na
 
 Gain captions show one decimal place; hover or open the value editor to see its
 full precision. Simply viewing or cancelling an edit preserves the stored value.
-The Master meter follows the combined output, keeps short hits visible as the
-peaks fall, and clears when playback pauses or stops.
+The Master strip meters its processed signal before device clipping, dry input
+monitoring and metronome. Live bars fall to silence when paused/stopped; peak
+holds remain available until reset. The transport device meter is separate.
 
 In Arrangement, **Add pattern** creates a four-beat MIDI pattern at the cursor on the selected MIDI track, or creates a track when needed. Empty MIDI lanes also show a double-click hint and offer **Add pattern** in their context menu. Double-clicking below the tracks creates a new MIDI track with its first clip at the clicked, snapped position. Select **Window → Clip Editor**, or double-click a clip, to open it. Drag a clip to move it; drag its edges to trim its length. **Properties → Clip** provides editable **Start**, **Duration** and **Source offset** in beats. Visible **−/+** buttons step each value by one beat; drag the number for fine adjustment or click to type. Start is one-based, and each step supports Undo. Tempo has matching buttons that step by one BPM. While trimming an arrangement clip, a pointer readout shows its current end and duration in seconds and beats. Use **Edit → Split at cursor / Duplicate**, or the clip's context menu. Right-click a track header for properties, collapse/expand, or deletion; use **Window → Effects / Routing** for its signal path. Arrangement **Fit** keeps sparse track rows at a readable maximum of 144 points while fitting the song horizontally.
 
@@ -214,15 +216,63 @@ The piano roll shows every tool directly: **Select**, **Pencil**, **Multi-draw**
 With **Pencil**, press at the note's starting time and pitch, then drag to choose
 its length. The starting pitch stays fixed while drawing.
 
-The select tool supports dragging a rectangle around notes. Drag note bodies to change time/pitch, and either edge to change length. **Length** chooses the initial drawing duration from **Last note**, fixed note values, or **1 bar**; Last note starts at 1/16 and remembers the last drawn or selected length. Double-click empty space to create a note or a note to delete it. Drawing past the marked **Clip end** extends the clip with the new note in one Undo step. The velocity lane supports individual and swept edits; selected chord/scale stacks fit within one octave. See [editor controls](EDITORS.md). The duplicate tool places a copy after a note; group duplication preserves the group's spacing. The cut tool splits at the snapped pointer position. Glue joins same-pitch notes from their earliest start to latest end, including gaps; use the tool on two notes or **Glue selected** on a selection. Leaving Clip Editor clears note selection so arrangement edit commands act on the clip.
+The select tool supports dragging a rectangle around notes. Drag note bodies to change time/pitch, and either edge to change length. **Length** chooses the initial drawing duration from **Last note**, fixed note values, or **1 bar**; Last note starts at 1/16 and remembers the last drawn or selected length. Double-click empty space to create a note or a note to delete it. Drawing past the marked **Clip end** extends the clip with the new note in one Undo step. The velocity lane supports individual and swept edits; selected chord/scale stacks fit within one octave. See [editor controls](EDITORS.md). The duplicate tool places a copy after a note; group duplication preserves the group's spacing. The cut tool splits at the snapped pointer position. Glue joins compatible notes from their earliest start to latest end, including gaps; use the tool on two notes or **Glue selected** on a selection. Expressive notes remain independent during automatic containment cleanup so channel, attributes and per-note data cannot be discarded by a coarse pitch match. Leaving Clip Editor clears note selection so arrangement edit commands act on the clip.
 
-Select notes with the mouse or **Edit → Select all notes**, then open **Notes** for Randomize, Quantize, and Legato. These actions are available with every tool:
+Select notes with the mouse or **Edit → Select all notes**, then open **Notes** for Humanize, Quantize, lengths, flips and Legato. These actions are available with every tool:
 
-- **Randomize…** previews velocity variation (initially ±16). Set **Timing ±** for up to ±0.25 beats of onset variation; zero keeps the rhythm fixed. Pitch and length stay fixed. **New variation** changes the seed; **Apply randomize** commits the preview and **Cancel randomize** discards it.
+- **Humanize…** previews repeatable velocity and timing variation. **New variation** changes the seed; **Apply humanize** commits the preview and **Cancel humanize** discards it. Pitch and length stay fixed.
 - **Quantize…** previews alignment to the chosen beat grid, with Strength, Swing, and optional Note ends. Apply or cancel before continuing to edit.
 - **Notes → Legato top to bottom** connects the highest note at each onset to the next highest, then the second-highest, and so on. A missing lower voice bridges to its next appearance. Only selected note lengths change, and the last note in each voice retains its length. **Notes → Legato** instead connects every selected note to the next distinct onset, keeping simultaneous chords together.
 
-Each applied action is one Undo step. Randomize and Quantize leave the song unchanged until Apply; a song edit or clip change discards an obsolete preview.
+**Notes → Note lengths…** previews **Fixed**, **Grow** or **Shrink** in audible
+beats. Fixed uses one length; Grow/Shrink apply one group delta, limited by the
+shortest note, preserving length differences. **Apply lengths** commits one Undo
+step and **Cancel lengths** restores the preview. Starts and clip bounds stay
+fixed, and hidden expression data is retained. **Flip horizontally** mirrors
+selected note timing within its span; **Flip vertically** inverts selected
+pitches within their range. Shift-drag or Cmd/Ctrl-drag duplicates selected
+notes without changing the originals.
+
+Resizing selected note edges uses one group delta, limited by the shortest note
+or source zero. Shortening a note keeps later expression data available if it is
+extended again. Moving its start retains the latest expression state at the new
+edge and keeps later points at their original absolute time. Modifier-dragging
+an edge still resizes; duplication uses the note body.
+
+The MIDI editor's **Clip** menu and a clip's **MIDI timing and pitch** context
+submenu offer **Half time**, **Double time**, **Semitone up/down** and **Octave
+up/down**. Half time doubles duration, Double time halves it; both keep the
+start and source notes, affecting only that occurrence's stretch. Transpose
+changes the complete shared note source, including trimmed notes and ghosts.
+Bounds are checked before an edit. Clip **Quantize…**/**Humanize…** preview notes
+intersecting its audible window; the Notes versions use the selection.
+
+Each applied action is one Undo step. Humanize, Quantize and length previews
+leave the song unchanged until Apply. Cancel restores temporary folding/view
+changes; a song edit or clip change discards an obsolete preview. **Loop this
+clip** uses exact audio/MIDI/automation clip bounds without changing workspace.
+
+### Note expression
+
+Select one note and choose **Notes → Expression…**. The popup edits **Attack
+velocity** and **Release velocity** at 16-bit precision, and **Note pitch** at
+1/512 semitone resolution. Original MIDI 1.0 attack precision remains intact
+when editing another property. Mouse steppers and **123** support exact entry.
+
+Per-note **Pressure**, **Pitch bend**, **Registered controller** and **Assignable
+controller** entries use **After note** time in audible beats, an exact 32-bit
+value and a normalized slider. Controller entries also choose a controller
+number from 0–127. **Add point**, **Remove point** and **Center
+pitch** edit a local draft. These are timestamped packets, not interpolated
+automation segments. Unsupported raw event types remain retained/read-only
+unless explicitly removed. **Apply** commits once; Cancel, Escape or closing
+discards the draft. A stale source/session cannot apply over newer edits.
+The destination VST3 must support the relevant musical mapping to sound it.
+Per-note pitch-bend packets remain saved but are currently unsupported in
+playback; Rill does not assume an arbitrary range. Broader
+unsupported packet families and program changes are retained. A saved performance
+using multiple groups needs separate tracks for complete playback through the
+current VST3 event-bus mapping; an advisory identifies skipped data.
 
 ## Clips and looping
 
@@ -278,17 +328,93 @@ Drag either visible endpoint of the strip to adjust the loop directly. The drag 
 
 **Range → Duration** shows seconds and offers exact 5, 10, 15, 30, 60 and 120-second durations from the current loop start. Select a phrase and choose **Edit → Repeat to loop end** to fill that range, including a partial last copy. WAV export still renders the full arrangement once.
 
+## Freeze and return to originals
+
+Right-click an audio or MIDI clip and choose **Freeze clip**, or right-click its
+track name and choose **Freeze track**. Rill renders into new managed audio,
+places an audio track immediately below the source (below its output group for
+a multi-output instrument), and mutes the printed original clips in one Undo
+action. Track Freeze creates one clip from the first unmuted clip's position
+through the last clip and the channel's reported effect tail. A multi-output
+instrument prints all configured output channels together from one instance.
+Reported tails are capped at 30 seconds; a Freeze batch is limited to 512 MiB
+of decoded stereo float audio.
+
+The print includes clip processing, input gain and inserts. Volume, pan, sends
+and their automation remain editable on the new channels; Master processing
+stays live. Sidechain consumers retain their signal through parallel routes to
+the printed channels. When every original clip is frozen, the original channel
+and its instrument outputs are muted too. Other clips on a partly frozen track
+remain active. **Cancel Freeze**, a rendering error or a changed song discards
+the pending print without muting any originals.
+
+Use **Return to originals** from an original or printed track/clip context menu
+to restore the original clips and the channel mutes changed by Freeze. Printed
+tracks, audio files and edits stay in the project, with their printed clips
+muted. Unchanged sidechain route copies are removed; edited copies remain.
+Freeze and Return both support Undo/Redo and portable save/reopen. Splitting an
+original while frozen preserves its return references. Removing or joining away
+an original, or missing original media/plug-ins, can make Return unavailable;
+Rill keeps the printed audio intact and reports the missing original instead
+of discarding work. Frozen audio remains usable without the source instrument.
+
+Freeze clip prints that part in isolation through its channel. Use Freeze track
+for shared processing across overlapping MIDI parts. Audio clips overlapping
+unselected clips must be frozen together with Freeze track, so muting a clip
+cannot reveal an older clip beneath its printed audio.
+
 ## Effects, sends, and folders
 
-Mixer channels read from top to bottom: source, **Effects** and inserts, volume
-and pan, **Mute**/**Solo**, stereo **Level**, then **Output** and sends. The fader
-has a calibrated dB scale. Pan uses a simple ring with a separate readout: drag up or right to
-move toward R, down or left toward L; Shift makes adjustments finer. Pressing
-the dial does not jump its value. Its readout shows **C** at center and **L/R**
-percentages elsewhere. Right-click anywhere in the Pan row for exact percentage
-entry and automation. The full-width Mute/Solo row shows each active state clearly. The
-horizontal L/R meter measures the channel after volume and pan, while Master
-shows the final stereo output.
+Mixer channels read from source and **Gain** through **Effects**/inserts, pan,
+**Mute**/**Solo**, volume fader and level readouts, then **Output** and sends.
+Gain is pre-insert trim; Volume is after inserts. Pan is a balance rail with a
+small center point and **C** or **L/R** readout. Drag to adjust, Shift for finer
+movement, or right-click for exact entry and automation. Faders and stereo
+meters share a calibrated dB scale; amber Mute and green Solo make states clear.
+
+Master has the same Gain, inserts, pan and volume automation, plus Mute, with no
+Solo or sends. Its Effects/Channel controls expose the real processing chain.
+Master strips and Analyze measure after those controls, before device clipping,
+dry monitoring and click; the transport meter shows device output separately.
+
+Instrument outputs share a group header, **name · N outputs**. The primary
+channel starts expanded; auxiliary outputs start folded with their names,
+meters, M/S and routing available. The header expands/collapses all auxiliaries;
+each chevron controls one output. Revealing an output expands it. Folding is
+view state and never changes the sound. Expanded outputs have independent Gain,
+inserts, volume, pan, sends and output routing. Reordering keeps the instrument
+group together, while Shift left/right on an output moves among its siblings.
+
+**Analyze** offers Spectrum, Levels, Loudness, Correlation and Phase. Levels
+shows sample peak/hold, L/R RMS, an oversampled true-peak estimate/hold and overs
+counts. RMS uses a 300 ms exponential mean-square time constant, not a VU or
+boxcar measurement. True peak estimates inter-sample levels to at least 192 kHz
+(4× at 48 kHz, 8× at 44.1 kHz); it is not a certified compliance meter. Loudness
+uses K-weighted 400 ms/3 s windows and an approximate gated integrated LUFS
+reading. Reset, seek/restart or a target change starts a fresh measurement;
+Stop holds the last analyzer reading. Opening or switching views never edits
+the song.
+
+### Plug-in inputs and outputs
+
+Open **Window → Routing**, select the instrument/insert under **Plug-in inputs
+and outputs**, then choose **Inspect I/O**. Inspection first saves the native
+editor state and runs in a separate process. **Refresh I/O** checks a changed
+preset/configuration. Available ports use the plug-in's bus names and native
+primary mapping rather than assuming its main bus is number one.
+
+For an extra input pair, choose **Add source…**, its level and **Pre volume**
+when needed. Pre volume taps follow the source's inserts but precede volume/pan;
+otherwise the tap follows volume/pan. Several sources can sum into one pair.
+This connects sidechains and audio-input instruments; a processor must actually
+support that input. Feedback-producing choices are excluded. Ordinary insert
+input stays connected to its channel.
+
+Use **Enable output…** or **Enable all output channels** for an instrument.
+Wide buses appear as stereo pairs, with a final odd channel treated as mono.
+The instrument runs once; its outputs feed independent grouped mixer channels.
+**Show in Mixer** reveals one and **Remove output** removes its channel with
+Undo. These are stereo/mono channel pairs, not surround or Atmos routing.
 
 The Mixer toolbar places **Add send…** beside **Add bus**. Select a channel and
 choose **Add send…**, then an available bus, or **New bus and send** to create
@@ -347,8 +473,9 @@ entry; pan shows **C** at center and **L/R** percentages to either side. **M**
 mutes the track and **S** solos it. Clicking the color strip opens the color
 picker, while the name and grip retain track selection and reordering.
 
-The default header is 288 points wide and each normal row is 144 points high.
-Resize the header gutter or track's lower edge, or use **View → Track layout**.
+The default header is 288 points wide. **View → Track density** chooses Compact
+(64-point default), Standard (89) or Detailed (144); resize the header gutter or
+track's lower edge for temporary custom sizing.
 Compact tracks keep mix controls and expose the full channel through the small
 channel-controls button; they do not squeeze routing and instrument names into
 the title. Resizing the header or rows is view state and leaves the song and
@@ -356,7 +483,7 @@ its history intact.
 
 ## Automation
 
-Right-click a channel fader, pan control, or send level to enter an exact value;
+Right-click a channel Gain, volume fader, pan control, or send level to enter an exact value;
 Routing also opens it directly from the send's value button. The menu identifies
 the channel and parameter, plus the destination for a send, and shows a readable
 current value and allowed range. Hover the field for its full stored value.
@@ -369,10 +496,10 @@ headers. Volume entry uses dB (−60 dB means silence), pan uses −100% left th
 has a directly editable volume readout. Exact-entry fields retain fractional
 values; concise displays do not change their stored precision.
 
-Right-click a channel volume, pan, or send control and choose **Create automation** to start a lane at its current value. Track-header rails keep only a concise current value and pan center mark. Parameter sliders retain endpoint captions and adaptive tick scales, showing halves, fifths, or tenths. Mixer Pan uses a rotary position index with a current balance readout; its context menu accepts −100% left through 0% center to 100% right. Mixer volume keeps its vertical fader, dB scale and separate editable dB readout.
+Right-click a channel Gain, volume, pan, or send control and choose **Create automation** to start a lane at its current value. This includes Master and instrument-output channels. Master lanes appear as global automation rows above ordinary tracks; selecting one and returning to Mixer reveals Master. Gain is pre-insert trim (up to +24.08 dB); volume remains post-insert. Track-header rails keep concise values and a pan center point. Sliders retain endpoint captions and adaptive ticks; Mixer volume keeps its vertical fader, aligned dB scale and separate editable readout.
 
-An orange **A** identifies a control following automation, a coral **!** identifies
-a manual override, and a muted dash identifies bypassed automation. **Override
+An orange envelope/zigzag icon and border identify automation, while a coral-red
+highlight identifies a manual override; bypassed automation is muted. **Override
 automation** holds the current value without deleting the curve; **Resume
 automation** returns to the saved curve at the current playhead. Applying a new
 value to an automated control creates the same visible override as dragging it.
@@ -386,11 +513,11 @@ explicitly a normalized percentage, because plug-in
 unit names alone do not provide a physical-unit conversion. Stepped parameters
 use their declared steps when edited, and automation state remains visible.
 
-Select a channel, then choose **Track → Add automation track…**. Pick Volume, Pan, a send, or a VST3 parameter. Each parameter gets its own arrangement track. Double-click that lane, or choose **Window → Automation**, to open its editor.
+Select a channel, then choose **Track → Add automation track…**. Pick Gain, Volume, Pan, a send, or a VST3 parameter. Each parameter gets its own arrangement track. Double-click that lane, or choose **Window → Automation**, to open its editor.
 
 Click to add points, drag to move them, and use **Beat**, **Value**, or **Delete point** for precise edits. New lanes start with straight **Linear** segments. Drag a line up or down, or drag its midpoint diamond, to bend only that segment toward a logarithmic or exponential shape. This works in Arrangement lanes, automation patterns and the focused editor. Select its starting point or diamond for **Log**, **Linear**, **Exp**, or precise **Slope** controls. Both endpoints and neighboring segments stay fixed, with no overshoot. Clicking a line still adds a point; each drag is one undoable edit. Existing Step, Smooth and Spline projects keep their saved shapes.
 
-Volume and send-gain points show **Gain** in dB, matching the graph. Click the
+Input-gain, volume and send-gain points show **Gain** in dB, matching the graph. Click the
 readout for exact entry or the **123** mouse keypad; **Silence** sets zero gain.
 Manual gain overrides use the same units. **Fit** frames the existing points;
 **Fit song** shows the whole arrangement so you can place an ending fade even
@@ -424,7 +551,7 @@ Thumbnails and the plug-in index live in `~/Library/Caches/Rill` on macOS, `%LOC
 
 Choose the input and output devices in **Window → Setup → Audio**, then select an audio track and open **Window → Recording**. Choose **Mono 1**, another input channel, or a stereo pair; enable **Arm recording** and press **Record** in the popup or transport. Track headers also have an arm control. Recording starts at the transport cursor and can continue beyond the current arrangement. The popup's meter shows the raw input level.
 
-**Input monitor (dry)** offers **Off**, **Auto**, and **On**. Auto monitors armed tracks while stopped or recording and turns monitoring off during ordinary playback. On monitors even when the track is unarmed. Monitoring follows the channel and output buses' volume, pan, mute, and solo; it bypasses their inserts and sends. Recorded WAVs contain the selected raw input, independent of mixer levels, and monitoring is not included in export.
+**Input monitor (dry)** offers **Off**, **Auto**, and **On**. Auto monitors armed tracks while stopped or recording and turns monitoring off during ordinary playback. On monitors even when the track is unarmed. Monitoring follows channel/output-bus input gain, volume, pan, mute and solo, plus Master input gain, volume, pan and mute. It bypasses inserts and sends, including Master inserts, and joins device output after the Master meter/Analyze tap. Recorded WAVs contain the selected raw input, independent of mixer levels, and monitoring is not included in export.
 
 Enable the transport loop before recording to retain each pass as a separate take. The newest complete pass becomes audible; a partial final pass remains available without shortening that complete pass. Open **Takes…** to select whole passes or comp ranges with smooth or custom spline crossfades. **Record into → Overdub layer** creates a separate colored audio track with the source track's bus, folder, volume, and pan; inserts and sends are not copied. Existing clips and recorded sources remain intact. Each recording is one undoable edit.
 
@@ -432,9 +559,11 @@ Enable the transport loop before recording to retain each pass as a separate tak
 
 ### MIDI recording and pre-count
 
-Select a MIDI track and open **Window → Recording**. Choose the shared **MIDI device** and **All channels** or one channel, arm the track, then press **Record**. Arming MIDI initially enables **Auto** monitoring through its assigned plugin instrument; **Off** and **On** remain available. You can record notes without an instrument and assign one later. MIDI device selection is also available under **Setup → Audio**. Opening a project never arms tracks or opens MIDI inputs automatically.
+Select a MIDI track and open **Window → Recording**. Choose the shared **MIDI device** and **All channels** or one channel, arm the track, then press **Record**. **Input format** reports MIDI 1.0 or UMP; **UMP group** selects one of sixteen groups for the track. Legacy inputs use Group 1. Use separate tracks for other incoming groups; changing this selector does not rewrite existing clips. Arming MIDI initially enables **Auto** monitoring through its assigned plugin instrument; **Off** and **On** remain available. You can record notes without an instrument and assign one later. MIDI device selection is also available under **Setup → Audio**. Opening a project never arms tracks or opens MIDI inputs automatically.
 
-Each session adds a new MIDI clip on the existing instrument track. Existing clips remain intact and play alongside it, so recording over them overdubs their notes without creating another plugin instance. Loop passes accumulate in one clip, splitting held notes at the loop boundary. Recorded data includes note start/end, pitch, velocity, same-key retriggers, and sustain-pedal note lengths. Pitch bend, aftertouch, ordinary CC automation, and SysEx are not recorded. Audio and MIDI can be armed together and publish as one undoable edit.
+Each session adds a new MIDI clip on the existing instrument track. Existing clips remain intact and play alongside it, so recording over them overdubs their notes without creating another plugin instance. Loop passes accumulate in one clip, splitting held notes at the loop boundary. The project can retain high-resolution attack/release velocity, pitch attributes and controller/per-note UMP data alongside note timing and retriggers. MIDI 1.0 sustain extends note lengths; MIDI 2.0 preserves the actual key-release edge and sustain controller for the instrument. Original MIDI 1.0 attack velocity keeps its seven-bit precision. Audio and MIDI can be armed together and publish as one undoable edit.
+
+Native UMP input targets macOS 11 and newer. Linux and Windows currently use MIDI 1.0 input. VST3 does not carry raw UMP, so preserved project data and audible plug-in expression are different capabilities; the assigned instrument must support the relevant mapping. The macOS module has been compiler-checked, but physical UMP hardware and driver timing have not been verified here. MIDI-CI/profile negotiation and universal SysEx8 support are outside this implementation.
 
 **Pre-count** in the Recording popup offers **No pre-count**, **1 bar**, or **2 bars**. From stopped, the count uses project tempo/time signature while the cursor stays at the intended start. Notes and audio played before the cue are excluded; notes already held before it are not chased into the recording. Recording during existing playback starts without pre-count to keep backing audio uninterrupted. Stop during the count cancels without creating clips. MIDI audition pauses during pre-count while the existing instrument graph prepares the exact start; dry audio monitoring remains available, and MIDI monitoring resumes at the cue.
 
@@ -468,6 +597,13 @@ export. A failed Save inside **Save changes?** leaves that decision open. Normal
 picker cancellation stays silent. Other platforms retain their existing native
 picker behavior.
 
+Standard MIDI `.mid` export creates a constant-tempo MIDI 1.0 note file. If the
+project contains richer performance data, **Export MIDI 1.0 copy** first explains
+that high-resolution pitch/velocity will be reduced and UMP/per-note expression
+omitted. Choose **Export MIDI 1.0 copy…** to continue to the file picker or
+**Cancel**. The original `.rill` retains the full data. This is not a raw UMP or
+standard MIDI Clip File export.
+
 **File → Recent exports** keeps the current document's last five successful WAV/MIDI destinations. Choose an entry to copy its full path. This lets you check an earlier WAV after the MIDI completion appears. Re-exporting the same destination moves it to the front; failed or cancelled exports add no success entry. New/Open clears the list.
 
 ## Plug-in stability
@@ -476,7 +612,7 @@ Each VST3 instrument/effect instance runs in a separate `daw-plugin-host` proces
 
 This is crash isolation. Helpers retain the user's filesystem and network permissions; they are not an OS permission sandbox. Plug-in IPC runs on the render worker, away from the lock-free device callback. The helper must be next to `rill`, or specified by `DAW_PLUGIN_HOST`.
 
-VST3 audio, MIDI, latency, transport, effect inputs, native instrument/effect editors, parameter automation, and instrument/effect state recall are supported. Sidechains, a standalone preset browser, and CLAP/VST2/AU/AAX hosting are not included.
+VST3 audio, supported MIDI/expression mappings, latency, transport, auxiliary inputs, grouped instrument outputs, native instrument/effect editors, parameter automation and state recall are supported. A standalone preset browser and CLAP/VST2/AU/LV2/AAX hosting are not included. ARA requires a separate document/random-access integration; see the [format assessment](PRODUCT_DIRECTION.md#additional-plug-in-formats).
 
 ## Rendering and verification
 
@@ -492,7 +628,7 @@ cargo run --release -p daw-engine --example render_bench
 
 Real native plug-in tests are opt-in; commands and environment variables are in the test sources. Local validation exercised Surge XT and CHOWTapeModel, including forcibly terminated plug-in children, recovery, sample-offset MIDI, effect input, state roundtrips, and a routed chain with compensated bus latency.
 
-See [architecture and limitations](ARCHITECTURE.md) for the processing graph, real-time boundaries, file formats, and PDC model. Current media scope includes PCM/float WAV, MP3, FLAC and OGG/Vorbis import, audio input recording, and constant-tempo note MIDI; MIDI controller/expressive recording, disk-streamed playback, tempo maps, automatic tempo-following warp markers, and surround are not implemented. Volume, pan, note, and clip edits update the existing playback graph; failed audio preparation keeps the last valid audio playing. Structural, plugin-state, and device changes still rebuild playback and may briefly interrupt it. Cosmetic changes do not rebuild the graph, including Undo/Redo.
+See [architecture and limitations](ARCHITECTURE.md) for the processing graph, real-time boundaries, file formats and PDC model. Current media scope includes PCM/float WAV, MP3, FLAC and OGG/Vorbis import, audio input recording and constant-tempo MIDI with rich project performance data. Disk-streamed playback, tempo maps, automatic tempo-following warp markers and surround are not implemented. Input gain, volume, pan, note and clip edits update the existing playback graph; failed audio preparation keeps the last valid audio playing. Structural, plug-in-state and device changes still rebuild playback and may briefly interrupt it. Cosmetic changes do not rebuild the graph, including Undo/Redo.
 
 ## Build from source
 

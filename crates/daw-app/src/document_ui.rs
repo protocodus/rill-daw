@@ -226,6 +226,7 @@ impl DawApp {
 
     pub(crate) fn request_document_transition(&mut self, transition: DocumentTransition) {
         self.cancel_audio_import();
+        self.cancel_freeze();
         if self.document_guard.is_some() {
             return;
         }
@@ -260,6 +261,7 @@ impl DawApp {
             || self.recording_busy()
             || self.project_io_pending()
             || self.state_sync_pending()
+            || self.freeze_busy()
             || self.edit_dirty
             || self.drag.is_some()
         {
@@ -292,6 +294,7 @@ impl DawApp {
         match stage {
             Stage::Waiting
                 if !self.audio_import_busy()
+                    && !self.freeze_busy()
                     && !self.recording_busy()
                     && !self.project_io_pending()
                     && !self.state_sync_pending()

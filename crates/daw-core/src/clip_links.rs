@@ -7,7 +7,7 @@ use std::collections::HashMap;
 /// Canonical source representation strips only instance-local audio settings.
 /// MIDI note IDs identify shared events, so editing another instance does not
 /// invalidate note selection or require a fragile positional correspondence.
-fn shared_source(clip: &Clip) -> (String, ClipContent) {
+fn shared_source(clip: &Clip) -> (String, ClipContent, Vec<crate::MidiClipEvent>) {
     let mut content = clip.content.clone();
     if let ClipContent::Audio {
         envelope,
@@ -23,7 +23,7 @@ fn shared_source(clip: &Clip) -> (String, ClipContent) {
         *crossfade = None;
         *boundary_fades = None;
     }
-    (clip.name.clone(), content)
+    (clip.name.clone(), content, clip.midi_events.clone())
 }
 
 // Compare borrowed source fields: validation and unrelated UI edits must not
@@ -73,16 +73,19 @@ fn same_content(a: &ClipContent, a_length: f64, b: &ClipContent, b_length: f64) 
 }
 
 fn same_source(a: &Clip, b: &Clip) -> bool {
-    a.name == b.name && same_content(&a.content, a.source_length(), &b.content, b.source_length())
+    a.name == b.name
+        && a.midi_events == b.midi_events
+        && same_content(&a.content, a.source_length(), &b.content, b.source_length())
 }
 
 fn explicit_envelope(clip: &Clip) -> bool {
     !matches!(clip.content, ClipContent::Audio { envelope: None, .. })
 }
 
-fn apply_source(clip: &mut Clip, source: &(String, ClipContent)) {
+fn apply_source(clip: &mut Clip, source: &(String, ClipContent, Vec<crate::MidiClipEvent>)) {
     if explicit_envelope(clip)
         && clip.name == source.0
+        && clip.midi_events == source.2
         && same_content(&clip.content, clip.source_length(), &source.1, 0.0)
     {
         return;
@@ -112,6 +115,7 @@ fn apply_source(clip: &mut Clip, source: &(String, ClipContent)) {
     }
     clip.name.clone_from(&source.0);
     clip.content = content;
+    clip.midi_events.clone_from(&source.2);
 }
 
 impl Project {
@@ -151,11 +155,14 @@ impl Project {
     /// MIDI events receive independent IDs; the clip instance ID stays stable.
     pub fn make_clip_independent(&mut self, track_id: u64, clip_id: u64) -> Result<()> {
         let clip = self.clip_mut(track_id, clip_id).context("Clip not found")?;
-        if clip.link_group.take().is_some()
-            && let ClipContent::Midi { notes } = &mut clip.content
-        {
-            for note in notes {
-                note.id = new_id();
+        if clip.link_group.take().is_some() {
+            if let ClipContent::Midi { notes } = &mut clip.content {
+                for note in notes {
+                    note.refresh_identity();
+                }
+            }
+            for event in &mut clip.midi_events {
+                event.id = new_id();
             }
         }
         Ok(())

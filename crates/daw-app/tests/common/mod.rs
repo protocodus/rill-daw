@@ -62,6 +62,21 @@ impl Harness {
         )
     }
 
+    /// Hold only this app child's Freeze worker for deterministic cancellation
+    /// and stale-publication checks; normal launches never read this variable.
+    pub fn with_freeze_delay(delay_ms: u64) -> Self {
+        let directory = tempfile::tempdir().expect("create isolated Freeze E2E directory");
+        Self::launch_configured_with_environment(
+            None,
+            directory,
+            None,
+            None,
+            false,
+            false,
+            &[("RILL_E2E_FREEZE_DELAY_MS", delay_ms.to_string().into())],
+        )
+    }
+
     /// Like `with_plugin_host`, with the desktop's automatic background
     /// capture of missing previews. Only supply a test editor worker here.
     pub fn with_plugin_previews(path: &std::path::Path, host: &std::path::Path) -> Self {

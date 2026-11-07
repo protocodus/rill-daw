@@ -73,6 +73,7 @@ pub enum AutomationNavigation {
 /// application's song model. Every surface uses the same exact target.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AutomationControl {
+    InputGain { track: u64 },
     Gain { track: u64 },
     Pan { track: u64 },
     Send { track: u64, bus: u64 },

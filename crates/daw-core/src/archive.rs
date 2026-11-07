@@ -41,7 +41,7 @@ pub(crate) fn save(project: &Project, path: &Path) -> Result<()> {
     let mut names: HashMap<PathBuf, String> = HashMap::new();
     let mut assets = Vec::new();
     let mut total = 0u64;
-    for track in &mut portable.tracks {
+    for track in portable.channels_mut() {
         if let Instrument::Vst3 { path, .. } = &mut track.instrument {
             absolute_plugin(path, &base);
         }
@@ -97,7 +97,7 @@ pub(crate) fn save(project: &Project, path: &Path) -> Result<()> {
         serde_json::to_writer(
             &mut writer,
             &ProjectFile {
-                version: 4,
+                version: 6,
                 project: portable,
             },
         )?;
@@ -222,7 +222,7 @@ pub(crate) fn load(path: &Path, scratch: &Path) -> Result<Project> {
     );
     let envelope: ProjectFile = serde_json::from_slice(&bytes).context("Read project manifest")?;
     ensure!(
-        (1..=4).contains(&envelope.version),
+        (1..=6).contains(&envelope.version),
         "Unsupported project bundle version {}",
         envelope.version
     );

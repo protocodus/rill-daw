@@ -487,6 +487,16 @@ impl PluginInternal for IsolatedPluginImpl {
         }
     }
 
+    fn audio_bus_details(&self) -> Result<crate::audio::AudioBusDetailsLayout> {
+        match self.send_command(HostCommand::AudioBusDetails)? {
+            HostResponse::AudioBusDetails { details } => Ok(details),
+            HostResponse::Error { message } => {
+                Err(Error::Other(format!("AudioBusDetails: {message}")))
+            }
+            _ => Err(Error::Other("AudioBusDetails: unexpected response".into())),
+        }
+    }
+
     fn process_buses(&mut self, buffers: &mut BusAudioBuffers) -> Result<()> {
         let frames = buffers
             .outputs

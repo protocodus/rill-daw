@@ -782,10 +782,18 @@ impl InputController {
                     factors = [0.0; 2];
                     break;
                 }
-                factors[0] *= track.gain * (1.0 - track.pan.max(0.0));
-                factors[1] *= track.gain * (1.0 + track.pan.min(0.0));
+                factors[0] *= track.input_gain * track.gain * (1.0 - track.pan.max(0.0));
+                factors[1] *= track.input_gain * track.gain * (1.0 + track.pan.min(0.0));
                 current = track.output_bus;
             }
+            // Monitoring is explicitly dry and bypasses inserts, but the final
+            // Master trim/volume/balance and mute still govern its output.
+            let master = &project.master;
+            if master.mute {
+                factors = [0.0; 2];
+            }
+            factors[0] *= master.input_gain * master.gain * (1.0 - master.pan.max(0.0));
+            factors[1] *= master.input_gain * master.gain * (1.0 + master.pan.min(0.0));
             match route.channels {
                 AudioInputChannels::Mono { channel } => {
                     matrix[channel as usize][0] += factors[0];

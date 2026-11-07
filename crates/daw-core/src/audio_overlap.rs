@@ -139,7 +139,7 @@ impl AudioSchedule {
     pub fn new(clips: &[Clip]) -> Result<Self> {
         let mut events = Vec::with_capacity(clips.len() * 2);
         for (index, clip) in clips.iter().enumerate() {
-            if clip.is_take_source() {
+            if clip.is_take_source() || clip.muted {
                 continue;
             }
             if let ClipContent::Audio { crossfade, .. } = clip.content {

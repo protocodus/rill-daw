@@ -105,6 +105,14 @@ impl DawApp {
                 lufs_integrated: snapshot.lufs_integrated,
                 peak_dbfs: snapshot.peak_dbfs,
                 rms_dbfs: snapshot.rms_dbfs,
+                rms_300ms_dbfs: snapshot.rms_300ms_dbfs,
+                channel_rms_300ms_dbfs: snapshot.channel_rms_300ms_dbfs,
+                channel_peak_dbfs: snapshot.channel_peak_dbfs,
+                sample_peak_hold_dbfs: snapshot.sample_peak_hold_dbfs,
+                true_peak_dbfs: snapshot.true_peak_dbfs,
+                true_peak_hold_dbfs: snapshot.true_peak_hold_dbfs,
+                true_peak_oversampling: snapshot.true_peak_oversampling,
+                overload_samples: snapshot.overload_samples,
                 correlation: snapshot.correlation,
                 phase: &snapshot.phase,
             });
@@ -138,7 +146,7 @@ impl DawApp {
                         done = daw_ui::quiet_button(ui, "Done").clicked();
                         reset = daw_ui::quiet_button(ui, "Reset measurement").clicked();
                     }, |ui| { daw_ui::hover_text(daw_ui::text::note(ui, status), match self.analysis.target {
-                        SignalMonitorTarget::Master => "Master sum before device clipping, dry input monitoring and metronome",
+                        SignalMonitorTarget::Master => "Post-insert Master output, after volume and pan; before device clipping, dry input monitoring and metronome",
                         SignalMonitorTarget::Channel(_) => "Channel after inserts, volume, pan and mute; before output/send destination gain",
                     }); });
                 });
@@ -184,6 +192,14 @@ impl DawApp {
             "spectrum_db":snapshot.spectrum_db,"lufs_momentary":snapshot.lufs_momentary,
             "lufs_short_term":snapshot.lufs_short_term,"lufs_integrated":snapshot.lufs_integrated,
             "peak_dbfs":snapshot.peak_dbfs,"rms_dbfs":snapshot.rms_dbfs,
+            "rms_300ms_dbfs":snapshot.rms_300ms_dbfs,
+            "channel_rms_300ms_dbfs":snapshot.channel_rms_300ms_dbfs,
+            "channel_peak_dbfs":snapshot.channel_peak_dbfs,
+            "sample_peak_hold_dbfs":snapshot.sample_peak_hold_dbfs,
+            "true_peak_dbfs":snapshot.true_peak_dbfs,
+            "true_peak_hold_dbfs":snapshot.true_peak_hold_dbfs,
+            "true_peak_oversampling":snapshot.true_peak_oversampling,
+            "overload_samples":snapshot.overload_samples,
             "correlation":snapshot.correlation,"phase":snapshot.phase,
         })).unwrap_or(Value::Null);
         result

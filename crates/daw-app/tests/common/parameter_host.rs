@@ -75,6 +75,29 @@ fn main() {
                     "[]"
                 }
             )
+        } else if line == "\"AudioBusDetails\"" {
+            format!(
+                r#"{{"AudioBusDetails":{{"details":{{"inputs":{},"outputs":[{{"name":"Main output","channels":2,"active":true,"main":true}}]}}}}}}"#,
+                if effect {
+                    r#"[{"name":"Main input","channels":2,"active":true,"main":true}]"#
+                } else {
+                    "[]"
+                }
+            )
+        } else if line.contains("\"NoteExpressions\"") {
+            r#"{"NoteExpressions":{"expressions":[]}}"#.to_owned()
+        } else if line.contains("\"MidiControllerAssignments\"") {
+            r#"{"MidiControllerAssignments":{"assignments":[]}}"#.to_owned()
+        } else if matches!(
+            line.as_str(),
+            "\"ServiceHostRequests\"" | "\"TakeRestartFlags\""
+        ) {
+            r#"{"RestartFlags":{"bits":0}}"#.to_owned()
+        } else if line == "\"BusArrangements\"" {
+            format!(
+                r#"{{"BusArrangements":{{"arrangements":{{"inputs":{},"outputs":[3]}}}}}}"#,
+                if effect { "[3]" } else { "[]" }
+            )
         } else if line == "\"LatencySamples\"" {
             r#"{"LatencySamples":{"samples":0}}"#.to_owned()
         } else if line == "\"TailSamples\"" {

@@ -36,6 +36,10 @@ enum Edit {
     Command(u64, u64, ClipCommand),
     Erase(u64, u64),
     LoopRange(f64, f64),
+    Freeze(u64, Option<Vec<u64>>),
+    Unfreeze(u64),
+    MidiTransform(u64, u64, daw_ui::MidiClipAction),
+    ClipMuted(u64, u64, bool),
     New(u64, f64),
     Mute(u64),
     Solo(u64),
@@ -534,6 +538,20 @@ impl DawApp {
         let content_width = (ui.available_width() - 12.0).max(header_width + 1.0);
         let pattern_start = self.snapped(self.cursor).max(0.0);
         let mut edits = Vec::new();
+        let freeze_channels: std::collections::HashSet<_> = self
+            .project
+            .tracks
+            .iter()
+            .filter(|track| self.can_freeze(track.id, None))
+            .map(|track| track.id)
+            .collect();
+        let unfreeze_channels: std::collections::HashSet<_> = self
+            .project
+            .tracks
+            .iter()
+            .filter(|track| self.can_unfreeze(track.id))
+            .map(|track| track.id)
+            .collect();
         let clip_edge_drag_id = egui::Id::new("arrangement_clip_edge_drag");
         let mut clip_edge_drag = ui
             .ctx()
@@ -1005,7 +1023,7 @@ impl DawApp {
                                     match control {
                                         daw_ui::AutomationControl::Gain { .. } => { gain = daw_ui::channel_gain_from_db(value as f32); exact_gain = true; }
                                         daw_ui::AutomationControl::Pan { .. } => { pan = (value / 100.0) as f32; exact_pan = true; }
-                                        daw_ui::AutomationControl::Send { .. } => {}
+                                        daw_ui::AutomationControl::Send { .. } | daw_ui::AutomationControl::InputGain { .. } => {}
                                     }
                                 }
                             }
@@ -1097,6 +1115,17 @@ impl DawApp {
                         {
                             edits.push(Edit::New(track.id, pattern_start));
                             ui.close();
+                        }
+                        if matches!(track.kind, TrackKind::Audio | TrackKind::Midi)
+                            && ui.add_enabled(freeze_channels.contains(&track.id), daw_ui::button_widget("Freeze track"))
+                                .on_hover_text("Print this channel's clips and insert processing to new audio tracks below; retain and mute the originals")
+                                .clicked()
+                            {
+                                edits.push(Edit::Freeze(track.id, None));
+                                ui.close();
+                        }
+                        if unfreeze_channels.contains(&track.id) && daw_ui::button(ui, "Return to originals").clicked() {
+                            edits.push(Edit::Unfreeze(track.id)); ui.close();
                         }
                         if track.kind == TrackKind::Folder && daw_ui::button(ui, "Add subfolder").clicked() {
                             edits.push(Edit::Folder(Some(track.id)));
@@ -1213,7 +1242,7 @@ impl DawApp {
                             continue;
                         }
                         let p = p.with_clip_rect(Rect::from_min_max(Pos2::new(grid_left, row.top()), Pos2::new(canvas.right(), row.bottom())));
-                        let col = color(track_color);
+                        let col = color(track_color).gamma_multiply(if clip.muted { 0.38 } else { 1.0 });
                         let is_selected = self.arranger_selection.ids.contains(&clip.id);
                         let surface = daw_ui::clip_surface_named(&p, rect, col, is_selected, &clip.name);
                         let cp = p.with_clip_rect(rect.shrink(3.0).intersect(Rect::from_min_max(
@@ -1223,7 +1252,7 @@ impl DawApp {
                         folder_rows[row_index].color = color(track_color);
                     let rect_json = |rect: Rect| serde_json::json!({"min": [rect.min.x,rect.min.y], "max": [rect.max.x,rect.max.y]});
                         let visible_clip = rect.intersect(Rect::from_min_max(Pos2::new(grid_left, row.top()), Pos2::new(canvas.right(), row.bottom())));
-                        clip_diagnostics.push(serde_json::json!({"id":clip.id,"track":track.id,"rect":rect_json(rect),"visible_rect":rect_json(visible_clip),"title_rect":rect_json(surface.title),"content_rect":rect_json(surface.content),"name_hit_rect":rect_json(surface.name_hit),"named_header":!clip.name.trim().is_empty(),"linked":clip.link_group.is_some(),"link_icon":title.icon.map(rect_json)}));
+                        clip_diagnostics.push(serde_json::json!({"id":clip.id,"track":track.id,"rect":rect_json(rect),"visible_rect":rect_json(visible_clip),"title_rect":rect_json(surface.title),"content_rect":rect_json(surface.content),"name_hit_rect":rect_json(surface.name_hit),"named_header":!clip.name.trim().is_empty(),"linked":clip.link_group.is_some(),"muted":clip.muted,"link_icon":title.icon.map(rect_json)}));
                         if !compact && row_height >= 44.0 {
                             match &clip.content {
                                 ClipContent::Midi { notes } => {
@@ -1568,6 +1597,35 @@ impl DawApp {
                                 self.selected_notes.clear();
                                 popup = Some(PopupKind::Inspector);
                                 ui.close();
+                            }
+                            if daw_ui::button(ui, "Loop this clip")
+                                .on_hover_text("Set the loop to this clip's exact bounds and enable looping")
+                                .clicked()
+                            {
+                                edits.push(Edit::LoopRange(clip.start, clip.end()));
+                                ui.close();
+                            }
+                            if ui.add_enabled(freeze_channels.contains(&track.id) && !clip.muted, daw_ui::button_widget("Freeze clip"))
+                                .on_hover_text("Print this clip with its channel's insert processing to new audio below; retain and mute the original")
+                                .clicked()
+                            {
+                                edits.push(Edit::Freeze(track.id, Some(vec![clip.id])));
+                                ui.close();
+                            }
+                            if unfreeze_channels.contains(&track.id) && daw_ui::button(ui, "Return to originals").clicked() {
+                                edits.push(Edit::Unfreeze(track.id)); ui.close();
+                            }
+                            if daw_ui::button(ui, if clip.muted { "Unmute clip" } else { "Mute clip" }).clicked() {
+                                edits.push(Edit::ClipMuted(track.id, clip.id, !clip.muted));
+                                ui.close();
+                            }
+                            if matches!(clip.content, ClipContent::Midi { .. }) {
+                                daw_ui::choice_menu(ui, "MIDI timing and pitch", |ui| {
+                                    if let Some(action) = daw_ui::midi_clip_action_menu_contents(ui,
+                                        crate::clip_actions::midi_clip_action_availability(clip)) {
+                                        edits.push(Edit::MidiTransform(track.id, clip.id, action));
+                                    }
+                                });
                             }
                             // Same order as the Edit menu: open, select, clipboard,
                             // name, structure, transitions, playback, delete.
@@ -2156,6 +2214,9 @@ impl DawApp {
                     | Edit::GroupMove(..)
                     | Edit::TransferGroup(..)
                     | Edit::LoopRange(..)
+                    | Edit::Freeze(..)
+                    | Edit::Unfreeze(..)
+                    | Edit::MidiTransform(..)
                     | Edit::Erase(..)
             ) {
                 self.begin_edit();
@@ -2230,6 +2291,22 @@ impl DawApp {
                 Edit::LoopRange(start, end) => {
                     self.loop_range(start, end);
                     continue;
+                }
+                Edit::Freeze(track, clips) => {
+                    self.request_freeze(track, clips);
+                    continue;
+                }
+                Edit::Unfreeze(track) => {
+                    self.unfreeze(track);
+                    continue;
+                }
+                Edit::MidiTransform(track, clip, action) => {
+                    self.apply_midi_clip_action(track, clip, action);
+                    continue;
+                }
+                Edit::ClipMuted(track, clip, muted) => {
+                    self.edit_label = Some(if muted { "Mute clip" } else { "Unmute clip" }.into());
+                    self.project.set_clip_muted(track, clip, muted)
                 }
                 Edit::Bounds(t, c, original, start, length, stretch) => {
                     if self.project.clip(t, c).is_some_and(|clip| {
@@ -2494,6 +2571,9 @@ impl DawApp {
                 let (track, parameter) = match control {
                     daw_ui::AutomationControl::Gain { track } => {
                         (track, AutomationParameter::TrackGain)
+                    }
+                    daw_ui::AutomationControl::InputGain { track } => {
+                        (track, AutomationParameter::TrackInputGain)
                     }
                     daw_ui::AutomationControl::Pan { track } => {
                         (track, AutomationParameter::TrackPan)
@@ -2911,12 +2991,70 @@ impl DawApp {
             track: id,
             parameter: AutomationParameter::TrackPan,
         };
+        let input_target = AutomationTarget {
+            track: id,
+            parameter: AutomationParameter::TrackInputGain,
+        };
+        let input_automation = self.automation_control_state(input_target);
         let gain_automation = self.automation_control_state(gain_target);
         let pan_automation = self.automation_control_state(pan_target);
         let mut overrides = Vec::new();
         if let Some(track) = self.project.track_mut(id) {
             daw_ui::form_grid(ui, "channel_properties", |ui| {
-                let label = daw_ui::form_label(ui, "Gain");
+                let label = daw_ui::form_label(ui, "Input gain");
+                daw_ui::parameter_row(ui, |ui| {
+                    let mut gain = input_automation
+                        .filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
+                        .map(|(_, _, value)| AutomationParameter::TrackInputGain.denormalize(value))
+                        .unwrap_or(track.input_gain);
+                    let response = ui
+                        .add(
+                            daw_ui::slider(&mut gain, AutomationParameter::TrackInputGain.range())
+                                .zero_reference(1.0)
+                                .clamping(egui::SliderClamping::Edits)
+                                .endpoint_labels("−∞ dB", "+24 dB")
+                                .show_value(false),
+                        )
+                        .labelled_by(label.id)
+                        .on_hover_text("Trim the source signal before the insert chain");
+                    if let Some((_, state, _)) = input_automation {
+                        daw_ui::paint_automation_control(ui, &response, state);
+                    }
+                    let numeric = daw_ui::gain_value_button(
+                        ui,
+                        "channel_input_gain",
+                        &mut gain,
+                        16.0,
+                        "Gain",
+                    );
+                    let response = response.union(numeric);
+                    let (action, exact) = daw_ui::automatable_parameter_value_context_named(
+                        ui,
+                        &response,
+                        daw_ui::AutomationControl::InputGain { track: id },
+                        input_automation.map(|(lane, state, _)| (lane, state)),
+                        f64::from(daw_ui::channel_gain_to_db(gain)),
+                        -60.0..=f64::from(20.0 * 16.0_f32.log10()),
+                        "dB",
+                        &format!("{} · Input gain", track.name),
+                    );
+                    if let Some(action) = action {
+                        navigation = Some(action);
+                    }
+                    if let Some(value) = exact {
+                        gain = daw_ui::channel_gain_from_db(value as f32);
+                    }
+                    if response.changed() || exact.is_some() {
+                        track.input_gain = gain;
+                        changed = true;
+                        overrides.push((
+                            input_target,
+                            AutomationParameter::TrackInputGain.normalize(gain),
+                        ));
+                    }
+                });
+                ui.end_row();
+                let label = daw_ui::form_label(ui, "Volume");
                 daw_ui::parameter_row(ui, |ui| {
                     let mut gain = gain_automation
                         .filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
@@ -3059,7 +3197,9 @@ impl DawApp {
                 daw_ui::form_label(ui, "Playback");
                 ui.horizontal(|ui| {
                     changed |= daw_ui::toggle(ui, &mut track.mute, "Mute").changed();
-                    changed |= daw_ui::toggle(ui, &mut track.solo, "Solo").changed();
+                    if id != daw_core::MASTER_CHANNEL_ID {
+                        changed |= daw_ui::toggle(ui, &mut track.solo, "Solo").changed();
+                    }
                 });
                 ui.end_row();
                 let label = daw_ui::form_label(ui, "Path latency");

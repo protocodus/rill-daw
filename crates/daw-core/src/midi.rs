@@ -3,6 +3,7 @@ use anyhow::{Context, Result, bail, ensure};
 use midly::{Format, Header, MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind};
 use std::{
     collections::{HashMap, VecDeque},
+    io::Write,
     path::Path,
 };
 
@@ -189,18 +190,25 @@ pub fn export_midi(project: &Project, path: impl AsRef<Path>) -> Result<()> {
                 let on_tick = to_tick(clip.start + clip.source_to_local(start), PPQ)?;
                 let off_tick =
                     to_tick(clip.start + clip.source_to_local(end), PPQ)?.max(on_tick + 1);
-                events.push((on_tick, 1u8, note.pitch, note.velocity));
-                events.push((off_tick, 0u8, note.pitch, 0u8));
+                let note_channel = note.midi2.as_ref().map_or(channel, |data| data.channel);
+                events.push((on_tick, 1u8, note.pitch, note.velocity, note_channel));
+                events.push((
+                    off_tick,
+                    0u8,
+                    note.pitch,
+                    (note.release_velocity16() >> 9) as u8,
+                    note_channel,
+                ));
             }
         }
         // Note-off precedes note-on at equal ticks for retriggered notes.
-        events.sort_unstable_by_key(|event| (event.0, event.1, event.2));
+        events.sort_unstable_by_key(|event| (event.0, event.1, event.2, event.4));
         let mut output = vec![TrackEvent {
             delta: 0.into(),
             kind: TrackEventKind::Meta(MetaMessage::TrackName(track.name.as_bytes())),
         }];
         let mut last_tick = 0;
-        for (tick, on, pitch, velocity) in events {
+        for (tick, on, pitch, velocity, note_channel) in events {
             let delta = tick - last_tick;
             ensure!(
                 delta <= 0x0fff_ffff,
@@ -209,7 +217,7 @@ pub fn export_midi(project: &Project, path: impl AsRef<Path>) -> Result<()> {
             output.push(TrackEvent {
                 delta: delta.into(),
                 kind: TrackEventKind::Midi {
-                    channel: channel.into(),
+                    channel: note_channel.into(),
                     message: if on == 1 {
                         MidiMessage::NoteOn {
                             key: pitch.into(),
@@ -218,7 +226,7 @@ pub fn export_midi(project: &Project, path: impl AsRef<Path>) -> Result<()> {
                     } else {
                         MidiMessage::NoteOff {
                             key: pitch.into(),
-                            vel: 0.into(),
+                            vel: velocity.into(),
                         }
                     },
                 },
@@ -238,7 +246,29 @@ pub fn export_midi(project: &Project, path: impl AsRef<Path>) -> Result<()> {
         },
         tracks,
     };
-    smf.save(path).context("Write MIDI file")
+    write_midi_atomically(path.as_ref(), |file| {
+        smf.write_std(file).context("Write MIDI file")
+    })
+}
+
+fn write_midi_atomically(
+    path: &Path,
+    write: impl FnOnce(&mut std::fs::File) -> Result<()>,
+) -> Result<()> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let mut temporary = tempfile::Builder::new()
+        .prefix(".rill-midi-")
+        .tempfile_in(parent)?;
+    write(temporary.as_file_mut())?;
+    temporary.as_file_mut().flush()?;
+    temporary.as_file().sync_all()?;
+    temporary
+        .persist(path)
+        .context("Atomically replace MIDI file")?;
+    Ok(())
 }
 
 fn to_tick(beat: f64, ppq: u16) -> Result<u32> {
@@ -285,5 +315,28 @@ impl Project {
 
     pub fn export_midi(&self, path: impl AsRef<Path>) -> Result<()> {
         export_midi(self, path)
+    }
+}
+
+#[cfg(test)]
+mod atomic_midi_tests {
+    use super::*;
+
+    #[test]
+    fn failed_staged_write_preserves_destination_and_cleans_partial_output() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("existing.mid");
+        std::fs::write(&path, b"original delivery").unwrap();
+        let result = write_midi_atomically(&path, |file| {
+            file.write_all(b"partial output")?;
+            bail!("simulated writer failure")
+        });
+        assert!(result.is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"original delivery");
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+        let mut invalid = Project::new();
+        invalid.tempo = f64::NAN;
+        assert!(invalid.export_midi(&path).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"original delivery");
     }
 }

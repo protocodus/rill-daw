@@ -34,6 +34,12 @@ pub(crate) type EditorStateSignature =
 enum PendingAction {
     Save(PathBuf),
     Export(PathBuf, crate::export_ui::ExportSpecification),
+    Freeze {
+        track: u64,
+        clips: Option<Vec<u64>>,
+    },
+    Unfreeze(u64),
+    InspectIo(crate::plugin_io::IoTarget),
     Quit,
     New,
     Recovery,
@@ -53,6 +59,9 @@ impl PendingAction {
         matches!(
             self,
             Self::Quit
+                | Self::Freeze { .. }
+                | Self::Unfreeze(_)
+                | Self::InspectIo(_)
                 | Self::New
                 | Self::Open { .. }
                 | Self::ApplySettings(_)
@@ -420,6 +429,35 @@ impl DawApp {
             self.document_snapshot_ready();
         } else if !self.state_sync_pending() {
             self.document_snapshot_failed(self.status.clone());
+        }
+    }
+
+    pub(crate) fn request_freeze_snapshot(&mut self, track: u64, clips: Option<Vec<u64>>) {
+        if let Some(PendingAction::Freeze { track, clips }) =
+            self.defer_for_editor(PendingAction::Freeze { track, clips })
+        {
+            self.begin_freeze(track, clips);
+        }
+    }
+
+    pub(crate) fn request_unfreeze_snapshot(&mut self, track: u64) {
+        if let Some(PendingAction::Unfreeze(track)) =
+            self.defer_for_editor(PendingAction::Unfreeze(track))
+        {
+            self.begin_unfreeze(track);
+        }
+    }
+
+    pub(crate) fn request_plugin_io_inspection(
+        &mut self,
+        ctx: &egui::Context,
+        target: crate::plugin_io::IoTarget,
+    ) {
+        self.flush_pending_edit();
+        if let Some(PendingAction::InspectIo(target)) =
+            self.defer_for_editor(PendingAction::InspectIo(target))
+        {
+            self.begin_plugin_io_inspection(ctx, target);
         }
     }
 
@@ -1686,6 +1724,9 @@ impl DawApp {
         match action {
             PendingAction::Save(path) => self.finish_project_save(path),
             PendingAction::Export(path, specification) => self.start_export(path, specification),
+            PendingAction::Freeze { track, clips } => self.begin_freeze(track, clips),
+            PendingAction::Unfreeze(track) => self.begin_unfreeze(track),
+            PendingAction::InspectIo(target) => self.begin_plugin_io_inspection(_ctx, target),
             PendingAction::New => self.finish_new_session(),
             PendingAction::Recovery => self.autosave_recovery(),
             PendingAction::DocumentSnapshot { .. } => self.document_snapshot_ready(),

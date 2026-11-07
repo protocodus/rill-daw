@@ -354,6 +354,66 @@ pub fn mixer_mute_solo(
     .inner
 }
 
+/// Narrow output strips use familiar M/S captions with full accessible names
+/// and the same color/state treatment as the full console switches.
+pub fn mixer_folded_mute_solo(
+    ui: &mut Ui,
+    mute: &mut bool,
+    solo: &mut bool,
+    width: f32,
+) -> MixerMuteSoloResponse {
+    let height = crate::mixer_control_height(ui);
+    ui.allocate_ui_with_layout(
+        Vec2::new(width, height),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            let gap = crate::tokens::SPACE_XS;
+            ui.spacing_mut().item_spacing.x = gap;
+            ui.spacing_mut().button_padding.x = 2.0;
+            MixerMuteSoloResponse {
+                mute: mixer_switch(ui, mute, "M", (width - gap) * 0.5, true),
+                solo: mixer_switch(ui, solo, "S", (width - gap) * 0.5, false),
+            }
+        },
+    )
+    .inner
+}
+
+/// Master has no meaningful solo destination; retain its output mute while
+/// sharing the same pan and switch baselines as ordinary channel strips.
+pub fn mixer_master_pan_row(
+    ui: &mut Ui,
+    pan: &mut f32,
+    mute: &mut bool,
+    width: f32,
+) -> MixerPanRowResponse {
+    let height =
+        crate::tokens::COMPACT_HEIGHT + crate::MIXER_ROW_GAP + crate::mixer_control_height(ui);
+    ui.allocate_ui_with_layout(
+        Vec2::new(width, height),
+        egui::Layout::top_down(egui::Align::Min),
+        |ui| {
+            ui.set_min_size(Vec2::new(width, height));
+            ui.spacing_mut().item_spacing.y = crate::MIXER_ROW_GAP;
+            let pan = mixer_pan(ui, pan, width);
+            let (mute, solo) = ui
+                .horizontal(|ui| {
+                    let gap = crate::tokens::SPACE_XS;
+                    ui.spacing_mut().item_spacing.x = gap;
+                    let mute = mixer_switch(ui, mute, "Mute", (width - gap) * 0.5, true);
+                    let (_, solo) = ui.allocate_exact_size(
+                        Vec2::new((width - gap) * 0.5, crate::mixer_control_height(ui)),
+                        egui::Sense::hover(),
+                    );
+                    (mute, solo)
+                })
+                .inner;
+            MixerPanRowResponse { pan, mute, solo }
+        },
+    )
+    .inner
+}
+
 fn mixer_switch(ui: &mut Ui, value: &mut bool, label: &str, width: f32, mute: bool) -> Response {
     let colors = crate::theme::palette(ui.ctx());
     let accent = if mute { colors.mute } else { colors.solo };
@@ -364,6 +424,7 @@ fn mixer_switch(ui: &mut Ui, value: &mut bool, label: &str, width: f32, mute: bo
         Vec2::new(width, height),
         crate::IconButton::new(label)
             .min_size(Vec2::new(width, height))
+            .truncate()
             .label_color(if *value {
                 crate::theme::contrast_text(accent)
             } else {
@@ -386,7 +447,12 @@ fn mixer_switch(ui: &mut Ui, value: &mut bool, label: &str, width: f32, mute: bo
         response.mark_changed();
     }
     response.widget_info(|| {
-        egui::WidgetInfo::selected(egui::WidgetType::Checkbox, ui.is_enabled(), *value, label)
+        egui::WidgetInfo::selected(
+            egui::WidgetType::Checkbox,
+            ui.is_enabled(),
+            *value,
+            if mute { "Mute" } else { "Solo" },
+        )
     });
     response.on_hover_text(if mute {
         "Mute this channel"

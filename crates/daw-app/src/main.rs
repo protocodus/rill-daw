@@ -14,6 +14,7 @@ mod audio_takes_ui;
 mod automation;
 mod automation_editor;
 mod automation_state;
+mod clip_actions;
 mod clip_navigation;
 mod crossfade_ui;
 mod document_ui;
@@ -22,6 +23,7 @@ mod engine_lifecycle;
 mod error_ui;
 mod export_ui;
 mod finishing_actions;
+mod freeze_ui;
 mod history_ui;
 mod instrument_tools;
 mod join_tools;
@@ -29,10 +31,12 @@ mod join_ui;
 mod library;
 mod library_preview;
 mod midi_editor;
+mod midi_expression;
 mod midi_generate_ui;
 mod mixer_flow;
 mod mixer_routing;
 mod plugin_details;
+mod plugin_io;
 mod plugin_ui;
 mod project_io;
 mod recording_tools;
@@ -79,7 +83,7 @@ fn main() -> anyhow::Result<()> {
     }
     if args.first().is_some_and(|s| s == "--help" || s == "-h") {
         println!(
-            "Rill — modular Rust DAW\n\nrill [session.rill]\nrill --render-demo output.wav\nrill --render session.rill output.wav\nrill --screenshot output.png [--project session.rill] [--view assistant|clip|mixer|analysis|channel|instrument|effects|routing|automation|library|setup|properties|crossfade|join|unsaved-changes]\nrill --headless (isolated JSON automation; see docs/E2E.md)\nrill --mcp (native app with current-song MCP over stdio)\nrill --mcp-application (MCP with explicit project I/O and setup capabilities)\n\nLegacy .daw.json sessions remain supported. Build all workspace binaries to enable isolated VST3 hosting."
+            "Rill — modular Rust DAW\n\nrill [session.rill]\nrill --render-demo output.wav\nrill --render session.rill output.wav\nrill --screenshot output.png [--project session.rill] [--view assistant|clip|expression|mixer|analysis|channel|instrument|effects|routing|automation|library|setup|properties|crossfade|join|unsaved-changes]\nrill --headless (isolated JSON automation; see docs/E2E.md)\nrill --mcp (native app with current-song MCP over stdio)\nrill --mcp-application (MCP with explicit project I/O and setup capabilities)\n\nLegacy .daw.json sessions remain supported. Build all workspace binaries to enable isolated VST3 hosting."
         );
         return Ok(());
     }

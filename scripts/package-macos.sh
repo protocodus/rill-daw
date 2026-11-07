@@ -39,7 +39,7 @@ cat > "$bundle/Info.plist" <<PLIST
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleVersion</key><string>$rill_numeric_version</string>
 <key>CFBundleShortVersionString</key><string>$rill_numeric_version</string>
-<key>LSMinimumSystemVersion</key><string>11.0</string>
+<key>LSMinimumSystemVersion</key><string>$MACOSX_DEPLOYMENT_TARGET</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSMicrophoneUsageDescription</key><string>RILL records and monitors audio from the input device you select.</string>
 </dict></plist>

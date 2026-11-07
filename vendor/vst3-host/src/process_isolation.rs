@@ -66,6 +66,9 @@ pub(crate) fn is_slow_command(command: &HostCommand) -> bool {
             | HostCommand::CreateGui
             | HostCommand::CloseGui
             | HostCommand::GetAllParameters
+            | HostCommand::AudioBusDetails
+            | HostCommand::NoteExpressions {..}
+            | HostCommand::MidiControllerAssignments {..}
             | HostCommand::SaveState
             | HostCommand::LoadState { .. }
             | HostCommand::GetProgramData { .. }
@@ -628,6 +631,8 @@ pub enum HostCommand {
     },
     /// Query per-bus channel counts and activation state.
     AudioBusLayout,
+    /// Query native bus names and main/aux classification without changing activation.
+    AudioBusDetails,
     /// Serialize the plugin's current state to an opaque byte blob.
     SaveState,
     /// Restore the plugin's state from a blob previously returned by `SaveState`.
@@ -894,6 +899,11 @@ pub enum HostResponse {
     AudioBusLayout {
         /// Complete input/output layout.
         layout: crate::audio::AudioBusLayout,
+    },
+    /// Native audio bus names and classification in index order.
+    AudioBusDetails {
+        /// Complete ordered input/output metadata.
+        details: crate::audio::AudioBusDetailsLayout,
     },
     /// A single parameter value (normalized).
     ParameterValue {

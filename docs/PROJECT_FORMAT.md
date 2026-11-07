@@ -1,14 +1,14 @@
 # Rill project files
 
-`.rill` is a portable ZIP archive. Version 4 contains `manifest.json` and the WAV
-files referenced by audio clips. MIDI notes, edits, routing, automation, and opaque
+`.rill` is a portable ZIP archive. Version 6 contains `manifest.json` and the WAV
+files referenced by audio clips. MIDI performance data, edits, routing, automation, and opaque
 instrument/effect state live in the manifest. Legacy JSON projects remain readable
 and writable when their filename has another extension, such as `.daw.json`.
 
 The manifest is UTF-8 JSON with this envelope:
 
 ```json
-{"version":4,"project":{"name":"Song","tracks":[]}}
+{"version":6,"project":{"name":"Song","tracks":[]}}
 ```
 
 The example omits the remaining required project fields. The `project` schema is
@@ -42,7 +42,92 @@ Version 4 adds optional audio clip `audio_take` membership. A retained candidate
 
 Retained candidates remain in `track.clips` with their original source windows and edits. They are silent: playback, overlap scheduling, and export duration exclude them. Their media remains bundled even when no comp region currently uses it. Comp regions are ordinary editable audio clips with local bounds, source offsets, rates, fades, and optional crossfades. Selecting a passage preserves other regions and adds smooth complementary crossfades limited to available source handles; choosing a whole take replaces the group's audible comp. Independent copies and overdubs clear take membership, while splits preserve it. Detaching a group removes retained candidates from the document and leaves the current comp as ordinary clips without deleting any source files.
 
-Versions 1–3 remain readable. New saves use version 4 so older applications reject unsupported take metadata instead of playing retained candidates as ordinary overlapping clips. These version rules apply to ZIP manifests and legacy JSON alike.
+Versions 1–6 remain readable. New saves use version 6 so older applications
+reject unsupported routing, Master, Freeze or MIDI performance semantics instead
+of silently dropping them. These version rules apply to ZIP manifests and legacy
+JSON alike; missing optional fields retain their legacy defaults.
+
+## Master, plug-in buses and Freeze
+
+Version 5 adds `Project.master`, a channel outside `project.tracks` with the
+reserved ID `0`. Ordinary object IDs remain positive. Its default is a unity
+stereo sum with centered pan and no inserts, preserving older projects' sound.
+Master supports `input_gain`, ordered insert slots, `gain` (volume), `pan` and
+mute. It cannot contain clips, an instrument, sends, parent folders, input
+assignments or outgoing routing, and cannot be soloed. `project.track(0)` and
+the channel iterators include it; arrangement track ordering excludes it.
+
+All audio channels gain a finite `input_gain` field in `0..=16`, defaulting to
+`1.0`. This is pre-insert trim, separate from the existing post-insert `gain`
+volume and `pan`. `AutomationParameter::TrackInputGain` automates it; ordinary
+automation targets use `track: 0` for Master, including its insert parameters.
+
+`Track.instrument_inputs` and `EffectSlot.inputs` contain `PluginInputRoute`
+records: `source_track`, destination `bus` and `first_channel`, linear `gain`
+and `pre_fader`. Bus/channel indices are zero-based native plug-in addresses;
+`first_channel` starts an even-indexed stereo pair, with a final odd channel
+handled as mono. A source tap is after its inserts and either before or after
+volume/pan. Distinct sources can sum into one input pair. An insert's actual
+primary input pair remains its channel signal; extra routes cannot replace it.
+Master cannot be a source, but its inserts can receive auxiliary input.
+
+An instrument output channel is a `Bus` track with
+`instrument_output: {"track": owner_id, "bus": 1, "first_channel": 0}`.
+It receives that raw native output from the owner's single instrument instance,
+before the owner's trim/inserts/fader, and has its own processing and routing.
+Output channels are not summing-bus destinations. The main native output is
+resolved from plug-in metadata rather than assumed to be bus zero. Input,
+output and owner dependencies participate in feedback/cycle validation even
+when muted or at zero gain. Selected pairs are checked against the restored
+plug-in's actual bus layout during preparation. Model bounds are 64 buses,
+128 channels per bus, 128 input routes per processor and 128 output selections
+per creation batch; native allocation limits are enforced separately.
+
+Clips gain occurrence-local `muted` (default false) and optional `freeze`
+provenance. `FreezeLink` stores a group ID, original owner/clip IDs, channel
+mute states changed by Freeze, any parallel sidechain route copies, and an
+`active` flag. Printed pieces share the group's provenance; splitting an
+original updates active return references. These fields do not propagate a
+mute to other ghost occurrences. References to deleted originals remain valid
+provenance, but Return refuses to mute a print if its required original is
+missing. Load reserves referenced IDs, preventing accidental reuse.
+
+Freeze files are managed 32-bit float WAV assets bundled like other sources.
+Undo/Redo and Return retain media. Return restores the recorded original mutes,
+mutes the printed clips, and removes only unchanged sidechain copies made by
+Freeze. User-edited routes and printed audio edits remain. See the
+[Freeze workflow](USER_GUIDE.md#freeze-and-return-to-originals).
+
+## MIDI 2.0 performance data
+
+Version 6 adds optional `Note.midi2`, `Clip.midi_events` and the incoming
+`Track.midi_input_group` selector (zero-based `0..15`, default `0`). The input
+group selector does not rewrite or filter already stored performance data.
+
+`Midi2NoteData` retains group/channel, wire note index, 16-bit attack/release
+velocities, attack/release attribute types and data, and relative-source-beat
+per-note expression packets. `protocol: 1` preserves an original MIDI 1.0
+attack's exact `u7 / 127` playback normalization; `protocol: 2` uses `u16 / 65535`.
+Release, pitch or expression editing does not silently change that attack flag.
+MIDI 2.0 velocity zero remains zero even though the legacy piano-roll preview
+uses a playable minimum. Pitch attribute type 3 retains absolute Pitch 7.9
+precision (1/512 semitone); the wire note index remains its expression address.
+
+`UmpPacket` stores four exact `u32` words plus `word_count` (1–4), validates the
+message type's defined packet length, and requires unused storage words to be
+zero. `MidiClipEvent` adds a stable ID and source beat; per-note events instead
+belong to their note and use relative source beats. The model retains hidden
+events when notes/clips are trimmed and validates their address and IDs.
+Per-clip performance data is bounded to 262,144 events and per-note expressions
+to 32,768 points; the manifest size limit remains an aggregate bound.
+Automatic containment cleanup does not merge expressive notes into a matching
+legacy pitch: their distinct channel, attributes, IDs and expression remain.
+
+This is project persistence, not a claim to implement raw UMP stream files,
+the standard MIDI Clip File format, MIDI-CI/profile negotiation or every SysEx
+family in playback. Standard `.mid` delivery remains MIDI 1.0 note export;
+the app requires an explicit **Export MIDI 1.0 copy…** decision when richer
+data would be reduced or omitted. Save `.rill` to retain the original data.
 
 Audio tracks also save an optional `audio_input` channel assignment: for example
 `{"Mono":{"channel":0}}` or `{"Stereo":{"left":0,"right":1}}`. Indices are
@@ -134,7 +219,7 @@ Opening extracts the bundle and prepares waveform data on the worker before flus
 
 ## MIDI input and recording timing
 
-Project format 4 additionally stores optional `Track.midi_input`: `"All"`,
+Since project format 4, optional `Track.midi_input` stores `"All"`,
 `{"Channel":{"channel":0}}` (zero-based channel 0–15), or `null`. New MIDI
 tracks default to All; older manifests without the field load with no assignment.
 Only MIDI tracks accept this field. The global MIDI device identifier is stored
@@ -143,8 +228,11 @@ session-only.
 
 Project fields `metronome_enabled`, `metronome_gain`, and `precount_bars` default
 to false, 0.25, and 0 when absent. Gain is finite in 0–1; pre-count accepts 0, 1,
-or 2 bars. These additions do not change existing musical data and require no
-format-version bump. MIDI recordings use ordinary independent MIDI clips, with
-sustain represented by note duration and loop passes merged into that clip.
-There is no extra source file for MIDI. Mixed audio/MIDI recording publishes one
-validated project edit and archives its audio sources through the existing path.
+or 2 bars. MIDI recordings use ordinary independent MIDI clips, with legacy
+MIDI 1.0 sustain represented by note duration and loop passes merged into that
+clip. MIDI 2.0 retains key-release timing and the sustain controller. Version 6
+also saves rich performance data in the fields described above. There is no
+extra source file for MIDI. The selected input device and platform transport
+are not a promise that a saved packet maps to every VST3 destination. Mixed
+audio/MIDI recording publishes one validated project edit and archives its audio
+sources through the existing path.

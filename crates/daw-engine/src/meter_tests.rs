@@ -70,7 +70,7 @@ fn channel_meters_follow_own_fader_pan_bus_and_send_without_changing_audio() {
         metered.render(&mut output, &mut positions).unwrap();
         reference.render(&mut dry, &mut dry_positions).unwrap();
         assert_eq!(output, dry);
-        for _ in 0..4 {
+        for block in 0..4 {
             assert_eq!(
                 crate::allocation_test_support::count_allocations(|| {
                     metered.render(&mut output, &mut positions).unwrap();
@@ -85,7 +85,23 @@ fn channel_meters_follow_own_fader_pan_bus_and_send_without_changing_audio() {
             assert_peaks(meters.peaks(bass), [0.0, 0.1]);
             assert_peaks(meters.peaks(bus), [0.2, 0.075]);
             assert_peaks(meters.peaks(send), [0.1, 0.05]);
+            let settled = (1.0_f64 - (-((BLOCK * (block + 2)) as f64) / (48_000.0 * 0.3)).exp())
+                .sqrt() as f32;
+            for (id, expected) in [
+                (lead, [0.4, 0.1]),
+                (bass, [0.0, 0.1]),
+                (bus, [0.2, 0.075]),
+                (send, [0.1, 0.05]),
+            ] {
+                for (actual, peak) in meters.rms(id).into_iter().zip(expected) {
+                    assert!(
+                        (actual - peak * settled).abs() < 2e-6,
+                        "Post-fader RMS belongs to channel {id}: {actual}"
+                    );
+                }
+            }
             assert_eq!(meters.peaks(muted), [0.0; 2]);
+            assert_eq!(meters.rms(muted), [0.0; 2]);
             assert_eq!(meters.peaks(u64::MAX), [0.0; 2]);
             assert_ne!(
                 meters.peaks(lead),
@@ -96,6 +112,7 @@ fn channel_meters_follow_own_fader_pan_bus_and_send_without_changing_audio() {
         metered.seek(3.0).unwrap();
         for id in [lead, bass, muted, bus, send] {
             assert_eq!(meters.peaks(id), [0.0; 2], "seek clears stale peaks");
+            assert_eq!(meters.rms(id), [0.0; 2], "seek clears stale RMS");
         }
         metered.render(&mut output, &mut positions).unwrap();
         assert_eq!(meters.peaks(lead), [0.0; 2]);

@@ -286,6 +286,7 @@ impl DawApp {
                     ui.spacing_mut().item_spacing.y = widgets::tokens::SPACE_MD;
                     // Signal order, as on the strip: the main output, then sends
                     // (pre-fader above post-fader).
+                    if track_id != MASTER_CHANNEL_ID {
                     widgets::text::section_heading(ui, "Output");
                     let current = self.project.track(track_id).unwrap().output_bus;
                     let mut output = current;
@@ -482,12 +483,17 @@ impl DawApp {
                         }
                         self.message(result, "Send added");
                     }
+                    } else {
+                        widgets::text::section_heading(ui, "Output");
+                        widgets::text::note(ui, "Master feeds the selected audio output device after its inserts, pan and volume.");
+                    }
+                    self.plugin_io_controls(ui, track_id);
                 });
                 footer.show(window_ui, |ui| {
                     widgets::dialog_actions(
                         ui,
                         |ui| {
-                            create_send = widgets::button(ui, "New return with effect…")
+                            create_send = track_id != MASTER_CHANNEL_ID && widgets::button(ui, "New return with effect…")
                                 .on_hover_text("Choose an effect for a new bus and send to it")
                                 .clicked();
                         },
@@ -563,6 +569,22 @@ pub(crate) fn visible_tracks_with_expanded(
         }
     }
     let mut out = Vec::new();
+    // Master is a real channel outside the song's track array. Its automation
+    // still needs visible arranger rows even though there is no parent row to
+    // visit; keep these global lanes above the ordinary track hierarchy.
+    out.extend(
+        project
+            .tracks
+            .iter()
+            .enumerate()
+            .filter_map(|(index, track)| {
+                track
+                    .automation
+                    .as_ref()
+                    .is_some_and(|lane| lane.target.track == MASTER_CHANNEL_ID)
+                    .then_some((index, 0))
+            }),
+    );
     visit(project, expanded, None, 0, &mut out);
     out
 }

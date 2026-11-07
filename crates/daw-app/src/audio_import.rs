@@ -327,6 +327,7 @@ impl DawApp {
         } else if self.document_guard.is_some()
             || self.project_io_pending()
             || self.state_sync_pending()
+            || self.freeze_busy()
         {
             Some("Finish the current document operation before importing audio or MIDI")
         } else {
@@ -397,7 +398,8 @@ impl DawApp {
             ensure!(
                 self.document_guard.is_none()
                     && !self.project_io_pending()
-                    && !self.state_sync_pending(),
+                    && !self.state_sync_pending()
+                    && !self.freeze_busy(),
                 "Finish the current document operation before importing audio"
             );
             ensure!(

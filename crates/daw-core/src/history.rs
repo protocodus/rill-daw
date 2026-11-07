@@ -238,14 +238,15 @@ impl History {
 
 // Heap sizes of cloned data plus inline storage. No JSON serialization or
 // sample buffers are involved. Allocator bookkeeping is outside this estimate.
-fn snapshot_bytes(project: &Project) -> usize {
+pub(crate) fn snapshot_bytes(project: &Project) -> usize {
     let mut bytes = size_of::<Project>() + project.name.len();
-    for track in &project.tracks {
+    for track in project.channels() {
         bytes += size_of_val(track)
             + track.name.len()
             + track.instrument_name.len()
             + track.instrument_state.len()
             + track.instrument_parameters.len() * size_of::<crate::PluginParameterValue>()
+            + track.instrument_inputs.len() * size_of::<crate::PluginInputRoute>()
             + track.sends.len() * size_of::<crate::Send>();
         if let Instrument::Vst3 { path, class_id } = &track.instrument {
             bytes += path.len() + class_id.as_ref().map_or(0, String::len);
@@ -255,6 +256,7 @@ fn snapshot_bytes(project: &Project) -> usize {
                 + effect.name.len()
                 + effect.state.len()
                 + effect.parameters.len() * size_of::<crate::PluginParameterValue>();
+            bytes += effect.inputs.len() * size_of::<crate::PluginInputRoute>();
             let Effect::Vst3 { path, class_id } = &effect.effect;
             bytes += path.len() + class_id.as_ref().map_or(0, String::len);
         }
@@ -267,8 +269,24 @@ fn snapshot_bytes(project: &Project) -> usize {
         }
         for clip in &track.clips {
             bytes += size_of_val(clip) + clip.name.len();
+            bytes += clip.midi_events.len() * size_of::<crate::MidiClipEvent>();
+            if let Some(freeze) = &clip.freeze {
+                bytes += freeze.source_clips.len() * size_of::<u64>()
+                    + freeze.muted_tracks.len() * size_of::<crate::FreezeTrackMute>()
+                    + freeze.input_copies.len() * size_of::<crate::FreezeInputCopy>();
+            }
             bytes += match &clip.content {
-                ClipContent::Midi { notes } => notes.len() * size_of::<crate::Note>(),
+                ClipContent::Midi { notes } => {
+                    notes.len() * size_of::<crate::Note>()
+                        + notes
+                            .iter()
+                            .map(|note| {
+                                note.midi2.as_ref().map_or(0, |data| {
+                                    data.expressions.len() * size_of::<crate::MidiNoteExpression>()
+                                })
+                            })
+                            .sum::<usize>()
+                }
                 ClipContent::Audio { path, .. } => path.len(),
             };
         }
@@ -426,5 +444,108 @@ mod tests {
         assert!(!history.can_undo());
         assert!(!history.can_redo());
         assert_eq!(history.memory_bytes(), 0);
+    }
+
+    #[test]
+    fn expressive_events_and_freeze_provenance_count_toward_the_snapshot_budget() {
+        use crate::{
+            Clip, FreezeInputCopy, FreezeLink, FreezeTrackMute, MidiClipEvent, MidiNoteExpression,
+            Note, PluginInputRoute, UmpPacket,
+        };
+
+        let mut project = Project::new();
+        let track = project.add_midi_track("Performance");
+        let mut note = Note::new(60, 0.0, 1.0, 64);
+        note.set_velocity16(0x8123);
+        let clip = Clip::midi("Source", 0.0, 4.0, vec![note]);
+        let clip_id = clip.id;
+        project.track_mut(track).unwrap().clips.push(clip);
+        let printed_track = project.add_audio_track("Print");
+        let printed = Clip::audio("Printed", 0.0, 4.0, "print.wav");
+        let printed_id = printed.id;
+        project
+            .track_mut(printed_track)
+            .unwrap()
+            .clips
+            .push(printed);
+        project.master.inserts.push(crate::EffectSlot::new(
+            "Master processor",
+            Effect::Vst3 {
+                path: "master.vst3".into(),
+                class_id: None,
+            },
+        ));
+        let effect_id = project.master.inserts[0].id;
+        let baseline = snapshot_bytes(&project);
+        let expression = UmpPacket::from_words(&[0x40a0_3c00, 0xdead_beef]).unwrap();
+        let global = UmpPacket::from_words(&[0x40b0_0b00, 0xffff_fffe]).unwrap();
+        let clip = project.clip_mut(track, clip_id).unwrap();
+        if let ClipContent::Midi { notes } = &mut clip.content {
+            notes[0].midi2.as_mut().unwrap().expressions = (0..128)
+                .map(|i| MidiNoteExpression::new(f64::from(i) / 128.0, expression))
+                .collect();
+        }
+        clip.midi_events = (0..64)
+            .map(|i| MidiClipEvent::new(f64::from(i) / 64.0, global))
+            .collect();
+        project.clip_mut(printed_track, printed_id).unwrap().freeze = Some(FreezeLink {
+            group: crate::new_id(),
+            source_track: track,
+            source_clips: vec![clip_id],
+            muted_tracks: vec![FreezeTrackMute {
+                track,
+                muted: false,
+            }],
+            input_copies: vec![FreezeInputCopy {
+                track: crate::MASTER_CHANNEL_ID,
+                effect: Some(effect_id),
+                route: PluginInputRoute {
+                    source_track: track,
+                    bus: 0,
+                    first_channel: 0,
+                    gain: 1.0,
+                    pre_fader: false,
+                },
+            }],
+            active: true,
+        });
+        project.master.inserts[0].state = vec![0x7f; 1024];
+        project.master.inserts[0].inputs.push(PluginInputRoute {
+            source_track: track,
+            bus: 1,
+            first_channel: 0,
+            gain: 1.0,
+            pre_fader: false,
+        });
+        project.validate().unwrap();
+        let heap = 128 * size_of::<MidiNoteExpression>()
+            + 64 * size_of::<MidiClipEvent>()
+            + size_of::<u64>()
+            + size_of::<FreezeTrackMute>()
+            + size_of::<FreezeInputCopy>()
+            + 1024
+            + size_of::<PluginInputRoute>();
+        assert_eq!(snapshot_bytes(&project) - baseline, heap);
+
+        let mut history = History::with_limits(128, baseline + heap / 2);
+        history.commit_named(&project, "Expressive edit");
+        assert!(
+            !history.can_undo(),
+            "Oversized state must be a history boundary"
+        );
+        assert_eq!(history.memory_bytes(), 0);
+        let budget = (snapshot_bytes(&project) + 1024) * 2;
+        let mut history = History::with_limits(128, budget);
+        for i in 0..8 {
+            history.commit_named(&project, "Expression");
+            project.tempo = 90.0 + f64::from(i);
+        }
+        assert_eq!(history.undo_labels().count(), 2);
+        while history.undo(&mut project) {
+            assert!(history.memory_bytes() <= budget);
+        }
+        while history.redo(&mut project) {
+            assert!(history.memory_bytes() <= budget);
+        }
     }
 }

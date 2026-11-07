@@ -47,6 +47,7 @@ pub fn mixer_control_height(ui: &Ui) -> f32 {
 pub enum MixerChannelRole {
     Bus,
     SendReturn,
+    InstrumentOutput,
 }
 
 impl MixerChannelRole {
@@ -54,6 +55,7 @@ impl MixerChannelRole {
         match self {
             Self::Bus => "Bus",
             Self::SendReturn => "Send return",
+            Self::InstrumentOutput => "Output",
         }
     }
 }
@@ -80,6 +82,7 @@ pub fn mixer_role_heading(
         match role {
             MixerChannelRole::Bus => crate::Icon::Routing,
             MixerChannelRole::SendReturn => crate::Icon::Input,
+            MixerChannelRole::InstrumentOutput => crate::Icon::Instrument,
         }
         .paint(
             ui.painter(),
@@ -103,6 +106,9 @@ pub fn mixer_role_heading(
             MixerChannelRole::Bus => "Bus · groups channels through their main outputs",
             MixerChannelRole::SendReturn => {
                 "Send return · receives one or more sends; it can also receive main outputs"
+            }
+            MixerChannelRole::InstrumentOutput => {
+                "Instrument output · independent audio from the grouped instrument"
             }
         },
     )
@@ -310,11 +316,7 @@ fn mixer_name_plate_inner(
     let master = kind == MixerNamePlateKind::Master;
     let (rect, response) = ui.allocate_exact_size(
         Vec2::new(width, mixer_control_height(ui)),
-        if master || grip {
-            Sense::hover()
-        } else {
-            Sense::click()
-        },
+        if grip { Sense::hover() } else { Sense::click() },
     );
     let colors = crate::theme::palette(ui.ctx());
     let plate = egui::emath::GuiRounding::round_to_pixels(rect, ui.painter().pixels_per_point());
@@ -360,15 +362,7 @@ fn mixer_name_plate_inner(
     }
     if !grip {
         response.widget_info(|| {
-            egui::WidgetInfo::labeled(
-                if master {
-                    egui::WidgetType::Label
-                } else {
-                    egui::WidgetType::Button
-                },
-                ui.is_enabled(),
-                name,
-            )
+            egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), name)
         });
     }
     if master {

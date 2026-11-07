@@ -73,3 +73,42 @@ Remove the local patch once an upstream release provides equivalent host-prefill
 actions, retained-target validation, side-effect-free editor capability queries,
 and separate bounded lifecycle/audio deadlines,
 after verifying both native-menu paths and headless plugin loading.
+
+Rill also exposes native bus names and Main/Aux roles through the additive
+`AudioBusDetailsLayout` metadata query. The isolation protocol forwards that query,
+explicit bus activation and bus arrangements, preserving native indices and
+inactive slots. The Rill adapter admits bounded layouts before allocating audio,
+selects the actual Main role (which need not be index zero), and reapplies selected
+auxiliary activation after state restoration or helper recovery. Existing stereo
+processing entry points keep their previous default routing.
+
+The isolated Rill helper now forwards channel-specific Note Expression metadata,
+controller mappings and sample-offset controller parameter changes. High-resolution
+musical events reuse the existing owned `PluginEvent` wire representation: float
+note velocity, host note IDs, double normalized expression values, integer note
+attributes, and native float poly pressure. MIDI-1 attacks retain their original
+seven-bit normalization. These are explicit VST3 musical mappings, not raw UMP or
+universal MIDI-2 protocol support. Expression enumeration rejects malformed counts
+before allocation. The mapping ABI and existing VST3 event structures are retained;
+no alternative plug-in format is introduced. Rill ships the host and helper from
+the same executable build; existing command names and default processing behavior
+remain intact.
+
+The MIDI-2 per-note IDs follow the official **VST SDK 3.8.1 build 84**
+[`ivstnoteexpression.h`, pinned commit `4f547e8e`](https://github.com/steinbergmedia/vst3_pluginterfaces/blob/4f547e8e102b47de4a8b8aaf343c73b700786372/vst/ivstnoteexpression.h#L61-L88):
+assignable controllers use `201000 + index`, registered controllers
+`202000 + index`, and note attributes the reserved `203000`/`204000` ranges.
+Older Rust bindings omit these constants; their native `u32` type IDs remain ABI
+compatible. Rill forwards only IDs the plug-in explicitly advertises for that
+event bus/channel, without inferring mappings for ordinary vendor custom IDs.
+Unsigned 32-bit controller payloads become `f64::from(data) / f64::from(u32::MAX)`,
+preserving all 32-bit levels in the SDK's
+[absolute normalized `[0, 1]` expression value](https://github.com/steinbergmedia/vst3_pluginterfaces/blob/4f547e8e102b47de4a8b8aaf343c73b700786372/vst/ivstnoteexpression.h#L114-L128).
+
+Additional native regressions:
+
+```sh
+cargo test --locked -p daw-plugins --test multi_bus
+cargo test --locked -p daw-plugins --test expressive
+cargo test --locked -p daw-engine --lib midi2_render_tests
+```

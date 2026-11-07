@@ -4,10 +4,10 @@ use crate::{
     theme::*,
 };
 use daw_core::{
-    Chord, ClipContent, EditBatch, EntityRef, GenerateHarmony, GenerateSettings, LegatoMode, Note,
-    NoteStack, QuantizeSettings, RandomizeSettings, Scale, SongEdit, SongSession, copy_midi_notes,
-    merge_fully_overlapping_midi_notes, move_midi_notes, paste_midi_notes, quantize_notes,
-    randomize_source_notes,
+    Chord, ClipContent, EditBatch, EntityRef, GenerateHarmony, GenerateSettings, LegatoMode,
+    MidiNoteLengthChange, Note, NoteStack, QuantizeSettings, RandomizeSettings, Scale, SongEdit,
+    SongSession, copy_midi_notes, merge_fully_overlapping_midi_notes, midi_note_lengths,
+    move_midi_notes, paste_midi_notes, quantize_notes, randomize_source_notes,
 };
 use daw_ui::{PianoRows, TimelineBounds, TimelinePane, TimelineViewport};
 use eframe::egui::{self, Align2, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, emath::GuiRounding};
@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 const KEYS: f32 = daw_ui::tokens::PIANO_KEYS_WIDTH;
 const RULER: f32 = daw_ui::tokens::TIMELINE_RULER_HEIGHT + daw_ui::tokens::TIMELINE_LOOP_HEIGHT;
 const VELOCITY: f32 = daw_ui::tokens::VELOCITY_LANE_HEIGHT;
-const MIN_NOTE: f64 = 1.0 / 64.0;
+const MIN_NOTE: f64 = daw_core::MIN_MIDI_NOTE_LENGTH;
 
 #[derive(Clone)]
 enum Gesture {
@@ -26,7 +26,7 @@ enum Gesture {
         edge: i8,
         duplicate: bool,
         dragged: bool,
-        shift_pressed: bool,
+        modifier_pressed: bool,
         deselect_on_click: Option<u64>,
     },
     Draw {
@@ -51,6 +51,21 @@ enum Gesture {
 enum NoteTransform {
     Quantize(QuantizeSettings),
     Randomize(RandomizeSettings),
+    Length(daw_ui::MidiNoteLengthSettings),
+}
+
+fn note_length_change(settings: daw_ui::MidiNoteLengthSettings) -> MidiNoteLengthChange {
+    match settings.mode {
+        daw_ui::MidiNoteLengthMode::Fixed => MidiNoteLengthChange::Set {
+            length: settings.beats,
+        },
+        daw_ui::MidiNoteLengthMode::Grow => MidiNoteLengthChange::Add {
+            delta: settings.beats,
+        },
+        daw_ui::MidiNoteLengthMode::Shrink => MidiNoteLengthChange::Add {
+            delta: -settings.beats,
+        },
+    }
 }
 
 impl NoteTransform {
@@ -87,7 +102,16 @@ impl NoteTransform {
                     timing: settings.timing,
                     seed: settings.seed,
                 },
-                "Randomize notes",
+                "Humanize notes",
+            ),
+            Self::Length(settings) => (
+                SongEdit::EditMidiNoteLengths {
+                    track,
+                    clip,
+                    note_ids,
+                    change: note_length_change(settings),
+                },
+                "Change note lengths",
             ),
         };
         NoteEdit::Command(edit, label, session, selected.clone())
@@ -102,6 +126,8 @@ struct NoteTransformPreview {
     origin: f64,
     clip_window: (f64, f64, f64, f64),
     session: SongSession,
+    whole_clip: bool,
+    original_view: TimelineViewport,
 }
 
 pub(crate) struct MidiEditorState {
@@ -125,8 +151,10 @@ pub(crate) struct MidiEditorState {
     last_created: Option<(Vec<u64>, f64)>,
     clipboard: Vec<Note>,
     transform: Option<NoteTransformPreview>,
+    requested_transform: Option<(u64, u64, daw_ui::MidiClipAction)>,
     quantize_settings: QuantizeSettings,
     randomize_settings: RandomizeSettings,
+    length_settings: daw_ui::MidiNoteLengthSettings,
     generate: Option<crate::midi_generate_ui::GenerateDialog>,
     generation_memory: HashMap<u64, crate::midi_generate_ui::GenerateMemory>,
     pending_merge_owners: HashSet<(u64, u64)>,
@@ -164,8 +192,10 @@ impl Default for MidiEditorState {
             last_created: None,
             clipboard: Vec::new(),
             transform: None,
+            requested_transform: None,
             quantize_settings: QuantizeSettings::default(),
             randomize_settings: RandomizeSettings::default(),
+            length_settings: daw_ui::MidiNoteLengthSettings::default(),
             generate: None,
             generation_memory: HashMap::new(),
             pending_merge_owners: HashSet::new(),
@@ -229,10 +259,16 @@ impl MidiEditorState {
     }
 
     pub(crate) fn note_transform_active(&self) -> bool {
-        self.transform.is_some()
+        self.transform.is_some() || self.requested_transform.is_some()
     }
     pub(crate) fn cancel_note_transform(&mut self) -> bool {
-        self.transform.take().is_some()
+        let active = if let Some(preview) = self.transform.take() {
+            self.viewport = preview.original_view;
+            true
+        } else {
+            false
+        };
+        self.requested_transform.take().is_some() || active
     }
     pub(crate) fn generate_active(&self) -> bool {
         self.generate.is_some()
@@ -280,11 +316,14 @@ impl MidiEditorState {
         self.navigation_note = None;
         self.keyboard_focus = false;
         self.hidden_selection.clear();
-        self.transform = None;
+        self.cancel_note_transform();
+        self.requested_transform = None;
     }
 }
 
 enum NoteEdit {
+    /// Existing-note gesture snapshots already use exact persisted source time.
+    Source(Box<NoteEdit>),
     Add(Vec<Note>),
     Generate(Vec<Note>, f64),
     Move(Vec<Note>, f64, i16),
@@ -365,6 +404,62 @@ fn local_note_times(notes: &mut [Note], rate: f64) {
     }
 }
 
+fn flip_note_selection(
+    notes: &[Note],
+    selected: &HashSet<u64>,
+    axis: daw_ui::MidiNoteFlip,
+) -> anyhow::Result<Vec<Note>> {
+    let selected_notes: Vec<_> = notes
+        .iter()
+        .filter(|note| selected.contains(&note.id))
+        .collect();
+    anyhow::ensure!(!selected_notes.is_empty(), "Select notes to flip");
+    if selected_notes.len() == 1 {
+        return Ok(notes.to_vec());
+    }
+    let first = selected_notes
+        .iter()
+        .map(|note| note.start)
+        .fold(f64::INFINITY, f64::min);
+    let end = selected_notes
+        .iter()
+        .map(|note| note.start + note.length)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let low = selected_notes
+        .iter()
+        .map(|note| note.pitch_semitones())
+        .fold(f64::INFINITY, f64::min);
+    let high = selected_notes
+        .iter()
+        .map(|note| note.pitch_semitones())
+        .fold(f64::NEG_INFINITY, f64::max);
+    let mut edited = notes.to_vec();
+    for note in edited.iter_mut().filter(|note| selected.contains(&note.id)) {
+        match axis {
+            daw_ui::MidiNoteFlip::Horizontal => {
+                note.start = (first + end - (note.start + note.length)).max(0.0)
+            }
+            daw_ui::MidiNoteFlip::Vertical => {
+                let pitch = low + high - note.pitch_semitones();
+                if pitch.fract() == 0.0
+                    && note
+                        .midi2
+                        .as_ref()
+                        .is_none_or(|data| data.attribute_type != 3)
+                {
+                    // Keep high-resolution velocity/custom attributes in their
+                    // existing encoding when this remains an integer edit.
+                    note.set_pitch(pitch as u8);
+                } else {
+                    note.set_pitch_semitones(pitch)?;
+                }
+            }
+        }
+        daw_core::validate_note(note)?;
+    }
+    Ok(edited)
+}
+
 impl NoteEdit {
     fn into_source_time(mut self, rate: f64) -> Self {
         match &mut self {
@@ -380,13 +475,93 @@ impl NoteEdit {
             | Self::Duplicate(_)
             | Self::Glue(_)
             | Self::Velocity(_)
-            | Self::Command(..) => {}
+            | Self::Command(..)
+            | Self::Source(_) => {}
         }
         self
     }
 }
 
 impl DawApp {
+    fn apply_selected_note_flip(&mut self, axis: daw_ui::MidiNoteFlip) {
+        self.flush_pending_edit();
+        let (Some(track), Some(clip)) = (self.selected_track, self.selected_clip) else {
+            return;
+        };
+        let Some(source) = self.project.clip(track, clip) else {
+            return;
+        };
+        let ClipContent::Midi { notes } = &source.content else {
+            return;
+        };
+        let selection: HashSet<_> = notes
+            .iter()
+            .filter(|note| {
+                self.selected_notes.contains(&note.id)
+                    && note.start < source.offset + source.source_length()
+                    && note.start + note.length > source.offset
+            })
+            .map(|note| note.id)
+            .collect();
+        if selection.is_empty() {
+            return;
+        }
+        let mut local = notes.clone();
+        local_note_times(&mut local, source.source_rate);
+        match flip_note_selection(&local, &selection, axis) {
+            Ok(edited) => {
+                self.apply_note_edit(NoteEdit::Replace(
+                    edited,
+                    selection,
+                    match axis {
+                        daw_ui::MidiNoteFlip::Horizontal => "Flip note timing",
+                        daw_ui::MidiNoteFlip::Vertical => "Flip note pitches",
+                    },
+                ));
+                // A discrete mirror preserves note identity and alternatives,
+                // including a mirrored note which now overlaps another note.
+                self.midi_editor.pending_merge_owners.remove(&(track, clip));
+                if self.midi_editor.only_scale_keys
+                    && let Some(ClipContent::Midi { notes }) =
+                        self.selected().map(|clip| &clip.content)
+                {
+                    let visible = self
+                        .midi_editor
+                        .visible_note_ids(notes, self.root, self.scale);
+                    self.midi_editor
+                        .hidden_selection
+                        .extend(self.selected_notes.difference(&visible).copied());
+                    self.selected_notes.retain(|id| visible.contains(id));
+                }
+                self.flush_pending_edit();
+            }
+            Err(error) => self.message(Err(error), ""),
+        }
+    }
+
+    /// Whole-clip commands open the existing preview with an explicit owner and
+    /// window scope. No notes or history are changed until Apply is chosen.
+    pub(crate) fn request_midi_clip_transform(
+        &mut self,
+        track: u64,
+        clip: u64,
+        action: daw_ui::MidiClipAction,
+    ) {
+        let Some(source) = self.project.clip(track, clip) else {
+            return;
+        };
+        if !matches!(source.content, ClipContent::Midi { .. }) {
+            return;
+        }
+        self.flush_pending_edit();
+        self.selected_track = Some(track);
+        self.selected_clip = Some(clip);
+        self.open_workspace(crate::app::WorkspaceView::Clip);
+        self.midi_editor.select_clip_preserving_view(clip);
+        self.midi_editor.requested_transform = Some((track, clip, action));
+        self.last_editor_clip = Some(clip);
+    }
+
     /// Note IDs must remain stable while a pointer gesture is updating them.
     /// The central transaction flush resolves overlaps after release, including
     /// when the user has left the editor or a keyboard action edited the source.
@@ -533,6 +708,9 @@ impl DawApp {
             clip.source_rate,
         );
         let clip_name = clip.name.clone();
+        let clip_actions = crate::clip_actions::midi_clip_action_availability(clip);
+        let mut whole_clip_action = None;
+        let mut loop_this_clip = false;
         // Everything below, including quantize/clipboard/velocity geometry,
         // uses one common beat scale. Convert only at the model boundary.
         let source_model = notes.clone();
@@ -543,8 +721,9 @@ impl DawApp {
         let previous_view = state.viewport;
         let same_clip = state.clip == Some(clip_id);
         let mut view_action = daw_ui::TimelineViewAction::None;
-        let previous_rows = PianoRows::new(|pitch| {
+        let mut previous_rows = PianoRows::new(|pitch| {
             state.generate.is_some()
+                || state.transform.is_some()
                 || !state.only_scale_keys
                 || self.scale.contains(self.root, pitch)
         });
@@ -570,6 +749,33 @@ impl DawApp {
         let mut open_generate = false;
         let mut open_ai = false;
         let mut open_transform = None;
+        let mut whole_clip_scope = None;
+        if let Some((owner, requested_clip, action)) = state.requested_transform.take()
+            && owner == track_id
+            && requested_clip == clip_id
+        {
+            open_transform = match action {
+                daw_ui::MidiClipAction::Quantize => {
+                    Some(NoteTransform::Quantize(state.quantize_settings))
+                }
+                daw_ui::MidiClipAction::Humanize => {
+                    Some(NoteTransform::Randomize(state.randomize_settings))
+                }
+                _ => None,
+            };
+            whole_clip_scope = Some(
+                source_notes
+                    .iter()
+                    .filter(|note| {
+                        note.start < clip_offset + clip_length
+                            && note.start + note.length > clip_offset
+                    })
+                    .map(|note| note.id)
+                    .collect::<HashSet<_>>(),
+            );
+        }
+        let mut requested_flip = None;
+        let mut open_expression = None;
         let mut reveal_note = None;
         let mut reveal_key = None;
         let supported = [
@@ -676,6 +882,17 @@ impl DawApp {
                     state.chord.name()
                 ));
                 ui.add_space(daw_ui::tokens::SPACE_SM);
+                ui.add_enabled_ui(state.transform.is_none() && !self.recording_busy(), |ui| {
+                    daw_ui::quiet_action_menu(ui, "Clip", |ui| {
+                        if daw_ui::button(ui, "Loop this clip").clicked() {
+                            loop_this_clip = true;
+                            ui.close();
+                        }
+                        ui.separator();
+                        whole_clip_action =
+                            daw_ui::midi_clip_action_menu_contents(ui, clip_actions);
+                    });
+                });
                 daw_ui::quiet_action_menu(ui, "Notes", |ui| {
                     let editable = !self.selected_notes.is_empty() && state.transform.is_none();
                     // Edit
@@ -851,8 +1068,10 @@ impl DawApp {
                                                 self.selected_notes.contains(&note.id)
                                             }) {
                                                 let row = scale_rows.nearest_row(note.pitch);
-                                                note.pitch = scale_rows
-                                                    .pitch_at(row as f32 + f32::from(delta));
+                                                note.set_pitch(
+                                                    scale_rows
+                                                        .pitch_at(row as f32 + f32::from(delta)),
+                                                );
                                             }
                                             actions.push(NoteEdit::Replace(
                                                 edited,
@@ -870,12 +1089,25 @@ impl DawApp {
                     ui.separator();
                     // Transform
                     ui.add_enabled_ui(editable, |ui| {
-                        if daw_ui::button(ui, "Randomize…").clicked() {
+                        if daw_ui::button(ui, "Humanize…").clicked() {
                             open_transform =
                                 Some(NoteTransform::Randomize(state.randomize_settings));
                             ui.close();
                         }
+                        if daw_ui::button(ui, "Note lengths…").clicked() {
+                            open_transform = Some(NoteTransform::Length(state.length_settings));
+                            ui.close();
+                        }
                     });
+                    if let Some(axis) = daw_ui::midi_note_flip_menu_contents(ui, editable) {
+                        requested_flip = Some(axis);
+                    }
+                    if ui.add_enabled(editable && self.selected_notes.len() == 1, daw_ui::button_widget("Expression…"))
+                        .on_hover_text("Edit high-resolution velocity and per-note expression for one selected note")
+                        .clicked() {
+                        open_expression = self.selected_notes.iter().copied().next();
+                        ui.close();
+                    }
                     if !self.selected_notes.is_empty()
                         || matches!(self.tool, Tool::Pencil | Tool::MultiDraw)
                     {
@@ -1041,7 +1273,9 @@ impl DawApp {
         // scale-only view and viewport without changing that view preference.
         let mut rows = PianoRows::new(|pitch| {
             open_generate
+                || open_transform.is_some()
                 || state.generate.is_some()
+                || state.transform.is_some()
                 || !state.only_scale_keys
                 || self.scale.contains(self.root, pitch)
         });
@@ -1072,19 +1306,25 @@ impl DawApp {
             state.transform = None;
         }
         if let Some(settings) = open_transform {
+            let whole_clip = whole_clip_scope.is_some();
             state.transform = Some(NoteTransformPreview {
                 source: source_notes.clone(),
                 source_model: source_model.clone(),
-                selected: self.selected_notes.clone(),
+                selected: whole_clip_scope
+                    .take()
+                    .unwrap_or_else(|| self.selected_notes.clone()),
                 settings,
                 origin: clip_start - clip_offset,
                 clip_window: (clip_start, clip_offset, clip_length, source_rate),
                 session: self.song_session,
+                whole_clip,
+                original_view: state.viewport,
             });
             state.gesture = None;
         }
         let mut quantize_controls = serde_json::Value::Null;
         let mut randomize_controls = serde_json::Value::Null;
+        let mut length_controls = serde_json::Value::Null;
         if let Some(preview) = &mut state.transform {
             let mut apply = false;
             let mut cancel = false;
@@ -1093,6 +1333,7 @@ impl DawApp {
                     NoteTransform::Quantize(settings) => {
                         daw_ui::parameter_row_wrapped(ui, |ui| {
                             daw_ui::text::label(ui, "Quantize preview");
+                            daw_ui::text::note(ui, if preview.whole_clip { "Clip window" } else { "Selected notes" });
                             daw_ui::select("quantize_grid", format!("{} beat", settings.grid)).width(90.0).show_ui(ui, |ui| {
                                 for grid in [0.0625, 0.125, 0.25, 0.5, 1.0, 2.0] { daw_ui::selectable_value(ui, &mut settings.grid, grid, format!("{grid} beat")); }
                             });
@@ -1114,7 +1355,7 @@ impl DawApp {
                     }
                     NoteTransform::Randomize(settings) => {
                         ui.horizontal_wrapped(|ui| {
-                            daw_ui::text::label(ui, "Randomize preview");
+                            daw_ui::text::label(ui, "Humanize preview");
                             let velocity = daw_ui::toolbar_group(ui, |ui| {
                                 daw_ui::text::label(ui, "Velocity ±");
                                 ui.add(daw_ui::number(&mut settings.velocity).range(0..=127).speed(1.0))
@@ -1133,14 +1374,23 @@ impl DawApp {
                             randomize_controls = serde_json::json!({"velocity":settings.velocity,"timing":settings.timing,"seed":settings.seed,"velocity_rect":rect_json(velocity.rect),"timing_rect":rect_json(timing.rect),"seed_rect":rect_json(seed.rect)});
                         });
                         ui.horizontal_wrapped(|ui| {
-                            apply = daw_ui::primary_button(ui, "Apply randomize").clicked();
-                            cancel = daw_ui::button(ui, "Cancel randomize").clicked();
-                            daw_ui::text::note(ui, "Selected notes · pitch and length stay fixed");
+                            apply = daw_ui::primary_button(ui, "Apply humanize").clicked();
+                            cancel = daw_ui::button(ui, "Cancel humanize").clicked();
+                            daw_ui::text::note(ui, if preview.whole_clip { "Clip window · pitch and length stay fixed" } else { "Selected notes · pitch and length stay fixed" });
                         });
                         state.randomize_settings = *settings;
                     }
+                    NoteTransform::Length(settings) => {
+                        let response = daw_ui::midi_note_length_preview(ui, settings,
+                            preview.selected.len(), MIN_NOTE, daw_core::MAX_BEAT);
+                        apply = response.apply;
+                        cancel = response.cancel;
+                        length_controls = serde_json::json!({"mode":settings.mode.label(),"beats":settings.beats,"amount_rect":rect_json(response.amount)});
+                        state.length_settings = *settings;
+                    }
                 }
             });
+            let mut length_report = None;
             let result = match preview.settings {
                 NoteTransform::Quantize(settings) => {
                     quantize_notes(&preview.source, &preview.selected, preview.origin, settings)
@@ -1152,6 +1402,17 @@ impl DawApp {
                     source_rate,
                 )
                 .map(|mut notes| {
+                    local_note_times(&mut notes, source_rate);
+                    notes
+                }),
+                NoteTransform::Length(settings) => midi_note_lengths(
+                    &preview.source_model,
+                    &preview.selected,
+                    source_rate,
+                    note_length_change(settings),
+                )
+                .map(|(mut notes, report)| {
+                    length_report = Some(report);
                     local_note_times(&mut notes, source_rate);
                     notes
                 }),
@@ -1173,10 +1434,40 @@ impl DawApp {
                     cancel = true;
                 }
             }
+            if let Some(report) = length_report {
+                length_controls["changed"] = serde_json::json!(report.changed);
+                length_controls["applied_delta"] = serde_json::json!(report.applied_delta);
+                let caption = if let Some(delta) = report.applied_delta {
+                    let requested = match preview.settings {
+                        NoteTransform::Length(settings) => match note_length_change(settings) {
+                            MidiNoteLengthChange::Add { delta } => delta,
+                            _ => unreachable!(),
+                        },
+                        _ => unreachable!(),
+                    };
+                    format!(
+                        "Change {delta:+.6} beats{} · starts stay fixed",
+                        if (delta - requested).abs() > 1e-10 {
+                            " · limited by selection bounds"
+                        } else {
+                            ""
+                        }
+                    )
+                } else {
+                    "Fixed lengths · starts, pitches and velocities stay fixed".to_owned()
+                };
+                daw_ui::text::note(ui, caption);
+            }
             if apply || cancel {
+                let original_view = preview.original_view;
                 state.transform = None;
+                rows = PianoRows::new(|pitch| {
+                    !state.only_scale_keys || self.scale.contains(self.root, pitch)
+                });
                 if cancel {
                     notes = source_notes.clone();
+                    state.viewport = original_view;
+                    previous_rows = rows.clone();
                 }
             }
         }
@@ -1324,8 +1615,9 @@ impl DawApp {
                                         .filter(|note| self.selected_notes.contains(&note.id))
                                     {
                                         if let Some(row) = rows.row(note.pitch) {
-                                            note.pitch =
-                                                rows.pitch_at(row as f32 + f32::from(delta));
+                                            note.set_pitch(
+                                                rows.pitch_at(row as f32 + f32::from(delta)),
+                                            );
                                         }
                                     }
                                 }
@@ -1646,7 +1938,7 @@ impl DawApp {
                     button: egui::PointerButton::Primary,
                     pressed: true,
                     modifiers,
-                } => Some((*pos, modifiers.shift)),
+                } => Some((*pos, *modifiers)),
                 _ => None,
             })
         });
@@ -1675,7 +1967,9 @@ impl DawApp {
         }
         let mut double = false;
         let modifiers = ui.input(|i| i.modifiers);
-        let press_shift = press.map_or(modifiers.shift, |(_, shift)| shift);
+        let press_modifiers = press.map_or(modifiers, |(_, modifiers)| modifiers);
+        let press_shift = press_modifiers.shift;
+        let press_copy = press_shift || press_modifiers.ctrl || press_modifiers.command;
         let pitch_at = |pos: Pos2| rows.pitch_at(view.row_at(plot, pos.y));
         let snap = self.snap;
         let snap_beat = |beat: f64| {
@@ -1999,13 +2293,13 @@ impl DawApp {
         {
             let identity = note_hit.as_ref().map(|(note, _)| note.id);
             let now = ui.input(|input| input.time);
-            // Selection intent belongs to the press, even if Shift is released
-            // before the mouse. Such a click must never become a double-delete.
-            let shift_click = press_shift
+            // Selection/copy intent belongs to the press even if the modifier
+            // is released before the mouse. Never turn it into double-delete.
+            let shift_click = press_copy
                 || matches!(
                     state.gesture,
                     Some(Gesture::Notes {
-                        shift_pressed: true,
+                        modifier_pressed: true,
                         ..
                     })
                 );
@@ -2126,16 +2420,16 @@ impl DawApp {
                             let edge = daw_ui::piano_note_edge(*rect, pos.x);
                             state.last_length = note.length;
                             state.gesture = Some(Gesture::Notes {
-                                originals: notes
+                                originals: source_model
                                     .iter()
                                     .filter(|n| self.selected_notes.contains(&n.id))
                                     .cloned()
                                     .collect(),
                                 origin: pos,
                                 edge,
-                                duplicate: press_shift && edge == 0,
+                                duplicate: press_copy && edge == 0,
                                 dragged: false,
-                                shift_pressed: press_shift,
+                                modifier_pressed: press_copy,
                                 deselect_on_click,
                             });
                         }
@@ -2231,7 +2525,7 @@ impl DawApp {
                         edge,
                         duplicate,
                         dragged,
-                        shift_pressed,
+                        modifier_pressed,
                         ..
                     } if dragged || pos.distance(origin) > 2.0 => {
                         let raw_delta = (pos.x - origin.x) as f64 / view.pixels_per_beat as f64;
@@ -2244,18 +2538,18 @@ impl DawApp {
                             let copied: Vec<_> = originals
                                 .into_iter()
                                 .map(|mut note| {
-                                    note.id = daw_core::new_id();
+                                    note.refresh_identity();
                                     note
                                 })
                                 .collect();
-                            actions.push(NoteEdit::Add(copied.clone()));
+                            actions.push(NoteEdit::Source(Box::new(NoteEdit::Add(copied.clone()))));
                             state.gesture = Some(Gesture::Notes {
                                 originals: copied.clone(),
                                 origin,
                                 edge,
                                 duplicate: false,
                                 dragged: true,
-                                shift_pressed,
+                                modifier_pressed,
                                 deselect_on_click: None,
                             });
                             copied
@@ -2281,12 +2575,22 @@ impl DawApp {
                             let mut moved = originals;
                             for note in &mut moved {
                                 if let Some(row) = rows.row(note.pitch) {
-                                    note.pitch = rows.pitch_at(row as f32 + f32::from(row_delta));
+                                    note.set_pitch(
+                                        rows.pitch_at(row as f32 + f32::from(row_delta)),
+                                    );
                                 }
                             }
-                            actions.push(NoteEdit::Move(moved, delta, 0));
+                            actions.push(NoteEdit::Source(Box::new(NoteEdit::Move(
+                                moved,
+                                delta * source_rate,
+                                0,
+                            ))));
                         } else {
-                            actions.push(NoteEdit::Resize(originals, delta, edge < 0));
+                            actions.push(NoteEdit::Source(Box::new(NoteEdit::Resize(
+                                originals,
+                                delta * source_rate,
+                                edge < 0,
+                            ))));
                         }
                     }
                     Gesture::Draw {
@@ -2510,12 +2814,21 @@ impl DawApp {
             "visible_pitches":rows.pitches(),"highlight_scale":state.highlight_scale,"highlight_chord":state.highlight_chord,"only_scale_keys":state.only_scale_keys,
             "hidden_notes":notes.iter().filter(|note| rows.row(note.pitch).is_none()).count(),
             "tool":format!("{:?}",self.tool),"cursor":self.cursor,"chord":state.chord.name(),"stack":state.stack.name(),"audition":state.audition,
-            "quantize":quantize_controls,"randomize":randomize_controls,"color_out_of_scale":state.color_out_of_scale,"preview_notes":if state.transform.is_some(){Some(&notes)}else{None},"clipboard_count":state.clipboard.len(),
+            "quantize":quantize_controls,"randomize":randomize_controls,"length_edit":length_controls,"color_out_of_scale":state.color_out_of_scale,"preview_notes":if state.transform.is_some(){Some(&notes)}else{None},"clipboard_count":state.clipboard.len(),
             "generate":generate_diagnostics,
             "keyboard_pitch":state.keyboard_pitch,"keyboard_focus":state.keyboard_focus,"navigation_note":state.navigation_note,
             "pitch_hint":pitch_hint,
         })));
         self.midi_editor = state;
+        if loop_this_clip {
+            self.flush_pending_edit();
+            self.loop_range(clip_start, clip_start + clip_length);
+            self.edit_label = Some("Loop clip".into());
+            self.flush_pending_edit();
+        }
+        if let Some(action) = whole_clip_action {
+            self.apply_midi_clip_action(track_id, clip_id, action);
+        }
         let edited = !actions.is_empty();
         for action in actions {
             let generated = match &action {
@@ -2540,6 +2853,12 @@ impl DawApp {
                     draft.committed(window, ids.len());
                 }
             }
+        }
+        if let Some(axis) = requested_flip {
+            self.apply_selected_note_flip(axis);
+        }
+        if let Some(note) = open_expression {
+            self.open_midi_expression(track_id, clip_id, note);
         }
         if edited
             && self.midi_editor.only_scale_keys
@@ -2579,6 +2898,7 @@ impl DawApp {
             .ok_or_else(|| anyhow::anyhow!("Select a MIDI clip"))?;
         let old: HashMap<_, _> = original.iter().map(|note| (note.id, note)).collect();
         let randomizing = matches!(&edit, SongEdit::RandomizeNotes { .. });
+        let changing_lengths = matches!(&edit, SongEdit::EditMidiNoteLengths { .. });
         let mut candidate = self.project.clone();
         EditBatch {
             label: label.into(),
@@ -2591,19 +2911,23 @@ impl DawApp {
             let tolerance = (8.0 * f64::EPSILON * a.abs().max(b.abs()).max(1.0)).min(1e-9);
             (a - b).abs() <= tolerance
         };
-        let length = edited
-            .iter()
-            .filter(|note| scope.contains(&note.id))
-            .filter(|note| {
-                !randomizing
-                    || old.get(&note.id).is_some_and(|old| {
-                        let end = window.source_to_local(old.start + old.length);
-                        note.start > old.start
-                            && (end <= window.length || same_time(end, window.length))
-                    })
-            })
-            .map(|note| window.source_to_local(note.start + note.length))
-            .fold(window.length, f64::max);
+        let length = if changing_lengths {
+            window.length
+        } else {
+            edited
+                .iter()
+                .filter(|note| scope.contains(&note.id))
+                .filter(|note| {
+                    !randomizing
+                        || old.get(&note.id).is_some_and(|old| {
+                            let end = window.source_to_local(old.start + old.length);
+                            note.start > old.start
+                                && (end <= window.length || same_time(end, window.length))
+                        })
+                })
+                .map(|note| window.source_to_local(note.start + note.length))
+                .fold(window.length, f64::max)
+        };
         let affected = edited
             .iter()
             .filter(|note| {
@@ -2615,12 +2939,19 @@ impl DawApp {
             })
             .map(|note| note.id)
             .collect();
-        let merged = merge_fully_overlapping_midi_notes(edited, &affected)?;
-        let selected = scope
-            .iter()
-            .map(|id| merged.remapped.get(id).copied().unwrap_or(*id))
-            .collect();
-        *candidate.midi_notes_mut(track, clip).unwrap() = merged.notes;
+        let (notes, selected) = if changing_lengths {
+            // A batch duration command has explicit note identities and must
+            // not silently replace alternatives or their expression streams.
+            (edited.to_vec(), scope)
+        } else {
+            let merged = merge_fully_overlapping_midi_notes(edited, &affected)?;
+            let selected = scope
+                .iter()
+                .map(|id| merged.remapped.get(id).copied().unwrap_or(*id))
+                .collect();
+            (merged.notes, selected)
+        };
+        *candidate.midi_notes_mut(track, clip).unwrap() = notes;
         candidate.clip_mut(track, clip).unwrap().length = length;
         candidate.synchronize_linked_clip(track, clip)?;
         if self.commit_song_candidate(candidate, label)? {
@@ -2653,7 +2984,35 @@ impl DawApp {
         // fold/unfold round trip restores the selection of hidden pitches.
         self.midi_editor.clear_hidden_selection();
         let minimum_note = MIN_NOTE * original.source_rate;
-        let action = action.into_source_time(original.source_rate);
+        let unchanged_times: HashMap<u64, (Option<f64>, Option<f64>)> =
+            match (&action, &original.content) {
+                (NoteEdit::Replace(edited, _, _), ClipContent::Midi { notes })
+                    if original.source_rate != 1.0 =>
+                {
+                    let originals: HashMap<_, _> =
+                        notes.iter().map(|note| (note.id, note)).collect();
+                    edited
+                        .iter()
+                        .filter_map(|note| {
+                            let source = originals.get(&note.id)?;
+                            Some((
+                                note.id,
+                                (
+                                    (note.start == source.start / original.source_rate)
+                                        .then_some(source.start),
+                                    (note.length == source.length / original.source_rate)
+                                        .then_some(source.length),
+                                ),
+                            ))
+                        })
+                        .collect()
+                }
+                _ => HashMap::new(),
+            };
+        let action = match action {
+            NoteEdit::Source(action) => *action,
+            action => action.into_source_time(original.source_rate),
+        };
         let selection = self.selected_notes.clone();
         self.begin_edit();
         let mut edit_label = None;
@@ -2669,7 +3028,9 @@ impl DawApp {
                 | NoteEdit::Replace(..)
         );
         let result = match action {
-            NoteEdit::Command(..) => unreachable!("Commands use the shared session service"),
+            NoteEdit::Command(..) | NoteEdit::Source(_) => {
+                unreachable!("Commands use the shared session service")
+            }
             NoteEdit::Replace(mut edited, selected, label) => {
                 // Preserve unselected source values bit-for-bit through the
                 // editor/source conversion, including arbitrary stretch ratios.
@@ -2683,6 +3044,13 @@ impl DawApp {
                             && let Some(source) = unchanged.get(&note.id)
                         {
                             *note = (*source).clone();
+                        } else if let Some((start, length)) = unchanged_times.get(&note.id) {
+                            if let Some(start) = start {
+                                note.start = *start;
+                            }
+                            if let Some(length) = length {
+                                note.length = *length;
+                            }
                         }
                     }
                 }
@@ -2746,13 +3114,19 @@ impl DawApp {
                     .fold(f64::INFINITY, f64::min);
                 let min = originals.iter().map(|n| n.pitch).min().unwrap_or(0) as i16;
                 let max = originals.iter().map(|n| n.pitch).max().unwrap_or(127) as i16;
-                let delta = delta.max(-earliest);
+                let latest = originals
+                    .iter()
+                    .map(|note| note.start + note.length)
+                    .fold(0.0_f64, f64::max);
+                let delta = delta.clamp(-earliest, daw_core::MAX_BEAT - latest);
                 let pitch_delta = pitch_delta.clamp(-min, 127 - max);
                 if let Some(notes) = self.project.midi_notes_mut(track, clip) {
                     for original in originals {
                         if let Some(n) = notes.iter_mut().find(|n| n.id == original.id) {
-                            n.start = original.start + delta;
-                            n.pitch = (i16::from(original.pitch) + pitch_delta) as u8;
+                            let start = original.start + delta;
+                            *n = original;
+                            n.start = start;
+                            n.set_pitch((i16::from(n.pitch) + pitch_delta) as u8);
                         }
                     }
                 }
@@ -2770,36 +3144,57 @@ impl DawApp {
                         .min(
                             originals
                                 .iter()
-                                .map(|n| n.length - minimum_note)
+                                .map(|n| n.length - n.length.min(minimum_note))
                                 .fold(f64::INFINITY, f64::min),
                         )
                 } else {
-                    delta.max(
-                        originals
-                            .iter()
-                            .map(|n| minimum_note - n.length)
-                            .fold(f64::NEG_INFINITY, f64::max),
-                    )
+                    delta
+                        .max(
+                            originals
+                                .iter()
+                                .map(|n| n.length.min(minimum_note) - n.length)
+                                .fold(f64::NEG_INFINITY, f64::max),
+                        )
+                        .min(
+                            originals
+                                .iter()
+                                .map(|note| daw_core::MAX_BEAT - (note.start + note.length))
+                                .fold(f64::INFINITY, f64::min),
+                        )
                 };
-                if let Some(notes) = self.project.midi_notes_mut(track, clip) {
-                    for original in originals {
-                        if let Some(n) = notes.iter_mut().find(|n| n.id == original.id) {
-                            if start_edge {
-                                n.start = original.start + delta;
-                                n.length = original.length - delta;
-                            } else {
-                                n.length = original.length + delta;
+                let resized: anyhow::Result<Vec<_>> = originals
+                    .into_iter()
+                    .map(|mut note| {
+                        if start_edge {
+                            note.trim_start_preserving_end(note.start + delta)?;
+                        } else {
+                            note.length += delta;
+                        }
+                        daw_core::validate_note(&note)?;
+                        Ok(note)
+                    })
+                    .collect();
+                match resized {
+                    Ok(resized) => {
+                        if let Some(notes) = self.project.midi_notes_mut(track, clip) {
+                            for resized in resized {
+                                if let Some(note) =
+                                    notes.iter_mut().find(|note| note.id == resized.id)
+                                {
+                                    *note = resized;
+                                }
                             }
                         }
+                        Ok(())
                     }
+                    Err(error) => Err(error),
                 }
-                Ok(())
             }
             NoteEdit::Velocity(values) => {
                 if let Some(notes) = self.project.midi_notes_mut(track, clip) {
                     for (id, value) in values {
                         if let Some(note) = notes.iter_mut().find(|n| n.id == id) {
-                            note.velocity = value.clamp(1, 127);
+                            note.set_velocity(value.clamp(1, 127));
                         }
                     }
                 }

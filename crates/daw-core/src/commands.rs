@@ -7,6 +7,9 @@ use std::collections::{HashMap, HashSet};
 
 pub const MAX_BATCH_EDITS: usize = 128;
 pub const MAX_BATCH_NOTES: usize = 8192;
+/// Bound newly allocated document data from one transactional tool call. Large
+/// existing plugin states do not prevent small edits to the same document.
+pub const MAX_BATCH_GROWTH_BYTES: usize = 32 * 1024 * 1024;
 /// Trusted host lookup from an existing source path to its duration in seconds.
 pub type AudioSourceDurations<'a> = dyn Fn(&str) -> Option<f64> + 'a;
 
@@ -102,6 +105,10 @@ pub struct MixChange {
     #[serde(default)]
     pub gain_db: Option<f64>,
     #[serde(default)]
+    pub input_gain: Option<f32>,
+    #[serde(default)]
+    pub input_gain_db: Option<f64>,
+    #[serde(default)]
     pub pan: Option<f32>,
     #[serde(default)]
     pub mute: Option<bool>,
@@ -161,6 +168,10 @@ pub enum SongEdit {
         track: EntityRef,
         input: MidiInputChannel,
     },
+    SetMidiInputGroup {
+        track: EntityRef,
+        group: u8,
+    },
     ClearTrackInput {
         track: EntityRef,
     },
@@ -208,6 +219,85 @@ pub enum SongEdit {
         track: EntityRef,
         clip: EntityRef,
         name: String,
+    },
+    SetClipMuted {
+        track: EntityRef,
+        clip: EntityRef,
+        muted: bool,
+    },
+    SetNoteVelocity16 {
+        track: EntityRef,
+        clip: EntityRef,
+        note: u64,
+        velocity: u16,
+    },
+    SetNotePitchSemitones {
+        track: EntityRef,
+        clip: EntityRef,
+        note: u64,
+        value: f64,
+    },
+    EditMidiNoteLengths {
+        track: EntityRef,
+        clip: EntityRef,
+        note_ids: Vec<u64>,
+        change: MidiNoteLengthChange,
+    },
+    SetNoteReleaseVelocity16 {
+        track: EntityRef,
+        clip: EntityRef,
+        note: u64,
+        velocity: u16,
+    },
+    UpsertNoteExpression {
+        track: EntityRef,
+        clip: EntityRef,
+        note: u64,
+        beat: f64,
+        packet: UmpPacket,
+        #[serde(default)]
+        key: Option<String>,
+    },
+    UpdateNoteExpression {
+        track: EntityRef,
+        clip: EntityRef,
+        note: u64,
+        point: EntityRef,
+        beat: f64,
+        packet: UmpPacket,
+    },
+    RemoveNoteExpression {
+        track: EntityRef,
+        clip: EntityRef,
+        note: u64,
+        point: EntityRef,
+    },
+    SetMidiEvent {
+        track: EntityRef,
+        clip: EntityRef,
+        event: Option<EntityRef>,
+        beat: f64,
+        packet: UmpPacket,
+        #[serde(default)]
+        key: Option<String>,
+    },
+    RemoveMidiEvent {
+        track: EntityRef,
+        clip: EntityRef,
+        event: EntityRef,
+    },
+    SetPluginInputs {
+        track: EntityRef,
+        effect: Option<u64>,
+        inputs: Vec<PluginInputRoute>,
+    },
+    AddInstrumentOutput {
+        track: EntityRef,
+        name: String,
+        bus: u32,
+        first_channel: u32,
+        #[serde(default)]
+        key: Option<String>,
     },
     MoveClip {
         track: EntityRef,
@@ -508,7 +598,7 @@ fn text(value: &str) -> Result<()> {
 fn resolve(value: &EntityRef, refs: &HashMap<String, u64>) -> Result<u64> {
     match value {
         EntityRef::Id(id) => {
-            ensure!(*id > 0 && *id < u64::MAX, "Invalid object ID");
+            ensure!(*id < u64::MAX, "Invalid object ID");
             Ok(*id)
         }
         EntityRef::Key(key) => refs
@@ -611,12 +701,18 @@ impl EditBatch {
             })
             .sum();
         ensure!(note_count <= MAX_BATCH_NOTES, "Too many notes in one batch");
+        let before_bytes = crate::history::snapshot_bytes(project);
         let mut candidate = project.clone();
         let mut refs = HashMap::new();
         let mut result = EditResult::default();
         for (index, edit) in self.edits.iter().enumerate() {
             apply_one(edit, &mut candidate, &mut refs, &mut result, durations)
                 .with_context(|| format!("Edit {}", index + 1))?;
+            ensure!(
+                crate::history::snapshot_bytes(&candidate).saturating_sub(before_bytes)
+                    <= MAX_BATCH_GROWTH_BYTES,
+                "Edit batch adds more than 32 MiB of document data; use smaller batches"
+            );
         }
         candidate.prune_automation();
         candidate.validate()?;
@@ -709,6 +805,14 @@ fn apply_one(
             ensure!(track.kind == TrackKind::Midi, "Choose a MIDI track");
             track.midi_input = Some(*input);
         }
+        SongEdit::SetMidiInputGroup { track, group } => {
+            let track = p.track_mut(r(track)?).context("Track not found")?;
+            ensure!(
+                track.kind == TrackKind::Midi && *group < 16,
+                "Choose a MIDI input group between 0 and 15"
+            );
+            track.midi_input_group = *group;
+        }
         SongEdit::ClearTrackInput { track } => {
             let track = p.track_mut(r(track)?).context("Track not found")?;
             ensure!(
@@ -729,6 +833,10 @@ fn apply_one(
                     channel.gain.is_none() || channel.gain_db.is_none(),
                     "Choose linear gain or gain_db, not both"
                 );
+                ensure!(
+                    channel.input_gain.is_none() || channel.input_gain_db.is_none(),
+                    "Choose linear input_gain or input_gain_db, not both"
+                );
                 let id = r(&channel.track)?;
                 ensure!(seen.insert(id), "Duplicate mix channel");
                 let track = p.track_mut(id).context("Track not found")?;
@@ -746,6 +854,20 @@ fn apply_one(
                     );
                     track.gain = 10.0_f64.powf(db / 20.0) as f32;
                 }
+                if let Some(gain) = channel.input_gain {
+                    ensure!(
+                        gain.is_finite() && (0.0..=16.0).contains(&gain),
+                        "Input gain must be between 0 and 16"
+                    );
+                    track.input_gain = gain;
+                }
+                if let Some(db) = channel.input_gain_db {
+                    ensure!(
+                        db.is_finite() && (-120.0..=24.0).contains(&db),
+                        "Input gain must be between -120 and 24 dB"
+                    );
+                    track.input_gain = 10.0_f64.powf(db / 20.0) as f32;
+                }
                 if let Some(pan) = channel.pan {
                     track.pan = pan;
                 }
@@ -759,6 +881,117 @@ fn apply_one(
         }
         SongEdit::SetOutput { track, bus } => {
             p.set_output(r(track)?, bus.as_ref().map(r).transpose()?)?
+        }
+        SongEdit::SetPluginInputs {
+            track,
+            effect,
+            inputs,
+        } => {
+            p.set_plugin_inputs(r(track)?, *effect, inputs.clone())?;
+        }
+        SongEdit::AddInstrumentOutput {
+            track,
+            name,
+            bus,
+            first_channel,
+            key,
+        } => {
+            text(name)?;
+            let id = p.add_instrument_output(r(track)?, name, *bus, *first_channel)?;
+            record(result, refs, "track", id, key)?;
+        }
+        SongEdit::SetClipMuted { track, clip, muted } => {
+            p.set_clip_muted(r(track)?, r(clip)?, *muted)?;
+        }
+        SongEdit::SetNoteVelocity16 {
+            track,
+            clip,
+            note,
+            velocity,
+        } => {
+            p.set_note_velocity16(r(track)?, r(clip)?, *note, *velocity)?;
+        }
+        SongEdit::SetNotePitchSemitones {
+            track,
+            clip,
+            note,
+            value,
+        } => {
+            p.set_note_pitch_semitones(r(track)?, r(clip)?, *note, *value)?;
+        }
+        SongEdit::EditMidiNoteLengths {
+            track,
+            clip,
+            note_ids,
+            change,
+        } => {
+            let (track, clip) = (r(track)?, r(clip)?);
+            let selected = selected_notes(p, track, clip, note_ids)?;
+            p.edit_midi_note_lengths(track, clip, &selected, *change)?;
+        }
+        SongEdit::SetNoteReleaseVelocity16 {
+            track,
+            clip,
+            note,
+            velocity,
+        } => {
+            let (track, clip) = (r(track)?, r(clip)?);
+            p.midi_notes_mut(track, clip)
+                .context("MIDI clip not found")?
+                .iter_mut()
+                .find(|candidate| candidate.id == *note)
+                .context("Note not found")?
+                .set_release_velocity16(*velocity);
+            p.synchronize_linked_clip(track, clip)?;
+        }
+        SongEdit::UpsertNoteExpression {
+            track,
+            clip,
+            note,
+            beat,
+            packet,
+            key,
+        } => {
+            let id = p.upsert_note_expression(r(track)?, r(clip)?, *note, *beat, *packet)?;
+            record(result, refs, "note_expression", id, key)?;
+        }
+        SongEdit::UpdateNoteExpression {
+            track,
+            clip,
+            note,
+            point,
+            beat,
+            packet,
+        } => {
+            p.update_note_expression(r(track)?, r(clip)?, *note, r(point)?, *beat, *packet)?;
+        }
+        SongEdit::RemoveNoteExpression {
+            track,
+            clip,
+            note,
+            point,
+        } => {
+            p.remove_note_expression(r(track)?, r(clip)?, *note, r(point)?)?;
+        }
+        SongEdit::SetMidiEvent {
+            track,
+            clip,
+            event,
+            beat,
+            packet,
+            key,
+        } => {
+            let id = p.set_midi_event(
+                r(track)?,
+                r(clip)?,
+                event.as_ref().map(r).transpose()?,
+                *beat,
+                *packet,
+            )?;
+            record(result, refs, "midi_event", id, key)?;
+        }
+        SongEdit::RemoveMidiEvent { track, clip, event } => {
+            p.remove_midi_event(r(track)?, r(clip)?, r(event)?)?;
         }
         SongEdit::SetFolder { track, folder } => {
             p.set_parent_folder(r(track)?, folder.as_ref().map(r).transpose()?)?
@@ -914,7 +1147,7 @@ fn apply_one(
                 let &index = index_by_id.get(&change.id).context("Note not found")?;
                 let note = &mut data[index];
                 if let Some(v) = change.pitch {
-                    note.pitch = v;
+                    note.set_pitch(v);
                 }
                 if let Some(v) = change.start {
                     note.start = v;
@@ -923,7 +1156,7 @@ fn apply_one(
                     note.length = v;
                 }
                 if let Some(v) = change.velocity {
-                    note.velocity = v;
+                    note.set_velocity(v);
                 }
                 validate_note(note)?;
             }

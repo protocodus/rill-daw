@@ -145,6 +145,7 @@ fn failed_output_rejects_audio_midi_and_audition_without_clearing_its_cause() {
                 routes: vec![MidiRoute {
                     track: midi,
                     channel: None,
+                    group: 0,
                     monitor: true,
                 }],
             },
@@ -335,6 +336,7 @@ fn output_xrun_stops_audio_and_midi_capture_and_preserves_the_exact_recorded_pre
                 routes: vec![MidiRoute {
                     track: midi,
                     channel: None,
+                    group: 0,
                     monitor: false,
                 }],
             },

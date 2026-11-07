@@ -21,7 +21,10 @@ impl Project {
     pub fn ordered_track_ids(&self) -> Vec<u64> {
         let mut children: HashMap<Option<u64>, Vec<usize>> = HashMap::new();
         for (index, track) in self.tracks.iter().enumerate() {
-            children.entry(track.parent_folder).or_default().push(index);
+            children
+                .entry(track.group_parent())
+                .or_default()
+                .push(index);
         }
         let mut seen = vec![false; self.tracks.len()];
         let mut ordered = Vec::with_capacity(self.tracks.len());
@@ -62,11 +65,24 @@ impl Project {
         target: u64,
         placement: TrackPlacement,
     ) -> Result<bool> {
+        ensure!(
+            source != crate::MASTER_CHANNEL_ID && target != crate::MASTER_CHANNEL_ID,
+            "Master cannot be reordered"
+        );
         let source_parent = self
             .track(source)
             .context("Source track not found")?
             .parent_folder;
         let target_track = self.track(target).context("Destination track not found")?;
+        if let Some(output) = self.track(source).and_then(|track| track.instrument_output) {
+            ensure!(
+                placement != TrackPlacement::IntoFolder
+                    && target_track
+                        .instrument_output
+                        .is_some_and(|target| target.track == output.track),
+                "Instrument outputs can be reordered within their instrument group"
+            );
+        }
         if source == target && placement != TrackPlacement::IntoFolder {
             return Ok(false);
         }
@@ -85,7 +101,7 @@ impl Project {
         self.routing_order()?;
         let mut children: HashMap<u64, Vec<u64>> = HashMap::new();
         for track in &self.tracks {
-            if let Some(parent) = track.parent_folder {
+            if let Some(parent) = track.group_parent() {
                 children.entry(parent).or_default().push(track.id);
             }
         }
@@ -146,6 +162,14 @@ impl Project {
         self.track_mut(source)
             .expect("source retained")
             .parent_folder = parent;
+        for child in &mut self.tracks {
+            if child
+                .instrument_output
+                .is_some_and(|output| output.track == source)
+            {
+                child.parent_folder = parent;
+            }
+        }
         Ok(true)
     }
 }

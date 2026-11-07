@@ -21,7 +21,6 @@ fn context(start: u64, count: usize) -> BlockContext {
         tempo: 120.0,
         timeline: true,
         live_input: true,
-        meter_decay: 1.0,
     }
 }
 
@@ -106,6 +105,7 @@ fn loop_wrap_releases_only_sequencer_voices_and_defers_live_edges_during_priming
             end: 256,
             pitch: 60,
             velocity: 90,
+            precise: None,
         };
         record_active_note(
             &mut track.active_notes,

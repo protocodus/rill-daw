@@ -15,6 +15,23 @@ use std::{
 
 type ParameterResult = Arc<Mutex<Option<Result<Vec<daw_plugins::ParameterInfo>, String>>>>;
 
+// Keep the chooser order and the boundary of the larger plug-in parameter
+// page together when adding another automatable channel control.
+const CHANNEL_PARAMETERS: [(AutomationParameter, &str); 3] = [
+    (AutomationParameter::TrackInputGain, "Input gain"),
+    (AutomationParameter::TrackGain, "Volume"),
+    (AutomationParameter::TrackPan, "Pan"),
+];
+
+fn default_parameter_index() -> usize {
+    // Volume remains the initial workflow even when another channel control
+    // precedes it in the picker.
+    CHANNEL_PARAMETERS
+        .iter()
+        .position(|(parameter, _)| *parameter == AutomationParameter::TrackGain)
+        .expect("Volume is an automatable channel control")
+}
+
 #[derive(Clone, PartialEq, Eq)]
 struct ParameterSource {
     track: u64,
@@ -59,7 +76,7 @@ impl Default for EditorState {
             track: None,
             creating: false,
             source: None,
-            parameter: 0,
+            parameter: default_parameter_index(),
             point: None,
             viewport: TimelineViewport::default(),
             fitted: false,
@@ -124,7 +141,7 @@ impl DawApp {
             });
         state.creating = true;
         state.source = Some(lane.target.track);
-        state.parameter = 0;
+        state.parameter = default_parameter_index();
         ctx.data_mut(|data| data.insert_temp(key, state));
     }
 
@@ -158,7 +175,7 @@ impl DawApp {
         let parameter_page = state
             .source
             .and_then(|id| self.project.track(id))
-            .is_some_and(|track| state.parameter >= 2 + track.sends.len());
+            .is_some_and(|track| state.parameter >= CHANNEL_PARAMETERS.len() + track.sends.len());
         let mut open = true;
         let mut cancel = false;
         let popup = if editing {
@@ -206,8 +223,7 @@ impl DawApp {
         let ui = footer.body();
         let tracks: Vec<_> = self
             .project
-            .tracks
-            .iter()
+            .channels()
             .filter(|t| matches!(t.kind, TrackKind::Audio | TrackKind::Midi | TrackKind::Bus))
             .map(|t| (t.id, t.name.clone()))
             .collect();
@@ -248,14 +264,14 @@ impl DawApp {
         });
         if selected_source != state.source {
             state.source = selected_source;
-            state.parameter = 0;
+            state.parameter = default_parameter_index();
         }
         let source = state.source.unwrap();
         let track = self.project.track(source).unwrap();
-        let mut choices = vec![
-            (AutomationParameter::TrackGain, "Volume".to_owned()),
-            (AutomationParameter::TrackPan, "Pan".to_owned()),
-        ];
+        let mut choices: Vec<_> = CHANNEL_PARAMETERS
+            .iter()
+            .map(|(parameter, label)| (*parameter, (*label).to_owned()))
+            .collect();
         for send in &track.sends {
             let name = self
                 .project
@@ -562,7 +578,7 @@ impl DawApp {
         if add_parameter {
             state.creating = true;
             state.source = Some(lane.target.track);
-            state.parameter = 0;
+            state.parameter = default_parameter_index();
             return;
         }
         if interpolation != lane.interpolation || enabled == track.mute {
@@ -661,7 +677,9 @@ impl DawApp {
                 let mut manual = lane.target.parameter.denormalize(value);
                 let manual_response = if matches!(
                     lane.target.parameter,
-                    AutomationParameter::TrackGain | AutomationParameter::SendGain { .. }
+                    AutomationParameter::TrackInputGain
+                        | AutomationParameter::TrackGain
+                        | AutomationParameter::SendGain { .. }
                 ) {
                     daw_ui::gain_value_button(
                         ui,
@@ -706,15 +724,15 @@ impl DawApp {
             let range = lane.target.parameter.range();
             let speed = (*range.end() - *range.start()) as f64 / 200.0;
             let value_response = match lane.target.parameter {
-                AutomationParameter::TrackGain | AutomationParameter::SendGain { .. } => {
-                    daw_ui::gain_value_button(
-                        ui,
-                        ("automation_point_gain", id, point.id),
-                        &mut value,
-                        *range.end(),
-                        "Gain",
-                    )
-                }
+                AutomationParameter::TrackInputGain
+                | AutomationParameter::TrackGain
+                | AutomationParameter::SendGain { .. } => daw_ui::gain_value_button(
+                    ui,
+                    ("automation_point_gain", id, point.id),
+                    &mut value,
+                    *range.end(),
+                    "Gain",
+                ),
                 parameter => {
                     let (prefix, tooltip) = match parameter {
                         AutomationParameter::TrackPan => ("Pan ", "−1 left · 0 center · 1 right"),
@@ -1076,6 +1094,9 @@ const AUTOMATION_TRAILING_WIDTH: f32 = 480.0;
 /// Value-axis labels in the parameter's own units.
 fn value_axis_label(parameter: AutomationParameter) -> fn(f32) -> String {
     match parameter {
+        AutomationParameter::TrackInputGain => {
+            |value| daw_ui::gain_axis_label(AutomationParameter::TrackInputGain.denormalize(value))
+        }
         AutomationParameter::TrackGain => {
             |value| daw_ui::gain_axis_label(AutomationParameter::TrackGain.denormalize(value))
         }
@@ -1155,53 +1176,70 @@ mod tests {
             daw_ui::theme::Appearance::Light,
             daw_ui::theme::Appearance::Dark,
         ] {
-            let ctx = egui::Context::default();
-            daw_ui::theme::set_appearance(&ctx, appearance);
-            let mut project = daw_core::Project::new();
-            let source = project.add_audio_track("Glass keys");
-            let mut app = DawApp::with_context(&ctx, project, None);
-            app.selected_track = Some(source);
-            app.automation_open = true;
-            let mut output = egui::FullOutput::default();
-            for _ in 0..4 {
-                output = ctx.run(
-                    egui::RawInput {
-                        screen_rect: Some(egui::Rect::from_min_size(
-                            egui::Pos2::ZERO,
-                            egui::vec2(1100.0, 720.0),
-                        )),
-                        ..Default::default()
-                    },
-                    |ctx| app.automation_editor(ctx),
+            for (parameter, (_, label)) in CHANNEL_PARAMETERS.iter().enumerate() {
+                let ctx = egui::Context::default();
+                daw_ui::theme::set_appearance(&ctx, appearance);
+                let mut project = daw_core::Project::new();
+                let source = project.add_audio_track("Glass keys");
+                let mut app = DawApp::with_context(&ctx, project, None);
+                app.selected_track = Some(source);
+                app.automation_open = true;
+                ctx.data_mut(|data| {
+                    data.insert_temp(
+                        egui::Id::new("automation_editor_state"),
+                        EditorState {
+                            track: Some(source),
+                            source: Some(source),
+                            parameter,
+                            ..Default::default()
+                        },
+                    )
+                });
+                let mut output = egui::FullOutput::default();
+                for _ in 0..4 {
+                    output = ctx.run(
+                        egui::RawInput {
+                            screen_rect: Some(egui::Rect::from_min_size(
+                                egui::Pos2::ZERO,
+                                egui::vec2(1100.0, 720.0),
+                            )),
+                            ..Default::default()
+                        },
+                        |ctx| app.automation_editor(ctx),
+                    );
+                }
+                let window = ctx
+                    .memory(|memory| memory.area_rect(egui::Id::new("automation_create")))
+                    .expect("creation window");
+                assert!(
+                    window.height() < 300.0,
+                    "Short form must hug its content: {window:?}"
+                );
+                let label_rect = |label| {
+                    output
+                        .shapes
+                        .iter()
+                        .find_map(|shape| match &shape.shape {
+                            egui::Shape::Text(text) if text.galley.text() == label => {
+                                Some(text.galley.rect.translate(text.pos.to_vec2()))
+                            }
+                            _ => None,
+                        })
+                        .unwrap()
+                };
+                let add = label_rect("Add automation track");
+                let cancel = label_rect("Cancel");
+                assert!(
+                    label_rect(label).is_positive(),
+                    "The selected channel parameter is visible"
+                );
+                assert!((add.center().y - cancel.center().y).abs() < 1.0);
+                assert!(cancel.right() < add.left());
+                assert!(
+                    window.bottom() - add.bottom() < 50.0,
+                    "No large blank region below the footer"
                 );
             }
-            let window = ctx
-                .memory(|memory| memory.area_rect(egui::Id::new("automation_create")))
-                .expect("creation window");
-            assert!(
-                window.height() < 300.0,
-                "Short form must hug its content: {window:?}"
-            );
-            let label_rect = |label| {
-                output
-                    .shapes
-                    .iter()
-                    .find_map(|shape| match &shape.shape {
-                        egui::Shape::Text(text) if text.galley.text() == label => {
-                            Some(text.galley.rect.translate(text.pos.to_vec2()))
-                        }
-                        _ => None,
-                    })
-                    .unwrap()
-            };
-            let add = label_rect("Add automation track");
-            let cancel = label_rect("Cancel");
-            assert!((add.center().y - cancel.center().y).abs() < 1.0);
-            assert!(cancel.right() < add.left());
-            assert!(
-                window.bottom() - add.bottom() < 50.0,
-                "No large blank region below the footer"
-            );
         }
     }
 
@@ -1219,7 +1257,7 @@ mod tests {
         let mut state = EditorState {
             track: Some(track),
             source: Some(track),
-            parameter: 2,
+            parameter: CHANNEL_PARAMETERS.len(),
             parameter_source: Some(ParameterSource {
                 track,
                 effect: None,
@@ -1312,7 +1350,7 @@ mod tests {
             let mut state = EditorState {
                 track: Some(track),
                 source: Some(track),
-                parameter: 2,
+                parameter: CHANNEL_PARAMETERS.len(),
                 parameter_source: Some(ParameterSource {
                     track,
                     effect: None,
@@ -1370,7 +1408,7 @@ mod tests {
         let mut state = EditorState {
             track: Some(source),
             source: Some(source),
-            parameter: 2,
+            parameter: CHANNEL_PARAMETERS.len(),
             parameter_source: Some(ParameterSource {
                 track: source,
                 effect: None,

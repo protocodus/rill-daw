@@ -714,6 +714,7 @@ mod tests {
                     routes: vec![crate::MidiRoute {
                         track: midi,
                         channel: None,
+                        group: 0,
                         monitor: true,
                     }],
                 },

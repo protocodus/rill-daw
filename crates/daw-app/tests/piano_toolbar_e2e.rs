@@ -210,17 +210,17 @@ fn exposed_piano_tools_preserve_mouse_and_key_access_and_wrap_within_the_editor(
             unchanged(&dismissed, &before);
             let notes = app.click("Notes");
             label(&notes, "Quantize…");
-            label(&notes, "Randomize…");
+            label(&notes, "Humanize…");
             let preview = app.click("Quantize…");
             label(&preview, "Apply quantize");
             unchanged(&preview, &before);
             let cancelled = app.click("Cancel quantize");
             unchanged(&cancelled, &before);
             app.click("Notes");
-            let preview = app.click("Randomize…");
-            label(&preview, "Apply randomize");
+            let preview = app.click("Humanize…");
+            label(&preview, "Apply humanize");
             unchanged(&preview, &before);
-            let cancelled = app.click("Cancel randomize");
+            let cancelled = app.click("Cancel humanize");
             unchanged(&cancelled, &before);
         }
     }

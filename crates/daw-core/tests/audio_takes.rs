@@ -435,7 +435,7 @@ fn portable_archive_preserves_inactive_sources_and_legacy_projects_have_no_takes
     project.save(&json).unwrap();
     let manifest: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&json).unwrap()).unwrap();
-    assert_eq!(manifest["version"], 4);
+    assert_eq!(manifest["version"], 6);
     assert_eq!(Project::load(&json).unwrap(), project);
     let bundle = temp.path().join("takes.rill");
     project.save(&bundle).unwrap();

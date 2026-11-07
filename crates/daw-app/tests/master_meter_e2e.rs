@@ -1,5 +1,5 @@
-//! The running mixer reads the production output callback's measured PCM.
-//! A virtual sink controls sample consumption without ALSA null's unpaced clock.
+//! Mixer Master meters use the post-Master, pre-device channel tap. Transport
+//! meters retain the callback's independently measured/clipped output PCM.
 mod common;
 
 use common::Harness;
@@ -34,15 +34,14 @@ fn near(actual: [f64; 2], expected: [f64; 2]) {
 }
 
 fn master(state: &Value) -> [f64; 2] {
-    let displayed = stereo(&state["mixer"]["master_peaks"]);
-    near(
-        displayed,
-        [
-            state["engine"]["peak_left"].as_f64().unwrap(),
-            state["engine"]["peak_right"].as_f64().unwrap(),
-        ],
-    );
-    displayed
+    stereo(&state["mixer"]["master_peaks"])
+}
+
+fn device(state: &Value) -> [f64; 2] {
+    [
+        state["engine"]["peak_left"].as_f64().unwrap(),
+        state["engine"]["peak_right"].as_f64().unwrap(),
+    ]
 }
 
 fn channel(state: &Value, id: u64) -> [f64; 2] {
@@ -117,6 +116,7 @@ fn master_and_channel_meters_match_actual_bus_send_and_muted_mix_pcm() {
         near(stereo(sample), [0.3, 0.125]);
     }
     near(master(&state), [0.3, 0.125]);
+    near(device(&state), [0.3, 0.125]);
     near(channel(&state, lead), [0.4, 0.1]);
     near(channel(&state, bass), [0.0, 0.1]);
     near(channel(&state, bus), [0.2, 0.075]);
@@ -140,6 +140,7 @@ fn master_and_channel_meters_match_actual_bus_send_and_muted_mix_pcm() {
         near(stereo(sample), [0.0, 0.0375]);
     }
     near(master(&state), [0.0, 0.0375]);
+    near(device(&state), [0.0, 0.0375]);
     near(channel(&state, lead), [0.0, 0.0]);
     near(channel(&state, send), [0.0, 0.0]);
     near(channel(&state, bus), [0.0, 0.0375]);
@@ -178,7 +179,14 @@ fn master_keeps_a_short_transient_visible_after_the_next_silent_callback() {
     app.click("Play");
     wait_for_engine(&mut app);
     let hit = pump(&mut app, 256);
-    near(master(&hit), [0.4, 0.2]);
+    near(device(&hit), [0.4, 0.2]);
+    for (value, source) in master(&hit).into_iter().zip(channel(&hit, track)) {
+        assert!(
+            (value - source).abs() < 0.002,
+            "Master and source share post-fader render-meter ballistics"
+        );
+    }
+    near(stereo(&hit["mixer"]["master"]["peak_hold"]), [0.4, 0.2]);
     assert!(
         hit["audio_output"]
             .as_array()
@@ -195,7 +203,14 @@ fn master_keeps_a_short_transient_visible_after_the_next_silent_callback() {
             .all(|value| stereo(value) == [0.0; 2])
     );
     let release = 10.0_f64.powf(-24.0 * (256.0 / 48_000.0) / 20.0);
-    near(master(&silence), [0.4 * release, 0.2 * release]);
+    near(device(&silence), [0.4 * release, 0.2 * release]);
+    for (value, source) in master(&silence).into_iter().zip(channel(&silence, track)) {
+        assert!(
+            (value - source).abs() < 0.002,
+            "The pre-device Master releases on the renderer's channel clock"
+        );
+    }
+    near(stereo(&silence["mixer"]["master"]["peak_hold"]), [0.4, 0.2]);
     assert!(
         !silence["visible_labels"]
             .as_array()

@@ -67,6 +67,13 @@ enum Command {
         #[serde(default)]
         delay_frames: u32,
     },
+    MidiUmpInput {
+        words: Vec<u32>,
+        #[serde(default)]
+        offset_frames: u32,
+        #[serde(default)]
+        delay_frames: u32,
+    },
     MidiError,
     OutputError,
     OutputXrun,
@@ -188,6 +195,22 @@ enum Command {
     WaitAudioImport {
         #[serde(default = "project_timeout")]
         timeout_ms: u64,
+    },
+    Freeze {
+        track: u64,
+        clips: Option<Vec<u64>>,
+        #[serde(default = "wait_by_default")]
+        wait: bool,
+    },
+    WaitFreeze {
+        #[serde(default = "project_timeout")]
+        timeout_ms: u64,
+    },
+    CancelFreeze,
+    Unfreeze {
+        track: u64,
+        #[serde(default = "wait_by_default")]
+        wait: bool,
     },
     Open {
         path: PathBuf,
@@ -879,6 +902,24 @@ impl Harness {
         Ok(())
     }
 
+    fn wait_freeze(&mut self, timeout_ms: u64) -> Result<()> {
+        ensure!(
+            (1..=300_000).contains(&timeout_ms),
+            "Freeze timeout must be between 1 and 300000 ms"
+        );
+        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+        while self.app.freeze_busy() || self.app.state_sync_pending() {
+            ensure!(
+                Instant::now() < deadline,
+                "Freeze did not finish before the test deadline"
+            );
+            self.settle();
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        ensure!(!self.app.error, "{}", self.app.status);
+        Ok(())
+    }
+
     fn execute(&mut self, command: Command) -> Result<bool> {
         self.audio_output = None;
         self.inspect_paint = false;
@@ -1090,6 +1131,31 @@ impl Harness {
                     engine.inject_virtual_midi(&bytes, offset_frames)?;
                 } else {
                     engine.inject_virtual_midi_delayed(&bytes, delay_frames)?;
+                }
+                self.settle();
+            }
+            Command::MidiUmpInput {
+                words,
+                offset_frames,
+                delay_frames,
+            } => {
+                ensure!(
+                    self.app.virtual_audio,
+                    "UMP injection requires virtual audio mode"
+                );
+                ensure!(
+                    offset_frames == 0 || delay_frames == 0,
+                    "Choose either a MIDI offset or callback delivery delay"
+                );
+                let engine = self
+                    .app
+                    .engine
+                    .as_mut()
+                    .context("Audio engine is not ready")?;
+                if delay_frames == 0 {
+                    engine.inject_virtual_ump(&words, offset_frames)?;
+                } else {
+                    engine.inject_virtual_ump_delayed(&words, delay_frames)?;
                 }
                 self.settle();
             }
@@ -1379,6 +1445,27 @@ impl Harness {
                 header,
             } => self.drop_files(paths, track, beat, wait, header)?,
             Command::WaitAudioImport { timeout_ms } => self.wait_audio_import(timeout_ms)?,
+            Command::Freeze { track, clips, wait } => {
+                self.app.request_freeze(track, clips);
+                self.settle();
+                if wait {
+                    self.wait_freeze(300_000)?;
+                }
+                ensure!(!self.app.error, "{}", self.app.status);
+            }
+            Command::WaitFreeze { timeout_ms } => self.wait_freeze(timeout_ms)?,
+            Command::CancelFreeze => {
+                self.app.cancel_freeze();
+                self.settle();
+            }
+            Command::Unfreeze { track, wait } => {
+                self.app.unfreeze(track);
+                self.settle();
+                if wait {
+                    self.wait_freeze(300_000)?;
+                }
+                ensure!(!self.app.error, "{}", self.app.status);
+            }
             Command::Open { path, wait } => {
                 self.app.request_open_project(path, false);
                 if wait {
@@ -1441,6 +1528,7 @@ impl Harness {
         );
         let deadline = Instant::now() + Duration::from_millis(timeout_ms);
         while self.app.recording_busy()
+            || self.app.freeze_busy()
             || self.app.state_sync_pending()
             || self.app.project_io_pending()
             || self.app.recovery_pending()
@@ -1568,6 +1656,7 @@ impl Harness {
         });
         for (field, diagnostic) in [
             ("midi_editor", "midi_editor_diagnostics"),
+            ("midi_expression", "midi_expression_diagnostics"),
             ("audio_editor", "audio_editor_diagnostics"),
             ("timeline", "timeline_diagnostics"),
             ("mixer", "mixer_diagnostics"),
@@ -1639,7 +1728,9 @@ impl Harness {
         state["audio_batch_fades"] = state["boundary_fades_dialog"].clone();
         state["finishing"] = self.app.finishing_diagnostics();
         state["signal_analysis"] = self.app.signal_analysis_diagnostics(&self.ctx);
+        state["plugin_io"] = self.app.plugin_io_diagnostics(&self.ctx);
         state["popups"]["analysis"] = json!(self.app.analysis.open);
+        state["popups"]["midi_export"] = json!(self.app.midi_export_open);
         state["menu_label_rects"] =
             json!(self.menu_labels.iter().map(|(label,rect)| json!({
             "text":label,"min":[rect.left(),rect.top()],"max":[rect.right(),rect.bottom()]
@@ -1673,6 +1764,7 @@ impl Harness {
         state["export_include_effect_tails"] = json!(self.app.settings.export.include_effect_tails);
         state["export_preferences"] = json!(self.app.settings.export);
         state["audio_import"] = self.app.audio_import_diagnostics();
+        state["freeze"] = self.app.freeze_diagnostics();
         state["clipboard_text"] = json!(self.clipboard_text);
         state["recording"] = self.app.recording_diagnostics(&self.ctx);
         state["popups"]["recording"] = json!(self.app.recording_open);

@@ -50,16 +50,16 @@ execution must derive from the canonical registry rather than separate lists.
 | `daw-ai` | Background `AgentRun`, provider adapters, bounded tool loop, encrypted credential envelope; sends `ToolCall` events to the app rather than owning a project |
 | `daw-ui::assistant` | Shared provider-independent transcript/composer, reused by the app's assistant view |
 
-The current registry contains **37 tools**, of which **33 are current-song
-tools**, with **66 typed `SongEdit` variants**
-available through `apply_edits`. Its high-level operations avoid one call per
+The registry provides current-song tools and an application-profile extension,
+with typed `SongEdit` variants available through `apply_edits`.
+Its high-level operations avoid one call per
 note, control, or input assignment. This is substantial current-song coverage,
 not complete migration of every GUI action in the inventory below. Source tool
 discovery remains authoritative as the catalog expands.
 
 | Tool family | Registered tools and behavior |
 | --- | --- |
-| Song reads | `get_song_context`, `list_tracks`, `get_track`, `get_clip`: session/revision, paginated structural data, note data, and nondestructive clip settings |
+| Song reads | `get_song_context`, `list_tracks`, `get_track`, `get_clip`, `get_note_expressions`: session/revision, paginated structural and exact expression data, note data, and nondestructive clip settings |
 | Scope and history | `get_selection`, `set_selection`, `history`: choose objects by stable IDs without changing view; read/undo/redo normal song history |
 | Composition theory | `composer_catalog`, `composer_scale`, `composer_chord`, `composer_progression`, `composer_euclidean`: native, bounded theory queries adapted from midi-composer-mcp; no song edits |
 | Multi-part composition | `compose_progression`: create chord, arpeggio, and bass clips together in one fenced, undoable commit; reuse existing MIDI tracks or create new ones |
@@ -277,7 +277,7 @@ functionality must add its tool mapping in the same change.
 | Song and selection inspection | Song/track/clip/note overview, musical range and selection reads, stable IDs | `daw-core/src/model.rs`, `daw-app/src/app.rs` |
 | Tracks, buses, folders | Create/remove/reorder; rename/color; folder membership; mute/solo; gain/pan | `model.rs`, `routing.rs`, `app.rs`, `arrangement.rs` |
 | Arrangement clips | Create/move/trim/stretch/split/duplicate/delete; ghost copy/unlink; join/consolidate | `model.rs`, `clip_links.rs`, `join.rs`, `arrangement.rs`, `join_ui.rs` |
-| MIDI composition/editing | Bulk note insertion/replacement/deletion; move/resize/transpose/velocity; cut/copy/paste; split/glue; randomize; quantize; both legato modes; generation | `midi_edit.rs`, `midi_generate.rs`, `chords.rs`, `midi_editor.rs`, `midi_generate_ui.rs` |
+| MIDI composition/editing | Bulk note insertion/replacement/deletion; move/resize/transpose/velocity; fixed/additive lengths; exact velocity, pitch and expression edits; cut/copy/paste; split/glue; humanize; quantize; both legato modes; generation | `midi_edit.rs`, `midi_batch.rs`, `midi2.rs`, `midi_generate.rs`, `chords.rs`, `midi_editor.rs`, `midi_expression.rs`, `midi_generate_ui.rs` |
 | Audio regions | Range copy/cut/paste/duplicate/delete; gap/ripple delete; slip/nudge; clip gain/fades/crossfade; reverse; stretch/pitch; silence removal | `audio_edit.rs`, `audio_processing.rs`, `audio_silence.rs`, `audio_editor.rs`, `crossfade_ui.rs` |
 | Takes and comping | Inspect alternatives; choose whole/range takes; comp boundaries; overdub layer; retain/discard alternatives | `audio_takes.rs`, `audio_takes_ui.rs` |
 | Instruments and effects | Discover/select instance; inspect/set parameters; preset/state edits; insert/remove/reorder/bypass | `daw-plugins`, `plugin_ui.rs`, `library.rs` |

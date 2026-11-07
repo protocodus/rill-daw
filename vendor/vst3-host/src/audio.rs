@@ -71,6 +71,28 @@ pub struct AudioBusLayout {
     pub outputs: Vec<AudioBusConfig>,
 }
 
+/// On-demand native display metadata for one audio bus; its vector position is its VST3 index.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AudioBusDetails {
+    /// Native bus display name (or a stable index-based fallback).
+    pub name: String,
+    /// Number of native channels, including inactive buses.
+    pub channels: usize,
+    /// Current activation state.
+    pub active: bool,
+    /// Whether VST3 identifies this bus as a main bus rather than auxiliary.
+    pub main: bool,
+}
+
+/// Complete ordered display metadata without changing bus activation.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AudioBusDetailsLayout {
+    /// Input buses in native index order.
+    pub inputs: Vec<AudioBusDetails>,
+    /// Output buses in native index order.
+    pub outputs: Vec<AudioBusDetails>,
+}
+
 /// Sample storage for one VST3 audio bus.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AudioBusBuffer {

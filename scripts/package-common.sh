@@ -3,6 +3,24 @@
 set -eu
 
 rill_target=$(rustc -vV | awk '/^host:/ { print $2 }')
+case "$rill_target" in
+  *-apple-darwin)
+    MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-11.0}
+    export MACOSX_DEPLOYMENT_TARGET
+    python3 - "$MACOSX_DEPLOYMENT_TARGET" <<'PY'
+import sys
+try:
+    parts = sys.argv[1].split('.')
+    if not 1 <= len(parts) <= 3 or not all(part.isdecimal() for part in parts):
+        raise ValueError
+    version = tuple(int(part) for part in parts) + (0,) * (3 - len(parts))
+except ValueError:
+    raise SystemExit('Invalid MACOSX_DEPLOYMENT_TARGET')
+if version < (11, 0, 0):
+    raise SystemExit('RILL requires macOS 11 or newer for CoreMIDI UMP input')
+PY
+    ;;
+esac
 if [ "${RILL_TARGET:-$rill_target}" != "$rill_target" ]; then
   echo "Packaging must run on the native target: expected $RILL_TARGET, found $rill_target" >&2
   exit 1

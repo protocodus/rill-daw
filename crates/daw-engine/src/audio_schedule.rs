@@ -19,7 +19,10 @@ pub(super) fn compile(clips: &[Clip], samples_per_beat: f64) -> Result<Vec<Segme
     let mut indices = vec![usize::MAX; clips.len()];
     let mut next = 0;
     for (index, clip) in clips.iter().enumerate() {
-        if !clip.is_take_source() && matches!(clip.content, ClipContent::Audio { .. }) {
+        if !clip.is_take_source()
+            && !clip.muted
+            && matches!(clip.content, ClipContent::Audio { .. })
+        {
             indices[index] = next;
             next += 1;
         }

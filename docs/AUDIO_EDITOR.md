@@ -26,8 +26,15 @@ claim of feature parity with every established DAW.
 | Takes and comping | Imported and recorded take groups, retained originals, selection of whole takes or selected regions, and crossfades at comp boundaries. |
 | Recording and overdubs | Audio input selection, arming, monitoring and loop recording into separate takes. |
 | Join, duplicate and ghosts | Join selected material into a new clip. Independent copies retain the selected source window; ghosts share source edits while keeping occurrence placement, trim and slip local. |
+| Freeze | Clip/track context Freeze prints clip processing, input gain and inserts to new audio below the source, at the original position; volume/pan/sends and their automation remain live. All configured instrument outputs print together. Originals are muted, retained and restorable with Return to originals; printed media and edits remain saved. |
 | Navigation | Middle-button drag or Alt+drag to pan; shared zoom gestures and Fit (`F`) show all clip content on both axes. |
 | Recall and undo | Audio edits preserve source files and project state. Each clipboard command or drag is one undo transaction. |
+
+Freeze and Return are described in the [user guide](USER_GUIDE.md#freeze-and-return-to-originals).
+Printing creates new audio tracks and retains the editable originals; it never
+replaces the source file. Channel Gain, volume, pan, inserts and metering belong
+to the [mixer and routing workflow](USER_GUIDE.md#effects-sends-and-folders),
+including the real Master path and multi-output instruments.
 
 ## Editing many cues
 
@@ -165,6 +172,9 @@ redraws, both appearances and display densities, all waveform views, and impulse
 excluded by forward/reverse trim boundaries. Core tests compare pyramid queries
 against exact PCM extrema; shared renderer tests check physical edge width,
 clipping, and mesh storage reuse.
+`crates/daw-app/tests/freeze_e2e.rs` checks rendered placement and mix equivalence,
+all native output prints in one pass, retained originals/media, split pieces,
+Return/Undo/Redo, portable recall and cancellation/failure/stale-job guards.
 
 Run the focused suite with:
 

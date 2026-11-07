@@ -30,6 +30,109 @@ fn near(actual: Option<f32>, expected: f32, tolerance: f32, context: &str) {
 }
 
 #[test]
+fn oversampled_true_peak_exposes_intersample_headroom_like_independent_ebur128() {
+    // Independent oracle: ffmpeg -f f32le -ar48000 -ac2 -i signal.raw
+    // -af ebur128=peak=true -f null - reports1.6/-4.4dBFS true peaks.
+    // This quarter-rate sine has no over-full-scale SAMPLES; its phase hides
+    // 3.01dB from the sample detector. A quarter-second raised-cosine start
+    // avoids an arbitrary onset transient dominating the reference peak.
+    let rate = 48_000;
+    let mut analysis = Analysis::new(rate);
+    feed(&mut analysis, rate as usize * 4, |frame| {
+        let ramp = 0.5
+            - 0.5
+                * (std::f64::consts::PI * (frame as f64 / (f64::from(rate) * 0.25)).min(1.0)).cos();
+        let left = (1.2
+            * ramp
+            * (std::f64::consts::FRAC_PI_2 * frame as f64 + std::f64::consts::FRAC_PI_4).sin())
+            as f32;
+        [left, left * 0.5]
+    });
+    let measured = analysis.snapshot(SignalMonitorTarget::Master);
+    near(measured.peak_dbfs, -1.427, 0.01, "Hidden sample peak");
+    near(
+        measured.true_peak_dbfs,
+        1.6,
+        0.35,
+        "FFmpeg intersample reference",
+    );
+    near(
+        measured.true_peak_hold_dbfs,
+        1.6,
+        0.35,
+        "Held intersample reference",
+    );
+    near(
+        measured.channel_peak_dbfs[1],
+        -7.448,
+        0.01,
+        "Right channel sample peak",
+    );
+    near(
+        measured.channel_rms_300ms_dbfs[0],
+        -1.427,
+        0.02,
+        "Left settled RMS",
+    );
+    near(
+        measured.channel_rms_300ms_dbfs[1],
+        -7.448,
+        0.02,
+        "Right settled RMS",
+    );
+    assert_eq!(measured.true_peak_oversampling, 4);
+    assert_eq!(measured.overload_samples, [0; 2]);
+    assert!(measured.sample_peak_hold_dbfs.unwrap() < 0.0);
+
+    feed(&mut analysis, 256, |_| [1.1, -1.2]);
+    let overs = analysis.snapshot(SignalMonitorTarget::Master);
+    assert_eq!(overs.overload_samples, [256; 2]);
+    feed(&mut analysis, FFT_SIZE, |_| [0.0; 2]);
+    let held = analysis.snapshot(SignalMonitorTarget::Master);
+    assert!(held.peak_dbfs.is_none());
+    assert_eq!(held.overload_samples, [256; 2]);
+    assert_eq!(held.sample_peak_hold_dbfs, overs.sample_peak_hold_dbfs);
+    assert!(held.true_peak_hold_dbfs.unwrap() >= overs.true_peak_hold_dbfs.unwrap());
+    analysis.reset();
+    let reset = analysis.snapshot(SignalMonitorTarget::Master);
+    assert!(reset.true_peak_dbfs.is_none());
+    assert!(reset.true_peak_hold_dbfs.is_none());
+    assert!(reset.sample_peak_hold_dbfs.is_none());
+    assert!(reset.rms_300ms_dbfs.is_none());
+    assert_eq!(reset.overload_samples, [0; 2]);
+}
+
+#[test]
+fn true_peak_rms_and_overload_counts_are_independent_of_analysis_block_partition() {
+    let frames: Vec<_> = (0..12_000)
+        .map(|index| {
+            let tone = sine(index, 48_000, 13_000.0, 0.8);
+            [if index == 4095 { 1.3 } else { tone }, -tone * 0.5]
+        })
+        .collect();
+    let mut snapshots = Vec::new();
+    for size in [1, 63, 256, 511] {
+        let mut analysis = Analysis::new(48_000);
+        for block in frames.chunks(size) {
+            analysis.push(block);
+        }
+        snapshots.push(analysis.snapshot(SignalMonitorTarget::Master));
+    }
+    for measured in &snapshots[1..] {
+        assert_eq!(measured.true_peak_dbfs, snapshots[0].true_peak_dbfs);
+        assert_eq!(
+            measured.true_peak_hold_dbfs,
+            snapshots[0].true_peak_hold_dbfs
+        );
+        assert_eq!(
+            measured.channel_rms_300ms_dbfs,
+            snapshots[0].channel_rms_300ms_dbfs
+        );
+        assert_eq!(measured.overload_samples, [1, 0]);
+    }
+}
+
+#[test]
 fn k_weighted_loudness_matches_independent_ebur128_frequency_and_rate_oracles() {
     for rate in [44_100, 48_000, 96_000] {
         for (frequency, expected) in [(100.0, -21.8), (1000.0, -20.0), (10_000.0, -16.6)] {

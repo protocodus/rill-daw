@@ -388,6 +388,10 @@ fn settled(state: &Value, expected: f32) {
         );
     }
 }
+fn note_event(event: &Value, kind: &str, pitch: u8) -> bool {
+    event["SendMidiAt"]["event"][kind]["note"] == pitch
+        || event["SendPluginEvent"]["event"]["data"][kind]["pitch"] == pitch
+}
 fn notes(clip: &Clip) -> &[Note] {
     let ClipContent::Midi { notes } = &clip.content else {
         panic!("Expected a MIDI clip")
@@ -481,7 +485,7 @@ fn selected_midi_channel_records_exact_chords_and_velocities_and_exports_the_ins
             .logs()
             .iter()
             .flat_map(|(_, events)| events)
-            .any(|event| event["SendMidiAt"]["event"]["NoteOn"]["note"] == 72)
+            .any(|event| note_event(event, "NoteOn", 72))
     );
     app.quit();
 }
@@ -576,7 +580,7 @@ fn live_midi_chord_keeps_its_voices_and_audio_through_recording_loop_wraps() {
             held[0]
                 .1
                 .iter()
-                .filter(|event| event["SendMidiAt"]["event"]["NoteOn"]["note"] == pitch)
+                .filter(|event| note_event(event, "NoteOn", pitch))
                 .count(),
             1,
             "Loop wrap restarted live pitch {pitch}"
@@ -585,7 +589,7 @@ fn live_midi_chord_keeps_its_voices_and_audio_through_recording_loop_wraps() {
             held[0]
                 .1
                 .iter()
-                .all(|event| event["SendMidiAt"]["event"]["NoteOff"]["note"] != pitch)
+                .all(|event| !note_event(event, "NoteOff", pitch))
         );
     }
     midi(&mut app, 0, [0x80, 60, 0]);
@@ -987,20 +991,20 @@ fn live_midi_monitor_plays_filtered_chords_and_sustain_through_the_isolated_inst
             logs[0]
                 .1
                 .iter()
-                .any(|event| event["SendMidiAt"]["event"]["NoteOn"]["note"] == pitch)
+                .any(|event| note_event(event, "NoteOn", pitch))
         );
         assert!(
             logs[0]
                 .1
                 .iter()
-                .any(|event| event["SendMidiAt"]["event"]["NoteOff"]["note"] == pitch)
+                .any(|event| note_event(event, "NoteOff", pitch))
         );
     }
     assert!(
         !logs[0]
             .1
             .iter()
-            .any(|event| event["SendMidiAt"]["event"]["NoteOn"]["note"] == 72)
+            .any(|event| note_event(event, "NoteOn", 72))
     );
     for (pitch, count) in [(67, 1), (69, 2)] {
         for kind in ["NoteOn", "NoteOff"] {
@@ -1008,7 +1012,7 @@ fn live_midi_monitor_plays_filtered_chords_and_sustain_through_the_isolated_inst
                 logs[0]
                     .1
                     .iter()
-                    .filter(|event| event["SendMidiAt"]["event"][kind]["note"] == pitch)
+                    .filter(|event| note_event(event, kind, pitch))
                     .count(),
                 count,
                 "Lost short-note/retrigger {kind} for pitch{pitch}"
@@ -1127,7 +1131,7 @@ fn capture_stop_keeps_on_monitoring(audio_only: bool) {
         held[0]
             .1
             .iter()
-            .all(|event| event["SendMidiAt"]["event"]["NoteOff"]["note"] != 60)
+            .all(|event| !note_event(event, "NoteOff", 60))
     );
     midi(&mut app, 0, [0x80, 60, 0]);
     settled(&pump(&mut app, 4096), 0.08);
@@ -1137,7 +1141,7 @@ fn capture_stop_keeps_on_monitoring(audio_only: bool) {
             released[0]
                 .1
                 .iter()
-                .filter(|event| event["SendMidiAt"]["event"][kind]["note"] == 60)
+                .filter(|event| note_event(event, kind, 60))
                 .count(),
             1
         );
