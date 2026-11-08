@@ -5,20 +5,23 @@
 
 **From the first loop to the final mix.**
 
-Rill is a free, open-source desktop music workstation for **macOS, Linux, and Windows**. Compose with audio and MIDI, get help from an integrated AI assistant, and bring everything together in the mixer. Focused workspaces keep the music in view and the tools within reach.
+Rill is a free, open-source desktop music workstation for **macOS, Linux, and Windows**. Record audio and MIDI, develop a phrase with the integrated AI assistant, and bring your song together with your favorite VST3 instruments and effects. Focused workspaces keep arranging, editing, and mixing close to the music.
 
-Rill focuses on audio/MIDI music production. Video workflows and scoring to picture are outside its product scope.
+[Download](#download) · [Features](#make-it-your-song) · [AI assistant](#make-music-with-ai) · [Screenshots](#screenshots) · [User guide](docs/USER_GUIDE.md) · [Website](https://protocodus.cz/product/rill/)
 
-- **Build your song.** Drop WAV, MP3, FLAC or OGG audio into the arrangement. Large samples stream from disk and show a disk badge. Layer audio and MIDI, organize tracks with colors and folders, and reshape clips with non-destructive edits and undo.
-- **Find your next phrase.** Write notes by hand or explore chords, arpeggios, and melodies with editable previews and scale highlighting. Preview quantize/humanize, adjust note lengths together, and edit precise note expression.
-- **Make music with AI.** Ask the integrated assistant to write a part, reshape a phrase, or adjust the mix directly in your current song. Review its edits and undo them through normal song history.
-- **Shape your sound.** Bring your VST3 instruments and effects, then connect buses, sends, auxiliary inputs and grouped instrument outputs. Automate channel and Master gain, volume and pan; inspect spectrum, loudness and stereo levels. Plug-ins run in isolated processes.
-- **Print and return.** Freeze clips or tracks into new audio below their source, printing configured instrument outputs together. Originals stay retained and muted; **Return to originals** restores them without deleting the prints.
-- **Capture and finish.** Record audio and MIDI, choose loop takes, and export songs or loops as 16/24-bit PCM or 32-bit float WAV, or export MIDI. Every normal project save embeds the referenced audio, including retained takes and Freeze originals, in a portable song file.
+![Rill Arrangement with audio and MIDI parts, colored tracks, and a song timeline](artifacts/readme-arrangement.png)
 
-`.rill` projects retain high-resolution MIDI note/controller data. Native UMP input is available on macOS 11 and newer; Linux and Windows use MIDI 1.0 input. VST3 playback uses supported musical mappings, and exporting richer performances as `.mid` requires an explicit MIDI 1.0 copy. This is not universal MIDI 2.0 device or plug-in compatibility.
+## Make it your song
 
-[Download](#download) · [AI assistant](#make-music-with-ai) · [Screenshots](#screenshots) · [User guide](docs/USER_GUIDE.md)
+- **Arrange freely.** Import WAV, MP3, FLAC, OGG or MIDI. Trim, split, stretch and layer clips; organize tracks with colors and nested folders. Large audio streams from disk, and edits stay reversible.
+- **Capture a performance.** Record audio and MIDI with a pre-count and metronome. Keep audio loop passes as takes, comp your favorite passages with crossfades, or record separate overdub layers. MIDI loop passes build one overdubbed phrase.
+- **Develop the notes.** Write in the piano roll, preview chords, arpeggios and melodies, and refine timing with quantize and humanize. Edit velocity and supported note expression while retaining richer performance data in the project.
+- **Work with AI in context.** Ask for a new part, a phrase variation, an audio edit or a mix adjustment. Keep a conversation scoped to the open clip, channel or processor, with changes available in normal Undo/Redo history.
+- **Shape the mix.** Host VST3 instruments and effects in isolated processes. Connect buses, pre/post-fader sends, sidechains and grouped instrument outputs. Draw automation for plug-in parameters, sends, and channel/Master gain, volume and pan; inspect spectrum, loudness and stereo levels.
+- **Freeze and return.** Print clips or tracks to new audio, including configured instrument outputs together. Originals remain retained and muted; **Return to originals** brings them back while keeping your prints and edits.
+- **Take the song with you.** Save portable `.rill` projects with referenced audio, retained takes and Freeze originals embedded. Export songs or loops as 16/24-bit PCM or 32-bit float WAV, or make a MIDI file.
+
+Independent instrument and effect chains can run across multiple CPU cores. Shared-memory audio reduces plug-in communication overhead without reducing sample precision, and lightweight graphs retain a serial path. Performance depends on the song, plug-ins and hardware; see the [architecture and measured results](docs/ARCHITECTURE.md#scope-and-verification).
 
 ## Download
 
@@ -32,7 +35,7 @@ Get a development build for your platform. These links serve the latest successf
 | Linux · arm64 | [Download for arm64](https://nightly.link/protocodus/rill-daw/workflows/ci/main/rill-aarch64-unknown-linux-gnu.zip) | Run `./rill`. |
 | Windows 10/11 · x86-64 | [Download for Windows](https://nightly.link/protocodus/rill-daw/workflows/ci/main/rill-x86_64-pc-windows-msvc.zip) | Run `rill.exe`. |
 
-**Installing:** extract the download ZIP, then the platform archive inside it. Keep the application and `daw-plugin-host` helper together; keep the macOS app bundle intact. Each package includes a SHA-256 checksum and installation notes. Builds are unsigned and macOS builds are not notarized. Linux requires glibc 2.35 or newer; see [platform requirements and installation](docs/RELEASING.md).
+**Installing:** extract the download ZIP, then the platform archive inside it. Keep the application and `daw-plugin-host` helper together; keep the macOS app bundle intact. Each package includes a SHA-256 checksum and installation notes. Builds are unsigned and macOS builds are not notarized. macOS requires version 11 or newer; Linux requires glibc 2.35 or newer. See [platform requirements and installation](docs/RELEASING.md).
 
 **Bring your own instruments:** VST3 instruments and effects are installed separately. Rill includes an original audio drum loop to try immediately.
 
@@ -40,49 +43,52 @@ Build artifacts expire after 14 days. If a link is unavailable, visit the [succe
 
 ## Make music with AI
 
-Describe the change you want and work on it together. Rill's integrated assistant can inspect the current song, create MIDI parts, transform notes, adjust channel levels and pan, and process selected audio. Edits happen in the same project you are working on and use normal **Undo/Redo** history.
+Describe a musical change and hear it in your current song. The assistant can inspect the arrangement, create MIDI parts, transform notes, adjust plug-in parameters and the mix, and process or analyze selected audio. Its edits use the same **Undo/Redo** history as your own.
+
+Open **AI for this context** from an editor to limit the conversation to that clip, channel or processor. Its scope stays pinned when you change selection, and Rill checks edits against that boundary. Open **AI** in the menu bar for work across the song.
 
 Try prompts such as:
 
 - “Create a four-bar D-minor arpeggio using one of my installed VST3 instruments.”
+- “Humanize this phrase without changing its pitches.”
 - “Lower the drum bus by 3 dB and pan the shaker 20% right.”
 - “Normalize the selected audio clip to −1 dBFS.”
 
-![Rill's integrated AI Assistant with an example composition prompt ready to send](artifacts/readme-ai-assistant.png)
+![Rill's AI Assistant with a draft request pinned to the open Glass chords MIDI clip](artifacts/readme-ai-assistant.png)
 
-*An example prompt prepared in the Assistant panel, before sending it to a model.*
+*A prepared request pinned to the open MIDI clip. Connect your AI provider to send it; no request has been sent in this capture.*
 
-Choose **OpenAI** or **Anthropic** in **Window → Setup → AI**, enter your model and your own API key, then click **Apply**. Open **AI** in the menu bar or **Window → Assistant** to start a conversation. Requests go to the provider you choose.
+Choose **OpenAI** or **Anthropic** in **Window → Setup → AI**, enter your model and your own API key, then click **Apply**. Requests go to your chosen provider; its charges and usage limits apply. The rest of Rill works without AI setup.
 
 Prefer an external AI client? Rill also exposes the live song through **MCP**. See [AI assistant setup and MCP tools](docs/AI_TOOLS.md).
 
 ## Screenshots
 
-One original 32-bar project, from arranging and writing to editing and mixing. These are captures of the running desktop app.
-
-### Build the arrangement
-
-Layer drums, percussion, textures, and MIDI parts across an intro, main section, break, and return. Track colors and separate buses keep a larger session readable.
-
-![Rill Arrangement showing a 32-bar song with multiple audio and MIDI tracks](artifacts/readme-arrangement.png)
+From the arrangement above to notes, audio and mixing below: these are captures of the running desktop app.
 
 ### Write the parts
 
-Edit melodies and chords in the piano roll, with note lengths, velocities, scale highlighting, and phrase-generation tools close to the notes.
+Edit melodies and chords in the piano roll, with note lengths, velocities, scale highlighting, and phrase previews close to the notes.
 
 ![Rill piano roll showing MIDI notes and velocity editing in the demo project](artifacts/readme-piano-roll.png)
 
 ### Shape the audio
 
-Work directly on the waveform with non-destructive trimming, fades, gain, and processing tools.
+Work directly on the waveform with non-destructive trimming, fades, gain, source slip, and processing tools. Retained takes let you revisit a performance and refine the comp.
 
 ![Rill audio Clip Editor showing the waveform and audio editing tools](artifacts/readme-audio-editor.png)
 
 ### Bring the mix together
 
-Balance channels, place sounds in stereo, and reach instruments, effects, and routing from the mixer.
+Balance channels and Master, place sounds in stereo, and reach instruments, effects, routing and automation from the mixer.
 
 ![Rill Mixer showing the demo project's audio and instrument channels alongside its buses and master](artifacts/readme-mixer.png)
+
+### Give the song movement
+
+Draw volume changes, bend individual curve segments, and enter precise point values. Temporarily override automation without losing the curve, then resume it when ready.
+
+![Rill Automation editor showing the Atmosphere track's volume curve, editable points and segment controls](artifacts/readme-automation.png)
 
 ## Start making music
 
@@ -92,6 +98,12 @@ Balance channels, place sounds in stereo, and reach instruments, effects, and ro
 4. Save a portable `.rill` project, then use **File → Export WAV…** to share a mix.
 
 Use the menus and on-screen tools, or speed up familiar actions with keyboard shortcuts. See the [user guide](docs/USER_GUIDE.md) for recording, loop takes, generation, effects, routing, automation, and recovery.
+
+## Current scope
+
+Rill is in active development and focuses on audio/MIDI music production. It hosts **VST3**; instruments and effects are installed separately. Tempo maps, surround mixing, other plug-in formats, and video/scoring-to-picture workflows are not supported. See the [current capabilities and limits](docs/PRODUCT_DIRECTION.md).
+
+`.rill` projects preserve high-resolution MIDI note/controller data. Native UMP input targets macOS 11 and newer; Linux and Windows use MIDI 1.0 input. Audible expression depends on the VST3 instrument's supported mappings; per-note pitch-bend packets are retained but not currently played. Exporting richer performances as `.mid` requires an explicit MIDI 1.0 copy. This is not universal MIDI 2.0 device or plug-in compatibility; see [MIDI recording and expression](docs/USER_GUIDE.md#midi-recording-and-pre-count).
 
 ## Explore further
 
@@ -108,7 +120,7 @@ Use the menus and on-screen tools, or speed up familiar actions with keyboard sh
 Requires Rust 1.92 or newer and the platform's native build tools. Build the whole workspace so the isolated plug-in helper is available beside the app:
 
 ```sh
-cargo build --release --workspace
+cargo build --locked --release --workspace
 ./target/release/rill
 ```
 
