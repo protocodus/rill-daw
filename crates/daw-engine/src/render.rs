@@ -1,5 +1,6 @@
 use crate::automation::CompiledAutomation;
 use crate::meter::{ChannelMeter, ChannelMeters};
+use crate::performance::{RenderPerformanceSnapshot, TrackRenderPerformance, nanoseconds};
 use crate::quality::{self, RenderOptions};
 use anyhow::{Context, Result, bail, ensure};
 #[cfg(test)]
@@ -17,7 +18,11 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread,
+    time::Instant,
 };
+
+#[path = "schedule.rs"]
+mod schedule;
 
 #[path = "worker_pool.rs"]
 mod worker_pool;
@@ -1053,10 +1058,10 @@ impl RenderTrack {
                 let process = apply_plugin_automation(
                     &mut self.instrument_automation,
                     position as f64 * beats_per_sample,
-                    |id, value| plugin.set_parameter(id, value),
+                    |id, value| plugin.queue_parameter_for_block(id, value),
                 )
                 .and_then(|()| {
-                    plugin.set_transport(
+                    plugin.queue_transport_for_block(
                         position,
                         position as f64 * beats_per_sample,
                         context.tempo,
@@ -1249,10 +1254,10 @@ impl RenderTrack {
                     let process = apply_plugin_automation(
                         parameters,
                         position as f64 * beats_per_sample,
-                        |id, value| effect.set_parameter(id, value),
+                        |id, value| effect.queue_parameter_for_block(id, value),
                     )
                     .and_then(|()| {
-                        effect.set_transport(
+                        effect.queue_transport_for_block(
                             position,
                             position as f64 * beats_per_sample,
                             context.tempo,
@@ -1355,6 +1360,9 @@ pub(crate) struct Renderer {
     tracks: Vec<Option<Box<RenderTrack>>>,
     levels: Vec<Vec<usize>>,
     workers: Option<WorkerPool>,
+    performance: RenderPerformanceSnapshot,
+    track_performance: Vec<TrackRenderPerformance>,
+    profile_serial: bool,
     pub(crate) sample_rate: u32,
     tempo: f64,
     logical_sample: u64,
@@ -1378,6 +1386,75 @@ pub(crate) struct Renderer {
 }
 
 impl Renderer {
+    pub(crate) fn new_profiled_offline(
+        project: &Project,
+        sample_rate: u32,
+        workers: Option<usize>,
+    ) -> Result<Self> {
+        ensure!(workers != Some(0), "Worker count must be positive");
+        let mut renderer = Self::new_inner(
+            project,
+            sample_rate,
+            false,
+            workers,
+            RenderOptions::default(),
+            None,
+            ProcessingMode::Offline,
+            None,
+        )?;
+        renderer.profile_serial = true;
+        renderer.performance = RenderPerformanceSnapshot::default();
+        for track in &mut renderer.track_performance {
+            track.last_process_ns = 0;
+            track.last_ready_wait_ns = 0;
+        }
+        Ok(renderer)
+    }
+
+    pub(crate) fn performance_snapshot(&self) -> RenderPerformanceSnapshot {
+        self.performance
+    }
+
+    pub(crate) fn track_performance(&self) -> &[TrackRenderPerformance] {
+        &self.track_performance
+    }
+
+    pub(crate) fn set_block_transport(
+        &mut self,
+        policy: daw_plugins::BlockTransport,
+    ) -> Result<()> {
+        for track in self.tracks.iter_mut().flatten() {
+            if let Processor::Vst(plugin) = &mut track.processor {
+                plugin.set_block_transport(policy)?;
+            }
+            for insert in &mut track.inserts {
+                let Insert::Vst { effect, .. } = insert;
+                effect.set_block_transport(policy)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn ipc_stats(&self) -> daw_plugins::IpcStats {
+        let mut total = daw_plugins::IpcStats::default();
+        let mut add = |stats: Option<daw_plugins::IpcStats>| {
+            if let Some(stats) = stats {
+                total.requests = total.requests.saturating_add(stats.requests);
+                total.request_bytes = total.request_bytes.saturating_add(stats.request_bytes);
+                total.response_bytes = total.response_bytes.saturating_add(stats.response_bytes);
+            }
+        };
+        for track in self.tracks.iter().flatten() {
+            if let Processor::Vst(plugin) = &track.processor {
+                add(plugin.ipc_stats());
+            }
+            for insert in &track.inserts {
+                let Insert::Vst { effect, .. } = insert;
+                add(effect.ipc_stats());
+            }
+        }
+        total
+    }
     #[cfg(test)]
     pub(crate) fn new(project: &Project, sample_rate: u32, looping: bool) -> Result<Self> {
         Self::new_inner(
@@ -2092,18 +2169,8 @@ impl Renderer {
                 levels[depth].push(index);
             }
         }
-        let width = levels.iter().map(Vec::len).max().unwrap_or(0);
-        let useful_parallelism = levels.iter().any(|level| {
-            level.len() >= 32
-                || level
-                    .iter()
-                    .filter(|&&index| {
-                        matches!(tracks[index].processor, Processor::Vst(_))
-                            || !tracks[index].inserts.is_empty()
-                    })
-                    .count()
-                    >= 2
-        });
+        let level_width = levels.iter().map(Vec::len).max().unwrap_or(0);
+        let (useful_parallelism, width) = schedule::parallelism(&tracks, level_width);
         let available = thread::available_parallelism()
             .map(usize::from)
             .unwrap_or(1);
@@ -2112,8 +2179,20 @@ impl Renderer {
             .min(available.max(2))
             .min(width);
         check_cancelled()?;
+        let mut track_performance: Vec<_> = tracks
+            .iter()
+            .map(|track| TrackRenderPerformance {
+                track_id: track.id,
+                ..Default::default()
+            })
+            .collect();
         let workers = if worker_count > 1 {
-            Some(WorkerPool::new(worker_count, width)?)
+            Some(WorkerPool::new(
+                worker_count,
+                &tracks,
+                &levels,
+                &mut track_performance,
+            )?)
         } else {
             None
         };
@@ -2143,6 +2222,9 @@ impl Renderer {
                 .collect(),
             levels,
             workers,
+            performance: RenderPerformanceSnapshot::default(),
+            track_performance,
+            profile_serial: false,
             sample_rate,
             tempo: project.tempo,
             logical_sample: 0,
@@ -2736,6 +2818,12 @@ impl Renderer {
     }
 
     fn segment(&mut self, output: &mut [[f32; 2]], live_input: bool) -> Result<()> {
+        let started = Instant::now();
+        let sequence = self.performance.sequence.wrapping_add(1);
+        for timing in &mut self.track_performance {
+            timing.last_process_ns = 0;
+            timing.last_ready_wait_ns = 0;
+        }
         output.fill([0.0; 2]);
         let mut master = [[0.0_f64; 2]; BLOCK];
         let context = BlockContext {
@@ -2769,32 +2857,47 @@ impl Renderer {
                 tap.frames[..context.count].fill([0.0; 2]);
             }
         }
-        for level_index in 0..self.levels.len() {
-            let level = &self.levels[level_index];
-            if let Some(workers) = &mut self.workers
-                && level.len() > 1
-            {
-                self.plugin_errors += workers.process(
-                    &mut self.tracks,
-                    level,
-                    context,
-                    self.tolerate_plugin_failure,
-                )?;
-            } else {
+        let mut stats = if let Some(workers) = &mut self.workers {
+            let (failures, stats) = workers.process(
+                &mut self.tracks,
+                context,
+                self.tolerate_plugin_failure,
+                &mut master[..context.count],
+                &mut self.track_performance,
+            )?;
+            self.plugin_errors += failures;
+            stats
+        } else {
+            let mut stats = RenderPerformanceSnapshot {
+                block_frames: context.count,
+                track_timings_measured: self.profile_serial,
+                ..Default::default()
+            };
+            for level_index in 0..self.levels.len() {
+                let level = &self.levels[level_index];
                 for &index in level {
                     let track = self.tracks[index].as_mut().expect("owned graph node");
+                    let timed = self.profile_serial.then(Instant::now);
                     let result = track.process(context);
+                    if let Some(timed) = timed {
+                        let elapsed = nanoseconds(timed.elapsed());
+                        self.track_performance[index].record(elapsed, 0);
+                        stats.processing_ns = stats.processing_ns.saturating_add(elapsed);
+                        stats.max_track_ns = stats.max_track_ns.max(elapsed);
+                    }
+                    stats.nodes += 1;
                     self.plugin_errors +=
                         finish_processing(track, result, self.tolerate_plugin_failure)?;
                 }
+                for position in 0..self.levels[level_index].len() {
+                    self.route_track(
+                        self.levels[level_index][position],
+                        &mut master[..context.count],
+                    );
+                }
             }
-            for position in 0..self.levels[level_index].len() {
-                self.route_track(
-                    self.levels[level_index][position],
-                    &mut master[..context.count],
-                );
-            }
-        }
+            stats
+        };
         for (output, accumulated) in output.iter_mut().zip(master) {
             *output = [accumulated[0] as f32, accumulated[1] as f32];
         }
@@ -2831,6 +2934,9 @@ impl Renderer {
         if !self.preview {
             self.source_sample += context.count as u64;
         }
+        stats.sequence = sequence;
+        stats.wall_ns = nanoseconds(started.elapsed());
+        self.performance = stats;
         Ok(())
     }
 
@@ -2848,31 +2954,9 @@ impl Renderer {
                 let destination = remaining[target - track_index - 1]
                     .as_mut()
                     .expect("downstream graph node");
-                match route.kind {
-                    RouteKind::PluginInput { effect, input } => {
-                        let buffer = if let Some(effect) = effect {
-                            let Insert::Vst { inputs, .. } = &mut destination.inserts[effect];
-                            &mut inputs[input]
-                        } else {
-                            &mut destination.instrument_inputs[input]
-                        };
-                        for (index, frame) in route.output[..count].iter().enumerate() {
-                            buffer.mix_left[index] += f64::from(frame[0]);
-                            buffer.mix_right[index] += f64::from(frame[1]);
-                        }
-                    }
-                    _ => {
-                        for (index, frame) in route.output[..count].iter().enumerate() {
-                            destination.mix_left[index] += f64::from(frame[0]);
-                            destination.mix_right[index] += f64::from(frame[1]);
-                        }
-                    }
-                }
+                schedule::mix_route(route, destination, count);
             } else {
-                for (destination, frame) in output.iter_mut().zip(&route.output) {
-                    destination[0] += f64::from(frame[0]);
-                    destination[1] += f64::from(frame[1]);
-                }
+                schedule::mix_terminal(route, output);
             }
         }
     }

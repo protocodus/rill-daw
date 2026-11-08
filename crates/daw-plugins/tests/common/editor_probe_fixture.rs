@@ -1,5 +1,5 @@
 //! Native VST fixture shared by plugin isolation and running-app E2E tests.
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
@@ -10,7 +10,31 @@ pub struct EditorProbeFixture {
     _directory: tempfile::TempDir,
 }
 
+/// Deterministic real DSP work, compiled only into a native test bundle. Tracing
+/// is optional because filesystem work must not contaminate timing benchmarks.
+#[derive(Default)]
+pub struct DspProbeOptions<'a> {
+    pub stages: usize,
+    pub effect: bool,
+    pub trace_directory: Option<&'a Path>,
+    pub fail_after_blocks: Option<u64>,
+}
+
 impl EditorProbeFixture {
+    #[allow(dead_code)]
+    pub fn build_cpu_load(options: DspProbeOptions<'_>) -> Self {
+        assert!(options.stages <= 4096, "CPU fixture stage limit exceeded");
+        Self::build_source(
+            Duration::ZERO,
+            Duration::ZERO,
+            false,
+            options.effect,
+            options.effect,
+            false,
+            false,
+            Some(&options),
+        )
+    }
     /// Polyphonic test-only instrument: channels are separated in stereo and
     /// precise note velocity / targeted expression values affect actual audio.
     #[allow(dead_code)]
@@ -118,9 +142,32 @@ impl EditorProbeFixture {
         nonzero_main: bool,
         expressive: bool,
     ) -> Self {
+        Self::build_source(
+            lifecycle_delay,
+            process_delay,
+            offline_only,
+            multi_bus,
+            effect,
+            nonzero_main,
+            expressive,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn build_source(
+        lifecycle_delay: Duration,
+        process_delay: Duration,
+        offline_only: bool,
+        multi_bus: bool,
+        effect: bool,
+        nonzero_main: bool,
+        expressive: bool,
+        dsp: Option<&DspProbeOptions<'_>>,
+    ) -> Self {
         let directory = tempfile::tempdir().unwrap();
         let source = directory.path().join("editor_probe_plugin.rs");
-        let code = include_str!("editor_probe_plugin.rs")
+        let mut code = include_str!("editor_probe_plugin.rs")
             .replace(
                 "const EXPRESSIVE: bool = false;",
                 &format!("const EXPRESSIVE: bool = {expressive};"),
@@ -159,6 +206,29 @@ impl EditorProbeFixture {
                 "const REQUIRE_OFFLINE: bool = false;",
                 &format!("const REQUIRE_OFFLINE: bool = {offline_only};"),
             );
+        if let Some(dsp) = dsp {
+            code = code
+                .replace(
+                    "const DSP_STAGES: usize = 0;",
+                    &format!("const DSP_STAGES: usize = {};", dsp.stages),
+                )
+                .replace(
+                    "const FAIL_AFTER_BLOCKS: u64 = u64::MAX;",
+                    &format!(
+                        "const FAIL_AFTER_BLOCKS: u64 = {};",
+                        dsp.fail_after_blocks.unwrap_or(u64::MAX)
+                    ),
+                );
+            if let Some(directory) = dsp.trace_directory {
+                code = code.replace(
+                    "const TRACE_DIRECTORY: &str = \"\";",
+                    &format!(
+                        "const TRACE_DIRECTORY: &str = {:?};",
+                        directory.to_string_lossy()
+                    ),
+                );
+            }
+        }
         std::fs::write(&source, code).unwrap();
         let path = directory.path().join("NoEditorProbe.vst3");
         let contents = path.join("Contents");
@@ -219,11 +289,14 @@ impl EditorProbeFixture {
         };
         // Reuse Cargo's exact SDK bindings and dependencies; no network, nested Cargo
         // invocation, C++ SDK, or additional build-tool dependency is needed in CI.
-        let deps = std::env::current_exe()
+        let mut deps = std::env::current_exe()
             .unwrap()
             .parent()
             .unwrap()
             .to_path_buf();
+        if deps.file_name().is_some_and(|name| name == "examples") {
+            deps = deps.parent().unwrap().join("deps");
+        }
         let mut bindings: Vec<_> = std::fs::read_dir(&deps)
             .unwrap()
             .flatten()
@@ -263,7 +336,11 @@ impl EditorProbeFixture {
                     "--crate-type=cdylib",
                     "--crate-name=editor_probe_plugin",
                     "-C",
-                    "opt-level=1",
+                    if dsp.is_some() {
+                        "opt-level=3"
+                    } else {
+                        "opt-level=1"
+                    },
                 ])
                 .arg(&source)
                 .arg("--extern")

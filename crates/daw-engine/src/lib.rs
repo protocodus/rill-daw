@@ -7,12 +7,16 @@ mod automation;
 mod device;
 mod join;
 mod meter;
+mod offline;
+mod performance;
 mod quality;
 mod render;
 mod signal_monitor;
 mod stretch;
 
 pub use audio_stream::AudioStreamingSnapshot;
+pub use offline::OfflineRenderer;
+pub use performance::{RenderPerformanceSnapshot, TrackRenderPerformance};
 
 pub use signal_monitor::{SignalMonitorSnapshot, SignalMonitorTarget};
 

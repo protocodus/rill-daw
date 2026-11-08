@@ -124,6 +124,10 @@ fn main() {
                 if effect { 1 } else { 0 },
                 !effect
             )
+        } else if line == "\"ProcessingCapabilities\"" {
+            // This fixture implements only the legacy per-command protocol.
+            r#"{"ProcessingCapabilities":{"block_processing":false,"shared_audio":false}}"#
+                .to_owned()
         } else if line == "\"AudioBusLayout\"" {
             format!(
                 r#"{{"AudioBusLayout":{{"layout":{{"inputs":{},"outputs":[{{"channel_count":2,"active":true}}]}}}}}}"#,

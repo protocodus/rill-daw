@@ -150,6 +150,43 @@ fn parallel_graph_preserves_repeated_loop_positions_and_sample_values() {
 }
 
 #[test]
+fn parallel_reduction_preserves_quiet_contributions_after_large_cancellation() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut project = Project::new();
+    let bus = project.add_bus("Quiet later-level contribution");
+    project.track_mut(bus).unwrap().gain = 1.0;
+    for (index, sample) in [1.0e20_f32, -1.0e20, 1.0].into_iter().enumerate() {
+        let path = directory.path().join(format!("{index}.wav"));
+        AudioData {
+            sample_rate: 8_000,
+            channels: 1,
+            samples: vec![sample; 8_000],
+        }
+        .write_wav(&path)
+        .unwrap();
+        let source = project.add_audio_track(format!("Source {index}"));
+        let track = project.track_mut(source).unwrap();
+        track.gain = 1.0;
+        track
+            .clips
+            .push(Clip::audio("Constant", 0.0, 1.0, path.to_string_lossy()));
+        if index == 2 {
+            project.set_output(source, Some(bus)).unwrap();
+        }
+    }
+    // In f64, (large + -large) + quiet is 1; large + (quiet + -large)
+    // is 0. Arbitrary completion order must never select the reduction order.
+    for workers in [1, 2, 4] {
+        let mut renderer = Renderer::new_with_workers(&project, 8_000, false, workers).unwrap();
+        for _ in 0..40 {
+            let mut output = [[0.0; 2]; 17];
+            renderer.render(&mut output, &mut [0.0; 17]).unwrap();
+            assert!(output.iter().all(|frame| *frame == [1.0; 2]));
+        }
+    }
+}
+
+#[test]
 fn dependency_levels_mix_every_parent_before_processing_a_bus() {
     let directory = tempfile::tempdir().unwrap();
     let mut project = Project::new();
@@ -199,7 +236,13 @@ fn independent_sources_actually_overlap_on_multiple_persistent_workers() {
     let peak = Arc::new(AtomicUsize::new(0));
     let threads = Arc::new(Mutex::new(std::collections::HashSet::new()));
     let observed = (Arc::clone(&active), Arc::clone(&peak), Arc::clone(&threads));
+    let coordinator = std::thread::current().id();
+    let inline_master = Arc::new(AtomicBool::new(false));
+    let observed_master = Arc::clone(&inline_master);
     renderer.set_processing_observer(Arc::new(move |id| {
+        if id == 0 {
+            observed_master.store(std::thread::current().id() == coordinator, Ordering::SeqCst);
+        }
         if sources.contains(&id) {
             let count = observed.0.fetch_add(1, Ordering::SeqCst) + 1;
             observed.1.fetch_max(count, Ordering::SeqCst);
@@ -232,6 +275,100 @@ fn independent_sources_actually_overlap_on_multiple_persistent_workers() {
         "render blocks created fresh threads"
     );
     assert_eq!(active.load(Ordering::SeqCst), 0);
+    assert!(
+        inline_master.load(Ordering::SeqCst),
+        "the cheap final master should not require another worker roundtrip"
+    );
+}
+
+#[test]
+fn ready_branch_runs_before_an_unrelated_slow_source_finishes() {
+    use std::sync::Condvar;
+    let mut project = Project::new();
+    let fast = project.add_audio_track("Fast root");
+    let slow = project.add_audio_track("Unrelated slow root");
+    let branch = project.add_bus("Ready branch");
+    project.set_output(fast, Some(branch)).unwrap();
+    // Distinct routes from one parent are one completion dependency.
+    project.add_send(fast, branch, 0.5, true).unwrap();
+    let mut renderer = Renderer::new_with_workers(&project, 48_000, false, 2).unwrap();
+    let branch_started = Arc::new((Mutex::new(false), Condvar::new()));
+    let observed = Arc::clone(&branch_started);
+    renderer.set_processing_observer(Arc::new(move |id| {
+        let (started, notification) = &*observed;
+        if id == branch {
+            *started.lock().unwrap() = true;
+            notification.notify_all();
+        } else if id == slow {
+            // Bounded wait diagnoses the old whole-level barrier without
+            // hanging the test. The fast branch must run on the other worker.
+            let (started, _) = notification
+                .wait_timeout_while(
+                    started.lock().unwrap(),
+                    std::time::Duration::from_secs(2),
+                    |started| !*started,
+                )
+                .unwrap();
+            assert!(
+                *started,
+                "unrelated source blocked a dependency-ready branch"
+            );
+        }
+    }));
+    renderer
+        .render(&mut [[0.0; 2]; 256], &mut [0.0; 256])
+        .unwrap();
+    assert!(*branch_started.0.lock().unwrap());
+    assert!(renderer.tracks.iter().all(Option::is_some));
+    let stats = renderer.performance_snapshot();
+    assert_eq!(stats.worker_count, 2);
+    assert_eq!(stats.block_frames, 256);
+    assert_eq!(
+        stats.nodes,
+        renderer.levels.iter().map(Vec::len).sum::<usize>()
+    );
+    assert!(stats.track_timings_measured);
+    assert_eq!(stats.peak_active_workers, 2);
+}
+
+#[test]
+fn prepared_offline_telemetry_excludes_setup_and_profiles_serial_on_request() {
+    let (_directory, project, _) = fixture();
+    for workers in [1, 4] {
+        let mut renderer = crate::OfflineRenderer::new(&project, 48_000, Some(workers)).unwrap();
+        assert_eq!(renderer.performance_snapshot().sequence, 0);
+        renderer
+            .render(&mut [[0.0; 2]; 17], &mut [0.0; 17])
+            .unwrap();
+        let stats = renderer.performance_snapshot();
+        assert_eq!(stats.sequence, 1);
+        assert_eq!(stats.block_frames, 17);
+        assert!(stats.track_timings_measured);
+        assert!(stats.processing_ns >= stats.max_track_ns);
+        assert_eq!(
+            stats.processing_ns,
+            renderer
+                .track_performance()
+                .iter()
+                .map(|track| track.last_process_ns)
+                .sum::<u64>()
+        );
+        if workers == 1 {
+            assert_eq!(stats.worker_count, 0);
+            assert_eq!(stats.ready_wait_ns, 0);
+        }
+        renderer.render(&mut [], &mut []).unwrap();
+        assert_eq!(renderer.performance_snapshot().sequence, 1);
+        assert_eq!(renderer.ipc_stats().requests, 0);
+    }
+    assert!(crate::OfflineRenderer::new(&project, 48_000, Some(0)).is_err());
+    let mut realtime = Renderer::new_with_workers(&project, 48_000, true, 1).unwrap();
+    realtime
+        .render(&mut [[0.0; 2]; 17], &mut [0.0; 17])
+        .unwrap();
+    let stats = realtime.performance_snapshot();
+    assert!(!stats.track_timings_measured);
+    assert_eq!(stats.processing_ns, 0);
 }
 
 #[test]
@@ -340,8 +477,8 @@ fn disconnected_worker_restores_dispatched_and_unsent_nodes_without_drop_deadloc
     let test = std::thread::spawn(move || {
         let (_directory, project, _) = fixture();
         let mut renderer = Renderer::new_with_workers(&project, 48_000, false, 4).unwrap();
-        // Disconnect after preparation; worker 0 already owns a dispatched batch
-        // when the send to worker 1 fails. Wider pools also retain unsent batches.
+        // Disconnect after preparation; worker 0 already owns a dispatched node
+        // when the send to worker 1 fails. Wider pools also retain unsent nodes.
         renderer.workers.as_mut().unwrap().disconnect_for_test(1);
         let failure = renderer
             .render(&mut [[0.0; 2]; 256], &mut [0.0; 256])
@@ -372,7 +509,8 @@ fn prepared_parallel_dispatch_reuses_its_buffers_without_allocating() {
     // The counter is thread-local: this specifically checks the dispatcher,
     // ownership transfer, completion handling and ordered routing/mixing.
     let allocations = crate::allocation_test_support::count_allocations(|| {
-        for _ in 0..8 {
+        // Cross multiple 32-block priority refreshes as well as dispatch.
+        for _ in 0..20 {
             renderer.render(&mut audio, &mut positions).unwrap();
         }
     });

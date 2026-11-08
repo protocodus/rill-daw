@@ -470,6 +470,174 @@ fn native_wide_instrument_outputs_have_one_instance_and_independent_solo_mute() 
 }
 
 #[test]
+fn automatic_workers_cover_native_branches_at_different_depths_but_not_serial_chains() {
+    let fixture = EditorProbeFixture::build_multi_bus_effect();
+    let directory = tempfile::tempdir().unwrap();
+    let insert = || {
+        EffectSlot::new(
+            "Native",
+            Effect::Vst3 {
+                path: fixture.path.to_string_lossy().into_owned(),
+                class_id: Some(CLASS_ID.into()),
+            },
+        )
+    };
+    let mut project = Project::new();
+    let detector = audio(
+        &mut project,
+        directory.path(),
+        "detector",
+        [0.8, 0.2],
+        false,
+    );
+    let direct = audio(&mut project, directory.path(), "direct", [0.4, -0.2], false);
+    let later = audio(&mut project, directory.path(), "later", [0.1, -0.1], false);
+    project.track_mut(direct).unwrap().inserts.push(insert());
+    let mut effect = insert();
+    effect.inputs.push(PluginInputRoute {
+        source_track: detector,
+        bus: 1,
+        first_channel: 0,
+        gain: 1.0,
+        pre_fader: true,
+    });
+    project.track_mut(later).unwrap().inserts.push(effect);
+    let mut automatic =
+        Renderer::new_offline_with_options(&project, 8_000, RenderOptions::default()).unwrap();
+    assert!(
+        automatic.levels.iter().all(|level| level
+            .iter()
+            .filter(|&&index| !automatic.tracks[index].as_ref().unwrap().inserts.is_empty())
+            .count()
+            <= 1),
+        "fixture must separate native processors across levels"
+    );
+    assert_eq!(
+        automatic.workers.is_some(),
+        std::thread::available_parallelism().unwrap().get() > 1
+    );
+    let mut serial = Renderer::new_offline_with_workers(&project, 8_000, 1).unwrap();
+    let mut actual = [[0.0; 2]; BLOCK];
+    let mut expected = actual;
+    automatic.render(&mut actual, &mut [0.0; BLOCK]).unwrap();
+    serial.render(&mut expected, &mut [0.0; BLOCK]).unwrap();
+    assert_eq!(actual, expected);
+
+    let mut chain = Project::new();
+    let source = audio(&mut chain, directory.path(), "chain", [0.4, -0.2], false);
+    let first = chain.add_bus("First native node");
+    let second = chain.add_bus("Second native node");
+    chain.track_mut(first).unwrap().inserts.push(insert());
+    chain.track_mut(second).unwrap().inserts.push(insert());
+    chain.set_output(source, Some(first)).unwrap();
+    chain.set_output(first, Some(second)).unwrap();
+    let serial =
+        Renderer::new_offline_with_options(&chain, 8_000, RenderOptions::default()).unwrap();
+    assert!(
+        serial.workers.is_none(),
+        "dependent native nodes cannot run concurrently"
+    );
+}
+
+#[test]
+fn parallel_native_sidechains_and_muted_shared_outputs_are_sample_identical() {
+    let instrument = EditorProbeFixture::build_multi_bus();
+    let effect = EditorProbeFixture::build_multi_bus_effect();
+    let directory = tempfile::tempdir().unwrap();
+    let mut project = Project::new();
+    let detector = audio(&mut project, directory.path(), "detector", [0.8, 0.2], true);
+    project.track_mut(detector).unwrap().latency_samples = 37;
+    let independent = audio(
+        &mut project,
+        directory.path(),
+        "independent",
+        [0.1, -0.1],
+        false,
+    );
+    project.track_mut(independent).unwrap().latency_samples = 11;
+    let owner = project.add_midi_track("Muted shared instrument");
+    let track = project.track_mut(owner).unwrap();
+    track.mute = true;
+    track.instrument = Instrument::Vst3 {
+        path: instrument.path.to_string_lossy().into_owned(),
+        class_id: Some(CLASS_ID.into()),
+    };
+    track.clips.push(Clip::midi(
+        "Notes",
+        0.0,
+        1.0,
+        vec![Note::new(60, 0.0, 1.0, 100)],
+    ));
+    track.instrument_inputs = vec![
+        PluginInputRoute {
+            source_track: detector,
+            bus: 0,
+            first_channel: 0,
+            gain: 1.0,
+            pre_fader: true,
+        },
+        PluginInputRoute {
+            source_track: detector,
+            bus: 1,
+            first_channel: 2,
+            gain: 0.5,
+            pre_fader: false,
+        },
+    ];
+    let child = project
+        .add_instrument_output(owner, "Wide output", 1, 2)
+        .unwrap();
+    let mut insert = EffectSlot::new(
+        "Sidechain",
+        Effect::Vst3 {
+            path: effect.path.to_string_lossy().into_owned(),
+            class_id: Some(CLASS_ID.into()),
+        },
+    );
+    insert.inputs.push(PluginInputRoute {
+        source_track: detector,
+        bus: 1,
+        first_channel: 0,
+        gain: 0.75,
+        pre_fader: true,
+    });
+    project.track_mut(child).unwrap().inserts.push(insert);
+    let mut serial = Renderer::new_offline_with_workers(&project, 8_000, 1).unwrap();
+    let mut parallel = Renderer::new_offline_with_workers(&project, 8_000, 4).unwrap();
+    assert!(parallel.workers.is_some());
+    let source = parallel
+        .tracks
+        .iter()
+        .flatten()
+        .find(|track| track.id == owner)
+        .unwrap();
+    assert!(source.enabled && !source.channel_active);
+    for beat in [0.0, 0.25, 0.0] {
+        serial.seek(beat).unwrap();
+        parallel.seek(beat).unwrap();
+        for count in [1, 17, 256, 511] {
+            let mut expected = vec![[0.0; 2]; count];
+            let mut actual = expected.clone();
+            let mut expected_positions = vec![0.0; count];
+            let mut actual_positions = expected_positions.clone();
+            serial
+                .render(&mut expected, &mut expected_positions)
+                .unwrap();
+            parallel.render(&mut actual, &mut actual_positions).unwrap();
+            assert!(
+                actual
+                    .iter()
+                    .zip(&expected)
+                    .all(|(a, b)| a.map(f32::to_bits) == b.map(f32::to_bits)),
+                "Parallel sidechain/raw output reduction changed PCM"
+            );
+            assert_eq!(actual_positions, expected_positions);
+            assert!(actual.iter().flatten().any(|sample| sample.abs() > 0.01));
+        }
+    }
+}
+
+#[test]
 fn primary_insert_crash_keeps_healthy_instrument_output_children_playing() {
     let instrument = EditorProbeFixture::build_multi_bus();
     let effect = EditorProbeFixture::build_multi_bus_effect();
@@ -497,66 +665,70 @@ fn primary_insert_crash_keeps_healthy_instrument_output_children_playing() {
     let child = project
         .add_instrument_output(owner, "Independent wide output", 1, 2)
         .unwrap();
-    let mut renderer = Renderer::new(&project, 8_000, true).unwrap();
-    let source = renderer
-        .tracks
-        .iter()
-        .flatten()
-        .find(|track| track.id == owner)
-        .unwrap();
-    let Processor::Vst(plugin) = &source.processor else {
-        panic!("missing instrument")
-    };
-    let instrument_pid = plugin.isolation_pid().unwrap();
-    let Insert::Vst { effect, .. } = &source.inserts[0];
-    let effect_pid = effect.isolation_pid().unwrap();
-    assert_ne!(instrument_pid, effect_pid);
-    let mut output = [[0.0; 2]; BLOCK];
-    renderer.render(&mut output, &mut [0.0; BLOCK]).unwrap();
-    approx(output[0][0], 0.5625);
-    approx(output[0][1], 0.6875);
-    let killed = if cfg!(windows) {
-        std::process::Command::new("taskkill")
-            .args(["/PID", &effect_pid.to_string(), "/F"])
-            .output()
-            .unwrap()
-    } else {
-        std::process::Command::new("kill")
-            .args(["-KILL", &effect_pid.to_string()])
-            .output()
-            .unwrap()
-    };
-    assert!(killed.status.success());
-    for _ in 0..2 {
-        renderer.render(&mut output, &mut [0.0; BLOCK]).unwrap();
-        for frame in output {
-            approx(frame[0], 0.5);
-            approx(frame[1], 0.625);
-        }
-    }
-    assert_eq!(
-        renderer.plugin_errors, 1,
-        "Primary failure is reported once"
-    );
-    let source = renderer
-        .tracks
-        .iter()
-        .flatten()
-        .find(|track| track.id == owner)
-        .unwrap();
-    let Processor::Vst(plugin) = &source.processor else {
-        panic!("missing instrument")
-    };
-    assert_eq!(plugin.isolation_pid(), Some(instrument_pid));
-    assert!(
-        !renderer
+    project.add_audio_track("Independent silent root");
+    for workers in [1, 4] {
+        let mut renderer = Renderer::new_with_workers(&project, 8_000, true, workers).unwrap();
+        assert_eq!(renderer.workers.is_some(), workers > 1);
+        let source = renderer
             .tracks
             .iter()
             .flatten()
-            .find(|track| track.id == child)
-            .unwrap()
-            .plugin_failed
-    );
+            .find(|track| track.id == owner)
+            .unwrap();
+        let Processor::Vst(plugin) = &source.processor else {
+            panic!("missing instrument")
+        };
+        let instrument_pid = plugin.isolation_pid().unwrap();
+        let Insert::Vst { effect, .. } = &source.inserts[0];
+        let effect_pid = effect.isolation_pid().unwrap();
+        assert_ne!(instrument_pid, effect_pid);
+        let mut output = [[0.0; 2]; BLOCK];
+        renderer.render(&mut output, &mut [0.0; BLOCK]).unwrap();
+        approx(output[0][0], 0.5625);
+        approx(output[0][1], 0.6875);
+        let killed = if cfg!(windows) {
+            std::process::Command::new("taskkill")
+                .args(["/PID", &effect_pid.to_string(), "/F"])
+                .output()
+                .unwrap()
+        } else {
+            std::process::Command::new("kill")
+                .args(["-KILL", &effect_pid.to_string()])
+                .output()
+                .unwrap()
+        };
+        assert!(killed.status.success());
+        for _ in 0..2 {
+            renderer.render(&mut output, &mut [0.0; BLOCK]).unwrap();
+            for frame in output {
+                approx(frame[0], 0.5);
+                approx(frame[1], 0.625);
+            }
+        }
+        assert_eq!(
+            renderer.plugin_errors, 1,
+            "Primary failure is reported once"
+        );
+        let source = renderer
+            .tracks
+            .iter()
+            .flatten()
+            .find(|track| track.id == owner)
+            .unwrap();
+        let Processor::Vst(plugin) = &source.processor else {
+            panic!("missing instrument")
+        };
+        assert_eq!(plugin.isolation_pid(), Some(instrument_pid));
+        assert!(
+            !renderer
+                .tracks
+                .iter()
+                .flatten()
+                .find(|track| track.id == child)
+                .unwrap()
+                .plugin_failed
+        );
+    }
 }
 
 #[test]

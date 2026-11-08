@@ -851,6 +851,27 @@ pub(crate) trait PluginInternal: Send {
             outputs: side(layout.outputs, "Output"),
         })
     }
+    fn set_block_transport(
+        &mut self,
+        _policy: crate::process_isolation::BlockTransport,
+    ) -> Result<()> {
+        Ok(())
+    }
+    fn ipc_stats(&self) -> Option<crate::process_isolation::IpcStats> {
+        None
+    }
+    fn prepare_block_processing(&mut self) -> Result<()> {
+        Ok(())
+    }
+    fn process_buses_block(
+        &mut self,
+        _buffers: &mut BusAudioBuffers,
+        _commands: &mut Vec<crate::process_isolation::BlockCommand>,
+    ) -> Result<()> {
+        Err(Error::Other(
+            "Batched block processing requires an isolated processor".into(),
+        ))
+    }
     /// Process buffers while preserving VST3 bus boundaries.
     fn process_buses(&mut self, _buffers: &mut BusAudioBuffers) -> Result<()> {
         Err(Error::Other(
@@ -2035,13 +2056,19 @@ impl Plugin {
     /// bus / channel (defaults: bus 0, channel 0), via `INoteExpressionController`. Empty if the
     /// plugin doesn't implement it.
     pub fn note_expressions(&self) -> Result<Vec<crate::midi::NoteExpressionInfo>> {
-        self.note_expressions_on(0,0)
+        self.note_expressions_on(0, 0)
     }
 
     /// Query advertised note-expression dimensions for a particular event bus/channel.
-    pub fn note_expressions_on(&self, bus:i32,channel:u8) -> Result<Vec<crate::midi::NoteExpressionInfo>> {
-        if bus<0 || channel>=16 {
-            return Err(Error::InvalidParameter("invalid note-expression bus/channel".into()));
+    pub fn note_expressions_on(
+        &self,
+        bus: i32,
+        channel: u8,
+    ) -> Result<Vec<crate::midi::NoteExpressionInfo>> {
+        if bus < 0 || channel >= 16 {
+            return Err(Error::InvalidParameter(
+                "invalid note-expression bus/channel".into(),
+            ));
         }
         self.internal
             .as_ref()
@@ -2155,6 +2182,77 @@ impl Plugin {
             .as_mut()
             .ok_or_else(|| Error::Other("Plugin not initialized".to_string()))?
             .process_buses(buffers)?;
+        if let Ok(mut levels) = self.audio_levels.lock() {
+            levels.update_from_bus_buffers(&buffers.outputs);
+            if let Some(ref callback) = self.audio_callback {
+                callback(&levels);
+            }
+        }
+        Ok(())
+    }
+
+    /// Select the per-instance isolated block transport on a control thread.
+    pub fn set_block_transport(
+        &mut self,
+        policy: crate::process_isolation::BlockTransport,
+    ) -> Result<()> {
+        self.internal
+            .as_mut()
+            .ok_or_else(|| Error::Other("Plugin not initialized".into()))?
+            .set_block_transport(policy)
+    }
+
+    /// Read cumulative IPC counts without contacting the helper.
+    pub fn ipc_stats(&self) -> Option<crate::process_isolation::IpcStats> {
+        self.internal
+            .as_ref()
+            .and_then(|internal| internal.ipc_stats())
+    }
+
+    /// Negotiate optional isolated block batching and prepare transport storage.
+    /// Call on a control thread after configuring native buses.
+    pub fn prepare_block_processing(&mut self) -> Result<()> {
+        self.internal
+            .as_mut()
+            .ok_or_else(|| Error::Other("Plugin not initialized".into()))?
+            .prepare_block_processing()
+    }
+
+    /// Apply ordered block operations and process native buses in one isolated exchange.
+    /// Ordinary parameter/lifecycle methods remain immediate. Legacy helpers fall back to
+    /// ordered commands. The command vector is cleared after a native dispatch attempt,
+    /// retaining its allocation; validation errors before dispatch leave commands intact.
+    /// Never call this synchronous, bounded IPC from a device callback.
+    pub fn process_bus_audio_block(
+        &mut self,
+        buffers: &mut BusAudioBuffers,
+        commands: &mut Vec<crate::process_isolation::BlockCommand>,
+    ) -> Result<()> {
+        for bus in &mut buffers.outputs {
+            for channel in &mut bus.channels {
+                channel.fill(0.0);
+            }
+        }
+        if !self.is_processing {
+            return Err(Error::NotProcessing);
+        }
+        if buffers.block_size == 0
+            || buffers.block_size > self.block_size
+            || buffers.inputs.iter().chain(&buffers.outputs).any(|bus| {
+                bus.channels
+                    .iter()
+                    .any(|channel| channel.len() != buffers.block_size)
+            })
+        {
+            return Err(Error::ProcessError(
+                "Invalid native processing block shape".into(),
+            ));
+        }
+        crate::process_isolation::validate_block_commands(commands, buffers.block_size)?;
+        self.internal
+            .as_mut()
+            .ok_or_else(|| Error::Other("Plugin not initialized".into()))?
+            .process_buses_block(buffers, commands)?;
         if let Ok(mut levels) = self.audio_levels.lock() {
             levels.update_from_bus_buffers(&buffers.outputs);
             if let Some(ref callback) = self.audio_callback {
@@ -2797,7 +2895,7 @@ fn validate_pressure(pressure: u8) -> Result<()> {
 ///
 /// The match below has no wildcard arm on purpose: `MidiEvent` is `#[non_exhaustive]` only to
 /// downstream crates, so a variant added here fails to compile until it states its own ranges.
-fn validate_midi_event(event: &MidiEvent) -> Result<()> {
+pub(crate) fn validate_midi_event(event: &MidiEvent) -> Result<()> {
     match *event {
         MidiEvent::NoteOn { note, velocity, .. } | MidiEvent::NoteOff { note, velocity, .. } => {
             validate_note(note)?;
@@ -2835,7 +2933,7 @@ fn validate_midi_event(event: &MidiEvent) -> Result<()> {
     }
 }
 
-fn validate_plugin_event(event: &PluginEvent) -> Result<()> {
+pub(crate) fn validate_plugin_event(event: &PluginEvent) -> Result<()> {
     if event.bus_index < 0 {
         return Err(Error::MidiError(format!(
             "Invalid event bus index: {}",

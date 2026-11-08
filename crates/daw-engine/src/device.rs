@@ -138,6 +138,10 @@ pub struct EngineSnapshot {
     pub rendered_frames: u64,
     pub consumed_frames: u64,
     pub audio_streaming: crate::AudioStreamingSnapshot,
+    /// Most recently published graph segment. Durations include worker/plug-in
+    /// waits and are not a measure of total host CPU utilisation. Publication
+    /// is best-effort and never delays the render worker or device callback.
+    pub render_performance: crate::RenderPerformanceSnapshot,
 }
 
 pub fn list_output_devices() -> Result<Vec<DeviceInfo>> {
@@ -202,6 +206,7 @@ struct Controls {
     finished_generation: AtomicU64,
     audio_streaming: crate::audio_stream::SharedStreaming,
     streamed_clips: Mutex<Arc<Vec<(u64, u64)>>>,
+    render_performance: Mutex<crate::RenderPerformanceSnapshot>,
 }
 impl Controls {
     fn new() -> Self {
@@ -230,6 +235,7 @@ impl Controls {
             finished_generation: AtomicU64::new(u64::MAX),
             audio_streaming: crate::audio_stream::SharedStreaming::default(),
             streamed_clips: Mutex::new(Arc::new(Vec::new())),
+            render_performance: Mutex::default(),
         }
     }
 
@@ -241,6 +247,15 @@ impl Controls {
             if !Arc::ptr_eq(&current, &next) {
                 *current = next;
             }
+        }
+    }
+
+    fn publish_performance(&self, snapshot: crate::RenderPerformanceSnapshot) {
+        // Readers run on the control side. A slow reader can skip a diagnostic
+        // update, but cannot hold up audio delivery. The callback never uses
+        // this lock, and the writer only copies a fixed-size value.
+        if let Ok(mut current) = self.render_performance.try_lock() {
+            *current = snapshot;
         }
     }
 
@@ -785,6 +800,7 @@ impl AudioEngine {
                     }
                     worker_controls.publish_streaming(&renderer);
                     worker_queue.push_block(&frames, &positions, generation);
+                    worker_controls.publish_performance(renderer.performance_snapshot());
                     worker_controls
                         .rendered_frames
                         .fetch_add(BLOCK as u64, Ordering::Relaxed);
@@ -1183,6 +1199,11 @@ impl AudioEngine {
             rendered_frames: self.controls.rendered_frames.load(Ordering::Relaxed),
             consumed_frames: self.controls.consumed_frames.load(Ordering::Relaxed),
             audio_streaming: self.controls.audio_streaming.snapshot(),
+            render_performance: *self
+                .controls
+                .render_performance
+                .lock()
+                .unwrap_or_else(|error| error.into_inner()),
         }
     }
 
@@ -1887,5 +1908,20 @@ mod tests {
     fn engine_can_be_initialized_on_a_background_thread() {
         fn assert_send<T: Send>() {}
         assert_send::<AudioEngine>();
+    }
+
+    #[test]
+    fn performance_publication_does_not_wait_for_a_control_reader() {
+        let controls = Controls::new();
+        let reader = controls.render_performance.lock().unwrap();
+        let next = crate::RenderPerformanceSnapshot {
+            wall_ns: 42,
+            ..Default::default()
+        };
+        controls.publish_performance(next);
+        assert_eq!(reader.wall_ns, 0);
+        drop(reader);
+        controls.publish_performance(next);
+        assert_eq!(controls.render_performance.lock().unwrap().wall_ns, 42);
     }
 }

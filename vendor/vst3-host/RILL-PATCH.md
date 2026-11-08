@@ -1,4 +1,4 @@
-# vst3-host 0.10.0: native automation menus and stable plugin loading
+# vst3-host 0.10.0: isolated audio transport, native menus and stable loading
 
 Source: the published `vst3-host` 0.10.0 crate from crates.io, licensed under MIT
 (see LICENSE). Upstream repository: https://github.com/HelgeSverre/rust-vst3-host/.
@@ -30,22 +30,15 @@ This avoids initializing GUI frameworks inside an audio-only worker. An eager
 load-time editor probe caused the reported Hammond B-3X crash; native editors still
 open explicitly in Rill's separate editor helper.
 
-Plugin activation, deactivation, reconfiguration, complete parameter enumeration,
-and other lifecycle operations use the existing bounded 30-second control deadline.
-AAS Player can take longer than the 100-millisecond audio deadline to activate, and
-enumerating its thousands of parameters can approach that bound. These control
-operations must not be mistaken for a hung audio callback. `Process` and
-`ProcessBuses` retain their short deadline, and exceeding either deadline still
-terminates the worker. Native fixtures exercise delayed lifecycle callbacks and
-metadata enumeration, along with both lifecycle and audio timeout enforcement.
-
 Isolated lifecycle and configuration commands use the configured bounded slow
 operation deadline (30 seconds in Rill), including start/stop, sample rate, block
-size, and bus reconfiguration. Native instruments can legitimately spend longer
+size, bus reconfiguration and complete parameter enumeration. Native instruments can legitimately spend longer
 than one audio-block deadline in these calls; AAS initialization took about 200 ms.
-Audio `Process` and `ProcessBuses` retain Rill's 100 ms deadline, so a stalled
+Audio `Process`, `ProcessBuses` and `ProcessBlock` retain Rill's 100 ms live deadline, so a stalled
 processor still terminates promptly. The native fixture delays lifecycle callbacks
 by 200 ms and checks both successful initialization and enforced timeout bounds.
+Offline audio uses Rill's separate five-second processing deadline. These bounds
+contain hung helpers; they do not establish hardware callback schedulability.
 
 The isolated command pipe uses one persistent writer and a one-request queue.
 The response deadline covers request writes as well as response reads, including
@@ -53,6 +46,50 @@ large state transfers to a helper that leaves stdin open without reading it.
 Shutdown never writes directly to that pipe, and kills an unresponsive child
 before bounded writer/reader cleanup. Protocol tests exercise a blocked 4 MiB
 state write and shutdown while the command pipe is full.
+
+The additive `ProcessingCapabilities` handshake negotiates `ProcessBlock` and
+shared PCM. A block contains a bounded, ordered `BlockCommand` list for transport,
+parameters and sample-offset musical events followed by one audio processing
+request. Complete value, offset, count and bus-shape validation precedes native
+state changes. The list preserves same-offset ordering and supports at most
+16,384 operations, 4,096 explicit parameter points and 8 MiB of owned native
+event payload, sharing bounds with the native queues. The parameter queue also
+rejects mapped MIDI fanout beyond capacity before mirroring the rejected value
+to the controller; accepted points are never silently discarded. Batching does
+not combine lifecycle, metadata or editor calls.
+`BlockTransport::Auto` uses negotiated shared PCM when available, `Batched`
+retains lossless inline PCM, and `Legacy` retains immediate commands and the
+previous processing request. Older helpers can reject the capability query and
+continue through the original protocol. In-process implementations apply the
+same admitted operations without IPC. `IpcStats` counts actual requests and
+serialized bytes rather than local queued operations.
+
+`shared_audio` provides reusable host/helper mappings backed by a private named
+temporary file using `memmap2` and `tempfile`. The header verifies identity,
+layout and capacity. Fixed bounds are 64 buses per direction, 256 aggregate
+channels, 65,536 frames per channel and 64 MiB of PCM. Mapping setup is outside
+block processing and touches the PCM pages. Blocks exchange generation/frame
+identities over the control pipe; atomics transfer ownership before either
+endpoint reads or writes PCM. Native plug-ins see separate local buffers.
+Transfers retain all sample bits, and inactive channels and unused tails become
+silence. The fallback inline codec remains exact IEEE-754 data.
+
+Failed or stale exchanges permanently poison a mapping rather than recycle
+storage that a late helper could still write. A sticky instance failure also
+rejects legacy processing calls until recovery, so partially applied operations
+cannot leak into a later block through another API. Reconfiguration acknowledges
+`ReleaseSharedAudio` before dropping the old owner; shutdown and failed setup
+reap the child before temporary-file cleanup where necessary. Windows file
+deletion therefore follows both peers' unmapping. Unix mappings also retain
+their backing storage after the owner closes or removes its pathname. Mapping
+creation/admission failures can select inline batching, but a failed native
+processing call is never retried via a second transport.
+
+This patch preserves one helper-owned lane for native lifecycle, control and
+DSP calls. Shared PCM removes audio encoding and large pipe payloads; it does
+not turn the synchronous adapter into a hard real-time callback API. Graph and
+helper threads retain ordinary scheduling until a dedicated bounded DSP lane
+with correct platform deadline coordination exists.
 
 Regression coverage lives with the upstream COM implementation unit tests and
 process-isolation serialization tests. A native test plugin terminates its worker
@@ -64,15 +101,19 @@ Run from the repository root:
 cargo test --locked -p vst3-host --lib component_handler_tests
 cargo test --locked -p vst3-host --lib host_notifications_and_restart_requests_round_trip_across_the_wire
 cargo test --locked -p vst3-host --lib slow_commands_are_classified_apart_from_the_per_block_ones
+cargo test --locked -p vst3-host --lib process_isolation::block
+cargo test --locked -p vst3-host --lib shared_audio
 cargo build --locked --workspace --bins
 cargo test --locked -p daw-plugins --test native_dsp_load
+cargo test --locked -p daw-plugins --test block_transport
 cargo test --locked -p daw-app --test plugin_loading_e2e
 ```
 
 Remove the local patch once an upstream release provides equivalent host-prefilled
 actions, retained-target validation, side-effect-free editor capability queries,
-and separate bounded lifecycle/audio deadlines,
-after verifying both native-menu paths and headless plugin loading.
+separate bounded lifecycle/audio deadlines, ordered block processing and shared
+PCM ownership. Verify native menus, headless loading, transport equivalence,
+stale-response rejection and process cleanup before removing it.
 
 Rill also exposes native bus names and Main/Aux roles through the additive
 `AudioBusDetailsLayout` metadata query. The isolation protocol forwards that query,

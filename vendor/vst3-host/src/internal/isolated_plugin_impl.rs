@@ -9,7 +9,9 @@ use crate::{
     midi::{MidiEvent, PluginEvent},
     parameters::Parameter,
     plugin::{PluginInfo, PluginInternal, StateContext},
-    process_isolation::{HostCommand, HostResponse, PluginHostProcess},
+    process_isolation::{
+        validate_block_commands, BlockCommand, HostCommand, HostResponse, PluginHostProcess,
+    },
 };
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -19,6 +21,13 @@ use std::time::Duration;
 pub struct IsolatedPluginImpl {
     /// The process managing the isolated plugin
     process: Mutex<PluginHostProcess>,
+    block_processing: Option<bool>,
+    block_transport: crate::process_isolation::BlockTransport,
+    shared_audio_supported: bool,
+    shared_audio: Option<crate::shared_audio::SharedAudioHost>,
+    prepared_pid: Option<u32>,
+    prepared_layout: Option<AudioBusLayout>,
+    block_failed: bool,
     /// Plugin information
     info: PluginInfo,
     /// Current sample rate (also used to reload after a crash)
@@ -94,6 +103,13 @@ impl IsolatedPluginImpl {
     ) -> Self {
         Self {
             process: Mutex::new(process),
+            block_processing: None,
+            block_transport: crate::process_isolation::BlockTransport::Auto,
+            shared_audio_supported: false,
+            shared_audio: None,
+            prepared_pid: None,
+            prepared_layout: None,
+            block_failed: false,
             info,
             sample_rate,
             block_size,
@@ -113,6 +129,71 @@ impl IsolatedPluginImpl {
             auto_recover_max_retries,
             recovery_count: std::sync::atomic::AtomicU64::new(0),
             poll_error_logged: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    fn store_output_events(&self, events: Vec<PluginEvent>) {
+        if !events.is_empty() {
+            if let Ok(mut queued) = self.output_events.lock() {
+                queued.extend(events);
+                if queued.len() > MAX_OUTPUT_MIDI {
+                    let excess = queued.len() - MAX_OUTPUT_MIDI;
+                    queued.drain(..excess);
+                }
+            }
+        }
+    }
+
+    fn accept_bus_response(
+        &self,
+        buffers: &mut BusAudioBuffers,
+        response: HostResponse,
+    ) -> Result<()> {
+        match response {
+            HostResponse::BusAudioOutput {
+                outputs,
+                output_events,
+            } => {
+                let valid = outputs.len() == buffers.outputs.len()
+                    && outputs
+                        .iter()
+                        .zip(&buffers.outputs)
+                        .all(|(source, destination)| {
+                            source.active == destination.active
+                                && source.channels.len() == destination.channels.len()
+                                && destination
+                                    .channels
+                                    .iter()
+                                    .all(|channel| channel.len() == buffers.block_size)
+                                && source
+                                    .channels
+                                    .iter()
+                                    .all(|channel| channel.len() == buffers.block_size)
+                        });
+                if !valid {
+                    for bus in &mut buffers.outputs {
+                        for channel in &mut bus.channels {
+                            channel.fill(0.0);
+                        }
+                    }
+                    return Err(Error::ProcessError(
+                        "Native output shape differs from requested block".into(),
+                    ));
+                }
+                for (destination, source) in buffers.outputs.iter_mut().zip(outputs) {
+                    for (destination, source) in
+                        destination.channels.iter_mut().zip(source.channels)
+                    {
+                        destination.copy_from_slice(&source);
+                    }
+                }
+                self.store_output_events(output_events);
+                Ok(())
+            }
+            HostResponse::Error { message } => Err(Error::ProcessError(message)),
+            _ => Err(Error::ProcessError(
+                "Unexpected native audio block response".into(),
+            )),
         }
     }
 
@@ -426,6 +507,11 @@ impl PluginInternal for IsolatedPluginImpl {
     }
 
     fn process(&mut self, buffers: &mut AudioBuffers) -> Result<()> {
+        if self.block_failed {
+            return Err(Error::ProcessError(
+                "Native block failed; recover before processing again".into(),
+            ));
+        }
         let frames = buffers
             .outputs
             .first()
@@ -497,7 +583,249 @@ impl PluginInternal for IsolatedPluginImpl {
         }
     }
 
+    fn set_block_transport(
+        &mut self,
+        policy: crate::process_isolation::BlockTransport,
+    ) -> Result<()> {
+        self.block_transport = policy;
+        self.prepare_block_processing()
+    }
+
+    fn ipc_stats(&self) -> Option<crate::process_isolation::IpcStats> {
+        self.process.lock().ok().map(|process| process.ipc_stats())
+    }
+
+    fn prepare_block_processing(&mut self) -> Result<()> {
+        let pid = self.helper_pid();
+        if self.block_processing.is_none() || self.prepared_pid != pid {
+            self.shared_audio = None;
+            self.block_failed = false;
+            self.shared_audio_supported = false;
+            self.block_processing = Some(false);
+            match self.send_command_once(HostCommand::ProcessingCapabilities)? {
+                HostResponse::ProcessingCapabilities {
+                    block_processing,
+                    shared_audio,
+                } => {
+                    self.block_processing = Some(block_processing);
+                    self.shared_audio_supported = block_processing && shared_audio;
+                }
+                // Older helpers reject the unknown command without changing their processor.
+                HostResponse::Error { .. } => {}
+                _ => {
+                    return Err(Error::Other(
+                        "Unexpected processing capabilities reply".into(),
+                    ));
+                }
+            }
+            self.prepared_pid = pid;
+        }
+        // The peer must unmap before the host deletes its backing file (Windows).
+        if let Some(previous) = self.shared_audio.take() {
+            let released = self.send_command_once(HostCommand::ReleaseSharedAudio);
+            if !matches!(released, Ok(HostResponse::Success { .. })) {
+                if let Ok(mut process) = self.process.lock() {
+                    process.shutdown();
+                }
+                drop(previous);
+                return Err(Error::ProcessError(
+                    "Could not release shared PCM ownership".into(),
+                ));
+            }
+            drop(previous);
+        }
+        self.prepared_layout = Some(self.audio_bus_layout()?);
+        if self.shared_audio_supported
+            && self.block_transport == crate::process_isolation::BlockTransport::Auto
+        {
+            let layout = self.prepared_layout.clone().expect("layout was prepared");
+            // Mapping availability is optional. Inline batching remains a lossless fallback.
+            if let Ok(shared) = crate::shared_audio::SharedAudioHost::new(layout, self.block_size) {
+                match self.send_command_once(HostCommand::ConfigureSharedAudio {
+                    descriptor: shared.descriptor().clone(),
+                }) {
+                    Ok(HostResponse::Success { .. }) => self.shared_audio = Some(shared),
+                    Ok(HostResponse::Error { .. }) => {
+                        if !matches!(
+                            self.send_command_once(HostCommand::ReleaseSharedAudio),
+                            Ok(HostResponse::Success { .. })
+                        ) {
+                            if let Ok(mut process) = self.process.lock() {
+                                process.shutdown();
+                            }
+                            return Err(Error::ProcessError(
+                                "Could not release rejected shared PCM mapping".into(),
+                            ));
+                        }
+                    }
+                    other => {
+                        // The child may have mapped the file before a timeout. Reap it
+                        // before this local owner unmaps/deletes the backing file.
+                        if let Ok(mut process) = self.process.lock() {
+                            process.shutdown();
+                        }
+                        return Err(match other {
+                            Err(error) => error,
+                            _ => Error::Other("Unexpected shared audio configuration reply".into()),
+                        });
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn process_buses_block(
+        &mut self,
+        buffers: &mut BusAudioBuffers,
+        commands: &mut Vec<BlockCommand>,
+    ) -> Result<()> {
+        validate_block_commands(commands, buffers.block_size)?;
+        if self.block_processing.is_none() || self.prepared_pid != self.helper_pid() {
+            self.prepare_block_processing()?;
+        }
+        if self.block_failed {
+            return Err(Error::ProcessError(
+                "Native block failed; recover before processing again".into(),
+            ));
+        }
+        let layout = self
+            .prepared_layout
+            .as_ref()
+            .ok_or_else(|| Error::ProcessError("Native bus layout was not prepared".into()))?;
+        let matches_layout = |buses: &[crate::audio::AudioBusBuffer],
+                              expected: &[AudioBusConfig]| {
+            buses.len() == expected.len()
+                && buses.iter().zip(expected).all(|(bus, expected)| {
+                    bus.active == expected.active && bus.channels.len() == expected.channel_count
+                })
+        };
+        if !matches_layout(&buffers.inputs, &layout.inputs)
+            || !matches_layout(&buffers.outputs, &layout.outputs)
+        {
+            return Err(Error::ProcessError(
+                "Native bus layout differs from prepared block".into(),
+            ));
+        }
+        let mut tempo = self.tempo;
+        let mut playing = self.is_playing;
+        for command in commands.iter() {
+            match command {
+                BlockCommand::SetTempo { bpm } => tempo = *bpm,
+                BlockCommand::SetPlaying { playing: value } => playing = *value,
+                _ => {}
+            }
+        }
+        let processed = (|| {
+            if self.block_processing != Some(true)
+                || self.block_transport == crate::process_isolation::BlockTransport::Legacy
+            {
+                for command in commands.drain(..) {
+                    match self.send_command_once(command.into_command())? {
+                        HostResponse::Success { .. } => {}
+                        HostResponse::Error { message } => {
+                            return Err(Error::ProcessError(message));
+                        }
+                        _ => {
+                            return Err(Error::ProcessError(
+                                "Unexpected legacy block operation reply".into(),
+                            ));
+                        }
+                    }
+                }
+                return self.process_buses(buffers);
+            }
+            let outputs = buffers
+                .outputs
+                .iter()
+                .map(|bus| AudioBusConfig {
+                    channel_count: bus.channels.len(),
+                    active: bus.active,
+                })
+                .collect();
+            let shared_audio = if let Some(shared) = &mut self.shared_audio {
+                match shared.begin(&buffers.inputs, buffers.block_size) {
+                    Ok(block) => Some(block),
+                    Err(error) => {
+                        shared.poison();
+                        return Err(Error::ProcessError(error.to_string()));
+                    }
+                }
+            } else {
+                None
+            };
+            let mut request = HostCommand::ProcessBlock {
+                commands: std::mem::take(commands),
+                inputs: if shared_audio.is_some() {
+                    Vec::new()
+                } else {
+                    buffers.inputs.clone()
+                },
+                outputs,
+                frames: buffers.block_size as u32,
+                shared_audio,
+            };
+            let response = self
+                .process
+                .lock()
+                .map_err(|error| Error::Other(format!("Failed to lock process: {error}")))
+                .and_then(|mut process| {
+                    process
+                        .send_command_once(&request)
+                        .map_err(|error| classify_ipc_error(&error))
+                });
+            if let HostCommand::ProcessBlock { commands: sent, .. } = &mut request {
+                *commands = std::mem::take(sent);
+            }
+            if let Some(block) = shared_audio {
+                let shared = self
+                    .shared_audio
+                    .as_mut()
+                    .expect("shared request owns a mapping");
+                let events = match response {
+                    Ok(HostResponse::SharedAudioOutput {
+                        block: completed,
+                        output_events,
+                    }) if completed == block => {
+                        if let Err(error) = shared.finish(block, &mut buffers.outputs) {
+                            shared.poison();
+                            return Err(Error::ProcessError(error.to_string()));
+                        }
+                        output_events
+                    }
+                    other => {
+                        shared.poison();
+                        return Err(match other {
+                            Err(error) => error,
+                            Ok(HostResponse::Error { message }) => Error::ProcessError(message),
+                            _ => Error::ProcessError(
+                                "Shared audio acknowledgement does not match the block".into(),
+                            ),
+                        });
+                    }
+                };
+                self.store_output_events(events);
+                Ok(())
+            } else {
+                self.accept_bus_response(buffers, response?)
+            }
+        })();
+        commands.clear();
+        if processed.is_ok() {
+            self.tempo = tempo;
+            self.is_playing = playing;
+        } else {
+            self.block_failed = true;
+        }
+        processed
+    }
+
     fn process_buses(&mut self, buffers: &mut BusAudioBuffers) -> Result<()> {
+        if self.block_failed {
+            return Err(Error::ProcessError(
+                "Native block failed; recover before processing again".into(),
+            ));
+        }
         let frames = buffers
             .outputs
             .iter()
@@ -519,45 +847,7 @@ impl PluginInternal for IsolatedPluginImpl {
             outputs,
             frames: frames as u32,
         })?;
-        match response {
-            HostResponse::BusAudioOutput {
-                outputs,
-                output_events,
-            } => {
-                for (destination_bus, source_bus) in buffers.outputs.iter_mut().zip(&outputs) {
-                    for (destination, source) in destination_bus
-                        .channels
-                        .iter_mut()
-                        .zip(&source_bus.channels)
-                    {
-                        let count = destination.len().min(source.len());
-                        destination[..count].copy_from_slice(&source[..count]);
-                        destination[count..].fill(0.0);
-                    }
-                }
-                for destination_bus in buffers.outputs.iter_mut().skip(outputs.len()) {
-                    for destination in &mut destination_bus.channels {
-                        destination.fill(0.0);
-                    }
-                }
-                if !output_events.is_empty() {
-                    if let Ok(mut queued) = self.output_events.lock() {
-                        queued.extend(output_events);
-                        if queued.len() > MAX_OUTPUT_MIDI {
-                            let drop_count = queued.len() - MAX_OUTPUT_MIDI;
-                            queued.drain(0..drop_count);
-                        }
-                    }
-                }
-                Ok(())
-            }
-            HostResponse::Error { message } => Err(Error::ProcessError(format!(
-                "ProcessBuses error: {message}"
-            ))),
-            _ => Err(Error::Other(
-                "ProcessBuses: unexpected response".to_string(),
-            )),
-        }
+        self.accept_bus_response(buffers, response)
     }
 
     fn send_midi_event(&mut self, event: MidiEvent) -> Result<()> {
@@ -597,7 +887,11 @@ impl PluginInternal for IsolatedPluginImpl {
                 active,
             },
             "SetBusActive",
-        )
+        )?;
+        if self.block_processing.is_some() {
+            self.prepare_block_processing()?;
+        }
+        Ok(())
     }
 
     fn bus_arrangements(&self) -> Result<crate::audio::BusArrangements> {
@@ -632,6 +926,9 @@ impl PluginInternal for IsolatedPluginImpl {
             self.send_command(HostCommand::BusArrangements)
         {
             self.output_channels = arrangements.outputs.iter().map(|a| a.channel_count()).sum();
+        }
+        if self.block_processing.is_some() {
+            self.prepare_block_processing()?;
         }
         Ok(())
     }
@@ -913,6 +1210,9 @@ impl PluginInternal for IsolatedPluginImpl {
         // Track the new config so a post-crash reload uses it.
         self.sample_rate = sample_rate;
         self.block_size = block_size;
+        if self.block_processing.is_some() {
+            self.prepare_block_processing()?;
+        }
         Ok(())
     }
 
@@ -1106,7 +1406,11 @@ impl PluginInternal for IsolatedPluginImpl {
                 context: context.clone(),
             },
             "LoadState",
-        )
+        )?;
+        if self.block_processing.is_some() {
+            self.prepare_block_processing()?;
+        }
+        Ok(())
     }
 
     fn take_output_events(&self) -> Vec<PluginEvent> {
@@ -1130,7 +1434,12 @@ impl PluginInternal for IsolatedPluginImpl {
     }
 
     fn recover(&mut self) -> Result<()> {
-        self.recover_locked()
+        self.recover_locked()?;
+        self.block_failed = false;
+        if self.block_processing.is_some() {
+            self.prepare_block_processing()?;
+        }
+        Ok(())
     }
 }
 
@@ -1163,7 +1472,7 @@ impl IsolatedPluginImpl {
         }) {
             Ok(HostResponse::PluginInfo { .. }) => {}
             Ok(HostResponse::Error { message }) => {
-                return Err(Error::PluginLoadFailed(format!("reload failed: {message}")))
+                return Err(Error::PluginLoadFailed(format!("reload failed: {message}")));
             }
             Ok(_) => return Err(Error::Other("unexpected response while reloading".into())),
             // The reload itself crashed the fresh helper — the plugin is unrecoverable.
@@ -1300,6 +1609,71 @@ mod tests {
             false,
             0,
         )
+    }
+
+    #[test]
+    fn unknown_capability_command_falls_back_without_sending_new_protocol() {
+        let fake = FakeHelper::new("block_legacy");
+        let layout = AudioBusLayout {
+            inputs: vec![],
+            outputs: vec![AudioBusConfig {
+                channel_count: 2,
+                active: true,
+            }],
+        };
+        let layout_json = serde_json::to_string(&HostResponse::AudioBusLayout {
+            layout: layout.clone(),
+        })
+        .unwrap();
+        let output_json = serde_json::to_string(&HostResponse::BusAudioOutput {
+            outputs: vec![crate::audio::AudioBusBuffer::new(2, 8, true)],
+            output_events: vec![],
+        })
+        .unwrap();
+        let script = std::fs::read_to_string(&fake.script).unwrap().replace("    *LoadPlugin*)", &format!(
+            "    *ProcessingCapabilities*) printf '%s\\n' '{{\"Error\":{{\"message\":\"unknown command\"}}}}' ;;\n    *AudioBusLayout*) printf '%s\\n' '{layout_json}' ;;\n    *ProcessBuses*) printf '%s\\n' '{output_json}' ;;\n    *LoadPlugin*)"
+        ));
+        std::fs::write(&fake.script, script).unwrap();
+        let mut plugin = isolated(&fake);
+        plugin.prepare_block_processing().unwrap();
+        let mut buffers = BusAudioBuffers::new(&layout, 8, 44_100.0);
+        let mut commands = vec![
+            BlockCommand::SetTempo { bpm: 137.0 },
+            BlockCommand::SetPlaying { playing: false },
+        ];
+        plugin
+            .process_buses_block(&mut buffers, &mut commands)
+            .unwrap();
+        assert!(commands.is_empty());
+        assert_eq!(plugin.tempo, 137.0);
+        assert!(!plugin.is_playing);
+        let requests = fake.requests();
+        assert_eq!(
+            requests
+                .iter()
+                .filter(|request| request.contains("ProcessingCapabilities"))
+                .count(),
+            1
+        );
+        assert!(!requests
+            .iter()
+            .any(|request| request.contains("ProcessBlock")
+                || request.contains("ConfigureSharedAudio")));
+        assert!(requests[requests.len() - 3].contains("SetTempo"));
+        assert!(requests[requests.len() - 2].contains("SetPlaying"));
+        assert!(requests.last().unwrap().contains("ProcessBuses"));
+    }
+
+    #[test]
+    fn unrelated_helper_cannot_be_mistaken_for_batch_capability() {
+        let fake = FakeHelper::new("wrong_block_capability");
+        let mut plugin = isolated(&fake);
+        assert!(plugin.prepare_block_processing().is_err());
+        assert!(!fake
+            .requests()
+            .iter()
+            .any(|request| request.contains("ConfigureSharedAudio")
+                || request.contains("ProcessBlock")));
     }
 
     #[test]

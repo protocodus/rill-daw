@@ -3,6 +3,11 @@
 //! This module provides functionality to run VST3 plugins in separate processes
 //! for improved stability and crash protection.
 
+mod block;
+pub use block::{
+    validate_block_commands, BlockCommand, BlockTransport, IpcStats, MAX_BLOCK_COMMANDS,
+};
+
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, Command, Stdio};
@@ -55,6 +60,8 @@ pub(crate) fn is_slow_command(command: &HostCommand) -> bool {
     matches!(
         command,
         HostCommand::LoadPlugin { .. }
+            | HostCommand::ConfigureSharedAudio { .. }
+            | HostCommand::ReleaseSharedAudio
             | HostCommand::UnloadPlugin
             | HostCommand::StartProcessing
             | HostCommand::StopProcessing
@@ -67,8 +74,8 @@ pub(crate) fn is_slow_command(command: &HostCommand) -> bool {
             | HostCommand::CloseGui
             | HostCommand::GetAllParameters
             | HostCommand::AudioBusDetails
-            | HostCommand::NoteExpressions {..}
-            | HostCommand::MidiControllerAssignments {..}
+            | HostCommand::NoteExpressions { .. }
+            | HostCommand::MidiControllerAssignments { .. }
             | HostCommand::SaveState
             | HostCommand::LoadState { .. }
             | HostCommand::GetProgramData { .. }
@@ -449,6 +456,30 @@ fn clamped_bus_count<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i32, 
 /// can never drift apart.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum HostCommand {
+    /// Negotiate optional block transports without changing the loaded processor.
+    ProcessingCapabilities,
+    /// Release a shared mapping before its host unmaps or deletes its backing file.
+    ReleaseSharedAudio,
+    /// Attach bounded PCM storage before processing begins.
+    ConfigureSharedAudio {
+        /// Host-owned mapping with fixed native bus layout.
+        descriptor: crate::shared_audio::SharedAudioDescriptor,
+    },
+    /// Apply all ordered operations and process exactly one audio block.
+    ProcessBlock {
+        /// Operations validated in full before touching native state.
+        #[serde(deserialize_with = "block::deserialize_commands")]
+        commands: Vec<BlockCommand>,
+        /// Inline input buses, empty when shared PCM is used.
+        inputs: Vec<crate::audio::AudioBusBuffer>,
+        /// Native output bus layout, including inactive buses.
+        outputs: Vec<crate::audio::AudioBusConfig>,
+        /// Actual frames in this block.
+        frames: u32,
+        /// Ownership token for previously negotiated shared PCM.
+        #[serde(default)]
+        shared_audio: Option<crate::shared_audio::SharedAudioBlock>,
+    },
     /// Query cached MIDI controller assignments.
     MidiControllerAssignments {
         /// Input or output mapping direction.
@@ -843,6 +874,20 @@ pub enum HostCommand {
 /// Responses from the isolated plugin process
 #[derive(Debug, Serialize, Deserialize)]
 pub enum HostResponse {
+    /// Optional processing transports supported by this helper version.
+    ProcessingCapabilities {
+        /// Ordered operations and audio in one request.
+        block_processing: bool,
+        /// Fixed-layout shared PCM with explicit ownership tokens.
+        shared_audio: bool,
+    },
+    /// Shared output is published and belongs to the matching block.
+    SharedAudioOutput {
+        /// Exact ownership token from the request.
+        block: crate::shared_audio::SharedAudioBlock,
+        /// Owned output musical events in native order.
+        output_events: Vec<crate::midi::PluginEvent>,
+    },
     /// Reply to MidiControllerAssignments.
     MidiControllerAssignments {
         /// Returned assignments.
@@ -1103,7 +1148,9 @@ impl ProtocolChannel {
                 None => {
                     // Nothing to fall back to: keep speaking on fd 1 as-is, so the protocol
                     // still works even though plugin writes can pollute it.
-                    eprintln!("helper: could not privatise the protocol channel; plugin writes to stdout may corrupt it");
+                    eprintln!(
+                        "helper: could not privatise the protocol channel; plugin writes to stdout may corrupt it"
+                    );
                     libc::STDOUT_FILENO
                 }
             }
@@ -1142,6 +1189,7 @@ impl Write for ProtocolChannel {
 /// crashed helper surfaces as a disconnect error rather than a silent wedge.
 pub struct PluginHostProcess {
     process: Option<Child>,
+    stats: IpcStats,
     /// One persistent writer owns stdin. A helper that stops reading cannot
     /// block the caller before its response deadline starts.
     commands: Option<SyncSender<String>>,
@@ -1443,6 +1491,7 @@ impl PluginHostProcess {
 
         Ok(Self {
             process: Some(child),
+            stats: IpcStats::default(),
             commands: Some(commands),
             writer: Some(writer),
             writer_finished,
@@ -1545,12 +1594,12 @@ impl PluginHostProcess {
     /// live plugin state that a fresh process would not have.
     pub fn send_command(&mut self, command: HostCommand) -> Result<HostResponse, String> {
         if !matches!(command, HostCommand::LoadPlugin { .. }) {
-            return self.exchange(command).map_err(String::from);
+            return self.exchange(&command).map_err(String::from);
         }
 
         let mut retries_left = LOAD_CRASH_RETRIES;
         loop {
-            match self.exchange(command.clone()) {
+            match self.exchange(&command) {
                 Ok(response) => return Ok(response),
                 Err(ExchangeError::DiedDuringCommand(detail)) if retries_left > 0 => {
                     retries_left -= 1;
@@ -1570,21 +1619,38 @@ impl PluginHostProcess {
         }
     }
 
+    /// Dispatch a borrowed request exactly once, retaining caller-owned block storage.
+    /// Unlike `send_command`, this never retries a load or any other operation.
+    pub fn send_command_once(&mut self, command: &HostCommand) -> Result<HostResponse, String> {
+        self.exchange(command).map_err(String::from)
+    }
+
     /// One request/response exchange with the current child, with no recovery.
-    fn exchange(&mut self, command: HostCommand) -> Result<HostResponse, ExchangeError> {
+    fn exchange(&mut self, command: &HostCommand) -> Result<HostResponse, ExchangeError> {
         if self.dead {
             return Err(ExchangeError::AlreadyDead(
                 "Helper process is no longer running".to_string(),
             ));
         }
 
-        let command_json = serde_json::to_string(&command)
+        if let HostCommand::ProcessBlock { commands, .. } = command {
+            block::validate_command_limits(commands)
+                .map_err(|error| ExchangeError::Encoding(error.to_string()))?;
+        }
+
+        let command_json = serde_json::to_string(command)
             .map_err(|e| ExchangeError::Encoding(format!("Failed to serialize command: {}", e)))?;
+
+        self.stats.requests = self.stats.requests.saturating_add(1);
+        self.stats.request_bytes = self
+            .stats
+            .request_bytes
+            .saturating_add(command_json.len() as u64);
 
         // Anything already queued predates this command.
         self.drop_stale_lines();
 
-        let timeout = self.timeout_for(&command);
+        let timeout = self.timeout_for(command);
         let deadline = Instant::now() + timeout;
         let Some(commands) = self.commands.as_ref() else {
             return Err(ExchangeError::AlreadyDead(
@@ -1604,6 +1670,8 @@ impl PluginHostProcess {
             let remaining = deadline.saturating_duration_since(Instant::now());
             match self.responses.recv_timeout(remaining) {
                 Ok(line) => {
+                    self.stats.response_bytes =
+                        self.stats.response_bytes.saturating_add(line.len() as u64);
                     self.queued.fetch_sub(1, Ordering::Relaxed);
                     match serde_json::from_str::<HostResponse>(&line) {
                         Ok(response) => return Ok(response),
@@ -1645,6 +1713,11 @@ impl PluginHostProcess {
                 }
             }
         }
+    }
+
+    /// Read cumulative exchange counters without contacting the helper.
+    pub fn ipc_stats(&self) -> IpcStats {
+        self.stats
     }
 
     /// Whether the helper process is still considered alive.
@@ -1712,6 +1785,7 @@ impl PluginHostProcess {
                     Ok(None) => std::thread::sleep(Duration::from_millis(10)),
                     Err(_) => {
                         let _ = process.kill();
+                        let _ = process.wait();
                         break;
                     }
                 }

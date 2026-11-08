@@ -4,7 +4,7 @@ use crate::{
     audio::{AudioBuffers, AudioBusBuffer, AudioBusConfig, AudioBusLayout, BusAudioBuffers},
     error::{Error, Result},
     midi::{MidiChannel, MidiEvent, PluginEvent},
-    parameters::{Parameter, ParameterChange},
+    parameters::{Parameter, ParameterChange, MAX_PENDING_PARAM_CHANGES},
     plugin::{
         decode_state_snapshot, encode_state_snapshot, PluginInfo, PluginInternal, StateContext,
         StateSnapshot,
@@ -43,13 +43,6 @@ const MAX_OUTPUT_MIDI: usize = 4096;
 /// real polyphony, and bounds a caller that starts notes it never releases.
 const MAX_TRACKED_NOTES: usize = 1024;
 
-/// Cap on parameter changes queued for the next block (see `PluginImpl::pending_param_changes`).
-/// The queue's only drain is `process()`, which returns early while the plugin isn't processing —
-/// so a host whose stream keeps running after `stop_processing`, or one automating parameters
-/// before playback starts, would otherwise grow it forever and then flood a single block with the
-/// whole backlog. The sibling of `MAX_QUEUED_EVENTS` on the MIDI side: pre-reserved so the audio
-/// path never reallocates, and changes past the cap are dropped (and counted).
-const MAX_PENDING_PARAM_CHANGES: usize = 4096;
 const MIDI_CONTROLLER_COUNT: usize = ControllerNumbers_::kCtrlProgramChange as usize + 1;
 const MIDI_CHANNEL_COUNT: usize = 16;
 const MAX_OUTPUT_PARAMETER_FEEDBACK: usize = 4096;
@@ -211,9 +204,6 @@ pub struct PluginImpl {
     // with process() by the caller's &mut access, so a plain Vec (no lock) is sufficient.
     // Pre-reserved to MAX_PENDING_PARAM_CHANGES and capped there — see the constant.
     pending_param_changes: Vec<ParameterChange>,
-    // How many parameter changes have been dropped because the queue was full. Reported in the
-    // warning so a host sees a running total rather than one line per lost change.
-    dropped_param_changes: u64,
 
     // Parameter edits the plugin's *own editor* reported via `IComponentHandler::performEdit`,
     // after `process()` has routed them into the processor's input queue. Drained by the host
@@ -1536,7 +1526,6 @@ impl PluginImpl {
                 component_handler: Some(component_handler),
                 connection: initialized.take_connection(),
                 pending_param_changes: Vec::with_capacity(MAX_PENDING_PARAM_CHANGES),
-                dropped_param_changes: 0,
                 gui_param_changes_for_host: Arc::new(Mutex::new(Vec::with_capacity(
                     MAX_EDITOR_FEEDBACK,
                 ))),
@@ -2545,25 +2534,16 @@ impl PluginInternal for PluginImpl {
         value: f64,
         sample_offset: i32,
     ) -> Result<()> {
-        // Every route into the processor queue also updates the controller, so a value set
-        // through `AudioHandle`/`RtControl` (or a mapped MIDI controller) is reflected by the
-        // plugin's own editor, `get_parameter`, `format_parameter` and saved state — deferred
-        // to the control thread when it arrives from the audio callback.
-        self.mirror_parameter_to_controller(id, value);
+        // Reject before mirroring: a value rejected by the DSP queue must not appear
+        // accepted in the controller/editor. Mapped MIDI fanout uses this same bound.
         if self.pending_param_changes.len() >= MAX_PENDING_PARAM_CHANGES {
-            // Only reachable when nothing is draining the queue (the plugin isn't
-            // processing), so the dropped change would have arrived as part of a stale flood
-            // anyway. The controller half above still ran, so the plugin's own display
-            // stays correct.
-            self.dropped_param_changes += 1;
-            log::warn!(
-                "dropping parameter change for {id}, queue full at \
-                     {MAX_PENDING_PARAM_CHANGES} (is the plugin processing?); \
-                     {} dropped so far",
-                self.dropped_param_changes
-            );
-            return Ok(());
+            return Err(Error::InvalidParameter(format!(
+                "Parameter queue is full ({MAX_PENDING_PARAM_CHANGES} pending points)"
+            )));
         }
+        // Controller and processor receive the same admitted point; the controller
+        // mirror is deferred to its owning thread when called from an audio callback.
+        self.mirror_parameter_to_controller(id, value);
         self.pending_param_changes.push(ParameterChange {
             id,
             value,
@@ -3834,7 +3814,9 @@ impl PluginInternal for PluginImpl {
         };
         unsafe {
             let count = ctrl.getNoteExpressionCount(bus, channel);
-            if !(0..=4096).contains(&count) { return Err(Error::Other("invalid note expression count".into())); }
+            if !(0..=4096).contains(&count) {
+                return Err(Error::Other("invalid note expression count".into()));
+            }
             let mut out = Vec::with_capacity(count.max(0) as usize);
             for i in 0..count {
                 let mut info: NoteExpressionTypeInfo = std::mem::zeroed();

@@ -201,7 +201,8 @@ impl ExpressiveMidiMessage {
         Ok(())
     }
 
-    pub(crate) fn queue(self, plugin: &mut vst3_host::Plugin) -> Result<()> {
+    pub(crate) fn block_command(self) -> vst3_host::process_isolation::BlockCommand {
+        use vst3_host::process_isolation::BlockCommand;
         let data = match self.data {
             ExpressiveMidiData::NoteOn {
                 channel,
@@ -264,24 +265,24 @@ impl ExpressiveMidiMessage {
                 controller,
                 value,
             } => {
-                plugin.send_midi_controller_at(
-                    0,
-                    MidiChannel::from_index(channel).expect("validated channel"),
-                    controller.native(),
+                return BlockCommand::SendMidiControllerAt {
+                    bus: 0,
+                    channel: MidiChannel::from_index(channel).expect("validated channel"),
+                    controller: controller.native(),
                     value,
-                    self.offset as i32,
-                )?;
-                return Ok(());
+                    sample_offset: self.offset as i32,
+                };
             }
         };
-        plugin.send_plugin_event(PluginEvent {
-            bus_index: 0,
-            sample_offset: self.offset as i32,
-            ppq_position: 0.0,
-            flags: 0,
-            data,
-        })?;
-        Ok(())
+        BlockCommand::SendPluginEvent {
+            event: PluginEvent {
+                bus_index: 0,
+                sample_offset: self.offset as i32,
+                ppq_position: 0.0,
+                flags: 0,
+                data,
+            },
+        }
     }
 }
 

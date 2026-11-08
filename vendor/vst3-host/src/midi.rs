@@ -166,6 +166,9 @@ pub enum MidiEvent {
 /// unbounded allocation in the host.
 pub const MAX_EVENT_PAYLOAD_BYTES: usize = 1024 * 1024;
 
+/// Aggregate owned event payload allowed in one native input/output queue.
+pub const MAX_QUEUED_EVENT_PAYLOAD_BYTES: usize = 8 * 1024 * 1024;
+
 /// Maximum UTF-16 code units accepted from a pointer-backed VST3 event.
 pub const MAX_EVENT_TEXT_UNITS: usize = 16 * 1024;
 

@@ -68,6 +68,9 @@ struct Worker {
     plugin: Option<Plugin>,
     sample_rate: f64,
     max_block: usize,
+    block_failed: bool,
+    shared_audio: Option<vst3_host::shared_audio::SharedAudioWorker>,
+    shared_buffers: Option<BusAudioBuffers>,
     outputs: Vec<Vec<f32>>,
     bus_outputs: Vec<AudioBusBuffer>,
 }
@@ -84,6 +87,17 @@ impl Worker {
     }
 
     fn handle(&mut self, command: HostCommand) -> Result<HostResponse> {
+        if matches!(command, HostCommand::ProcessingCapabilities) {
+            return Ok(HostResponse::ProcessingCapabilities {
+                block_processing: true,
+                shared_audio: true,
+            });
+        }
+        if matches!(command, HostCommand::ReleaseSharedAudio) {
+            self.shared_audio = None;
+            self.shared_buffers = None;
+            return Ok(success());
+        }
         if let HostCommand::LoadPlugin {
             path,
             sample_rate,
@@ -124,7 +138,10 @@ impl Worker {
                 has_midi_output: info.has_midi_output,
                 compatibility: plugin.class_compatibility().to_vec(),
             };
+            self.shared_audio = None;
+            self.shared_buffers = None;
             self.plugin = Some(plugin);
+            self.block_failed = false;
             self.outputs.clear();
             self.bus_outputs.clear();
             self.sample_rate = sample_rate;
@@ -132,6 +149,8 @@ impl Worker {
             return Ok(response);
         }
         if matches!(command, HostCommand::UnloadPlugin) {
+            self.shared_audio = None;
+            self.shared_buffers = None;
             self.plugin = None;
             self.outputs.clear();
             self.bus_outputs.clear();
@@ -139,6 +158,115 @@ impl Worker {
         }
         let plugin = self.plugin.as_mut().context("No plugin loaded")?;
         match command {
+            HostCommand::ConfigureSharedAudio { descriptor } => {
+                let layout = plugin.audio_bus_layout()?;
+                ensure!(
+                    descriptor.layout == layout,
+                    "Shared audio bus layout differs from native layout"
+                );
+                ensure!(
+                    descriptor.max_frames as usize == self.max_block,
+                    "Shared audio capacity differs from native setup"
+                );
+                validate_audio_bus_layout(&layout, self.max_block)?;
+                let shared = vst3_host::shared_audio::SharedAudioWorker::open(descriptor)?;
+                let buffers = BusAudioBuffers::new(&layout, self.max_block, self.sample_rate);
+                self.shared_audio = Some(shared);
+                self.shared_buffers = Some(buffers);
+            }
+            HostCommand::ProcessBlock {
+                commands,
+                inputs,
+                outputs,
+                frames,
+                shared_audio,
+            } => {
+                ensure!(
+                    frames > 0 && frames as usize <= self.max_block,
+                    "Invalid processing block size"
+                );
+                ensure!(
+                    !self.block_failed,
+                    "Native block failed; reload the processor before processing again"
+                );
+                ensure!(plugin.is_processing(), "Plug-in is not processing");
+                let frames = frames as usize;
+                let layout = plugin.audio_bus_layout()?;
+                validate_audio_bus_layout(&layout, frames)?;
+                ensure!(outputs == layout.outputs, "Output bus layout changed");
+                vst3_host::process_isolation::validate_block_commands(&commands, frames)?;
+                if let Some(block) = shared_audio {
+                    ensure!(
+                        inputs.is_empty(),
+                        "Shared PCM block must not contain inline audio"
+                    );
+                    ensure!(
+                        block.frames as usize == frames,
+                        "Shared PCM frame count differs from block"
+                    );
+                    let shared = self
+                        .shared_audio
+                        .as_mut()
+                        .context("Shared PCM is not configured")?;
+                    let buffers = self
+                        .shared_buffers
+                        .as_mut()
+                        .context("Shared PCM buffers are missing")?;
+                    ensure!(
+                        shared.descriptor().layout == layout,
+                        "Shared PCM native layout changed"
+                    );
+                    for bus in buffers.inputs.iter_mut().chain(&mut buffers.outputs) {
+                        crate::audio_buffers::prepare_channels(&mut bus.channels, frames);
+                    }
+                    buffers.block_size = frames;
+                    shared.read_inputs(block, &mut buffers.inputs)?;
+                    // Full shape/value admission precedes every stateful native operation.
+                    let processed = (|| -> Result<()> {
+                        for command in &commands {
+                            command.apply(plugin)?;
+                        }
+                        plugin.process_bus_audio(buffers)?;
+                        Ok(())
+                    })();
+                    if let Err(error) = processed {
+                        self.block_failed = true;
+                        return Err(error);
+                    }
+                    if let Err(error) = shared.write_outputs(block, &buffers.outputs) {
+                        self.block_failed = true;
+                        return Err(error.into());
+                    }
+                    return Ok(HostResponse::SharedAudioOutput {
+                        block,
+                        output_events: plugin.take_output_events(),
+                    });
+                }
+                validate_input_buses(&inputs, &layout.inputs, frames)?;
+                prepare_bus_outputs(&mut self.bus_outputs, &outputs, frames);
+                let mut buffers = BusAudioBuffers {
+                    inputs,
+                    outputs: std::mem::take(&mut self.bus_outputs),
+                    block_size: frames,
+                    sample_rate: self.sample_rate,
+                };
+                let processed = (|| -> Result<()> {
+                    for command in &commands {
+                        command.apply(plugin)?;
+                    }
+                    plugin.process_bus_audio(&mut buffers)?;
+                    Ok(())
+                })();
+                if let Err(error) = processed {
+                    self.block_failed = true;
+                    self.bus_outputs = buffers.outputs;
+                    return Err(error);
+                }
+                return Ok(HostResponse::BusAudioOutput {
+                    outputs: buffers.outputs,
+                    output_events: plugin.take_output_events(),
+                });
+            }
             HostCommand::StartProcessing => plugin.start_processing()?,
             HostCommand::StopProcessing => plugin.stop_processing()?,
             HostCommand::Reconfigure {
@@ -271,13 +399,15 @@ impl Worker {
                     frames > 0 && frames as usize <= self.max_block,
                     "Invalid processing block size"
                 );
+                ensure!(
+                    !self.block_failed,
+                    "Native block failed; reload the processor before processing again"
+                );
+                ensure!(plugin.is_processing(), "Plug-in is not processing");
                 let expected = plugin.audio_bus_layout()?;
                 validate_audio_bus_layout(&expected, frames as usize)?;
                 ensure!(outputs == expected.outputs, "Output bus layout changed");
-                ensure!(
-                    inputs.len() == expected.inputs.len(),
-                    "Input bus layout changed"
-                );
+                validate_input_buses(&inputs, &expected.inputs, frames as usize)?;
                 prepare_bus_outputs(&mut self.bus_outputs, &outputs, frames as usize);
                 let mut buffers = BusAudioBuffers {
                     inputs,
@@ -299,6 +429,11 @@ impl Worker {
                     frames > 0 && frames as usize <= self.max_block,
                     "Invalid processing block size"
                 );
+                ensure!(
+                    !self.block_failed,
+                    "Native block failed; reload the processor before processing again"
+                );
+                ensure!(plugin.is_processing(), "Plug-in is not processing");
                 let output_channels = plugin.output_channel_count();
                 ensure!(
                     inputs.len().saturating_add(output_channels)
@@ -328,6 +463,25 @@ impl Worker {
         }
         Ok(success())
     }
+}
+
+fn validate_input_buses(
+    inputs: &[AudioBusBuffer],
+    layout: &[vst3_host::AudioBusConfig],
+    frames: usize,
+) -> Result<()> {
+    ensure!(inputs.len() == layout.len(), "Input bus layout changed");
+    for (bus, config) in inputs.iter().zip(layout) {
+        ensure!(
+            bus.active == config.active && bus.channels.len() == config.channel_count,
+            "Input bus layout changed"
+        );
+        ensure!(
+            bus.channels.iter().all(|channel| channel.len() == frames),
+            "Input bus block lengths differ"
+        );
+    }
+    Ok(())
 }
 
 fn success() -> HostResponse {

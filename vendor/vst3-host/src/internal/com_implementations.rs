@@ -1,6 +1,9 @@
 //! Internal COM interface implementations for VST3
 
-use crate::midi::{PluginEvent, PluginEventData, MAX_EVENT_PAYLOAD_BYTES, MAX_EVENT_TEXT_UNITS};
+use crate::midi::{
+    PluginEvent, PluginEventData, MAX_EVENT_PAYLOAD_BYTES, MAX_EVENT_TEXT_UNITS,
+    MAX_QUEUED_EVENT_PAYLOAD_BYTES,
+};
 use crate::plugin::StateContext;
 use std::collections::{HashMap, HashSet};
 use std::ffi::CStr;
@@ -2064,7 +2067,6 @@ impl IUnitHandler2Trait for ComponentHandler {
 /// above any single block's working set; same pre-reserve/drop-when-full policy as
 /// `MAX_OUTPUT_MIDI`.
 pub const MAX_QUEUED_EVENTS: usize = 4096;
-const MAX_QUEUED_EVENT_PAYLOAD_BYTES: usize = 8 * 1024 * 1024;
 
 pub struct HostEventList {
     pub events: Mutex<Vec<PluginEvent>>,

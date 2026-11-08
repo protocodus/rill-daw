@@ -21,7 +21,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 pub use vst3_host::audio::{AudioBusDetails, AudioBusDetailsLayout};
-use vst3_host::process_isolation::{HostCommand, HostResponse, PluginHostProcess};
+use vst3_host::process_isolation::{BlockCommand, HostCommand, HostResponse, PluginHostProcess};
+pub use vst3_host::process_isolation::{BlockTransport, IpcStats};
 pub use vst3_host::{AudioBusConfig, AudioBusLayout};
 use vst3_host::{BusAudioBuffers, MidiChannel, MidiEvent, Plugin, TransportPosition, Vst3Host};
 
@@ -435,6 +436,8 @@ pub struct VstInstrument {
     cached_tempo: Option<f64>,
     cached_playing: Option<bool>,
     next_position: Option<TransportPosition>,
+    block_commands: Vec<BlockCommand>,
+    queued_transport: Option<(TransportPosition, f64, bool)>,
     bus_activation: Option<BusActivation>,
     expressive_notes: Vec<expressive::Voice>,
     next_expressive_notes: Vec<expressive::Voice>,
@@ -543,6 +546,7 @@ impl VstInstrument {
         plugin
             .start_processing()
             .with_context(|| format!("Starting VST3 processor {}", path.display()))?;
+        plugin.prepare_block_processing()?;
         let latency = plugin.latency_samples();
         let tail = plugin.tail_samples();
         ensure!(
@@ -563,6 +567,8 @@ impl VstInstrument {
             cached_tempo: None,
             cached_playing: None,
             next_position: None,
+            block_commands: Vec::with_capacity(MAX_MIDI_EVENTS_PER_BLOCK * 2 + 256),
+            queued_transport: None,
             bus_activation: None,
             expressive_notes: Vec::with_capacity(MAX_MIDI_EVENTS_PER_BLOCK),
             next_expressive_notes: Vec::with_capacity(MAX_MIDI_EVENTS_PER_BLOCK),
@@ -720,6 +726,9 @@ impl VstInstrument {
         self.input_bus = input_bus;
         self.output_bus = output_bus;
         self.buffers = buffers;
+        self.block_commands.clear();
+        self.queued_transport = None;
+        self.plugin.prepare_block_processing()?;
         Ok(())
     }
 
@@ -749,6 +758,57 @@ impl VstInstrument {
     pub fn reset(&mut self) -> Result<()> {
         self.panic_pending = true;
         Ok(())
+    }
+
+    /// Queue automation for the next audio block. Ordinary control edits use
+    /// `set_parameter`, which remains synchronous and reports errors immediately.
+    pub fn queue_parameter_for_block(&mut self, id: u32, value: f64) -> Result<()> {
+        ensure!(
+            value.is_finite() && (0.0..=1.0).contains(&value),
+            "Parameter value must be normalized to 0..=1"
+        );
+        ensure!(
+            self.block_commands.len() < vst3_host::parameters::MAX_PENDING_PARAM_CHANGES,
+            "Too many block parameter changes"
+        );
+        self.block_commands
+            .push(BlockCommand::SetParameter { id, value });
+        Ok(())
+    }
+
+    /// Queue transport metadata with the next audio request. Cache state only
+    /// after that block succeeds, so rejected or zero-frame blocks cannot lose it.
+    pub fn queue_transport_for_block(
+        &mut self,
+        sample_position: i64,
+        quarter_notes: f64,
+        bpm: f64,
+        playing: bool,
+    ) -> Result<()> {
+        ensure!(
+            quarter_notes.is_finite() && bpm.is_finite() && bpm > 0.0,
+            "Invalid plugin transport position or tempo"
+        );
+        self.queued_transport = Some((
+            TransportPosition {
+                samples: sample_position,
+                quarter_notes,
+            },
+            bpm,
+            playing,
+        ));
+        Ok(())
+    }
+
+    /// Choose the per-instance IPC policy on a control thread.
+    pub fn set_block_transport(&mut self, policy: BlockTransport) -> Result<()> {
+        self.plugin.set_block_transport(policy)?;
+        Ok(())
+    }
+
+    /// Cumulative wire traffic; reads do not contact the native helper.
+    pub fn ipc_stats(&self) -> Option<IpcStats> {
+        self.plugin.ipc_stats()
     }
 
     pub fn set_transport(
@@ -959,6 +1019,8 @@ impl VstInstrument {
                 <= MAX_MIDI_EVENTS_PER_BLOCK,
             "Too many held MIDI notes"
         );
+        let mut commands = std::mem::take(&mut self.block_commands);
+        let queued_transport = self.queued_transport.take();
         self.buffers.block_size = frames;
         for bus in &mut self.buffers.inputs {
             audio_buffers::prepare_channels(&mut bus.channels, frames);
@@ -976,32 +1038,48 @@ impl VstInstrument {
                 input.right,
             );
         }
+        if let Some((position, bpm, playing)) = queued_transport {
+            if !self.next_position.is_some_and(|cached| {
+                cached.samples == position.samples
+                    && (cached.quarter_notes - position.quarter_notes).abs() < 1.0e-9
+            }) {
+                commands.push(BlockCommand::SetTransportPosition { position });
+            }
+            if self.cached_tempo != Some(bpm) {
+                commands.push(BlockCommand::SetTempo { bpm });
+            }
+            if self.cached_playing != Some(playing) {
+                commands.push(BlockCommand::SetPlaying { playing });
+            }
+        }
         if self.panic_pending {
             for (pitch, active) in self.active_notes.iter_mut().enumerate() {
                 for _ in 0..*active {
-                    self.plugin.send_midi_event_at(
-                        MidiEvent::NoteOff {
+                    commands.push(BlockCommand::SendMidiAt {
+                        event: MidiEvent::NoteOff {
                             channel: MidiChannel::Ch1,
                             note: pitch as u8,
                             velocity: 0,
                         },
-                        0,
-                    )?;
+                        sample_offset: 0,
+                    });
                 }
                 *active = 0;
             }
             for voice in &self.expressive_notes {
-                ExpressiveMidiMessage {
-                    offset: 0,
-                    data: ExpressiveMidiData::NoteOff {
-                        channel: voice.channel,
-                        pitch: voice.pitch,
-                        velocity: ExpressiveVelocity::Midi2(0),
-                        note_id: voice.note_id,
-                        tuning: 0.0,
-                    },
-                }
-                .queue(&mut self.plugin)?;
+                commands.push(
+                    ExpressiveMidiMessage {
+                        offset: 0,
+                        data: ExpressiveMidiData::NoteOff {
+                            channel: voice.channel,
+                            pitch: voice.pitch,
+                            velocity: ExpressiveVelocity::Midi2(0),
+                            note_id: voice.note_id,
+                            tuning: 0.0,
+                        },
+                    }
+                    .block_command(),
+                );
             }
             self.panic_pending = false;
         }
@@ -1012,23 +1090,35 @@ impl VstInstrument {
                     || events[legacy_index].offset <= expressive[expressive_index].offset)
             {
                 let event = events[legacy_index];
-                self.plugin
-                    .send_midi_event_at(event.as_host_event(), event.offset as i32)?;
+                commands.push(BlockCommand::SendMidiAt {
+                    event: event.as_host_event(),
+                    sample_offset: event.offset as i32,
+                });
                 legacy_index += 1;
             } else {
-                expressive[expressive_index].queue(&mut self.plugin)?;
+                commands.push(expressive[expressive_index].block_command());
                 expressive_index += 1;
             }
         }
         self.active_notes = next_active;
         std::mem::swap(&mut self.expressive_notes, &mut self.next_expressive_notes);
-        if let Err(error) = self.plugin.process_bus_audio(&mut self.buffers) {
+        let result = self
+            .plugin
+            .process_bus_audio_block(&mut self.buffers, &mut commands);
+        commands.clear();
+        self.block_commands = commands;
+        if let Err(error) = result {
             for bus in &mut self.buffers.outputs {
                 for channel in &mut bus.channels {
                     channel.fill(0.0);
                 }
             }
             return Err(error.into());
+        }
+        if let Some((position, bpm, playing)) = queued_transport {
+            self.next_position = Some(position);
+            self.cached_tempo = Some(bpm);
+            self.cached_playing = Some(playing);
         }
         if self.cached_playing == Some(true)
             && let (Some(position), Some(tempo)) = (&mut self.next_position, self.cached_tempo)
@@ -1284,6 +1374,26 @@ impl VstEffect {
         self.processor.panic_pending = false;
         self.processor.next_position = None;
         Ok(())
+    }
+
+    pub fn queue_parameter_for_block(&mut self, id: u32, value: f64) -> Result<()> {
+        self.processor.queue_parameter_for_block(id, value)
+    }
+    pub fn queue_transport_for_block(
+        &mut self,
+        sample_position: i64,
+        quarter_notes: f64,
+        bpm: f64,
+        playing: bool,
+    ) -> Result<()> {
+        self.processor
+            .queue_transport_for_block(sample_position, quarter_notes, bpm, playing)
+    }
+    pub fn set_block_transport(&mut self, policy: BlockTransport) -> Result<()> {
+        self.processor.set_block_transport(policy)
+    }
+    pub fn ipc_stats(&self) -> Option<IpcStats> {
+        self.processor.ipc_stats()
     }
 
     pub fn set_transport(

@@ -75,6 +75,7 @@ pub mod embed;
 pub mod backends;
 
 pub mod process_isolation;
+pub mod shared_audio;
 
 #[cfg(feature = "midi-input")]
 pub mod midi_input;

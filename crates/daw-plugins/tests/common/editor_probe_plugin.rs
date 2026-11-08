@@ -17,6 +17,33 @@ const MULTI_BUS: bool = false;
 const MULTI_EFFECT: bool = false;
 const NONZERO_MAIN: bool = false;
 const EXPRESSIVE: bool = false;
+const DSP_STAGES: usize = 0;
+const TRACE_DIRECTORY: &str = "";
+const FAIL_AFTER_BLOCKS: u64 = u64::MAX;
+
+struct ProcessTrace {
+    sequence: u64,
+    start: u128,
+}
+impl ProcessTrace {
+    fn new(sequence: u64) -> Self {
+        let start = if TRACE_DIRECTORY.is_empty() { 0 } else {
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        };
+        Self { sequence, start }
+    }
+}
+impl Drop for ProcessTrace {
+    fn drop(&mut self) {
+        if TRACE_DIRECTORY.is_empty() { return; }
+        use std::io::Write;
+        let end = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let pid = std::process::id();
+        let path = std::path::Path::new(TRACE_DIRECTORY).join(format!("{pid}.trace"));
+        let mut file = std::fs::OpenOptions::new().create(true).append(true).open(path).unwrap();
+        writeln!(file, "{pid} {} {} {end}", self.sequence, self.start).unwrap();
+    }
+}
 
 fn logical_bus(index:i32)->i32 {if NONZERO_MAIN && index<2 {1-index} else {index}}
 
@@ -92,6 +119,8 @@ impl IPluginFactoryTrait for Factory {
             last_release: AtomicU64::new(0),
             last_tuning: AtomicU64::new(0),
             expressive_gain: AtomicU64::new(0.5_f64.to_bits()),
+            process_count: AtomicU64::new(0),
+            dsp_state: std::sync::Mutex::new(Vec::new()),
         })
         .to_com_ptr::<IComponent>()
         .unwrap();
@@ -132,12 +161,41 @@ struct Instrument {
     last_release: AtomicU64,
     last_tuning: AtomicU64,
     expressive_gain: AtomicU64,
+    process_count: AtomicU64,
+    dsp_state: std::sync::Mutex<Vec<f64>>,
 }
 struct ExpressiveVoice { channel: i16, pitch: i16, id: i32, velocity: f64, expression: f64 }
 impl Class for Instrument {
     type Interfaces = (IComponent, IAudioProcessor, IEditController, INoteExpressionController, IMidiMapping);
 }
 impl Instrument {
+    /// Cascaded one-pole filters: persistent state and audible output prevent
+    /// optimization into a spin loop, and sample order is independent of blocks.
+    unsafe fn cpu_dsp(&self, data: &mut ProcessData) {
+        if DSP_STAGES == 0 { return; }
+        let channels: usize = (0..data.numOutputs).map(|index| (*data.outputs.offset(index as isize)).numChannels.max(0) as usize).sum();
+        let mut state = self.dsp_state.lock().unwrap();
+        state.resize(channels * DSP_STAGES, 0.0);
+        let mut channel_index = 0;
+        for bus_index in 0..data.numOutputs {
+            let bus = &mut *data.outputs.offset(bus_index as isize);
+            for channel in 0..bus.numChannels {
+                let offset = channel_index * DSP_STAGES;
+                channel_index += 1;
+                if MULTI_BUS && self.active_outputs.load(Relaxed) & (1 << bus_index) == 0 { continue; }
+                let samples = *bus.__field0.channelBuffers32.offset(channel as isize);
+                if samples.is_null() { continue; }
+                for frame in 0..data.numSamples {
+                    let mut sample = f64::from(*samples.offset(frame as isize));
+                    for filter in &mut state[offset..offset + DSP_STAGES] {
+                        *filter += 0.25 * (sample - *filter);
+                        sample = *filter;
+                    }
+                    *samples.offset(frame as isize) = sample as f32;
+                }
+            }
+        }
+    }
     unsafe fn expressive_process(&self,data:&mut ProcessData)->tresult {
         let mut voices=self.voices.lock().unwrap();
         let events=ComRef::from_raw(data.inputEvents);
@@ -357,6 +415,9 @@ impl IAudioProcessorTrait for Instrument {
         kResultOk
     }
     unsafe fn process(&self, data: *mut ProcessData) -> tresult {
+        let sequence = self.process_count.fetch_add(1, Relaxed);
+        let _trace = ProcessTrace::new(sequence);
+        if sequence >= FAIL_AFTER_BLOCKS { return kResultFalse; }
         if !FIRST_PROCESS_DELAY_ONLY || !self.processed.swap(true, Relaxed) {
             std::thread::sleep(std::time::Duration::from_millis(PROCESS_DELAY_MS));
         }
@@ -421,6 +482,7 @@ impl IAudioProcessorTrait for Instrument {
                 }
             }
         }
+        self.cpu_dsp(data);
         self.playing.store(playing, Relaxed);
         kResultOk
     }

@@ -3,6 +3,10 @@
 use crate::Result;
 use serde::{Deserialize, Serialize};
 
+/// Maximum parameter points waiting for the next native processing block.
+/// Overflow is rejected before changing the controller, including mapped MIDI fanout.
+pub const MAX_PENDING_PARAM_CHANGES: usize = 4096;
+
 /// Plugin parameter information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Parameter {

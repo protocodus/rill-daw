@@ -72,6 +72,20 @@ fn buffered_playback_stays_continuous_across_small_and_mixing_device_buffers() {
 }
 
 #[test]
+fn buffered_playback_publishes_graph_timing_without_changing_audio() {
+    let (_directory, project, _id) = fixture();
+    let mut engine = engine(&project);
+    let audio = engine.pump_virtual(2048).unwrap();
+    assert!(audio.iter().all(|frame| (frame[0] - 0.4).abs() < 1e-6));
+    wait_for(|| engine.snapshot().render_performance.wall_ns > 0);
+    let snapshot = engine.snapshot();
+    assert_eq!(snapshot.render_performance.block_frames, BLOCK);
+    assert!(snapshot.render_performance.nodes > 0);
+    assert_eq!(snapshot.underruns, 0);
+    assert_eq!(snapshot.render_errors, 0);
+}
+
+#[test]
 fn render_worker_exposes_parameter_failure_once_while_healthy_audio_continues() {
     let (_directory, project, id) = fixture();
     let mut engine = engine(&project);
