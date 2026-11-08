@@ -870,7 +870,9 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
         menu(&mut app, "Track", "Add MIDI track");
         app.key("Escape");
     }
-    let original = app.inspect();
+    // Source controls live in Detailed rows; the default Compact density
+    // deliberately exposes them through channel details instead.
+    let original = app.set_track_density("Detailed");
     let first = original["project"]["tracks"][0]["id"].clone();
     let second = original["project"]["tracks"][1]["id"].clone();
     assert_eq!(original["selected_track"], second);

@@ -11,7 +11,7 @@ pub use guidance::{
 };
 pub use secret::{EncryptedSecret, SecretString, decrypt_api_key, encrypt_api_key};
 
-use daw_tools::ToolSpec;
+use daw_tools::{ToolSpec, bounded_json};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
@@ -269,12 +269,7 @@ fn spawn_scripted_inner(
     crash_after: bool,
 ) -> Result<AgentRun, String> {
     validate_request(&request)?;
-    if turns.len() > MAX_TURNS
-        || serde_json::to_vec(&turns)
-            .map_err(|_| "Invalid fixture")?
-            .len()
-            > MAX_HISTORY_BYTES
-    {
+    if turns.len() > MAX_TURNS || bounded_json::encoded_len(&turns, MAX_HISTORY_BYTES).is_err() {
         return Err("Assistant fixture exceeds limits".into());
     }
     struct Scripted(std::collections::VecDeque<ScriptedTurn>, bool);
@@ -314,11 +309,7 @@ fn validate_request(request: &AgentRequest) -> Result<(), String> {
     {
         return Err("Assistant conversation exceeds limits; start a new chat".into());
     }
-    if serde_json::to_vec(&request.context)
-        .map_err(|_| "Invalid song context")?
-        .len()
-        > MAX_CONTEXT_BYTES
-    {
+    if bounded_json::encoded_len(&request.context, MAX_CONTEXT_BYTES).is_err() {
         return Err("Song context exceeds assistant limits".into());
     }
     if request.tools.is_empty() || request.tools.len() > 128 {
@@ -337,13 +328,13 @@ fn validate_request(request: &AgentRequest) -> Result<(), String> {
         {
             return Err("Invalid assistant tool catalog".into());
         }
+        let remaining = MAX_CONTEXT_BYTES
+            .checked_sub(schema_bytes)
+            .and_then(|remaining| remaining.checked_sub(spec.description.len()))
+            .ok_or("Assistant tool catalog exceeds limits")?;
         schema_bytes += spec.description.len()
-            + serde_json::to_vec(&spec.input_schema)
-                .map_err(|_| "Invalid tool schema")?
-                .len();
-    }
-    if schema_bytes > MAX_CONTEXT_BYTES {
-        return Err("Assistant tool catalog exceeds limits".into());
+            + bounded_json::encoded_len(&spec.input_schema, remaining)
+                .map_err(|_| "Assistant tool catalog exceeds limits")?;
     }
     Ok(())
 }
@@ -453,10 +444,12 @@ fn run_agent(
             if call.id.is_empty() || call.id.len() > 200 || !seen_ids.insert(call.id.clone()) {
                 return Err("Provider returned an invalid or reused tool-call ID".into());
             }
-            if !call.arguments.is_object() || call.arguments.to_string().len() > MAX_CONTEXT_BYTES {
+            if !call.arguments.is_object() {
                 return Err("Provider returned invalid tool arguments".into());
             }
-            history_bytes += call.id.len() + call.name.len() + call.arguments.to_string().len();
+            let argument_bytes = bounded_json::encoded_len(&call.arguments, MAX_CONTEXT_BYTES)
+                .map_err(|_| "Provider returned invalid tool arguments")?;
+            history_bytes += call.id.len() + call.name.len() + argument_bytes;
         }
         if history_bytes > MAX_HISTORY_BYTES {
             return Err("Assistant conversation reached its size limit".into());
@@ -490,9 +483,10 @@ fn run_agent(
                 Ok(value) => value,
                 Err(error) => json!({"error": error}),
             };
-            let result_bytes = result.to_string().len();
+            let result_bytes = bounded_json::encoded_len(&result, MAX_RESULT_BYTES)
+                .map_err(|_| "Tool result exceeds assistant context limits")?;
             history_bytes += result_bytes;
-            if result_bytes > MAX_RESULT_BYTES || history_bytes > MAX_HISTORY_BYTES {
+            if history_bytes > MAX_HISTORY_BYTES {
                 return Err("Tool result exceeds assistant context limits".into());
             }
             messages.push(Message::Tool {
@@ -711,6 +705,68 @@ mod tests {
         let mut oversized = request();
         oversized.prompt = "x".repeat(MAX_PROMPT_BYTES + 1);
         assert!(spawn_scripted(oversized, vec![]).is_err());
+    }
+
+    #[test]
+    fn oversized_escaped_arguments_reject_the_entire_turn_before_execution() {
+        let run = spawn_scripted(
+            request(),
+            vec![ScriptedTurn {
+                text: String::new(),
+                calls: vec![
+                    ScriptedToolCall {
+                        id: "valid".into(),
+                        name: "get_song_context".into(),
+                        arguments: json!({}),
+                    },
+                    ScriptedToolCall {
+                        id: "oversized".into(),
+                        name: "get_song_context".into(),
+                        arguments: json!({"text":"\u{0000}".repeat(MAX_CONTEXT_BYTES / 6)}),
+                    },
+                ],
+            }],
+        )
+        .unwrap();
+        loop {
+            match run.events.recv_timeout(Duration::from_secs(2)).unwrap() {
+                AgentEvent::Progress(_) => {}
+                AgentEvent::Failed(error) => {
+                    assert!(error.contains("invalid tool arguments"));
+                    break;
+                }
+                _ => panic!("An oversized turn must fail before dispatching any call"),
+            }
+        }
+    }
+
+    #[test]
+    fn oversized_tool_results_stop_before_the_next_provider_turn() {
+        let run = spawn_scripted(
+            request(),
+            vec![ScriptedTurn {
+                text: String::new(),
+                calls: vec![ScriptedToolCall {
+                    id: "query".into(),
+                    name: "get_song_context".into(),
+                    arguments: json!({}),
+                }],
+            }],
+        )
+        .unwrap();
+        loop {
+            match run.events.recv_timeout(Duration::from_secs(2)).unwrap() {
+                AgentEvent::Progress(_) => {}
+                AgentEvent::ToolCall { reply, .. } => {
+                    reply.send(Ok(json!("x".repeat(MAX_RESULT_BYTES)))).unwrap();
+                }
+                AgentEvent::Failed(error) => {
+                    assert!(error.contains("Tool result exceeds assistant context limits"));
+                    break;
+                }
+                _ => panic!("Oversized results must not complete the assistant run"),
+            }
+        }
     }
 
     #[test]

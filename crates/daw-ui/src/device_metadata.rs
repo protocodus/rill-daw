@@ -1,6 +1,10 @@
 //! Read-only device capabilities, shared by catalogues and device inspectors.
 use crate::{text, tokens};
 use egui::Ui;
+use std::{
+    hash::{DefaultHasher, Hash, Hasher},
+    sync::Arc,
+};
 
 #[derive(Clone, Copy)]
 pub struct DeviceIoSummary {
@@ -89,6 +93,45 @@ pub struct DeviceParameterMetadata<'a> {
     pub can_automate: bool,
 }
 
+fn cached_matches(
+    ctx: &egui::Context,
+    id: egui::Id,
+    query: &str,
+    parameters: &[DeviceParameterMetadata<'_>],
+) -> Arc<[usize]> {
+    let mut signature = DefaultHasher::new();
+    query.hash(&mut signature);
+    parameters.len().hash(&mut signature);
+    if !query.trim().is_empty() {
+        for parameter in parameters {
+            parameter.name.hash(&mut signature);
+            parameter.unit.hash(&mut signature);
+            parameter.id.hash(&mut signature);
+        }
+    }
+    crate::search_cache::cached_indices(ctx, id, signature.finish(), || {
+        let query = query.trim().to_lowercase();
+        let words: Vec<_> = query.split_whitespace().collect();
+        if words.is_empty() {
+            return (0..parameters.len()).collect();
+        }
+        parameters
+            .iter()
+            .enumerate()
+            .filter_map(|(index, parameter)| {
+                // Normalize once per row, not once per search word. Keep the
+                // complete text's Unicode casing and numeric-ID search intact.
+                let searchable = format!("{} {} {}", parameter.name, parameter.unit, parameter.id)
+                    .to_lowercase();
+                words
+                    .iter()
+                    .all(|word| searchable.contains(word))
+                    .then_some(index)
+            })
+            .collect()
+    })
+}
+
 /// A virtualized, read-only parameter catalogue. Search matches name, unit or
 /// numeric ID; it never edits values or requires a loaded project instance.
 pub fn device_parameter_catalog(
@@ -111,17 +154,12 @@ pub fn device_parameter_catalog(
     if clear {
         query.clear();
     }
-    let query = query.trim().to_lowercase();
-    let matches: Vec<_> = parameters
-        .iter()
-        .filter(|parameter| {
-            query.split_whitespace().all(|word| {
-                format!("{} {} {}", parameter.name, parameter.unit, parameter.id)
-                    .to_lowercase()
-                    .contains(word)
-            })
-        })
-        .collect();
+    let matches = cached_matches(
+        ui.ctx(),
+        ui.make_persistent_id("device_parameter_catalog_search"),
+        query,
+        parameters,
+    );
     if matches.is_empty() {
         text::note(
             ui,
@@ -143,7 +181,7 @@ pub fn device_parameter_catalog(
         .auto_shrink([false, true])
         .show_rows(ui, tokens::CONTROL_HEIGHT, matches.len(), |ui, rows| {
             for row in rows {
-                let parameter = matches[row];
+                let parameter = &parameters[matches[row]];
                 ui.push_id(parameter.id, |ui| {
                     crate::action_row(
                         ui,
@@ -174,4 +212,86 @@ pub fn device_parameter_catalog(
                 });
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parameter(id: u32, name: &str) -> DeviceParameterMetadata<'_> {
+        DeviceParameterMetadata {
+            id,
+            name,
+            unit: "Hz",
+            steps: 0,
+            read_only: false,
+            can_automate: true,
+        }
+    }
+
+    #[test]
+    fn cached_catalogue_search_preserves_unicode_tokens_and_numeric_ids() {
+        let ctx = egui::Context::default();
+        let id = egui::Id::new("metadata");
+        let parameters = [
+            parameter(123, "CUTOFF 音"),
+            parameter(456, "CUTOFF ΩΣ"),
+            parameter(789, "Resonance"),
+        ];
+        for (query, expected) in [
+            ("", vec![0, 1, 2]),
+            (" \t ", vec![0, 1, 2]),
+            ("CUTOFF Hz", vec![0, 1]),
+            ("音 23", vec![0]),
+            ("ωσ", vec![]),
+            ("ΩΣ 456", vec![1]),
+            ("missing", vec![]),
+        ] {
+            assert_eq!(&*cached_matches(&ctx, id, query, &parameters), expected);
+        }
+    }
+
+    #[test]
+    fn catalogue_cache_invalidates_search_fields_and_keeps_display_metadata_live() {
+        let ctx = egui::Context::default();
+        let id = egui::Id::new("metadata");
+        let mut parameters = [parameter(1, "Cutoff"), parameter(2, "Cutoff")];
+        let first = cached_matches(&ctx, id, "cutoff", &parameters);
+        parameters[0].read_only = true;
+        parameters[0].can_automate = false;
+        parameters[0].steps = 127;
+        assert!(Arc::ptr_eq(
+            &first,
+            &cached_matches(&ctx, id, "cutoff", &parameters),
+        ));
+        parameters[0].name = "Resonance";
+        assert_eq!(&*cached_matches(&ctx, id, "cutoff", &parameters), &[1]);
+        parameters.swap(0, 1);
+        assert_eq!(&*cached_matches(&ctx, id, "cutoff", &parameters), &[0]);
+        assert!(cached_matches(&ctx, id, "kHz", &parameters).is_empty());
+        parameters[0].unit = "kHz";
+        assert_eq!(&*cached_matches(&ctx, id, "kHz", &parameters), &[0]);
+        assert!(cached_matches(&ctx, id, "123", &parameters).is_empty());
+        parameters[1].id = 123;
+        assert_eq!(&*cached_matches(&ctx, id, "123", &parameters), &[1]);
+        assert!(cached_matches(&ctx, id, "123", &parameters[..1]).is_empty());
+        assert!(cached_matches(&ctx, id, "", &[]).is_empty());
+    }
+
+    #[test]
+    fn unchanged_large_catalogue_retains_the_result_allocation() {
+        let ctx = egui::Context::default();
+        let id = egui::Id::new("large_metadata");
+        let parameters: Vec<_> = (0..10_000).map(|id| parameter(id, "Cutoff 音")).collect();
+        for query in ["", "CUTOFF hz"] {
+            let first = cached_matches(&ctx, id, query, &parameters);
+            assert_eq!(first.len(), parameters.len());
+            for _ in 0..60 {
+                assert!(Arc::ptr_eq(
+                    &first,
+                    &cached_matches(&ctx, id, query, &parameters),
+                ));
+            }
+        }
+    }
 }

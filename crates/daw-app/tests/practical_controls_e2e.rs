@@ -434,7 +434,7 @@ fn channel_properties_volume_readout_is_directly_editable_to_fractional_db() {
     app.click("Mixer");
     let before = app.click("Precise channel");
     assert_eq!(before["popups"]["properties"], true);
-    let (_, gain_y) = center(label(&before, "Gain"));
+    let (_, gain_y) = center(label(&before, "Volume"));
     let numeric = before["label_rects"]
         .as_array()
         .unwrap()
@@ -456,10 +456,15 @@ fn channel_properties_volume_readout_is_directly_editable_to_fractional_db() {
     app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
     app.command(json!({"command":"text","text":"-9.875"}));
     // Clicking the field label commits/focuses away without a keyboard shortcut.
-    let edited = app.click("Gain");
+    let edited = app.click("Volume");
     near(
         track(&edited, source)["gain"].as_f64().unwrap(),
         10_f64.powf(-9.875 / 20.0),
+    );
+    assert_eq!(
+        track(&edited, source)["input_gain"],
+        track(&before, source)["input_gain"],
+        "Volume entry must not change the separate input gain"
     );
     assert_eq!(undo(&mut app)["project"], before["project"]);
     app.quit();

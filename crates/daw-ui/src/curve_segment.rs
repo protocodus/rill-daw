@@ -121,6 +121,12 @@ pub(crate) fn segment_bend_at(
             egui::WidgetInfo::labeled(egui::WidgetType::Slider, enabled, "Segment slope")
         });
         bend(&response);
+        // The accessible handle extends beyond the small painted diamond.
+        // A click anywhere in that target follows the line's add-point action;
+        // only actual movement bends the segment.
+        if enabled && response.clicked() {
+            result.add = response.interact_pointer_pos();
+        }
         if interactive {
             response.context_menu(|ui| {
                 for (label, shape) in [("Log", -1.0), ("Linear", 0.0), ("Exp", 1.0)] {

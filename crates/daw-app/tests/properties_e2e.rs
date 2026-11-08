@@ -77,7 +77,10 @@ fn scroll_properties(app: &mut Harness, delta: f64) -> Value {
         state = app.inspect();
     }
     for tab in ["Clip", "Track", "Channel"] {
-        assert_eq!(rect(&state, tab), rect(&before, tab));
+        assert_eq!(visible(&state, tab), visible(&before, tab));
+        if visible(&before, tab) {
+            assert_eq!(rect(&state, tab), rect(&before, tab));
+        }
     }
     assert_eq!(state["window_rects"], before["window_rects"]);
     assert_eq!(state["project"], before["project"]);
@@ -212,11 +215,20 @@ fn properties_pages_fit_and_expose_only_controls_for_the_selected_item() {
             accessible(&lower, &["Fade in", "Fade out"]);
             let track = front(&mut app, "Track");
             accessible(&track, &["Color", "Compact track", "Folder"]);
-            for channel_control in ["Gain", "Pan", "Mute", "Solo", "Path latency"] {
+            for channel_control in [
+                "Input gain",
+                "Volume",
+                "Pan",
+                "Mute",
+                "Solo",
+                "Path latency",
+            ] {
                 assert!(!visible(&track, channel_control));
             }
-            let channel = front(&mut app, "Channel");
-            accessible(&channel, &["Gain", "Pan", "Mute", "Solo", "Path latency"]);
+            front(&mut app, "Channel");
+            let channel = scroll_properties(&mut app, 10000.0);
+            accessible(&channel, &["Input gain", "Volume", "Pan", "Mute", "Solo"]);
+            accessible(&scroll_properties(&mut app, -10000.0), &["Path latency"]);
             assert!(!visible(&channel, "Source offset"));
             assert!(!visible(&channel, "Fade in"));
             app.click("Clip");
@@ -240,24 +252,46 @@ fn properties_pages_fit_and_expose_only_controls_for_the_selected_item() {
                 match name {
                     "Track folder" => {
                         accessible(&track, &["Collapse folder", "Mute", "Solo"]);
-                        for unused in ["Gain", "Pan", "Path latency", "Bypass automation"] {
+                        for unused in [
+                            "Input gain",
+                            "Volume",
+                            "Pan",
+                            "Path latency",
+                            "Bypass automation",
+                        ] {
                             assert!(!visible(&track, unused), "Folder exposes {unused}");
                         }
                     }
                     "Gain automation" => {
                         accessible(&track, &["Bypass automation"]);
-                        for unused in ["Gain", "Pan", "Mute", "Solo", "Path latency"] {
+                        for unused in [
+                            "Input gain",
+                            "Volume",
+                            "Pan",
+                            "Mute",
+                            "Solo",
+                            "Path latency",
+                        ] {
                             assert!(!visible(&track, unused), "Automation exposes {unused}");
                         }
                     }
                     _ => {
-                        for channel_control in ["Gain", "Pan", "Mute", "Solo", "Path latency"] {
+                        for channel_control in [
+                            "Input gain",
+                            "Volume",
+                            "Pan",
+                            "Mute",
+                            "Solo",
+                            "Path latency",
+                        ] {
                             assert!(!visible(&track, channel_control));
                         }
+                        front(&mut app, "Channel");
                         accessible(
-                            &front(&mut app, "Channel"),
-                            &["Gain", "Pan", "Mute", "Solo", "Path latency"],
+                            &scroll_properties(&mut app, 10000.0),
+                            &["Input gain", "Volume", "Pan", "Mute", "Solo"],
                         );
+                        accessible(&scroll_properties(&mut app, -10000.0), &["Path latency"]);
                     }
                 }
                 assert_eq!(track["project"], original);
@@ -414,13 +448,17 @@ fn inspecting_existing_high_gain_does_not_change_or_dirty_the_project() {
     let track = front(&mut app, "Channel");
     let right =
         rect(&track, "6.0 dB")["min"][0].as_f64().unwrap() - f64::from(daw_ui::tokens::SPACE_SM);
-    let y = center(rect(&track, "Gain")).1;
+    let y = center(rect(&track, "Volume")).1;
     let edited = app.command(json!({"command":"pointer", "phase":"click",
         "x":right - 60.0, "y":y}));
     let gain = edited["project"]["tracks"][0]["gain"].as_f64().unwrap();
     assert!(
         gain > 0.0 && gain < 1.5,
         "Deliberate gain edit failed: {gain}"
+    );
+    assert_eq!(
+        edited["project"]["tracks"][0]["input_gain"], opened["project"]["tracks"][0]["input_gain"],
+        "Editing Volume must preserve the separate input gain"
     );
     assert_eq!(undo(&mut app, false)["project"], opened["project"]);
     app.quit();

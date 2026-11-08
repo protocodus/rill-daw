@@ -245,8 +245,12 @@ fn finite_extreme_samples_normalize_without_interpolation_overflow_and_bad_timin
     for (field, value) in [
         ("start", f64::NAN),
         ("length", f64::INFINITY),
+        ("length", -1.0),
         ("offset", f64::NAN),
+        ("offset", -1.0),
         ("rate", f64::MAX),
+        ("rate", 0.0),
+        ("rate", f64::NAN),
     ] {
         let mut invalid = clip.clone();
         match field {
@@ -255,6 +259,18 @@ fn finite_extreme_samples_normalize_without_interpolation_overflow_and_bad_timin
             "offset" => invalid.offset = value,
             _ => invalid.source_rate = value,
         }
+        assert!(normalization_gain(&invalid, &data, 120.0, -1.0).is_err());
+        assert!(detect_transients(&invalid, &data, 120.0, TransientSettings::default()).is_err());
+        assert!(
+            detect_audio_silence(
+                &invalid,
+                &data,
+                120.0,
+                (0.0, clip.end()),
+                AudioSilenceSettings::default(),
+            )
+            .is_err()
+        );
         assert!(normalization_gain_file(&invalid, &file, 120.0, -1.0, &cancel).is_err());
         assert!(
             detect_transients_file(
@@ -278,4 +294,46 @@ fn finite_extreme_samples_normalize_without_interpolation_overflow_and_bad_timin
             .is_err()
         );
     }
+}
+
+#[test]
+fn fractional_extreme_samples_are_finite_for_resident_and_cached_readers() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("alternating.wav");
+    let data = AudioData {
+        sample_rate: 8_192,
+        channels: 1,
+        samples: (0..8_192)
+            .map(|frame| if frame % 2 == 0 { f32::MAX } else { -f32::MAX })
+            .collect(),
+    };
+    data.write_wav(&path).unwrap();
+    let file = AudioFile::open(&path).unwrap();
+    let cancel = AtomicBool::new(false);
+    let mut clip = Clip::audio("Alternating", 0.0, 0.5, path.to_string_lossy());
+    // A power-of-two sample rate makes these source midpoints exact. Opposite
+    // extremes cancel to zero; their f32 difference must not overflow to NaN.
+    clip.offset = 0.5 / 8_192.0;
+    assert_eq!(daw_core::audio_sample(&data, 0.0, 0), f32::MAX);
+    assert_eq!(daw_core::audio_sample(&data, 0.5, 0), 0.0);
+    let settings = AudioSilenceSettings::default();
+    let resident = detect_audio_silence(&clip, &data, 60.0, (0.0, 0.5), settings).unwrap();
+    let streamed =
+        detect_audio_silence_file(&clip, &file, 60.0, (0.0, 0.5), settings, &cancel).unwrap();
+    assert!(resident.is_empty());
+    assert_eq!(streamed, resident);
+}
+
+#[test]
+fn malformed_source_window_returns_an_error_instead_of_panicking() {
+    let data = AudioData {
+        sample_rate: 1_000,
+        channels: 1,
+        samples: vec![0.5; 1_000],
+    };
+    let mut clip = Clip::audio("Invalid window", 0.0, 0.25, "source.wav");
+    clip.offset = 0.5;
+    clip.length = -0.25;
+    // Previously this attempted to take the inverted slice [500..250].
+    assert!(normalization_gain(&clip, &data, 60.0, -1.0).is_err());
 }

@@ -207,9 +207,22 @@ fn mixer_reorder_and_following_gain_edit_preserve_plugin_instances_and_live_audi
     project.save(&path).unwrap();
     app.command(json!({"command":"open","path":path}));
     app.command(json!({"command":"viewport","width":1400,"height":950}));
-    app.click("Mixer");
-    app.click("Signal flow");
+    let song_order = app.click("Mixer");
+    assert_eq!(song_order["mixer"]["order"], "Song order");
     app.click("Song order");
+    let signal_flow = app.click("Signal flow");
+    assert_eq!(signal_flow["mixer"]["order"], "Signal flow");
+    app.click("Signal flow");
+    let restored = app.click("Song order");
+    assert_eq!(restored["mixer"]["order"], "Song order");
+    for state in [&signal_flow, &restored] {
+        for field in ["project", "history", "selected_track", "selected_clip"] {
+            assert_eq!(
+                state[field], song_order[field],
+                "Changing mixer order changed {field}"
+            );
+        }
+    }
     app.click("Play");
     let started = wait(&mut app, |state| {
         state["engine"]["playing"] == true && state["playback_loading"] == false

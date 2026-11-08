@@ -219,7 +219,11 @@ impl DawApp {
             .collect();
         let song_channels =
             crate::mixer_flow::ordered_channels(&self.project, crate::mixer_flow::MixerOrder::Song);
-        let channels = crate::mixer_flow::ordered_channels(&self.project, order);
+        let channels = if order == crate::mixer_flow::MixerOrder::Song {
+            song_channels.clone()
+        } else {
+            crate::mixer_flow::ordered_channels(&self.project, order)
+        };
         let shift_targets = crate::mixer_flow::mixer_shift_targets(&self.project);
         let channel_indices: Vec<_> = channels
             .iter()

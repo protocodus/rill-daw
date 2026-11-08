@@ -165,7 +165,7 @@ pub fn audio_sample(data: &AudioData, frame: f64, channel: usize) -> f32 {
     let channel = channel.min(data.channels - 1);
     let a = data.samples[index * data.channels + channel];
     let b = data.samples[next * data.channels + channel];
-    a + (b - a) * (frame - index as f64) as f32
+    crate::audio_analysis::interpolate_sample(a, b, (frame - index as f64) as f32)
 }
 
 /// Find a source zero crossing near an arrangement beat (at most 5 ms each
@@ -323,16 +323,10 @@ pub fn normalization_gain(
     tempo: f64,
     target_db: f32,
 ) -> Result<f32> {
-    ensure!(
-        matches!(clip.content, ClipContent::Audio { .. }),
-        "Select an audio clip"
-    );
+    crate::audio_analysis::validate_clip(clip, tempo)?;
     data.validate()?;
     ensure!(
-        tempo.is_finite()
-            && tempo > 0.0
-            && target_db.is_finite()
-            && (-60.0..=0.0).contains(&target_db),
+        target_db.is_finite() && (-60.0..=0.0).contains(&target_db),
         "Invalid normalization target"
     );
     let frames_per_beat = f64::from(data.sample_rate) * 60.0 / tempo;
@@ -391,95 +385,15 @@ pub fn detect_transients(
     tempo: f64,
     settings: TransientSettings,
 ) -> Result<Vec<f64>> {
-    ensure!(
-        matches!(clip.content, ClipContent::Audio { .. }),
-        "Select an audio clip"
-    );
     data.validate()?;
-    ensure!(
-        tempo.is_finite()
-            && tempo > 0.0
-            && settings.sensitivity.is_finite()
-            && (0.0..=1.0).contains(&settings.sensitivity)
-            && settings.minimum_gap_ms.is_finite()
-            && (20.0..=2000.0).contains(&settings.minimum_gap_ms),
-        "Invalid transient settings"
-    );
-    let frames_per_beat = f64::from(data.sample_rate) * 60.0 / tempo;
-    // Inspect every source frame, even for a compressed clip. Sampling at the
-    // output rate would skip narrow source transients when source_rate > 1.
-    let frames = (clip.source_length() * frames_per_beat).ceil() as usize;
-    let window = (f64::from(data.sample_rate) * 0.005 * clip.source_rate)
-        .round()
-        .max(1.0) as usize;
-    let count = frames.div_ceil(window);
-    ensure!(
-        count <= 1_000_000,
-        "Clip is too long for transient analysis"
-    );
-    let mut levels = Vec::with_capacity(count);
-    for block in 0..count {
-        let mut sum = 0.0_f64;
-        let mut peak = 0.0_f32;
-        let length = window.min(frames - block * window);
-        for frame in 0..length {
-            let beat = (block * window + frame) as f64 / frames_per_beat / clip.source_rate;
-            let source = clip.audio_source_frame(beat, tempo, data.sample_rate);
-            let mut level = 0.0_f32;
-            for channel in 0..data.channels {
-                level = level.max(audio_sample(data, source, channel).abs());
-            }
-            peak = peak.max(level);
-            sum += f64::from(level) * f64::from(level);
-        }
-        levels.push(match settings.algorithm {
-            TransientAlgorithm::EnergyRise => (sum / length.max(1) as f64).sqrt() as f32,
-            TransientAlgorithm::AmplitudeGate => peak,
-        });
-    }
-    let peak = levels.iter().copied().fold(0.0_f32, f32::max);
-    if peak <= 1e-8 {
-        return Ok(Vec::new());
-    }
-    let floor = peak * (0.04 + 0.46 * (1.0 - settings.sensitivity));
-    let minimum_gap = settings.minimum_gap_ms as f64 * 0.001 * tempo / 60.0;
-    let mut result = Vec::new();
-    let mut previous = 0.0_f32;
-    let mut baseline = 0.0_f32;
-    let mut armed = true;
-    for (index, level) in levels.iter().copied().enumerate() {
-        let attack = match settings.algorithm {
-            TransientAlgorithm::AmplitudeGate => armed && level >= floor,
-            TransientAlgorithm::EnergyRise => {
-                level >= floor
-                    && level > previous * (1.15 + (1.0 - settings.sensitivity) * 1.2)
-                    && level > baseline * (1.1 + (1.0 - settings.sensitivity))
-            }
-        };
-        let beat = (index * window) as f64 / frames_per_beat / clip.source_rate;
-        if attack
-            && beat > 1e-9
-            && beat < clip.length - 1e-9
-            && result
-                .last()
-                .is_none_or(|last: &f64| beat - *last >= minimum_gap)
-        {
-            ensure!(
-                result.len() < 2048,
-                "Too many transients; increase the minimum gap"
-            );
-            result.push(beat);
-        }
-        if level >= floor {
-            armed = false;
-        }
-        if level < floor * 0.4 {
-            armed = true;
-        }
-        baseline = baseline * 0.9 + level * 0.1;
-        previous = level;
-    }
-    Ok(result)
+    crate::audio_analysis::AudioAnalysis::new(
+        clip,
+        tempo,
+        data.sample_rate,
+        data.channels,
+        |frame, channel| Ok(audio_sample(data, frame, channel)),
+    )?
+    .transients(settings, || Ok(()))
 }
 
 impl Project {

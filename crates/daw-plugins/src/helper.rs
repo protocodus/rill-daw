@@ -5,9 +5,11 @@
 //! deadlines, terminates hung children, and can start a fresh instance after a crash.
 
 use anyhow::{Context, Result, bail, ensure};
-use std::io::{BufRead, Write};
+use std::io::{BufRead, BufWriter, Write};
 use vst3_host::process_isolation::{HostCommand, HostResponse, ProtocolChannel};
-use vst3_host::{AudioBuffers, AudioBusLayout, BusAudioBuffers, Plugin, Vst3Host};
+use vst3_host::{AudioBuffers, BusAudioBuffers, Plugin, Vst3Host, audio::AudioBusBuffer};
+
+use crate::audio_buffers::{prepare_bus_outputs, prepare_outputs, validate_audio_bus_layout};
 
 /// Run only in the standalone `daw-plugin-host` executable. Claim stdout before loading
 /// any plugin so a plugin's console messages cannot corrupt the response protocol on Unix.
@@ -18,11 +20,24 @@ pub fn run() -> Result<()> {
         Some("--native-context-menu") => return crate::editor_context_menu::run_worker(),
         _ => {}
     }
-    let mut protocol = ProtocolChannel::claim();
+    // Coalesce JSON punctuation and payload writes into buffered pipe writes;
+    // every complete response is still flushed before accepting another command.
+    let mut protocol = BufWriter::new(ProtocolChannel::claim());
     let input = std::io::stdin();
     let mut worker = Worker::default();
-    for line in input.lock().lines() {
-        let line = line?;
+    let mut input = input.lock();
+    let mut line = String::new();
+    loop {
+        // Reuse normal processing messages, but do not retain a large one-off
+        // state/preset payload for the lifetime of this helper.
+        if line.capacity() > 1024 * 1024 {
+            line = String::new();
+        } else {
+            line.clear();
+        }
+        if input.read_line(&mut line)? == 0 {
+            break;
+        }
         let response = match serde_json::from_str::<HostCommand>(&line) {
             Ok(HostCommand::Shutdown) => break,
             Ok(command) => match worker.handle(command) {
@@ -35,10 +50,16 @@ pub fn run() -> Result<()> {
                 message: format!("Invalid helper command: {error}"),
             },
         };
-        serde_json::to_writer(&mut protocol, &response)?;
-        writeln!(protocol)?;
-        protocol.flush()?;
+        write_response(&mut protocol, &response)?;
+        worker.recycle(response);
     }
+    Ok(())
+}
+
+fn write_response(writer: &mut impl Write, response: &HostResponse) -> Result<()> {
+    serde_json::to_writer(&mut *writer, response)?;
+    writeln!(writer)?;
+    writer.flush()?;
     Ok(())
 }
 
@@ -47,9 +68,21 @@ struct Worker {
     plugin: Option<Plugin>,
     sample_rate: f64,
     max_block: usize,
+    outputs: Vec<Vec<f32>>,
+    bus_outputs: Vec<AudioBusBuffer>,
 }
 
 impl Worker {
+    /// Responses own their samples during serialization; reclaim those exact
+    /// allocations afterward instead of creating output storage for every block.
+    fn recycle(&mut self, response: HostResponse) {
+        match response {
+            HostResponse::AudioOutput { outputs, .. } => self.outputs = outputs,
+            HostResponse::BusAudioOutput { outputs, .. } => self.bus_outputs = outputs,
+            _ => {}
+        }
+    }
+
     fn handle(&mut self, command: HostCommand) -> Result<HostResponse> {
         if let HostCommand::LoadPlugin {
             path,
@@ -92,12 +125,16 @@ impl Worker {
                 compatibility: plugin.class_compatibility().to_vec(),
             };
             self.plugin = Some(plugin);
+            self.outputs.clear();
+            self.bus_outputs.clear();
             self.sample_rate = sample_rate;
             self.max_block = block_size as usize;
             return Ok(response);
         }
         if matches!(command, HostCommand::UnloadPlugin) {
             self.plugin = None;
+            self.outputs.clear();
+            self.bus_outputs.clear();
             return Ok(success());
         }
         let plugin = self.plugin.as_mut().context("No plugin loaded")?;
@@ -235,21 +272,23 @@ impl Worker {
                     "Invalid processing block size"
                 );
                 let expected = plugin.audio_bus_layout()?;
+                validate_audio_bus_layout(&expected, frames as usize)?;
                 ensure!(outputs == expected.outputs, "Output bus layout changed");
                 ensure!(
                     inputs.len() == expected.inputs.len(),
                     "Input bus layout changed"
                 );
-                let mut buffers = BusAudioBuffers::new(
-                    &AudioBusLayout {
-                        inputs: expected.inputs,
-                        outputs,
-                    },
-                    frames as usize,
-                    self.sample_rate,
-                );
-                buffers.inputs = inputs;
-                plugin.process_bus_audio(&mut buffers)?;
+                prepare_bus_outputs(&mut self.bus_outputs, &outputs, frames as usize);
+                let mut buffers = BusAudioBuffers {
+                    inputs,
+                    outputs: std::mem::take(&mut self.bus_outputs),
+                    block_size: frames as usize,
+                    sample_rate: self.sample_rate,
+                };
+                if let Err(error) = plugin.process_bus_audio(&mut buffers) {
+                    self.bus_outputs = buffers.outputs;
+                    return Err(error.into());
+                }
                 return Ok(HostResponse::BusAudioOutput {
                     outputs: buffers.outputs,
                     output_events: plugin.take_output_events(),
@@ -260,14 +299,23 @@ impl Worker {
                     frames > 0 && frames as usize <= self.max_block,
                     "Invalid processing block size"
                 );
-                let mut buffers = AudioBuffers::new(
-                    inputs.len(),
-                    plugin.output_channel_count(),
-                    frames as usize,
-                    self.sample_rate,
+                let output_channels = plugin.output_channel_count();
+                ensure!(
+                    inputs.len().saturating_add(output_channels)
+                        <= crate::audio_buffers::MAX_AUDIO_CHANNELS,
+                    "Plug-in exceeds the 256 audio channels limit"
                 );
-                buffers.inputs = inputs;
-                plugin.process_audio(&mut buffers)?;
+                prepare_outputs(&mut self.outputs, output_channels, frames as usize);
+                let mut buffers = AudioBuffers {
+                    inputs,
+                    outputs: std::mem::take(&mut self.outputs),
+                    block_size: frames as usize,
+                    sample_rate: self.sample_rate,
+                };
+                if let Err(error) = plugin.process_audio(&mut buffers) {
+                    self.outputs = buffers.outputs;
+                    return Err(error.into());
+                }
                 return Ok(HostResponse::AudioOutput {
                     outputs: buffers.outputs,
                     output_events: plugin.take_output_events(),
@@ -291,6 +339,80 @@ fn success() -> HostResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Default)]
+    struct CountingWriter {
+        bytes: Vec<u8>,
+        writes: usize,
+        flushes: usize,
+    }
+
+    impl Write for CountingWriter {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.writes += 1;
+            self.bytes.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.flushes += 1;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn responses_are_buffered_flushed_and_preserve_audio_exactly() {
+        let samples = vec![0.0, -0.0, 0.125, -1.0, f32::MIN_POSITIVE, f32::MAX];
+        let response = HostResponse::BusAudioOutput {
+            outputs: vec![AudioBusBuffer {
+                active: true,
+                channels: vec![samples.clone()],
+            }],
+            output_events: Vec::new(),
+        };
+        let mut direct = CountingWriter::default();
+        write_response(&mut direct, &response).unwrap();
+        let mut buffered = BufWriter::new(CountingWriter::default());
+        write_response(&mut buffered, &response).unwrap();
+        let sink = buffered.get_ref();
+        assert_eq!(sink.bytes, direct.bytes);
+        assert!(direct.writes > 1);
+        assert_eq!(sink.writes, 1, "small replies should use one pipe write");
+        assert_eq!(
+            sink.flushes, 1,
+            "the parent must receive each reply promptly"
+        );
+        assert_eq!(sink.bytes.last(), Some(&b'\n'));
+        let decoded: HostResponse = serde_json::from_slice(&sink.bytes).unwrap();
+        let HostResponse::BusAudioOutput { outputs, .. } = decoded else {
+            panic!("wrong response");
+        };
+        for (actual, expected) in outputs[0].channels[0].iter().zip(samples) {
+            assert_eq!(actual.to_bits(), expected.to_bits());
+        }
+    }
+
+    #[test]
+    fn serialized_outputs_are_recycled_and_unload_releases_them() {
+        let mut worker = Worker::default();
+        let samples = vec![0.5; 64];
+        let pointer = samples.as_ptr();
+        worker.recycle(HostResponse::AudioOutput {
+            outputs: vec![samples],
+            output_events: Vec::new(),
+        });
+        assert_eq!(worker.outputs[0].as_ptr(), pointer);
+        let bus = AudioBusBuffer::new(2, 64, true);
+        let pointer = bus.channels[0].as_ptr();
+        worker.recycle(HostResponse::BusAudioOutput {
+            outputs: vec![bus],
+            output_events: Vec::new(),
+        });
+        assert_eq!(worker.bus_outputs[0].channels[0].as_ptr(), pointer);
+        worker.handle(HostCommand::UnloadPlugin).unwrap();
+        assert!(worker.outputs.is_empty());
+        assert!(worker.bus_outputs.is_empty());
+    }
 
     #[test]
     fn commands_before_loading_return_error() {

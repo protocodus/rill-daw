@@ -127,7 +127,7 @@ fn reveal_track(
     expanded: &std::collections::HashSet<u64>,
 ) {
     let visible_rows = (height / view.row_height).max(0.01);
-    let visible = crate::routing::visible_tracks_with_expanded(project, expanded);
+    let visible = crate::track_order::visible_tracks_with_expanded(project, expanded);
     let lanes = folder_lanes(project, &visible);
     let (step, _) = daw_ui::folder_lane_padding(&lanes, label_width);
     let closures = daw_ui::folder_closures(&lanes);
@@ -1098,8 +1098,8 @@ impl DawApp {
                     }
                     row_response.context_menu(|ui| {
  daw_ui::command_menu_contents(ui, |ui| {
-                        let previous = crate::track_order::track_shift_intent(&self.project, track.id, false, false);
-                        let next = crate::track_order::track_shift_intent(&self.project, track.id, true, false);
+                        let (previous, next) = crate::track_order::track_shift_targets(&self.project, false)
+                            .get(&track.id).copied().unwrap_or_default();
                         let actions = daw_ui::track_reorder_menu(ui, daw_ui::TrackReorderAxis::Vertical,
                             previous.is_some(), next.is_some());
                         reorder_menu = Some(serde_json::json!({"track":track.id,

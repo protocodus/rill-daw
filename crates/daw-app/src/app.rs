@@ -3767,8 +3767,15 @@ impl DawApp {
                 || self.assistant.busy()
             {
                 16
-            } else {
+            } else if self.engine.is_some() {
+                // Paused engines still need bounded input/error polling and
+                // meter updates. Keep their existing responsiveness.
                 100
+            } else {
+                // Input events and background completions wake egui directly.
+                // Keep only a low-frequency recovery/deadline heartbeat while
+                // no audio device is running; job pollers request faster frames.
+                1000
             },
         ));
     }

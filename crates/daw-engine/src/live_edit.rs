@@ -100,9 +100,9 @@ struct TrackEdit {
     gain: f32,
     input_gain: f32,
     pan: f32,
-    gain_lane: Option<AutomationLane>,
-    input_gain_lane: Option<AutomationLane>,
-    pan_lane: Option<AutomationLane>,
+    gain_lane: Option<CompiledAutomation>,
+    input_gain_lane: Option<CompiledAutomation>,
+    pan_lane: Option<CompiledAutomation>,
     send_gains: Vec<AutomatedValue>,
     instrument_automation: Vec<PluginAutomation>,
     insert_automation: Vec<(u64, Vec<PluginAutomation>)>,
@@ -374,15 +374,15 @@ impl LiveEditPreparer {
                 input_gain: track.input_gain,
                 pan: track.pan,
                 gain_lane: active_automation_lane(project, id, AutomationParameter::TrackGain)
-                    .cloned(),
+                    .map(CompiledAutomation::new),
                 input_gain_lane: active_automation_lane(
                     project,
                     id,
                     AutomationParameter::TrackInputGain,
                 )
-                .cloned(),
+                .map(CompiledAutomation::new),
                 pan_lane: active_automation_lane(project, id, AutomationParameter::TrackPan)
-                    .cloned(),
+                    .map(CompiledAutomation::new),
                 send_gains: self
                     .send_buses
                     .get(&id)
@@ -843,7 +843,7 @@ fn swap_plugin_automation(
             if old.action_sequence > sequence {
                 // An immediate override made after this project snapshot must
                 // survive both its prepared preview and its final refinement.
-                new.lane.override_value = old.lane.override_value;
+                new.lane.set_override_value(old.lane.override_value());
                 new.manual = old.manual;
                 new.action_sequence = old.action_sequence;
             }

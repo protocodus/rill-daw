@@ -1,6 +1,7 @@
 //! Integrated assistant and MCP bridge. All tool execution enters the same
 //! control-thread dispatcher; providers and stdio never borrow the live song.
 use crate::app::{DawApp, PopupKind, SetupPage};
+use crate::mcp_bridge::ToolRequest;
 use daw_ai::{AgentEvent, AgentRun, ScriptedTurn};
 use daw_tools::{SongToolHost, ToolError, ToolHost, ToolScope};
 use eframe::egui;
@@ -62,14 +63,6 @@ mod worker_failure_tests {
         assert_eq!(app.project, original);
         assert!(!app.modified);
     }
-}
-
-struct ToolRequest {
-    profile: daw_tools::ToolProfile,
-    cancel: Arc<AtomicBool>,
-    name: String,
-    arguments: Value,
-    reply: Sender<Result<Value, ToolError>>,
 }
 
 struct PendingTool {
@@ -218,46 +211,8 @@ impl Assistant {
         self.next_worker_crashes = crash_tool;
     }
 
-    pub fn start_mcp_stdio(&mut self, profile: daw_tools::ToolProfile) {
-        let (sender, receiver) = mpsc::channel();
-        self.mcp_requests = Some(receiver);
-        std::thread::spawn(move || {
-            struct ChannelHost(Sender<ToolRequest>, daw_tools::ToolProfile);
-            impl ToolHost for ChannelHost {
-                fn tool_specs(&self) -> Vec<daw_tools::ToolSpec> {
-                    daw_tools::tool_specs_for(self.1)
-                }
-                fn call_tool(&mut self, name: &str, arguments: Value) -> Result<Value, ToolError> {
-                    let (reply, receiver) = mpsc::channel();
-                    let cancel = Arc::new(AtomicBool::new(false));
-                    self.0
-                        .send(ToolRequest {
-                            profile: self.1,
-                            cancel: cancel.clone(),
-                            name: name.into(),
-                            arguments,
-                            reply,
-                        })
-                        .map_err(|_| ToolError::new("unavailable", "Rill closed"))?;
-                    match receiver.recv_timeout(std::time::Duration::from_secs(90)) {
-                        Ok(result) => result,
-                        Err(_) => {
-                            cancel.store(true, Ordering::Release);
-                            Err(ToolError::new("timeout", "Tool dispatch timed out"))
-                        }
-                    }
-                }
-            }
-            let stdin = std::io::stdin();
-            let stdout = std::io::stdout();
-            if let Err(error) = daw_mcp::serve(
-                stdin.lock(),
-                stdout.lock(),
-                &mut ChannelHost(sender, profile),
-            ) {
-                eprintln!("MCP transport ended: {error}");
-            }
-        });
+    pub fn start_mcp_stdio(&mut self, profile: daw_tools::ToolProfile, ctx: egui::Context) {
+        self.mcp_requests = Some(crate::mcp_bridge::start_stdio(profile, ctx));
     }
 }
 

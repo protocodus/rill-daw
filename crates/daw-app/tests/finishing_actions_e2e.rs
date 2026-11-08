@@ -281,12 +281,14 @@ fn reexport_reuses_only_successful_destination_and_tail_choice_then_resets_on_op
     app.command(json!({"command":"file_dialog","kind":"export","path":mix}));
     front(&mut app, "Export…");
     let first = app.command(json!({"command":"wait_export"}));
-    assert_eq!(
-        first["finishing"]["last_export"],
-        json!({"path":mix,"include_effect_tails":false})
-    );
+    let receipt = &first["finishing"]["last_export"];
+    assert_eq!(receipt["path"], json!(mix));
+    assert_eq!(receipt["include_effect_tails"], false);
+    assert_eq!(receipt["encoding"], "Float32");
     let expected = AudioData::load_wav(&mix).unwrap();
     assert_eq!(expected.frames(), 24_000);
+    assert_eq!(receipt["report"]["frames"], expected.frames());
+    assert_eq!(receipt["report"]["sample_rate"], expected.sample_rate);
     // Change the popup preference and cancel; quick export still remembers the
     // successful render's tail option, not an abandoned options edit.
     menu(&mut app, "File", "Export WAV…");
@@ -312,10 +314,9 @@ fn reexport_reuses_only_successful_destination_and_tail_choice_then_resets_on_op
     );
     let failed = &failed["state"];
     assert_eq!(failed["error"], true);
-    assert_eq!(
-        failed["finishing"]["last_export"],
-        json!({"path":mix,"include_effect_tails":false})
-    );
+    // A failed render must preserve the complete successful specification and
+    // report, including the format/rate/range fields added to export receipts.
+    assert_eq!(&failed["finishing"]["last_export"], receipt);
     std::fs::write(&mix, b"replace this previous mix").unwrap();
     menu(&mut app, "File", "Re-export last WAV (replace)");
     app.command(json!({"command":"wait_export"}));

@@ -1,7 +1,7 @@
 //! Document identity and export decisions use the production menus and workers.
 mod common;
 use common::Harness;
-use daw_core::{AudioData, Clip, Note, Project};
+use daw_core::{AudioData, Clip, ClipContent, Note, Project};
 use serde_json::{Value, json};
 use std::path::Path;
 
@@ -81,14 +81,34 @@ fn save_as_and_reopen_show_the_saved_filename_and_seed_export_destinations() {
 }
 
 #[test]
-fn save_picker_normalizes_missing_extensions_and_preserves_recognized_extensions() {
+fn save_picker_normalizes_portable_extensions_and_embeds_audio() {
     let mut app = Harness::new();
-    menu(&mut app, "Track", "Add audio track");
+    let source = app.directory.path().join("External source.wav");
+    let audio = AudioData {
+        sample_rate: 8_000,
+        channels: 1,
+        samples: vec![0.25, -0.5, 0.75, -1.0],
+    };
+    audio.write_wav(&source).unwrap();
+    let mut project = Project::new();
+    let track = project.add_audio_track("Audio");
+    let length = audio.duration_seconds() * project.tempo / 60.0;
+    project.track_mut(track).unwrap().clips.push(Clip::audio(
+        "External source",
+        0.0,
+        length,
+        source.to_string_lossy(),
+    ));
+    let legacy = app.directory.path().join("Legacy.JSON");
+    project.save_legacy_json(&legacy).unwrap();
+    let legacy_bytes = std::fs::read(&legacy).unwrap();
+    app.command(json!({"command":"open", "path":legacy}));
+    let mut saved_paths = Vec::new();
     for (chosen, expected) in [
         ("First song", "First song.rill"),
         ("Version 1.2", "Version 1.2.rill"),
         ("Capital.RILL", "Capital.RILL"),
-        ("Legacy.JSON", "Legacy.JSON"),
+        ("Legacy.JSON", "Legacy.JSON.rill"),
     ] {
         let chosen = app.directory.path().join(chosen);
         let expected = app.directory.path().join(expected);
@@ -97,10 +117,24 @@ fn save_picker_normalizes_missing_extensions_and_preserves_recognized_extensions
         let state = finished(&mut app);
         assert_eq!(state["project_path"], json!(expected));
         assert!(expected.exists());
-        assert_eq!(Project::load(&expected).unwrap().tracks.len(), 1);
-        if expected.extension().unwrap().eq_ignore_ascii_case("rill") {
-            assert!(std::fs::read(&expected).unwrap().starts_with(b"PK"));
-        }
+        assert!(std::fs::read(&expected).unwrap().starts_with(b"PK"));
+        saved_paths.push(expected);
+    }
+    assert_eq!(std::fs::read(&legacy).unwrap(), legacy_bytes);
+    std::fs::remove_file(&source).unwrap();
+    for saved in saved_paths {
+        let reopened =
+            Project::load_with_assets(&saved, app.directory.path().join("reopened")).unwrap();
+        assert_eq!(reopened.tracks.len(), 1);
+        assert_eq!(reopened.tracks[0].clips.len(), 1);
+        let ClipContent::Audio { path, .. } = &reopened.tracks[0].clips[0].content else {
+            panic!("Portable save lost its audio clip");
+        };
+        assert_ne!(Path::new(path), source);
+        let embedded = AudioData::load_wav(path).unwrap();
+        assert_eq!(embedded.sample_rate, audio.sample_rate);
+        assert_eq!(embedded.channels, audio.channels);
+        assert_eq!(embedded.samples, audio.samples);
     }
     app.quit();
 }

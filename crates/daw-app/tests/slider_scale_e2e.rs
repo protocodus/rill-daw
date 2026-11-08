@@ -253,6 +253,7 @@ fn mixer_fader_range_ticks_and_handle_index_match_mouse_edits_at_multiple_sizes(
         for height in [720, 1300] {
             app.command(json!({"command":"viewport", "width":1100, "height":height}));
             let state = painted(&mut app);
+            assert_eq!(state["mixer"]["compact"], height == 720);
             let channel = mixer_channel(&state, id);
             let fader = Scale::from(&channel["fader_scale"]);
             let fractions: Vec<f64> = channel["fader_scale"]["ticks"]
@@ -302,15 +303,21 @@ fn mixer_fader_range_ticks_and_handle_index_match_mouse_edits_at_multiple_sizes(
             allocations[1] - allocations[0],
             0.1,
         );
-        near(
-            strip_heights[1] - strip_heights[0],
-            allocations[1] - allocations[0],
-            0.1,
+        assert!(
+            strip_heights[1] - allocations[1] > strip_heights[0] - allocations[0],
+            "Full-size controls reserve more fixed height than Compact controls",
         );
         app.command(json!({"command":"viewport", "width":1100, "height":1440}));
         let taller = painted(&mut app);
-        let taller_fader = Scale::from(&mixer_channel(&taller, id)["fader_scale"]);
+        assert_eq!(taller["mixer"]["compact"], false);
+        let taller_channel = mixer_channel(&taller, id);
+        let taller_fader = Scale::from(&taller_channel["fader_scale"]);
         near(taller_fader.length() - lengths[1], 140.0, 0.1);
+        // Within one density, every extra strip point extends the fader.
+        // The 720→1300 transition above also expands fixed control rows.
+        let taller_strip_height = taller_channel["strip"]["max"][1].as_f64().unwrap()
+            - taller_channel["strip"]["min"][1].as_f64().unwrap();
+        near(taller_strip_height - strip_heights[1], 140.0, 0.1);
         app.quit();
     }
 }
@@ -324,6 +331,7 @@ fn arrangement_controls_keep_current_values_and_native_endpoint_mapping_without_
         app.command(
             json!({"command":"viewport","width":1100,"height":720,"pixels_per_point":density}),
         );
+        app.set_track_density("Detailed");
         for compact in [false, true] {
             if compact {
                 app.click("Measured channel");

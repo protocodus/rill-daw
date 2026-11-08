@@ -25,6 +25,11 @@ use vst3_host::process_isolation::{HostCommand, HostResponse, PluginHostProcess}
 pub use vst3_host::{AudioBusConfig, AudioBusLayout};
 use vst3_host::{BusAudioBuffers, MidiChannel, MidiEvent, Plugin, TransportPosition, Vst3Host};
 
+mod audio_buffers;
+use audio_buffers::{
+    MAX_AUDIO_CHANNELS, copy_stereo_input, validate_audio_bus_layout, validate_pair,
+};
+
 pub mod catalog;
 mod expressive;
 pub use expressive::{
@@ -343,42 +348,6 @@ struct BusActivation {
     default_outputs: Vec<usize>,
     inputs: Vec<usize>,
     outputs: Vec<usize>,
-}
-
-const MAX_AUDIO_BUSES: usize = 64;
-const MAX_AUDIO_CHANNELS: usize = 256;
-const MAX_BUS_BUFFER_BYTES: usize = 64 * 1024 * 1024;
-
-fn validate_audio_bus_layout(layout: &AudioBusLayout, frames: usize) -> Result<()> {
-    ensure!(
-        layout.inputs.len() <= MAX_AUDIO_BUSES && layout.outputs.len() <= MAX_AUDIO_BUSES,
-        "Plug-in exceeds the 64 audio buses per direction limit"
-    );
-    let channels = layout
-        .inputs
-        .iter()
-        .chain(&layout.outputs)
-        .try_fold(0usize, |sum, bus| {
-            ensure!(
-                bus.channel_count <= MAX_AUDIO_CHANNELS,
-                "Plug-in audio bus has too many channels"
-            );
-            sum.checked_add(bus.channel_count)
-                .context("Plug-in channel count overflow")
-        })?;
-    ensure!(
-        channels <= MAX_AUDIO_CHANNELS,
-        "Plug-in exceeds the 256 audio channels limit"
-    );
-    let bytes = channels
-        .checked_mul(frames)
-        .and_then(|count| count.checked_mul(std::mem::size_of::<f32>()))
-        .context("Plug-in audio buffer size overflow")?;
-    ensure!(
-        bytes <= MAX_BUS_BUFFER_BYTES,
-        "Plug-in audio buffers exceed 64 MiB"
-    );
-    Ok(())
 }
 
 fn allocate_bus_buffers(
@@ -945,12 +914,9 @@ impl VstInstrument {
         inputs: &[StereoBusInput<'_>],
         frames: usize,
     ) -> Result<()> {
-        for bus in self
-            .buffers
-            .inputs
-            .iter_mut()
-            .chain(&mut self.buffers.outputs)
-        {
+        // Silence retained outputs even when validation rejects this block. Inputs
+        // are cleared only once, after validation, before copying connected pairs.
+        for bus in &mut self.buffers.outputs {
             for channel in &mut bus.channels {
                 channel.fill(0.0);
             }
@@ -994,15 +960,13 @@ impl VstInstrument {
             "Too many held MIDI notes"
         );
         self.buffers.block_size = frames;
-        for bus in self
-            .buffers
-            .inputs
-            .iter_mut()
-            .chain(&mut self.buffers.outputs)
-        {
+        for bus in &mut self.buffers.inputs {
+            audio_buffers::prepare_channels(&mut bus.channels, frames);
+        }
+        for bus in &mut self.buffers.outputs {
             for channel in &mut bus.channels {
+                // Existing samples were silenced above; growing adds silence too.
                 channel.resize(frames, 0.0);
-                channel.fill(0.0);
             }
         }
         for input in inputs {
@@ -1343,37 +1307,6 @@ impl VstEffect {
         self.processor
             .process_with_input(&[], input_left, input_right, output_left, output_right)
     }
-}
-
-fn copy_stereo_input(channels: &mut [Vec<f32>], left: &[f32], right: &[f32]) {
-    if channels.len() == 1 {
-        for ((output, left), right) in channels[0].iter_mut().zip(left).zip(right) {
-            *output = (left + right) * 0.5;
-        }
-    } else if channels.len() >= 2 {
-        channels[0].copy_from_slice(left);
-        channels[1].copy_from_slice(right);
-    }
-}
-
-fn validate_pair(
-    buses: &[vst3_host::audio::AudioBusBuffer],
-    bus: usize,
-    first_channel: usize,
-) -> Result<()> {
-    ensure!(
-        first_channel.is_multiple_of(2),
-        "Plug-in stereo pair must begin at an even channel"
-    );
-    let config = buses
-        .get(bus)
-        .context("Plug-in audio bus index is out of range")?;
-    ensure!(config.active, "Plug-in audio bus is inactive");
-    ensure!(
-        first_channel < config.channels.len(),
-        "Plug-in audio channel index is out of range"
-    );
-    Ok(())
 }
 
 /// Keep panic releases plus a maximum new block below the SDK's 4,096-event queue.

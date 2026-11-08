@@ -206,6 +206,7 @@ fn arranger_markers_distinguish_unity_gain_from_midpoint_in_standard_and_compact
         app.command(
             json!({"command":"viewport", "width":1100, "height":720, "pixels_per_point":density}),
         );
+        app.set_track_density("Detailed");
         for compact in [false, true] {
             if compact {
                 app.click("Header landmarks");

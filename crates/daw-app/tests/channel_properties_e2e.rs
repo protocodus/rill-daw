@@ -88,7 +88,7 @@ fn clips_and_channels_have_separate_control_scopes_and_edits() {
             app.click("Pattern");
             let midi = menu(&mut app, "Window", "Properties");
             assert!(visible(&midi, "Properties · Pattern"));
-            for channel_control in ["Gain", "Clip gain", "Pan", "Mute", "Solo"] {
+            for channel_control in ["Input gain", "Volume", "Clip gain", "Pan", "Mute", "Solo"] {
                 assert!(
                     !visible(&midi, channel_control),
                     "MIDI clip exposes {channel_control}"
@@ -100,7 +100,7 @@ fn clips_and_channels_have_separate_control_scopes_and_edits() {
                 "The title keeps its subject on every tab"
             );
             assert!(visible(&track, "Color"));
-            for channel_control in ["Gain", "Pan", "Mute", "Solo"] {
+            for channel_control in ["Input gain", "Volume", "Pan", "Mute", "Solo"] {
                 assert!(
                     !visible(&track, channel_control),
                     "Track metadata exposes {channel_control}"
@@ -108,7 +108,8 @@ fn clips_and_channels_have_separate_control_scopes_and_edits() {
             }
             let channel = front(&mut app, "Channel");
             assert!(visible(&channel, "Properties · Pattern"));
-            assert!(visible(&channel, "Gain"));
+            assert!(visible(&channel, "Input gain"));
+            assert!(visible(&channel, "Volume"));
             assert!(visible(&channel, "Pan"));
             assert!(!visible(&channel, "Clip gain"));
             assert_eq!(channel["project"], original);

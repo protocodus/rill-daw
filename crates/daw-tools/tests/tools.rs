@@ -200,6 +200,72 @@ fn transform_arguments(host: &Host, track: u64, clip: u64, operation: &str) -> V
 }
 
 #[test]
+fn velocity_selection_preserves_order_deduplicates_and_rejects_missing_notes_atomically() {
+    let (mut host, track, clip) = phrase_host();
+    let before = host.p.clone();
+    let notes = before.midi_notes(track, clip).unwrap();
+    let selected = [notes[7].id, notes[2].id, notes[7].id];
+    let mut arguments = transform_arguments(&host, track, clip, "velocity");
+    arguments["velocity"] = json!(99);
+    arguments["note_ids"] = json!(selected);
+    call(&mut host, "transform_phrase", arguments);
+    for (old, new) in notes.iter().zip(host.p.midi_notes(track, clip).unwrap()) {
+        let mut expected = old.clone();
+        if selected.contains(&old.id) {
+            expected.velocity = 99;
+        }
+        assert_eq!(*new, expected);
+    }
+    assert_eq!(host.history.undo_labels().count(), 1);
+    assert!(host.history.undo(&mut host.p));
+    assert_eq!(host.p, before);
+
+    let session = host.session;
+    let mut arguments = transform_arguments(&host, track, clip, "velocity");
+    arguments["velocity"] = json!(100);
+    arguments["note_ids"] = json!([notes[0].id, u64::MAX]);
+    let error = dispatch_song_tool(&mut host, "transform_phrase", arguments).unwrap_err();
+    assert_eq!(error.code, "not_found");
+    assert_eq!(host.p, before);
+    assert_eq!(host.session, session);
+    assert_eq!(host.history.undo_labels().count(), 0);
+
+    let mut arguments = transform_arguments(&host, track, clip, "velocity");
+    arguments["velocity"] = json!(80);
+    call(&mut host, "transform_phrase", arguments);
+    assert!(
+        host.p
+            .midi_notes(track, clip)
+            .unwrap()
+            .iter()
+            .all(|note| note.velocity == 80)
+    );
+}
+
+#[test]
+fn argument_budget_counts_encoded_bytes_and_accepts_the_exact_limit() {
+    let exact = json!("x".repeat(MAX_ARGUMENT_BYTES - 2));
+    assert!(parse_arguments::<Value>(exact).is_ok());
+    let too_large = json!("x".repeat(MAX_ARGUMENT_BYTES - 1));
+    assert_eq!(
+        parse_arguments::<Value>(too_large)
+            .map(|_| ())
+            .expect_err("An encoded string above the limit must be rejected")
+            .code,
+        "invalid_arguments"
+    );
+    // JSON escapes each NUL as six bytes, despite its one-byte source length.
+    let escaped = json!("\u{0000}".repeat(MAX_ARGUMENT_BYTES / 6 + 1));
+    assert_eq!(
+        parse_arguments::<Value>(escaped)
+            .map(|_| ())
+            .expect_err("JSON escaping must count toward the encoded byte limit")
+            .code,
+        "invalid_arguments"
+    );
+}
+
+#[test]
 fn randomize_tool_defaults_match_typed_edits_and_keep_one_undoable_commit() {
     let (mut phrase, track, clip) = phrase_host();
     let mut typed = clone_song_host(&phrase);

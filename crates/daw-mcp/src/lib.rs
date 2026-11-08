@@ -5,7 +5,7 @@
 //! commits, history, and cancellation. This crate never loads a project, opens
 //! an audio device, or obtains provider credentials.
 
-use daw_tools::ToolHost;
+use daw_tools::{ToolHost, bounded_json};
 use serde_json::{Value, json};
 use std::io::{self, BufRead, Read, Write};
 
@@ -196,13 +196,9 @@ pub fn serve<R: BufRead, W: Write, H: ToolHost + ?Sized>(
             Err(_) => Some(rpc_error(Value::Null, -32700, "Parse error")),
         };
         if let Some(response) = response {
-            let bytes = serde_json::to_vec(&response)?;
-            if bytes.len() > MAX_MESSAGE_BYTES {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "MCP response too large",
-                ));
-            }
+            let bytes = bounded_json::to_vec(&response, MAX_MESSAGE_BYTES).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "MCP response too large")
+            })?;
             writer.write_all(&bytes)?;
             writer.write_all(b"\n")?;
             writer.flush()?;
@@ -459,6 +455,45 @@ mod tests {
         let input = vec![b' '; MAX_MESSAGE_BYTES + 1];
         let error = serve(Cursor::new(input), Vec::new(), &mut Host::default()).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn stdio_never_writes_a_partial_oversized_response() {
+        struct LargeResult;
+        impl ToolHost for LargeResult {
+            fn call_tool(&mut self, _: &str, _: Value) -> Result<Value, ToolError> {
+                // MCP publishes both the structured result and a text copy.
+                Ok(json!({"text":"x".repeat(MAX_MESSAGE_BYTES / 2)}))
+            }
+        }
+        let input = [
+            request(
+                json!(1),
+                "initialize",
+                json!({
+                    "protocolVersion":PROTOCOL_VERSION,"capabilities":{},
+                    "clientInfo":{"name":"test","version":"1"}
+                }),
+            ),
+            json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
+            request(json!(2), "tools/call", json!({"name":"get_song_context"})),
+        ]
+        .iter()
+        .map(Value::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+        let mut output = Vec::new();
+        let error = serve(Cursor::new(input), &mut output, &mut LargeResult).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        let output = String::from_utf8(output).unwrap();
+        let messages: Vec<_> = output.lines().collect();
+        assert_eq!(
+            messages.len(),
+            1,
+            "Only the completed initialize response may be written"
+        );
+        assert_eq!(serde_json::from_str::<Value>(messages[0]).unwrap()["id"], 1);
+        assert!(output.ends_with('\n'));
     }
 
     #[test]

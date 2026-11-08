@@ -151,8 +151,18 @@ fn assert_layout(state: &Value, height: f64) -> f64 {
         ("Automation", 17.0),
     ] {
         let controls = labels(state, label);
-        assert_eq!(controls.len(), 3, "all {label} controls must be visible");
-        for (control, offset) in controls.iter().zip(&offsets) {
+        // Master has its own pan, mute and automation controls, but no Solo.
+        let expected = channels.len() + usize::from(label != "Solo");
+        assert_eq!(
+            controls.len(),
+            expected,
+            "all channel and applicable Master {label} controls must be visible"
+        );
+        for (index, (control, offset)) in controls.iter().zip(&offsets).enumerate() {
+            assert!(
+                control.left >= strips[index].left && control.right <= strips[index].right,
+                "{label} belongs inside its own channel/Master strip"
+            );
             assert!(control.bottom <= height, "{label}: {control:?}");
             assert!(
                 control.height() >= minimum_height,
@@ -209,19 +219,20 @@ fn mixer_fills_height_and_resizes_faders_without_losing_channel_controls() {
         project.save(&path).unwrap();
         app.command(json!({"command":"open", "path":path}));
         app.command(json!({"command":"system_theme", "dark":dark}));
-        // The shared control rows need more than 720 px before every channel
-        // action and the routing lanes fit without vertical scrolling.
+        // Keep both tall sizes in regular density so this measures fader
+        // growth independently of the compact/regular control breakpoint.
+        // The short sizes below separately exercise compact scrolling.
         app.command(
-            json!({"command":"viewport", "width":1100, "height":900, "pixels_per_point":density}),
+            json!({"command":"viewport", "width":1100, "height":1000, "pixels_per_point":density}),
         );
         app.click("Mixer");
         let initial = painted(&mut app);
-        let initial_height = assert_layout(&initial, 900.0);
+        let initial_height = assert_layout(&initial, 1000.0);
         let original_project = initial["project"].clone();
 
-        app.command(json!({"command":"viewport", "width":1440, "height":1300}));
+        app.command(json!({"command":"viewport", "width":1440, "height":1400}));
         let tall = painted(&mut app);
-        let tall_height = assert_layout(&tall, 1300.0);
+        let tall_height = assert_layout(&tall, 1400.0);
         assert!(
             tall_height > initial_height + 300.0,
             "extra window height must extend faders and meters, not create empty space"
@@ -249,9 +260,9 @@ fn mixer_fills_height_and_resizes_faders_without_losing_channel_controls() {
         assert_eq!(effects["selected_track"], project.tracks[0].id);
         app.key("Escape");
 
-        app.command(json!({"command":"viewport", "width":1100, "height":900}));
+        app.command(json!({"command":"viewport", "width":1100, "height":1000}));
         let resized = painted(&mut app);
-        assert!((assert_layout(&resized, 900.0) - initial_height).abs() < 1.0);
+        assert!((assert_layout(&resized, 1000.0) - initial_height).abs() < 1.0);
         assert_eq!(resized["project"], original_project);
         let fader = Bounds::from(&resized["mixer"]["channels"][0]["fader_scale"]["rail"]);
         let x = (fader.left + fader.right) * 0.5;

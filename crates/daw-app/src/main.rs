@@ -30,6 +30,7 @@ mod join_tools;
 mod join_ui;
 mod library;
 mod library_preview;
+mod mcp_bridge;
 mod midi_editor;
 mod midi_expression;
 mod midi_generate_ui;
@@ -166,7 +167,8 @@ fn main() -> anyhow::Result<()> {
             let mut app = app::DawApp::new(cc, project, screenshot);
             app.refresh_plugins();
             if mcp {
-                app.assistant.start_mcp_stdio(mcp_profile);
+                app.assistant
+                    .start_mcp_stdio(mcp_profile, cc.egui_ctx.clone());
             }
             app.project_path = project_path;
             if app.screenshot.is_some() {

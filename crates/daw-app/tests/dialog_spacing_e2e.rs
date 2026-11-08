@@ -131,15 +131,37 @@ fn setup_recording_export_warning_history_and_about_keep_their_actions_in_view()
                 popup_fits(&export, "Export WAV", width, height);
                 visible(
                     &export,
-                    &[
-                        "MIDI notes need an instrument",
-                        "Include effect tails",
-                        "Export…",
-                        "Cancel",
-                    ],
+                    &["Include effect tails", "Export…", "Cancel"],
                     width,
                     height,
                 );
+                // The bounded summary scrolls when format choices and a long
+                // missing-instrument warning exceed a compact viewport. Its
+                // footer must stay reachable while inspecting that warning.
+                let export_action = label(&export, "Export…").clone();
+                let cancel_action = label(&export, "Cancel").clone();
+                let title = label(&export, "Export WAV");
+                let x =
+                    (title["min"][0].as_f64().unwrap() + title["max"][0].as_f64().unwrap()) * 0.5;
+                let y = (title["max"][1].as_f64().unwrap()
+                    + export_action["min"][1].as_f64().unwrap())
+                    * 0.5;
+                app.command(json!({"command":"scroll", "x":x, "y":y, "delta":-1000.0}));
+                for _ in 0..20 {
+                    app.inspect();
+                }
+                let warning = app.inspect();
+                visible(
+                    &warning,
+                    &["MIDI notes need an instrument", "Export…", "Cancel"],
+                    width,
+                    height,
+                );
+                assert_eq!(label(&warning, "Export…"), &export_action);
+                assert_eq!(label(&warning, "Cancel"), &cancel_action);
+                for field in ["project", "history", "selected_track"] {
+                    assert_eq!(warning[field], export[field], "Scrolling changed {field}");
+                }
                 app.click("Cancel");
 
                 let history = menu(&mut app, "Edit", "History…");

@@ -20,18 +20,19 @@ fn plugin_automation_patterns_restore_manual_value_at_clip_end_and_after_seek() 
         points: vec![daw_core::AutomationPoint::new(0.0, 0.9)],
         interpolation: daw_core::Interpolation::Linear,
     };
+    let mut lane = daw_core::AutomationLane {
+        override_value: None,
+        target,
+        points: Vec::new(),
+        interpolation: daw_core::Interpolation::Linear,
+        clips: vec![pattern],
+    };
     let mut parameters = vec![PluginAutomation {
         id: 7,
         previous: None,
         manual: Some(0.25),
         action_sequence: 0,
-        lane: daw_core::AutomationLane {
-            override_value: None,
-            target,
-            points: Vec::new(),
-            interpolation: daw_core::Interpolation::Linear,
-            clips: vec![pattern],
-        },
+        lane: CompiledAutomation::new(&lane),
     }];
     let mut sent = Vec::new();
     for beat in [0.0, 0.5, 1.0, 2.5, 3.0, 4.0, 1.5, 0.0] {
@@ -47,10 +48,8 @@ fn plugin_automation_patterns_restore_manual_value_at_clip_end_and_after_seek() 
     for ((_, actual), expected) in sent.iter().zip([0.25, 0.9, 0.25, 0.9, 0.25]) {
         assert!((actual - expected).abs() < 1e-6);
     }
-    parameters[0]
-        .lane
-        .points
-        .push(daw_core::AutomationPoint::new(0.0, 0.6));
+    lane.points.push(daw_core::AutomationPoint::new(0.0, 0.6));
+    parameters[0].lane = CompiledAutomation::new(&lane);
     parameters[0].manual = None;
     initialize_automation_defaults(&mut parameters, || {
         panic!("Arranger points already provide the fallback; no metadata query is needed")

@@ -260,6 +260,11 @@ fn assert_mixer_paint(app: &mut Harness, id: u64) -> Value {
         daw_ui::theme::LIGHT
     };
     let shapes = state["painted_rects"].as_array().unwrap();
+    let plate_height = if state["mixer"]["compact"] == true {
+        daw_ui::tokens::COMPACT_HEIGHT
+    } else {
+        daw_ui::tokens::CONTROL_HEIGHT
+    };
     for channel in state["project"]["tracks"]
         .as_array()
         .unwrap()
@@ -275,8 +280,8 @@ fn assert_mixer_paint(app: &mut Harness, id: u64) -> Value {
             .unwrap();
         let (x, y) = center(label);
         let color = rgb(&state, channel["id"].as_u64().unwrap());
-        // Every strip's name plate carries the full channel color; a bus adds
-        // its BUS chip inside the plate instead of a subdued tint.
+        // Every name plate carries the full channel color, including buses;
+        // its height follows the console's active compact/full control scale.
         let header_color = json!([color[0], color[1], color[2], 255]);
         let color = header_color.clone();
         assert!(
@@ -287,7 +292,7 @@ fn assert_mixer_paint(app: &mut Harness, id: u64) -> Value {
                     && right > x
                     && top < y
                     && bottom > y
-                    && bottom - top >= 33.0
+                    && ((bottom - top) - f64::from(plate_height)).abs() < 1.0
                     && right - left > f64::from(daw_ui::MIXER_CONTENT_WIDTH) - 2.0
             }),
             "{name}: the name plate paints the channel color"

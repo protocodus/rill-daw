@@ -211,6 +211,7 @@ fn menus_and_pickers_keep_their_contents_above_the_dim_and_dismiss_normally() {
     let mut app = Harness::new();
     app.command(json!({"command":"viewport", "width":WIDTH, "height":HEIGHT}));
     let track = fixture(&mut app);
+    app.set_track_density("Detailed");
     let original = assert_clear(&mut app)["project"].clone();
 
     app.click("File");

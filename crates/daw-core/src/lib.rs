@@ -3,6 +3,7 @@
 
 mod archive;
 mod audio;
+mod audio_analysis;
 mod audio_decode;
 mod audio_edit;
 mod audio_file;

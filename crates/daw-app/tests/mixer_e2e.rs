@@ -147,7 +147,8 @@ fn sequencer_mixer_controls_route_undo_persist_and_change_exported_audio() {
     tone.write_wav(&source).unwrap();
     app.command(json!({"command":"drop","paths":[source],"track":0}));
     menu(&mut app, "Track", "Add folder");
-    let state = menu(&mut app, "Track", "Add bus");
+    menu(&mut app, "Track", "Add bus");
+    let state = app.set_track_density("Detailed");
     let source_track = state["project"]["tracks"][0]["id"].clone();
     let folder = state["project"]["tracks"][1]["id"].clone();
     let bus = state["project"]["tracks"][2]["id"].clone();
@@ -260,11 +261,15 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
     app.command(json!({"command":"open","path":path}));
     app.command(json!({"command":"viewport","width":1100,"height":900}));
     let state = menu(&mut app, "Window", "Mixer");
-    assert_eq!(label_count(&state, "Automation"), 3);
+    assert_eq!(
+        label_count(&state, "Automation"),
+        4,
+        "Three channels and Master"
+    );
     assert_eq!(
         label_count(&state, "Effects"),
-        3,
-        "inserts precede channel volume"
+        4,
+        "inserts precede channel volume on all three channels and Master"
     );
     assert!(!visible(&state, "Instrument"));
     let route_rows: Vec<_> = state["mixer"]["channels"]
@@ -277,13 +282,34 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
     assert!(route_rows.windows(2).all(|rows| {
         (rows[0]["min"][1].as_f64().unwrap() - rows[1]["min"][1].as_f64().unwrap()).abs() <= 1.0
     }));
-    let levels: Vec<_> = state["label_rects"]
+    // Input trim, volume and their scale captions all use dB. Select the
+    // volume readout inside each channel's own value field, including Master.
+    let levels: Vec<_> = state["mixer"]["channels"]
         .as_array()
         .unwrap()
         .iter()
-        .filter(|row| row["text"].as_str().unwrap().ends_with(" dB"))
+        .chain(std::iter::once(&state["mixer"]["master"]))
+        .map(|channel| {
+            let rect = &channel["gain"];
+            let labels: Vec<_> = state["label_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|row| {
+                    row["text"].as_str().unwrap().ends_with(" dB")
+                        && (0..2).all(|axis| {
+                            row["min"][axis].as_f64().unwrap()
+                                >= rect["min"][axis].as_f64().unwrap()
+                                && row["max"][axis].as_f64().unwrap()
+                                    <= rect["max"][axis].as_f64().unwrap()
+                        })
+                })
+                .collect();
+            assert_eq!(labels.len(), 1, "One volume readout in {rect}: {labels:?}");
+            labels[0]
+        })
         .collect();
-    assert_eq!(levels.len(), 3, "one gain readout per channel");
+    assert_eq!(levels.len(), 4, "one volume readout per channel and Master");
     assert!(
         levels.windows(2).all(|rows| {
             (rows[0]["min"][1].as_f64().unwrap() - rows[1]["min"][1].as_f64().unwrap()).abs() <= 1.0
@@ -429,7 +455,8 @@ fn output_header_picker_excludes_feedback_and_remains_available_on_compact_track
         rename_selected_track(&mut app, "Bus 1", name);
     }
     menu(&mut app, "Track", "Add audio track");
-    let before = app.inspect();
+    app.command(json!({"command":"viewport","width":1100,"height":900}));
+    let before = app.set_track_density("Detailed");
     let bus_a = before["project"]["tracks"][0]["id"].clone();
     let bus_b = before["project"]["tracks"][1]["id"].clone();
     let bus_c = before["project"]["tracks"][2]["id"].clone();

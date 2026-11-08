@@ -65,9 +65,9 @@ pub(crate) fn channel_owner(project: &Project, track: u64) -> Option<u64> {
 impl DawApp {
     pub(crate) fn visible_arranger_tracks(&self) -> Vec<(usize, usize)> {
         if self.arranger_selection.revealed_folders.is_empty() {
-            crate::routing::visible_tracks(&self.project)
+            crate::track_order::visible_tracks(&self.project)
         } else {
-            crate::routing::visible_tracks_with_expanded(
+            crate::track_order::visible_tracks_with_expanded(
                 &self.project,
                 &self.arranger_selection.revealed_folders,
             )
@@ -198,7 +198,7 @@ pub(crate) fn ordered_channels(project: &Project, order: MixerOrder) -> Vec<u64>
         .filter(|id| channels.contains_key(id))
         .collect();
     if order == MixerOrder::Song {
-        return grouped_instrument_outputs(project, song_order);
+        return grouped_instrument_outputs(&channels, song_order);
     }
 
     let position: HashMap<_, _> = song_order
@@ -265,23 +265,20 @@ pub(crate) fn ordered_channels(project: &Project, order: MixerOrder) -> Vec<u64>
         remaining.sort_by_key(|id| priority(*id));
         result.extend(remaining);
     }
-    grouped_instrument_outputs(project, result)
+    grouped_instrument_outputs(&channels, result)
 }
 
 /// Mixer groups define visible adjacency: auxiliary outputs move among their
 /// siblings, while ordinary channels move past complete instrument groups.
-type MixerShiftTargets = HashMap<
-    u64,
-    (
-        Option<daw_ui::TrackDropIntent>,
-        Option<daw_ui::TrackDropIntent>,
-    ),
->;
-
-pub(crate) fn mixer_shift_targets(project: &Project) -> MixerShiftTargets {
+pub(crate) fn mixer_shift_targets(project: &Project) -> crate::track_order::TrackShiftTargets {
+    let tracks: HashMap<_, _> = project
+        .tracks
+        .iter()
+        .map(|track| (track.id, track))
+        .collect();
     let mut siblings: HashMap<(Option<u64>, Option<u64>), Vec<u64>> = HashMap::new();
     for id in project.ordered_track_ids() {
-        let Some(track) = project.track(id) else {
+        let Some(track) = tracks.get(&id) else {
             continue;
         };
         if matches!(
@@ -297,52 +294,122 @@ pub(crate) fn mixer_shift_targets(project: &Project) -> MixerShiftTargets {
                 .push(id);
         }
     }
-    siblings
-        .values()
-        .flat_map(|ids| {
-            ids.iter().enumerate().map(move |(index, source)| {
-                let intent = |target, placement| daw_ui::TrackDropIntent {
-                    source: *source,
-                    target,
-                    placement,
-                };
-                (
-                    *source,
-                    (
-                        index
-                            .checked_sub(1)
-                            .map(|index| intent(ids[index], daw_ui::TrackDropPlacement::Before)),
-                        ids.get(index + 1)
-                            .map(|target| intent(*target, daw_ui::TrackDropPlacement::After)),
-                    ),
-                )
-            })
-        })
-        .collect()
+    crate::track_order::sibling_shift_targets(siblings.values().map(Vec::as_slice))
 }
 
-fn grouped_instrument_outputs(project: &Project, channels: Vec<u64>) -> Vec<u64> {
+fn grouped_instrument_outputs(
+    tracks: &HashMap<u64, &daw_core::Track>,
+    channels: Vec<u64>,
+) -> Vec<u64> {
+    let mut outputs: HashMap<u64, Vec<u64>> = HashMap::new();
+    for id in &channels {
+        if let Some(output) = tracks.get(id).and_then(|track| track.instrument_output) {
+            outputs.entry(output.track).or_default().push(*id);
+        }
+    }
     let mut result = Vec::with_capacity(channels.len());
     for id in &channels {
-        if project
-            .track(*id)
+        if tracks
+            .get(id)
             .is_some_and(|track| track.instrument_output.is_some())
         {
             continue;
         }
         result.push(*id);
-        result.extend(channels.iter().copied().filter(|child| {
-            project
-                .track(*child)
-                .and_then(|track| track.instrument_output.as_ref())
-                .is_some_and(|output| output.track == *id)
-        }));
-    }
-    // Keep an externally supplied incomplete graph repairable in the mixer.
-    for id in channels {
-        if !result.contains(&id) {
-            result.push(id);
+        if let Some(children) = outputs.get(id) {
+            result.extend(children);
         }
     }
+    // Keep an externally supplied incomplete graph repairable in the mixer.
+    // Normal projects have already emitted every channel; avoid even this
+    // additional membership pass unless an output's owner is missing.
+    if result.len() != channels.len() {
+        let seen: HashSet<_> = result.iter().copied().collect();
+        result.extend(channels.into_iter().filter(|id| !seen.contains(id)));
+    }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use daw_core::InstrumentOutput;
+
+    fn output(project: &mut Project, owner: u64, name: &str) -> u64 {
+        let id = project.add_bus(name);
+        project.track_mut(id).unwrap().instrument_output = Some(InstrumentOutput {
+            track: owner,
+            bus: 1,
+            first_channel: 0,
+        });
+        id
+    }
+
+    #[test]
+    fn grouping_keeps_output_sibling_order_and_emits_incomplete_channels_once() {
+        let mut project = Project::new();
+        let first = project.add_midi_track("First");
+        let other = project.add_audio_track("Other");
+        let second = project.add_midi_track("Second");
+        let first_b = output(&mut project, first, "First B");
+        let second_a = output(&mut project, second, "Second A");
+        let first_a = output(&mut project, first, "First A");
+        let missing = output(&mut project, u64::MAX, "Missing owner");
+        let nested = output(&mut project, first_b, "Invalid nested output");
+        let tracks = project
+            .tracks
+            .iter()
+            .map(|track| (track.id, track))
+            .collect();
+        assert_eq!(
+            grouped_instrument_outputs(
+                &tracks,
+                vec![
+                    first_b, other, second, first_a, first, second_a, missing, nested,
+                ]
+            ),
+            vec![
+                other, second, second_a, first, first_b, first_a, missing, nested
+            ]
+        );
+    }
+
+    #[test]
+    fn mixer_shift_actions_share_folder_and_output_group_boundaries() {
+        let mut project = Project::new();
+        let owner = project.add_midi_track("Owner");
+        let other = project.add_audio_track("Other");
+        let first = output(&mut project, owner, "First output");
+        let second = output(&mut project, owner, "Second output");
+        let folder = project.add_folder("Folder");
+        let child = project.add_audio_track("Child");
+        project.track_mut(child).unwrap().parent_folder = Some(folder);
+        let targets = mixer_shift_targets(&project);
+        assert_eq!(targets[&owner].1.unwrap().target, other);
+        assert_eq!(targets[&other].0.unwrap().target, owner);
+        assert_eq!(targets[&first].1.unwrap().target, second);
+        assert_eq!(targets[&second].0.unwrap().target, first);
+        assert_eq!(targets[&child], (None, None));
+    }
+
+    #[test]
+    fn signal_order_deduplicates_parallel_edges_and_retains_cycle_members() {
+        let mut project = Project::new();
+        let bus = project.add_bus("Bus");
+        let source = project.add_audio_track("Source");
+        project.track_mut(source).unwrap().output_bus = Some(bus);
+        project.add_send(source, bus, 0.5, false).unwrap();
+        assert_eq!(
+            ordered_channels(&project, MixerOrder::SignalFlow),
+            vec![source, bus]
+        );
+        // Incomplete editor graphs stay reachable instead of losing strips.
+        project.track_mut(bus).unwrap().output_bus = Some(source);
+        let ordered = ordered_channels(&project, MixerOrder::SignalFlow);
+        assert_eq!(ordered.len(), 2);
+        assert_eq!(
+            ordered.into_iter().collect::<HashSet<_>>(),
+            HashSet::from([source, bus])
+        );
+    }
 }

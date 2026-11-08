@@ -32,11 +32,21 @@ fn tone(path: &Path, first: f64, second: f64) -> AudioData {
 }
 
 fn open(app: &mut Harness, project: &Project, name: &str) -> Value {
-    let path = app.directory.path().join(format!("{name}.daw.json"));
+    let path = app.directory.path().join(format!("{name}.rill"));
     project.save(&path).unwrap();
     app.command(json!({"command":"open", "path":path}));
     app.command(json!({"command":"viewport", "width":1400, "height":900}));
     app.inspect()
+}
+
+// Portable saves extract fresh asset paths on Open, including retained takes.
+// Match previews to the admitted song instead of the external fixture filenames.
+fn loaded_source(state: &Value, track: u64, clip: u64) -> PathBuf {
+    let project: Project = serde_json::from_value(state["project"].clone()).unwrap();
+    let ClipContent::Audio { path, .. } = &project.clip(track, clip).unwrap().content else {
+        panic!("Expected an audio fixture clip");
+    };
+    PathBuf::from(path)
 }
 
 fn wait(app: &mut Harness, ready: impl Fn(&Value) -> bool) -> Value {
@@ -74,7 +84,7 @@ fn source<'a>(state: &'a Value, path: &Path) -> &'a Value {
         .find(|source| {
             source["path"]
                 .as_str()
-                .is_some_and(|name| Path::new(name).file_name() == path.file_name())
+                .is_some_and(|name| Path::new(name) == path)
         })
         .unwrap_or_else(|| {
             panic!(
@@ -194,7 +204,9 @@ fn surface_fixture() -> (Harness, PathBuf, PathBuf, u64) {
         2.0,
         primary.to_string_lossy(),
     ));
-    open(&mut app, &project, "spectral-surfaces");
+    let loaded = open(&mut app, &project, "spectral-surfaces");
+    let primary = loaded_source(&loaded, track, comp);
+    let alternate = loaded_source(&loaded, track, ids[1]);
     (app, primary, alternate, comp)
 }
 
@@ -304,6 +316,7 @@ fn reverse_trim_and_stretch_map_one_cached_source_into_the_correct_timeline_span
         .clips
         .extend([normal, reverse, trimmed, stretched]);
     let before = open(&mut app, &project, "mapped-spectra");
+    let path = loaded_source(&before, track, expected[0].0);
     app.click("Fit");
     ready(&mut app, 1);
     let state = paint_frame(&mut app);
@@ -420,6 +433,11 @@ fn background_previews_preserve_playback_export_history_and_drop_old_project_res
             replacement_path.to_string_lossy(),
         ));
     let replacement_before = open(&mut app, &replacement, "replacement-spectrum");
+    let replacement_path = loaded_source(
+        &replacement_before,
+        track,
+        replacement.track(track).unwrap().clips[0].id,
+    );
     let state = ready(&mut app, 1);
     assert!(spectrum(&state)["generation"].as_u64().unwrap() > generation);
     assert_eq!(spectrum(&state)["sources"].as_array().unwrap().len(), 1);
@@ -428,8 +446,8 @@ fn background_previews_preserve_playback_export_history_and_drop_old_project_res
     let painted_state = paint_frame(&mut app);
     for paint in painted(&painted_state, "arranger") {
         assert_eq!(
-            Path::new(paint["path"].as_str().unwrap()).file_name(),
-            replacement_path.file_name()
+            Path::new(paint["path"].as_str().unwrap()),
+            replacement_path.as_path()
         );
     }
     app.quit();

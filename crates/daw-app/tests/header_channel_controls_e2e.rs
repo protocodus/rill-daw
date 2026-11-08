@@ -55,6 +55,9 @@ fn header_sliders_share_mixer_values_undo_and_render_while_compact_channels_keep
     let path = app.directory.path().join("header-channels.rill");
     project.save(&path).unwrap();
     let original = app.command(json!({"command":"open", "path":path}));
+    // Absolute rail positions belong to expanded headers; Compact is the
+    // default and deliberately uses relative dragging of its value fields.
+    app.set_track_density("Detailed");
     for dark in [false, true] {
         app.command(json!({"command":"system_theme", "dark":dark}));
         let state = app.inspect();

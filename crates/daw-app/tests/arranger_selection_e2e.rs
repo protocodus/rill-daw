@@ -456,7 +456,12 @@ fn compatible_group_track_transfer_and_retained_take_sources_survive_duplicate_a
         .clips
         .iter()
         .filter(|clip| clip.is_take_source())
-        .cloned()
+        .map(|clip| {
+            let ClipContent::Audio { path, .. } = &clip.content else {
+                panic!("retained audio take");
+            };
+            (clip.clone(), std::fs::read(path).unwrap())
+        })
         .collect::<Vec<_>>();
     let comp = project.audio_take_regions(track, group)[0].id;
     let path = app.directory.path().join("Takes.daw.json");
@@ -478,8 +483,27 @@ fn compatible_group_track_transfer_and_retained_take_sources_survive_duplicate_a
     menu(&mut app, "Edit", "Delete");
     let after: Project = serde_json::from_value(app.inspect()["project"].clone()).unwrap();
     after.validate().unwrap();
-    for original in retained {
-        assert_eq!(after.clip(track, original.id), Some(&original));
+    for (mut original, source_bytes) in retained {
+        let retained = after
+            .clip(track, original.id)
+            .expect("retained take source");
+        let (
+            ClipContent::Audio {
+                path: expected_path,
+                ..
+            },
+            ClipContent::Audio {
+                path: actual_path, ..
+            },
+        ) = (&mut original.content, &retained.content)
+        else {
+            panic!("retained audio take");
+        };
+        // Portable saves extract into a fresh scratch directory when reopened.
+        // Its address changes; the source bytes and every musical field do not.
+        assert_eq!(std::fs::read(actual_path).unwrap(), source_bytes);
+        expected_path.clone_from(actual_path);
+        assert_eq!(retained, &original);
     }
     app.quit();
 }

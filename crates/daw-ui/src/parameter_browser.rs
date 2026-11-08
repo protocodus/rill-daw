@@ -52,12 +52,6 @@ const ROW_HEIGHT: f32 = 2.0 * tokens::SPACE_MD
     + tokens::SPACE_SM
     + VALUE_RAIL_HEIGHT;
 
-#[derive(Clone)]
-struct SearchCache {
-    signature: u64,
-    indices: Arc<[usize]>,
-}
-
 /// Keep the expensive Unicode normalization and ranking out of unchanged
 /// frames. Hash the borrowed metadata relevant to this filter so in-place
 /// changes invalidate the result without retaining another copy of the catalog.
@@ -87,23 +81,7 @@ fn cached_matches(
             }
         }
     }
-    let signature = signature.finish();
-    if let Some(cached) = ctx.data(|data| data.get_temp::<SearchCache>(id))
-        && cached.signature == signature
-    {
-        return cached.indices;
-    }
-    let indices: Arc<[usize]> = matches(items, state).into();
-    ctx.data_mut(|data| {
-        data.insert_temp(
-            id,
-            SearchCache {
-                signature,
-                indices: Arc::clone(&indices),
-            },
-        );
-    });
-    indices
+    crate::search_cache::cached_indices(ctx, id, signature.finish(), || matches(items, state))
 }
 
 fn matches(items: &[ParameterItem<'_>], state: &ParameterBrowserState) -> Vec<usize> {

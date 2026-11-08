@@ -7,6 +7,7 @@ Rill is a native Rust desktop DAW with separate project, rendering, plugin, and 
 | Crate | Responsibility |
 | --- | --- |
 | `daw-core` | Serializable projects, validation, source-preserving editing, undo/redo, WAV and Standard MIDI File I/O, scales, and routing topology. |
+| `daw-composer` | Deterministic phrase and accompaniment generation using the core music-theory catalogue; no UI, device, or provider ownership. |
 | `daw-engine` | Compile a project into a playback graph; render audio clips and isolated VST3 instruments/effects, sends, and buses; compensate path latency; expose device playback, input capture, dry monitoring, and offline export. |
 | `daw-plugins` | Discover VST3 metadata without loading native code into the app; host selected instruments and effects in separate `daw-plugin-host` processes. |
 | `daw-ui` | Shared egui component library, accessible controls, surfaces, popup windows, and design tokens; no audio or application dependencies. |
@@ -36,6 +37,44 @@ flowchart LR
 ```
 
 The UI owns the editable project. Starting playback prepares a separate renderer. While its plugin and routing topology stays unchanged, volume, pan, note, and clip edits use a persistent background preparation worker. It compiles immutable clip schedules, reuses decoded sources, and prepares any new audio without stopping the existing renderer. Only the newest requested edit can be installed; a failed preparation leaves the previous audio playing and reports the error. Undo and Redo use the same path. Renaming, colors, and collapsed state do not update audio, including when undone.
+
+## Shared utilities and CPU work
+
+Keep storage, transport and presentation adapters thin. Shared behavior lives at
+the lowest existing layer that owns it:
+
+| Module | Shared behavior and work avoided |
+| --- | --- |
+| `daw-core::audio_analysis` (private) | Timing validation, interpolation, transient and silence decisions shared by resident and streamed sources. Disk readers retain bounded windows and cancellation. |
+| `daw-engine::automation` (private) | Prepared pattern lookup shared by channel controls, sends, plug-ins and live-edit preparation. |
+| `daw-plugins::audio_buffers` (private) | Bus limits, stereo mapping and reusable output storage. The helper recycles samples after sending each response and buffers pipe writes, flushing each complete reply. |
+| `daw-tools::bounded_json` | Bounded encoded-byte counting and serialization shared by tool validation, AI and MCP. Provider requests reuse their validated encoded body. |
+| `daw-tools::query` (private) | Read-only query dispatch, pagination and redacted summaries, separate from mutation dispatch. |
+| `daw-ui::color_math` / `search_cache` (private) | Exact byte-channel color lookup and reusable parameter-search indices. Search signatures include matching and ordering metadata; live parameter values are read separately. |
+| `daw-app::track_order` | Indexed hierarchy traversal and shared sibling movement. Mixer output grouping uses indexed ownership instead of nested track scans. |
+| `daw-app::mcp_bridge` | Transport queues requests and wakes the UI after publishing them; song access remains on the control thread. |
+
+An inactive app without an installed audio engine requests a one-second
+maintenance heartbeat. User input and background completion wake the UI;
+individual active jobs request faster polling. A paused engine retains the
+100 ms input/error heartbeat, and playback retains its normal refresh rate.
+Reducing idle repaint work does not change the audio buffer or device settings.
+
+Color lookup tables preserve the original output for every byte value.
+Automation tests compare the compiled lookup with the core model across overlaps,
+boundaries and seeks; render tests compare manual and automated PCM exactly.
+Plug-in tests cover retained buffer capacity, changing block sizes, silence after
+errors/disconnection and bit-exact protocol samples. These are targeted CPU
+improvements, not a measured whole-application CPU percentage.
+
+For an isolated automation lookup comparison, run the ignored timing test in an
+optimized build; it reports timings without imposing machine-dependent limits:
+
+```sh
+cargo test --locked --release -p daw-engine --lib automation::tests::benchmark_pattern_lookup -- --ignored --nocapture
+```
+
+## Live editing
 
 Compatible edits also preview while a mouse gesture is held; history still commits the entire gesture as one Undo step on release. Returning to the original value restores playback without adding a history entry. During transport playback, piano-roll edits sound through the live timeline rather than adding an extra audition voice. Stopped note editing and the piano keyboard retain held-note audition.
 
@@ -128,6 +167,15 @@ project's [implementation rules](../claude.md).
 `TrackKind::Automation` owns one `AutomationLane` targeting a stable track ID and parameter (with stable insert or bus IDs where needed). Lanes have ordered beat/value points, unique IDs, normalized values in 0–1, and Step, Linear, or Smooth interpolation. Smooth uses monotone cubic Hermite interpolation (PCHIP), bounded to neighboring values. Endpoint values hold outside the point range; an empty or muted lane leaves the manual parameter unchanged. Duplicate lanes for one parameter are rejected. Automation tracks carry no audio edges, clips, inserts, or sends, and do not extend song duration.
 
 The render graph binds curves during preparation. Channel gain, pan, and send gain evaluate at sample positions corrected for each processing stage's upstream latency. VST3 parameters update between 256-frame processing blocks on the render worker; they are not sample-accurate. Neither curve evaluation nor plug-in IPC runs in the device callback.
+
+`daw-engine::automation` uses direct core lookup for lanes with up to 32 patterns,
+avoiding interval-index preparation and lookup overhead on small lanes. Larger
+lanes compile overlapping pattern precedence into disjoint intervals during
+preparation, including live-edit preparation. Rendering uses binary lookup to
+select a pattern and the existing core interpolation to evaluate it. Settled
+manual trim and fader factors are computed once per block; active
+automation and smoothing ramps retain per-sample evaluation. These optimizations
+preserve sample values, overlap priority, seek behavior and summation order.
 
 Curves persist with the project and use normal snapshot undo. Removing a target channel, insert, or send removes dependent lanes. Replacing a VST instrument clears its old parameter lanes to avoid applying old parameter IDs to another plug-in. The editor uses the shared, model-independent `daw-ui::curve_editor`; asynchronous parameter discovery loads a temporary isolated helper, reads parameter metadata, and closes it.
 

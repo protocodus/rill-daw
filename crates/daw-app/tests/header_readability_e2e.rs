@@ -72,6 +72,8 @@ fn header_captions_stay_bounded_and_exact_popup_dismissal_preserves_precision() 
     let fixture = app.directory.path().join("readable-headers.rill");
     project.save(&fixture).unwrap();
     let original = app.command(json!({"command":"open", "path":fixture}));
+    // Exercise expanded captions explicitly; new sessions start in Compact.
+    unchanged(&app.set_track_density("Detailed"), &original);
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
         app.command(json!({"command":"system_theme", "dark":dark}));
         for width in [1100, 1480] {

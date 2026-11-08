@@ -638,7 +638,7 @@ impl DawApp {
     }
 }
 
-/// Keep explicit legacy saves, and make extensionless native saves portable.
+/// Normal saves use the portable extension; legacy JSON remains an import path.
 /// Appending preserves dots in names without producing `Song.RILL.rill`.
 fn normalize_document_path(mut path: PathBuf, kind: DocumentDialog) -> PathBuf {
     let (extension, accepted): (&str, &[&str]) = match kind {

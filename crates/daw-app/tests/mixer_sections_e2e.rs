@@ -1,6 +1,5 @@
-//! Mixer strips separate their signal-flow sections by space alone: no
-//! section frames, and outlines only on the gain field, the pan and fader
-//! troughs and the meter troughs. The controls stay directly editable with the mouse.
+//! Mixer sections use spacing instead of enclosing frames. Outlines belong to
+//! individual input fields, processing actions and troughs, which remain mouse-editable.
 mod common;
 use common::Harness;
 use daw_core::Project;
@@ -41,12 +40,40 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
                     .collect::<Vec<_>>(),
                 ["Source", "Effects", "Volume & pan", "Output & sends"]
             );
-            for pair in sections.windows(2) {
-                let gap = pair[1]["rect"]["min"][1].as_f64().unwrap()
-                    - pair[0]["rect"]["max"][1].as_f64().unwrap();
+            // Input trim sits before the inserts; post-fader RMS statistics
+            // sit before routing. Neither belongs to an empty section gap.
+            let source_role_space = if channel["bus"] == true {
+                0.0
+            } else {
+                state["mixer"]["role_height"].as_f64().unwrap()
+            };
+            for (previous, next, expected_gap) in [
+                (
+                    &sections[0]["rect"],
+                    &channel["input_gain"],
+                    source_role_space + f64::from(daw_ui::MIXER_SECTION_GAP),
+                ),
+                (
+                    &channel["input_gain"],
+                    &sections[1]["rect"],
+                    f64::from(daw_ui::MIXER_ROW_GAP),
+                ),
+                (
+                    &sections[1]["rect"],
+                    &sections[2]["rect"],
+                    f64::from(daw_ui::MIXER_SECTION_GAP),
+                ),
+                (&sections[2]["rect"], &channel["statistics"], 0.0),
+                (
+                    &channel["statistics"],
+                    &sections[3]["rect"],
+                    f64::from(daw_ui::MIXER_SECTION_GAP + daw_ui::MIXER_ROW_GAP),
+                ),
+            ] {
+                let gap = next["min"][1].as_f64().unwrap() - previous["max"][1].as_f64().unwrap();
                 assert!(
-                    (gap - 13.0).abs() < 0.6,
-                    "sections are separated by one 13 pt gap: {gap} in {sections:?}"
+                    (gap - expected_gap).abs() < 0.6,
+                    "Expected {expected_gap} pt gap, got {gap} between {previous} and {next}"
                 );
             }
             let within = |rect: &Value, area: &Value| {
@@ -75,10 +102,18 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
                 .collect();
             for shape in &outlined {
                 assert!(
-                    ["gain", "pan", "fader", "meter"]
-                        .iter()
-                        .any(|area| within(&shape["rect"], &channel[*area])),
-                    "only the gain field, pan and fader troughs and meter are outlined: {shape}"
+                    [
+                        "input_gain",
+                        "effects",
+                        "analyze",
+                        "gain",
+                        "pan",
+                        "fader",
+                        "meter"
+                    ]
+                    .iter()
+                    .any(|area| within(&shape["rect"], &channel[*area])),
+                    "outlines must belong to input/volume fields, processing actions or troughs: {shape}"
                 );
             }
             assert!(

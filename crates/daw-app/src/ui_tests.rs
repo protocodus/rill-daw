@@ -1217,3 +1217,23 @@ fn detaching_a_midi_instance_keeps_audio_equivalent_and_does_not_rebuild_graph()
         assert!(!crate::app::audio_equivalent(&before, &changed));
     }
 }
+
+#[test]
+fn idle_ui_sleeps_without_delaying_pointer_navigation() {
+    let mut harness = Harness::new(0.0);
+    let mut output = harness.settle_full();
+    for _ in 0..12 {
+        output = harness.full_frame(RawInput::default());
+    }
+    assert!(harness.app.engine.is_none());
+    let repaint = output.viewport_output[&egui::ViewportId::ROOT].repaint_delay;
+    assert!(
+        repaint >= std::time::Duration::from_millis(900),
+        "idle repaint: {repaint:?}"
+    );
+    // OS input wakes the UI independently of the idle heartbeat. Drive actual
+    // pointer events and verify that opening the mixer takes effect immediately.
+    let mixer = text_position(&output, "Mixer", 0.0) + Vec2::new(8.0, 8.0);
+    harness.full_click(mixer);
+    assert_eq!(harness.app.view, WorkspaceView::Mixer);
+}

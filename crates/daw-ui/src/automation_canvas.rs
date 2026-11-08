@@ -136,21 +136,64 @@ pub fn automation_canvas_with_segments_at(
         );
         targets.push((point.id, target));
         hit |= point_response.hovered() || point_response.dragged() || point_response.clicked();
-        if editable && point_response.drag_started() {
-            ui.ctx()
-                .data_mut(|data| data.insert_temp(id.with("origin"), *point));
-        }
-        if editable && point_response.dragged() {
+        // Inline plots can be only a few dozen points high: waiting for egui's
+        // general drag threshold discards audible value changes. Capture the
+        // primary press and use its total movement, including sub-threshold
+        // drags, while preserving right-click point menus.
+        let primary_down = point_response.is_pointer_button_down_on()
+            && ui.input(|input| input.pointer.primary_down());
+        let primary_release = ui.input(|input| input.pointer.primary_released())
+            && (point_response.clicked_by(egui::PointerButton::Primary)
+                || point_response.drag_stopped_by(egui::PointerButton::Primary));
+        if editable && (primary_down || primary_release) {
+            let origin_id = point_response.id.with("origin");
+            // A native frame can contain press, movement and release together.
+            // Recover the actual press event, not its final pointer position.
+            let press = ui.input(|input| {
+                input.events.iter().rev().find_map(|event| match event {
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed: true,
+                        ..
+                    } => Some(*pos),
+                    _ => None,
+                })
+            });
+            if let Some(mut press) = press {
+                if let Some(transform) = ui
+                    .ctx()
+                    .layer_transform_from_global(point_response.layer_id)
+                {
+                    press = transform * press;
+                }
+                ui.ctx()
+                    .data_mut(|data| data.insert_temp(origin_id, (*point, press)));
+            }
             let origin = ui
                 .ctx()
-                .data(|data| data.get_temp::<CurvePoint>(id.with("origin")))
-                .unwrap_or(*point);
-            let delta = point_response.total_drag_delta().unwrap_or_default();
-            edit = Some(CurveEdit::Move {
-                id: point.id,
-                x: snap(origin.x + delta.x as f64 / viewport.pixels_per_beat as f64),
-                value: (origin.value - delta.y / rect.height()).clamp(0.0, 1.0),
-            });
+                .data(|data| data.get_temp::<(CurvePoint, Pos2)>(origin_id));
+            if let Some(((origin, start), current)) =
+                origin.zip(point_response.interact_pointer_pos())
+            {
+                let delta = current - start;
+                let (x, value) = if delta == Vec2::ZERO {
+                    // Returning to the press restores even an off-grid point.
+                    (origin.x, origin.value)
+                } else {
+                    (
+                        snap(origin.x + delta.x as f64 / viewport.pixels_per_beat as f64),
+                        (origin.value - delta.y / rect.height()).clamp(0.0, 1.0),
+                    )
+                };
+                if x != point.x || value != point.value {
+                    edit = Some(CurveEdit::Move {
+                        id: point.id,
+                        x,
+                        value,
+                    });
+                }
+            }
         }
         if editable {
             point_response.clone().context_menu(|ui| {

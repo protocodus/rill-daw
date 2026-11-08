@@ -3,6 +3,7 @@
 //! render worker, so plugin work cannot block the hardware callback.
 mod audio_asset;
 mod audio_stream;
+mod automation;
 mod device;
 mod join;
 mod meter;

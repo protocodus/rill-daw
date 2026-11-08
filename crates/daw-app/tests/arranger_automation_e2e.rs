@@ -237,6 +237,12 @@ fn points_patterns_ghosts_placement_precedence_undo_and_archive_work_in_arranger
     let moved=app.command(json!({"command":"pointer","phase":"drag","x":at.0,"y":at.1,"to_x":at.0+2.0*ppb,"to_y":at.1}));
     assert_eq!(lane(&moved)["clips"][1]["start"], 8.0);
     let at = center(&diagram(&moved)["clips"][0]["points"][1]["rect"]);
+    let unchanged = click(&mut app, at, "primary");
+    assert_eq!(
+        unchanged["project"], moved["project"],
+        "a point click without movement is not an edit"
+    );
+    assert_eq!(unchanged["history"], moved["history"]);
     let plot = &diagram(&moved)["clips"][0]["plot"];
     let delta = (plot["max"][1].as_f64().unwrap() - plot["min"][1].as_f64().unwrap()) * 0.2;
     let shared = app.command(
@@ -252,6 +258,13 @@ fn points_patterns_ghosts_placement_precedence_undo_and_archive_work_in_arranger
                 < 0.01
         );
     }
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(
+        undone["project"], moved["project"],
+        "one undo restores the complete precise drag"
+    );
+    let redone = app.command(json!({"command":"key","key":"Z","cmd":true,"shift":true}));
+    assert_eq!(redone["project"], shared["project"]);
     // Clearing arranger points falls through to the manual gain outside clips.
     let state = app.inspect();
     let at = point(&state, 1.0, 0.5);

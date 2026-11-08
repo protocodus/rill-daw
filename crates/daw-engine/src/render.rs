@@ -1,3 +1,4 @@
+use crate::automation::CompiledAutomation;
 use crate::meter::{ChannelMeter, ChannelMeters};
 use crate::quality::{self, RenderOptions};
 use anyhow::{Context, Result, bail, ensure};
@@ -296,7 +297,7 @@ struct AutomatedValue {
     manual: f32,
     smooth_value: f32,
     smooth_remaining: u32,
-    lane: Option<AutomationLane>,
+    lane: Option<CompiledAutomation>,
 }
 
 fn lane_enabled(project: &Project, track: &daw_core::Track) -> bool {
@@ -315,7 +316,7 @@ fn lane_enabled(project: &Project, track: &daw_core::Track) -> bool {
 
 impl AutomatedValue {
     fn new(project: &Project, track: u64, parameter: AutomationParameter, manual: f32) -> Self {
-        let lane = active_automation_lane(project, track, parameter).cloned();
+        let lane = active_automation_lane(project, track, parameter).map(CompiledAutomation::new);
         Self {
             manual,
             lane,
@@ -331,6 +332,12 @@ impl AutomatedValue {
         }
     }
 
+    /// Evaluate settled manual controls once per block. A ramp still advances
+    /// for every sample, even while an automation lane takes precedence.
+    fn constant(&self) -> Option<f32> {
+        (self.lane.is_none() && self.smooth_remaining == 0).then_some(self.smooth_value)
+    }
+
     #[inline]
     fn next_value(&mut self, beat: f64) -> f32 {
         if self.smooth_remaining > 0 {
@@ -341,7 +348,7 @@ impl AutomatedValue {
             .as_ref()
             .and_then(|lane| {
                 lane.effective_value_at(beat)
-                    .map(|value| lane.target.parameter.denormalize(value))
+                    .map(|value| lane.parameter().denormalize(value))
             })
             .unwrap_or(self.smooth_value)
     }
@@ -352,7 +359,7 @@ impl AutomatedValue {
             .as_ref()
             .and_then(|lane| {
                 lane.effective_value_at(beat)
-                    .map(|value| lane.target.parameter.denormalize(value))
+                    .map(|value| lane.parameter().denormalize(value))
             })
             .unwrap_or(self.manual)
     }
@@ -375,6 +382,12 @@ fn active_automation_lane(
     })
 }
 
+#[inline]
+fn fader_factors(gain: f32, pan: f32) -> [f32; 2] {
+    let pan = pan.clamp(-1.0, 1.0);
+    [gain * (1.0 - pan.max(0.0)), gain * (1.0 + pan.min(0.0))]
+}
+
 fn send_active(project: &Project, track: u64, send: &daw_core::Send) -> bool {
     send.gain > 0.0
         || active_automation_lane(
@@ -389,7 +402,7 @@ fn send_active(project: &Project, track: u64, send: &daw_core::Send) -> bool {
 
 struct PluginAutomation {
     id: u32,
-    lane: AutomationLane,
+    lane: CompiledAutomation,
     previous: Option<f32>,
     action_sequence: u64,
     manual: Option<f32>,
@@ -413,7 +426,7 @@ fn plugin_automation(project: &Project, track: u64, effect: Option<u64>) -> Vec<
                     || lane.clips.iter().any(|clip| !clip.points.is_empty())))
             .then(|| PluginAutomation {
                 id,
-                lane: lane.clone(),
+                lane: CompiledAutomation::new(lane),
                 previous: None,
                 action_sequence: 0,
                 manual: project.track(track).and_then(|track| {
@@ -446,19 +459,17 @@ fn initialize_automation_defaults(
     parameters: &mut [PluginAutomation],
     read: impl FnOnce() -> Result<Vec<daw_plugins::ParameterInfo>>,
 ) -> Result<()> {
-    if !parameters.iter().any(|parameter| {
-        parameter.manual.is_none()
-            && parameter.lane.points.is_empty()
-            && !parameter.lane.clips.is_empty()
-    }) {
+    if !parameters
+        .iter()
+        .any(|parameter| parameter.manual.is_none() && parameter.lane.pattern_only())
+    {
         return Ok(());
     }
     let defaults = read()?;
-    for parameter in parameters.iter_mut().filter(|parameter| {
-        parameter.manual.is_none()
-            && parameter.lane.points.is_empty()
-            && !parameter.lane.clips.is_empty()
-    }) {
+    for parameter in parameters
+        .iter_mut()
+        .filter(|parameter| parameter.manual.is_none() && parameter.lane.pattern_only())
+    {
         parameter.manual = Some(
             defaults
                 .iter()
@@ -511,7 +522,7 @@ fn apply_plugin_parameter_change(
     for parameter in parameters.iter_mut().filter(|parameter| parameter.id == id) {
         parameter.manual = Some(value as f32);
         if let Some(sequence) = override_sequence {
-            parameter.lane.override_value = Some(value as f32);
+            parameter.lane.set_override_value(Some(value as f32));
             parameter.previous = Some(value as f32);
             parameter.action_sequence = sequence;
         } else {
@@ -1181,15 +1192,17 @@ impl RenderTrack {
         }
         // Convert once after every source/bus contribution is accumulated.
         // Plug-in buffers and graph edges retain their f32 representation.
+        let input_gain = self.input_gain.constant();
         for index in 0..count {
-            let position = if context.timeline {
-                start as i64 + index as i64 - i64::from(self.source_arrival)
-            } else {
-                start as i64
-            };
-            let gain = self
-                .input_gain
-                .next_value(position as f64 * beats_per_sample);
+            let gain = input_gain.unwrap_or_else(|| {
+                let position = if context.timeline {
+                    start as i64 + index as i64 - i64::from(self.source_arrival)
+                } else {
+                    start as i64
+                };
+                self.input_gain
+                    .next_value(position as f64 * beats_per_sample)
+            });
             self.left[index] = self.mix_left[index] as f32 * gain;
             self.right[index] = self.mix_right[index] as f32 * gain;
         }
@@ -1267,6 +1280,11 @@ impl RenderTrack {
                 }
             }
         }
+        let fader = self
+            .gain
+            .constant()
+            .zip(self.pan.constant())
+            .map(|(gain, pan)| fader_factors(gain, pan));
         for index in 0..count {
             let delayed = self.delay.process([self.left[index], self.right[index]]);
             self.left[index] = delayed[0];
@@ -1274,18 +1292,20 @@ impl RenderTrack {
             if let Some(tap) = &mut self.freeze_tap {
                 tap.frames[index] = tap.delay.process(delayed);
             }
-            let position = if context.timeline {
-                start as i64 + index as i64 - self.latency as i64
-            } else {
-                start as i64
-            };
-            let beat = position as f64 * beats_per_sample;
-            let gain = self.gain.next_value(beat);
-            let pan = self.pan.next_value(beat).clamp(-1.0, 1.0);
+            let factors = fader.unwrap_or_else(|| {
+                let position = if context.timeline {
+                    start as i64 + index as i64 - self.latency as i64
+                } else {
+                    start as i64
+                };
+                let beat = position as f64 * beats_per_sample;
+                let gain = self.gain.next_value(beat);
+                fader_factors(gain, self.pan.next_value(beat))
+            });
             // Insert scratch buffers are free after the chain. Reuse them for
             // fader factors so multiple sends evaluate the lane only once.
-            self.insert_left[index] = gain * (1.0 - pan.max(0.0));
-            self.insert_right[index] = gain * (1.0 + pan.min(0.0));
+            self.insert_left[index] = factors[0];
+            self.insert_right[index] = factors[1];
             self.post_fader[index] = [
                 self.left[index] * self.insert_left[index],
                 self.right[index] * self.insert_right[index],

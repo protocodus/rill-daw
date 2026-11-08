@@ -185,13 +185,16 @@ fn section_bounds_stay_separate_and_compact_headers_keep_channel_access() {
                 let opened = click(&mut app, &details);
                 assert_eq!(opened["popups"]["properties"], true);
                 assert_eq!(opened["selected_track"], tracks[0]);
-                assert!(
-                    opened["visible_labels"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .any(|label| label == "Gain")
-                );
+                for control in ["Input gain", "Volume"] {
+                    assert!(
+                        opened["visible_labels"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .any(|label| label == control),
+                        "Channel details must expose {control}"
+                    );
+                }
                 unchanged(&opened, &original);
                 unchanged(&app.key("Escape"), &original);
             }
@@ -206,9 +209,7 @@ fn channel_sections_route_actions_to_the_correct_track_and_preserve_undo() {
     let [audio, midi, bus] = fixture(&mut app);
     // This workflow exercises the direct routing/source rows in Detailed
     // headers. Compact access is covered separately through Channel details.
-    app.click("View");
-    app.click("Track density");
-    app.click("Detailed");
+    app.set_track_density("Detailed");
     let original = app.inspect();
     for (control, field) in [("mute", "mute"), ("solo", "solo")] {
         let state = app.inspect();

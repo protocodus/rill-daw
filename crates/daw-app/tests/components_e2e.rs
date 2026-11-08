@@ -224,7 +224,7 @@ fn properties_controls_and_library_effect_mixer_navigation_work_in_both_themes_a
                 false
             );
             let channel = app.click("Channel");
-            accessible(&channel, &["Gain", "Pan", "Mute", "Solo"]);
+            accessible(&channel, &["Input gain", "Volume", "Pan", "Mute", "Solo"]);
             assert_eq!(app.click("Mute")["project"]["tracks"][0]["mute"], true);
             assert_eq!(app.click("Mute")["project"]["tracks"][0]["mute"], false);
             front(&mut app, "Track");
@@ -298,15 +298,27 @@ fn properties_controls_and_library_effect_mixer_navigation_work_in_both_themes_a
             let right = target["max"][0].as_f64().unwrap();
             let bottom = target["max"][1].as_f64().unwrap();
             assert!(left >= 0.0 && top_y >= 0.0 && right <= 1100.0 && bottom <= 720.0);
-            assert!(right > left && bottom - top_y >= f64::from(daw_ui::tokens::CONTROL_HEIGHT));
+            let control_height = if scrolled["mixer"]["compact"] == true {
+                daw_ui::tokens::COMPACT_HEIGHT
+            } else {
+                daw_ui::tokens::CONTROL_HEIGHT
+            };
+            assert!(
+                right > left && bottom - top_y >= f64::from(control_height),
+                "Output target must remain usable at density {density}: {target}",
+            );
             assert!(
                 top_y
                     < top["mixer"]["channels"][0]["target"]["min"][1]
                         .as_f64()
                         .unwrap()
             );
-            let routing = app.command(json!({"command":"pointer","phase":"click",
+            let output_menu = app.command(json!({"command":"pointer","phase":"click",
                 "x":(left+right)*0.5,"y":(top_y+bottom)*0.5}));
+            accessible(&output_menu, &["Output of Calm controls", "Routing…"]);
+            assert_eq!(output_menu["project"], scrolled["project"]);
+            assert_eq!(output_menu["history"], scrolled["history"]);
+            let routing = app.click("Routing…");
             assert_eq!(routing["popups"]["routing"], true);
             assert_eq!(routing["selected_track"], original["tracks"][0]["id"]);
             accessible(&routing, &["Routing of Calm controls", "Master output"]);

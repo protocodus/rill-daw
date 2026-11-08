@@ -1,6 +1,10 @@
 //! Audio-region visualization shared by clip editors and other timeline views.
 
-use crate::{TimelineViewport, theme};
+use crate::{
+    TimelineViewport,
+    color_math::{contrast_luminance, luminance},
+    theme,
+};
 use egui::{Color32, Painter, Pos2, Rect, Shape, Stroke};
 use std::sync::Arc;
 
@@ -123,30 +127,17 @@ pub struct WaveformColumn {
     pub maximum: f32,
 }
 
-fn waveform_color_contrast(a: Color32, b: Color32) -> f32 {
-    let luminance = |color: Color32| {
-        let linear = |value: u8| {
-            let value = f32::from(value) / 255.0;
-            if value <= 0.04045 {
-                value / 12.92
-            } else {
-                ((value + 0.055) / 1.055).powf(2.4)
-            }
-        };
-        0.2126 * linear(color.r()) + 0.7152 * linear(color.g()) + 0.0722 * linear(color.b())
-    };
-    let (a, b) = (luminance(a), luminance(b));
-    (a.max(b) + 0.05) / (a.min(b) + 0.05)
-}
-
 /// Keep the saturated clip hue visible against waveform surfaces. Adjust its
 /// brightness only when needed; darken in Light and lift dark colors in Dark.
 /// A small contrast margin accounts for integer color rounding. Preserve alpha.
 pub fn waveform_peak_color(color: Color32, palette: theme::Palette) -> Color32 {
     let opaque = color.to_opaque();
+    let background = luminance(palette.bg);
+    let raised = luminance(palette.raised);
     let readable = |candidate| {
-        waveform_color_contrast(candidate, palette.bg) >= 3.2
-            && waveform_color_contrast(candidate, palette.raised) >= 3.2
+        let foreground = luminance(candidate);
+        contrast_luminance(foreground, background) >= 3.2
+            && contrast_luminance(foreground, raised) >= 3.2
     };
     if readable(opaque) {
         return color;

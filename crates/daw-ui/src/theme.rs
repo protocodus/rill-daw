@@ -1,6 +1,9 @@
 //! Context-local Rill palettes. Native controls and musical canvases resolve the
 //! same current egui theme, including live operating-system appearance changes.
-use crate::tokens;
+use crate::{
+    color_math::{contrast_luminance, luminance},
+    tokens,
+};
 use egui::{Color32, FontId, Stroke, TextStyle};
 use serde::{Deserialize, Serialize};
 
@@ -165,18 +168,7 @@ pub fn palette(ctx: &egui::Context) -> Palette {
 }
 /// Choose readable foreground text on user-defined track colors and note fills.
 pub fn contrast_text(background: Color32) -> Color32 {
-    let channel = |value: u8| {
-        let value = f32::from(value) / 255.0;
-        if value <= 0.04045 {
-            value / 12.92
-        } else {
-            ((value + 0.055) / 1.055).powf(2.4)
-        }
-    };
-    let luminance = 0.2126 * channel(background.r())
-        + 0.7152 * channel(background.g())
-        + 0.0722 * channel(background.b());
-    if luminance > 0.179 {
+    if luminance(background) > 0.179 {
         Color32::BLACK
     } else {
         Color32::WHITE
@@ -384,22 +376,11 @@ pub fn color(rgb: [u8; 3]) -> Color32 {
 /// Retain a track's hue while giving labels and foreground marks contrast on themed surfaces.
 pub fn readable_track_color(ctx: &egui::Context, rgb: [u8; 3]) -> Color32 {
     let light = ctx.theme() == egui::Theme::Light;
-    let luminance = |rgb: Color32| {
-        let linear = |value: u8| {
-            let value = f32::from(value) / 255.0;
-            if value <= 0.04045 {
-                value / 12.92
-            } else {
-                ((value + 0.055) / 1.055).powf(2.4)
-            }
-        };
-        0.2126 * linear(rgb.r()) + 0.7152 * linear(rgb.g()) + 0.0722 * linear(rgb.b())
-    };
     let background = luminance(palette(ctx).panel);
     let mut color = color(rgb);
     for _ in 0..24 {
         let foreground = luminance(color);
-        if (foreground.max(background) + 0.05) / (foreground.min(background) + 0.05) >= 4.5 {
+        if contrast_luminance(foreground, background) >= 4.5 {
             break;
         }
         let adjust = |value: u8| {

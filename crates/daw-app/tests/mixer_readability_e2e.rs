@@ -211,6 +211,12 @@ fn mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mo
                 .contains(Bounds::from(label(&state, "Bus · 1 in")))
         );
         let output = Bounds::from(&drum_channel["target"]);
+        let rail_inset = if output.height() > f64::from(daw_ui::tokens::COMPACT_HEIGHT) {
+            daw_ui::tokens::SPACE_SM
+        } else {
+            daw_ui::tokens::SPACE_XS
+        };
+        let rail_height = output.height() - 2.0 * f64::from(rail_inset);
         assert!(output.contains(Bounds::from(label(&state, "Music"))));
         assert!(Bounds::from(&drum_channel["sends"]).contains(Bounds::from(label(&state, "Room"))));
         assert!(
@@ -221,8 +227,9 @@ fn mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mo
                 .any(|paint| {
                     let rail = Bounds::from(&paint["rect"]);
                     output.contains(rail)
-                        && rail.width() <= 5.0
-                        && rail.height() >= 12.0
+                        && (rail.width() - f64::from(daw_ui::MIXER_RAIL_WIDTH)).abs()
+                            <= 1.0 / density
+                        && (rail.height() - rail_height).abs() <= 1.0 / density
                         && paint["fill"] == json!([230, 160, 70, 255])
                 }),
             "Output must identify the destination bus with its track color"

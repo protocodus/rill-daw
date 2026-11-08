@@ -61,7 +61,12 @@ fn unchanged(state: &Value, baseline: &Value) {
 
 #[test]
 fn mixer_measures_after_processing_and_exposes_full_size_mute_solo_controls() {
-    for (dark, density) in [(false, 1.0), (true, 2.0)] {
+    for (dark, density, height) in [
+        (false, 1.0, 900),
+        (false, 1.0, 1100),
+        (true, 2.0, 900),
+        (true, 2.0, 1100),
+    ] {
         let mut app = Harness::new();
         let mut project = Project::new();
         let source = project.add_audio_track("Source");
@@ -72,10 +77,16 @@ fn mixer_measures_after_processing_and_exposes_full_size_mute_solo_controls() {
         project.save(&path).unwrap();
         app.command(json!({"command":"open", "path":path}));
         app.command(json!({"command":"system_theme", "dark":dark}));
-        app.command(json!({"command":"viewport", "width":1100, "height":900,
+        app.command(json!({"command":"viewport", "width":1100, "height":height,
             "pixels_per_point":density}));
         let baseline = app.click("Mixer");
         let state = app.command(json!({"command":"inspect", "paint":true}));
+        assert_eq!(state["mixer"]["compact"], height == 900);
+        let control_height = if height == 900 {
+            daw_ui::tokens::COMPACT_HEIGHT
+        } else {
+            daw_ui::tokens::CONTROL_HEIGHT
+        };
         unchanged(&state, &baseline);
         for id in [source, other, bus] {
             let channel = channel(&state, id);
@@ -104,13 +115,12 @@ fn mixer_measures_after_processing_and_exposes_full_size_mute_solo_controls() {
             assert!(edge(&channel["gain"], "max", 1) <= edge(&channel["meter"], "min", 1));
             assert!(edge(&channel["meter"], "max", 1) <= edge(&channel["target"], "min", 1));
             assert!(edge(&channel["target"], "max", 1) <= edge(&channel["sends"], "min", 1));
-            assert!(edge(&channel["sends"], "max", 1) <= 900.0);
+            assert!(edge(&channel["sends"], "max", 1) <= f64::from(height));
             for control in ["mute", "solo"] {
                 let rect = &channel[control];
                 assert!(edge(rect, "max", 0) - edge(rect, "min", 0) >= 60.0);
                 assert!(
-                    edge(rect, "max", 1) - edge(rect, "min", 1)
-                        >= f64::from(daw_ui::tokens::CONTROL_HEIGHT) - 0.1
+                    edge(rect, "max", 1) - edge(rect, "min", 1) >= f64::from(control_height) - 0.1
                 );
             }
         }

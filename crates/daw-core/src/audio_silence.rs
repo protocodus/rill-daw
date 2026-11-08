@@ -19,7 +19,7 @@ impl Default for AudioSilenceSettings {
     }
 }
 impl AudioSilenceSettings {
-    fn validate(self) -> Result<()> {
+    pub(crate) fn validate(self) -> Result<()> {
         ensure!(
             self.threshold_db.is_finite() && (-96.0..=0.0).contains(&self.threshold_db),
             "Threshold must be between -96 and 0 dBFS"
@@ -47,74 +47,15 @@ pub fn detect_audio_silence(
     range: (f64, f64),
     settings: AudioSilenceSettings,
 ) -> Result<Vec<(f64, f64)>> {
-    clip.audio_region(range.0, range.1)?;
     data.validate()?;
-    settings.validate()?;
-    ensure!(
-        tempo.is_finite() && tempo > 0.0 && clip.source_rate.is_finite() && clip.source_rate > 0.0,
-        "Invalid audio timing"
-    );
-    let source_frames_per_beat = f64::from(data.sample_rate) * 60.0 / tempo * clip.source_rate;
-    let frames = ((range.1 - range.0) * source_frames_per_beat).ceil();
-    ensure!(
-        frames <= 134_217_728.0,
-        "Audio selection is too long for silence analysis"
-    );
-    let frames = frames as usize;
-    let minimum = (f64::from(settings.minimum_silence_ms)
-        * 0.001
-        * f64::from(data.sample_rate)
-        * clip.source_rate)
-        .ceil()
-        .max(1.0) as usize;
-    let padding = f64::from(settings.padding_ms) * 0.001 * tempo / 60.0;
-    let threshold = 10_f32.powf(settings.threshold_db / 20.0);
-    let mut quiet = None;
-    let mut gaps = Vec::new();
-    for frame in 0..=frames {
-        let below = if frame == frames {
-            false
-        } else {
-            let beat = range.0 - clip.start + frame as f64 / source_frames_per_beat;
-            let source = clip.audio_source_frame(beat, tempo, data.sample_rate);
-            (0..data.channels).all(|channel| audio_sample(data, source, channel).abs() < threshold)
-        };
-        if below {
-            quiet.get_or_insert(frame);
-        } else if let Some(start) = quiet.take()
-            && frame - start >= minimum
-        {
-            let left = if start == 0 {
-                range.0
-            } else {
-                range.0 + start as f64 / source_frames_per_beat + padding
-            };
-            let right = if frame == frames {
-                range.1
-            } else {
-                range.0 + frame as f64 / source_frames_per_beat - padding
-            };
-            if right > left {
-                ensure!(
-                    gaps.len() < 2048,
-                    "Too many silent regions; increase Minimum silence"
-                );
-                gaps.push((left, right));
-            }
-        }
-    }
-    let mut retained = Vec::new();
-    let mut start = range.0;
-    for (left, right) in gaps {
-        if left > start {
-            retained.push((start, left));
-        }
-        start = right;
-    }
-    if start < range.1 {
-        retained.push((start, range.1));
-    }
-    Ok(retained)
+    crate::audio_analysis::AudioAnalysis::new(
+        clip,
+        tempo,
+        data.sample_rate,
+        data.channels,
+        |frame, channel| Ok(audio_sample(data, frame, channel)),
+    )?
+    .silence(range, settings, || Ok(()))
 }
 
 impl Project {

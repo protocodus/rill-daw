@@ -1,6 +1,7 @@
 //! Configurable source-spectrum backdrops. Build/upload each texture once; painting
 //! clips a single quad and never walks the spectrum or changes waveform data.
 use egui::{Color32, ColorImage, Painter, Rect, TextureId, pos2};
+use std::sync::LazyLock;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SpectrumPalette {
@@ -117,13 +118,47 @@ pub fn spectrum_view_controls(
     }
 }
 
-/// Build a normalized-alpha texture for a cached palette. Opacity is supplied
-/// by paint tint, so changing intensity never rebuilds or uploads the texture.
-pub fn spectrogram_palette_image(
+// Each input level is a byte, so its nonlinear alpha and palette color are
+// invariant across every source texture. These bounded tables replace up to
+// 262,144 powf/color conversions per image with byte-indexed lookups.
+static PALETTE_COLORS: LazyLock<[[Color32; 256]; 2]> = LazyLock::new(|| {
+    [SpectrumPalette::Monochrome, SpectrumPalette::BlueYellow]
+        .map(|palette| std::array::from_fn(|level| palette_color(level as u8, palette)))
+});
+static LEGACY_COLORS: LazyLock<[Color32; 256]> = LazyLock::new(|| {
+    std::array::from_fn(|level| {
+        let intensity = level as f32 / 255.0;
+        let alpha = (intensity.powf(1.6) * DEFAULT_SPECTRUM_OPACITY * 255.0).round() as u8;
+        Color32::from_white_alpha(alpha)
+    })
+});
+
+fn palette_color(level: u8, palette: SpectrumPalette) -> Color32 {
+    let level = f32::from(level) / 255.0;
+    let alpha = (level.powf(1.6) * 255.0).round() as u8;
+    let rgb = match palette {
+        SpectrumPalette::Monochrome => [255, 255, 255],
+        SpectrumPalette::BlueYellow => {
+            let (a, b, t) = if level < 0.45 {
+                ([25.0, 65.0, 190.0], [35.0, 175.0, 215.0], level / 0.45)
+            } else {
+                (
+                    [35.0, 175.0, 215.0],
+                    [255.0, 225.0, 75.0],
+                    (level - 0.45) / 0.55,
+                )
+            };
+            std::array::from_fn(|i| (a[i] + (b[i] - a[i]) * t).round() as u8)
+        }
+    };
+    Color32::from_rgba_unmultiplied(rgb[0], rgb[1], rgb[2], alpha)
+}
+
+fn image_from_levels(
     columns: usize,
     bands: usize,
     levels: &[u8],
-    palette: SpectrumPalette,
+    colors: &[Color32; 256],
 ) -> Option<ColorImage> {
     if columns == 0
         || bands == 0
@@ -136,51 +171,29 @@ pub fn spectrogram_palette_image(
     let mut pixels = vec![Color32::TRANSPARENT; levels.len()];
     for column in 0..columns {
         for band in 0..bands {
-            let level = f32::from(levels[column * bands + band]) / 255.0;
-            let alpha = (level.powf(1.6) * 255.0).round() as u8;
-            let rgb = match palette {
-                SpectrumPalette::Monochrome => [255, 255, 255],
-                SpectrumPalette::BlueYellow => {
-                    let (a, b, t) = if level < 0.45 {
-                        ([25.0, 65.0, 190.0], [35.0, 175.0, 215.0], level / 0.45)
-                    } else {
-                        (
-                            [35.0, 175.0, 215.0],
-                            [255.0, 225.0, 75.0],
-                            (level - 0.45) / 0.55,
-                        )
-                    };
-                    std::array::from_fn(|i| (a[i] + (b[i] - a[i]) * t).round() as u8)
-                }
-            };
             pixels[(bands - 1 - band) * columns + column] =
-                Color32::from_rgba_unmultiplied(rgb[0], rgb[1], rgb[2], alpha);
+                colors[usize::from(levels[column * bands + band])];
         }
     }
     Some(ColorImage::new([columns, bands], pixels))
+}
+
+/// Build a normalized-alpha texture for a cached palette. Opacity is supplied
+/// by paint tint, so changing intensity never rebuilds or uploads the texture.
+pub fn spectrogram_palette_image(
+    columns: usize,
+    bands: usize,
+    levels: &[u8],
+    palette: SpectrumPalette,
+) -> Option<ColorImage> {
+    image_from_levels(columns, bands, levels, &PALETTE_COLORS[palette.index()])
 }
 
 /// Convert time-major low-to-high log bands into a top-high texture. Call from
 /// background work, then upload once on the UI thread. Bounded alpha leaves
 /// waveforms, selection and edit handles visually dominant in either theme.
 pub fn spectrogram_image(columns: usize, bands: usize, levels: &[u8]) -> Option<ColorImage> {
-    if columns == 0
-        || bands == 0
-        || columns > 2048
-        || bands > 128
-        || columns.checked_mul(bands)? != levels.len()
-    {
-        return None;
-    }
-    let mut pixels = vec![Color32::TRANSPARENT; levels.len()];
-    for column in 0..columns {
-        for band in 0..bands {
-            let intensity = f32::from(levels[column * bands + band]) / 255.0;
-            let alpha = (intensity.powf(1.6) * DEFAULT_SPECTRUM_OPACITY * 255.0).round() as u8;
-            pixels[(bands - 1 - band) * columns + column] = Color32::from_white_alpha(alpha);
-        }
-    }
-    Some(ColorImage::new([columns, bands], pixels))
+    image_from_levels(columns, bands, levels, &LEGACY_COLORS)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -281,6 +294,72 @@ pub fn paint_audio_spectrogram(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lookup_images_match_original_color_math_for_all_levels_and_non_square_layouts() {
+        // Exercise every input byte at multiple rows/columns, including the
+        // palette transition, alpha rounding and premultiplied-color rounding.
+        let (columns, bands) = (256, 3);
+        let levels: Vec<_> = (0..columns * bands).map(|index| index as u8).collect();
+        let legacy = spectrogram_image(columns, bands, &levels).unwrap();
+        let mono = spectrogram_palette_image(columns, bands, &levels, SpectrumPalette::Monochrome)
+            .unwrap();
+        let color = spectrogram_palette_image(columns, bands, &levels, SpectrumPalette::BlueYellow)
+            .unwrap();
+        for row in 0..bands {
+            for column in 0..columns {
+                let input = levels[column * bands + bands - 1 - row];
+                let level = f32::from(input) / 255.0;
+                let alpha = (level.powf(1.6) * 255.0).round() as u8;
+                let original_rgb = if level < 0.45 {
+                    let t = level / 0.45;
+                    [25.0 + 10.0 * t, 65.0 + 110.0 * t, 190.0 + 25.0 * t]
+                } else {
+                    let t = (level - 0.45) / 0.55;
+                    [35.0 + 220.0 * t, 175.0 + 50.0 * t, 215.0 - 140.0 * t]
+                }
+                .map(|channel| channel.round() as u8);
+                let index = row * columns + column;
+                assert_eq!(
+                    legacy.pixels[index],
+                    Color32::from_white_alpha(
+                        (level.powf(1.6) * DEFAULT_SPECTRUM_OPACITY * 255.0).round() as u8,
+                    ),
+                );
+                assert_eq!(
+                    mono.pixels[index],
+                    Color32::from_rgba_unmultiplied(255, 255, 255, alpha),
+                );
+                assert_eq!(
+                    color.pixels[index],
+                    Color32::from_rgba_unmultiplied(
+                        original_rgb[0],
+                        original_rgb[1],
+                        original_rgb[2],
+                        alpha,
+                    ),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_palette_rejects_invalid_or_unbounded_image_dimensions() {
+        for (columns, bands, levels) in [
+            (0, 1, &[][..]),
+            (1, 0, &[][..]),
+            (2049, 1, &[][..]),
+            (1, 129, &[][..]),
+            (usize::MAX, usize::MAX, &[][..]),
+            (2, 3, &[0, 1, 2, 3, 4][..]),
+        ] {
+            assert!(spectrogram_image(columns, bands, levels).is_none());
+            for palette in [SpectrumPalette::Monochrome, SpectrumPalette::BlueYellow] {
+                assert!(spectrogram_palette_image(columns, bands, levels, palette).is_none());
+            }
+        }
+    }
+
     #[test]
     fn image_has_quiet_transparent_low_bands_at_bottom_and_bounded_alpha() {
         let image = spectrogram_image(2, 2, &[255, 0, 128, 64]).unwrap();

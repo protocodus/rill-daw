@@ -1103,37 +1103,53 @@ impl<'a> Slider<'a> {
 
 impl Widget for Slider<'_> {
     fn ui(mut self, ui: &mut Ui) -> Response {
+        if matches!(self.orientation, SliderOrientation::Horizontal) && !self.compact {
+            let height = if self.scale_labels {
+                crate::tokens::PARAMETER_ROW_HEIGHT
+            } else if self.mixer_style {
+                mixer_thickness(SliderOrientation::Horizontal)
+            } else {
+                crate::tokens::CONTROL_HEIGHT
+            };
+            let layout = if ui.layout().prefer_right_to_left() {
+                egui::Layout::right_to_left(egui::Align::Center)
+            } else {
+                egui::Layout::left_to_right(egui::Align::Center)
+            };
+            // Reserve the complete height before the parent centers this
+            // child, so the rail aligns with neighboring fields and actions.
+            // A wrapping row also needs the complete width of the rail,
+            // number and label. Place the group in that parent directly:
+            // an intervening scope would wrap within the remaining column.
+            let wrapping = ui.layout().is_horizontal() && ui.layout().main_wrap();
+            let width_id = ui.next_auto_id().with("slider_group_width");
+            let previous_width = wrapping
+                .then(|| ui.data(|data| data.get_temp::<f32>(width_id)))
+                .flatten();
+            let width = if wrapping {
+                previous_width.unwrap_or(ui.spacing().slider_width)
+            } else {
+                ui.available_size_before_wrap().x
+            };
+            let response = ui.allocate_ui_with_layout(egui::vec2(width, height), layout, |ui| {
+                ui.set_min_height(height);
+                ui.set_row_height(height);
+                self.add_contents(ui)
+            });
+            if wrapping {
+                let measured = response.response.rect.width();
+                if previous_width != Some(measured) {
+                    ui.data_mut(|data| data.insert_temp(width_id, measured));
+                    ui.ctx().request_discard("slider group width changed");
+                }
+            }
+            return response.inner | response.response;
+        }
         ui.scope(|ui| {
             if self.compact {
                 ui.spacing_mut().interact_size.y = 0.0;
             }
             let response = match self.orientation {
-                SliderOrientation::Horizontal if !self.compact => {
-                    let height = if self.scale_labels {
-                        crate::tokens::PARAMETER_ROW_HEIGHT
-                    } else if self.mixer_style {
-                        mixer_thickness(SliderOrientation::Horizontal)
-                    } else {
-                        crate::tokens::CONTROL_HEIGHT
-                    };
-                    let layout = if ui.layout().prefer_right_to_left() {
-                        egui::Layout::right_to_left(egui::Align::Center)
-                    } else {
-                        egui::Layout::left_to_right(egui::Align::Center)
-                    };
-                    // Reserve the complete height before the parent centers
-                    // this child. Growing a native 34-point row afterward
-                    // would leave its rail below neighboring control centers.
-                    ui.allocate_ui_with_layout(
-                        egui::vec2(ui.available_size_before_wrap().x, height),
-                        layout,
-                        |ui| {
-                            ui.set_min_height(height);
-                            ui.set_row_height(height);
-                            self.add_contents(ui)
-                        },
-                    )
-                }
                 SliderOrientation::Horizontal => ui.horizontal(|ui| self.add_contents(ui)),
                 SliderOrientation::Vertical => ui.vertical(|ui| self.add_contents(ui)),
             };

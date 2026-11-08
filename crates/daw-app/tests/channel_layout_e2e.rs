@@ -145,9 +145,9 @@ fn long_effect_and_bus_names_keep_reorder_remove_and_send_controls_reachable() {
         ] {
             visible(&state, label);
         }
-        // Generous send controls can put the output below the first viewport.
-        // Reveal it with the wheel and exercise the actual output picker.
-        let output = scroll_routing(&mut app, true);
+        // Routing follows signal order: Output precedes Sends. Reveal the top
+        // of the scroll body before exercising the actual output picker.
+        let output = scroll_routing(&mut app, false);
         visible(&output, "Master output");
         assert_eq!(output["project"], state["project"]);
         let choices = click_revealed(&mut app, "Master output");

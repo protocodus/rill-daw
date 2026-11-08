@@ -1,9 +1,9 @@
 use crate::{
     AgentConfig, Backend, Message, Provider, SYSTEM_PROMPT, ScriptedToolCall, ScriptedTurn,
 };
-use daw_tools::ToolSpec;
+use daw_tools::{ToolSpec, bounded_json};
 use reqwest::blocking::Client;
-use reqwest::header::HeaderValue;
+use reqwest::header::{CONTENT_TYPE, HeaderValue};
 use serde_json::{Value, json};
 use std::{io::Read, time::Duration};
 
@@ -30,9 +30,8 @@ impl HttpBackend {
 impl Backend for HttpBackend {
     fn turn(&mut self, messages: &[Message], tools: &[ToolSpec]) -> Result<ScriptedTurn, String> {
         let body = request_body(self.config.provider, &self.config.model, messages, tools);
-        if body.to_string().len() > MAX_RESPONSE_BYTES {
-            return Err("Assistant request exceeds context limits".into());
-        }
+        let bytes = bounded_json::to_vec(&body, MAX_RESPONSE_BYTES)
+            .map_err(|_| "Assistant request exceeds context limits")?;
         let key = self.config.api_key.expose_secret();
         let request = match self.config.provider {
             Provider::OpenAi => self
@@ -49,13 +48,17 @@ impl Backend for HttpBackend {
                     .header("anthropic-version", "2023-06-01")
             }
         };
-        let response = request.json(&body).send().map_err(|error| {
-            if error.is_timeout() {
-                "Provider request timed out"
-            } else {
-                "Could not connect to provider; check network and API settings"
-            }
-        })?;
+        let response = request
+            .header(CONTENT_TYPE, "application/json")
+            .body(bytes)
+            .send()
+            .map_err(|error| {
+                if error.is_timeout() {
+                    "Provider request timed out"
+                } else {
+                    "Could not connect to provider; check network and API settings"
+                }
+            })?;
         let status = response.status();
         if !status.is_success() {
             // Provider response bodies may echo inputs, authorization, or context.

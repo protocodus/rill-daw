@@ -48,6 +48,54 @@ fn add_curve(
 }
 
 #[test]
+fn settled_manual_controls_match_per_sample_automation_exactly() {
+    let (mut project, _directory, source) = fixture();
+    let bus = project.add_bus("Delayed return");
+    project.add_send(source, bus, 0.25, false).unwrap();
+    for id in [source, bus, 0] {
+        let track = project.track_mut(id).unwrap();
+        track.input_gain = 0.5;
+        track.gain = 0.75;
+        track.pan = 0.25;
+        track.latency_samples = 17;
+    }
+    let manual = render(&project, 8_000, 4.0).unwrap();
+    for id in [source, bus, 0] {
+        for (parameter, value) in [
+            (AutomationParameter::TrackInputGain, 0.5),
+            (AutomationParameter::TrackGain, 0.75),
+            (AutomationParameter::TrackPan, 0.25),
+        ] {
+            project
+                .add_automation_track_with_value(
+                    "Held",
+                    AutomationTarget {
+                        track: id,
+                        parameter,
+                    },
+                    parameter.normalize(value),
+                )
+                .unwrap();
+        }
+    }
+    assert_eq!(manual, render(&project, 8_000, 4.0).unwrap());
+}
+
+#[test]
+fn manual_block_shortcut_waits_until_the_smoothing_ramp_finishes() {
+    let mut control = AutomatedValue::new(&Project::new(), 0, AutomationParameter::TrackGain, 0.25);
+    assert_eq!(control.constant(), Some(0.25));
+    control.set_manual(0.75, 8_000);
+    let mut expected = 0.25_f32;
+    for remaining in (1..=40).rev() {
+        assert_eq!(control.constant(), None);
+        expected += (0.75 - expected) / remaining as f32;
+        assert_eq!(control.next_value(0.0), expected);
+    }
+    assert_eq!(control.constant(), Some(0.75));
+}
+
+#[test]
 fn native_splines_and_overrides_render_before_first_and_after_last_nodes() {
     for kind in 0..3 {
         let (mut project, _directory, source) = fixture();
@@ -310,7 +358,7 @@ fn plugin_curves_emit_held_endpoints_and_override_resume_values_without_allocati
     };
     let mut parameters = vec![PluginAutomation {
         id: 7,
-        lane,
+        lane: CompiledAutomation::new(&lane),
         previous: None,
         action_sequence: 0,
         manual: None,
@@ -327,9 +375,9 @@ fn plugin_curves_emit_held_endpoints_and_override_resume_values_without_allocati
             apply_plugin_automation(&mut parameters, -100.0, &mut set).unwrap();
             apply_plugin_automation(&mut parameters, 0.0, &mut set).unwrap();
             apply_plugin_automation(&mut parameters, f64::INFINITY, &mut set).unwrap();
-            parameters[0].lane.override_value = Some(0.55);
+            parameters[0].lane.set_override_value(Some(0.55));
             apply_plugin_automation(&mut parameters, 1.5, &mut set).unwrap();
-            parameters[0].lane.override_value = None;
+            parameters[0].lane.set_override_value(None);
             apply_plugin_automation(&mut parameters, 1.5, &mut set).unwrap();
         }),
         0
@@ -388,7 +436,7 @@ fn queued_plugin_overrides_and_prepared_resumes_follow_ui_action_order() {
         0
     );
     assert_eq!(sends, 0, "A stale override must never reach the plug-in");
-    assert_eq!(parameters[0].lane.override_value, None);
+    assert_eq!(parameters[0].lane.override_value(), None);
     assert!((parameters[0].lane.effective_value_at(1.5).unwrap() - 0.275).abs() < 1e-6);
 
     let mut older_plan = preparer.prepare(&project).unwrap();
@@ -421,7 +469,7 @@ fn queued_plugin_overrides_and_prepared_resumes_follow_ui_action_order() {
         .find(|track| track.id == owner)
         .unwrap()
         .instrument_automation;
-    assert_eq!(parameters[0].lane.override_value, Some(0.55));
+    assert_eq!(parameters[0].lane.override_value(), Some(0.55));
     assert_eq!(parameters[0].action_sequence, 4);
 
     let mut refinement = preparer.prepare(&project).unwrap();
@@ -434,7 +482,7 @@ fn queued_plugin_overrides_and_prepared_resumes_follow_ui_action_order() {
         .find(|track| track.id == owner)
         .unwrap()
         .instrument_automation;
-    assert_eq!(parameters[0].lane.override_value, Some(0.55));
+    assert_eq!(parameters[0].lane.override_value(), Some(0.55));
 
     let mut latest_resume = preparer.prepare(&project).unwrap();
     latest_resume.set_automation_sequence(5);
@@ -452,7 +500,7 @@ fn queued_plugin_overrides_and_prepared_resumes_follow_ui_action_order() {
         Ok(())
     })
     .unwrap();
-    assert_eq!(parameters[0].lane.override_value, None);
+    assert_eq!(parameters[0].lane.override_value(), None);
     assert!(
         (heard - 0.275).abs() < 1e-6,
         "Resume immediately reaches the plug-in"

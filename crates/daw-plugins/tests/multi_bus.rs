@@ -213,6 +213,62 @@ fn auxiliary_stereo_and_final_mono_inputs_mix_without_stale_audio() {
 }
 
 #[test]
+fn recycled_native_buffers_preserve_samples_and_silence_across_block_sizes() {
+    let fixture = EditorProbeFixture::build_multi_bus();
+    let mut plugin = effect(&fixture);
+    plugin.configure_audio_buses(&[1], &[]).unwrap();
+    for frames in [64, 1, 7, 64] {
+        let main_left = vec![1.0; frames];
+        let main_right = vec![2.0; frames];
+        let aux_left = vec![4.0; frames];
+        let aux_right = vec![6.0; frames];
+        let inputs = [
+            StereoBusInput {
+                bus: 0,
+                first_channel: 0,
+                left: &main_left,
+                right: &main_right,
+            },
+            StereoBusInput {
+                bus: 1,
+                first_channel: 0,
+                left: &aux_left,
+                right: &aux_right,
+            },
+        ];
+        let mut left = vec![99.0; frames];
+        let mut right = vec![99.0; frames];
+        plugin.process_bus_inputs(&inputs, frames).unwrap();
+        plugin
+            .copy_output_pair(0, 0, &mut left, &mut right)
+            .unwrap();
+        assert_eq!(left, vec![3.0; frames]);
+        assert_eq!(right, vec![5.0; frames]);
+        plugin.process_bus_inputs(&inputs[..1], frames).unwrap();
+        plugin
+            .copy_output_pair(0, 0, &mut left, &mut right)
+            .unwrap();
+        assert_eq!(left, main_left);
+        assert_eq!(right, main_right);
+
+        // Rejected blocks must silence retained output without queuing work;
+        // the following silent block must not reuse old inputs or output samples.
+        assert!(plugin.process_bus_inputs(&inputs, 65).is_err());
+        plugin
+            .copy_output_pair(0, 0, &mut left, &mut right)
+            .unwrap();
+        assert_eq!(left, vec![0.0; frames]);
+        assert_eq!(right, vec![0.0; frames]);
+        plugin.process_bus_inputs(&[], frames).unwrap();
+        plugin
+            .copy_output_pair(0, 0, &mut left, &mut right)
+            .unwrap();
+        assert_eq!(left, vec![0.0; frames]);
+        assert_eq!(right, vec![0.0; frames]);
+    }
+}
+
+#[test]
 fn invalid_bus_pairs_fail_before_midi_and_silence_destinations() {
     let fixture = EditorProbeFixture::build_multi_bus();
     let mut plugin = instrument(&fixture);

@@ -347,6 +347,29 @@ impl Harness {
         self.command(json!({"command": "click", "label": label}))
     }
 
+    /// Select an arranger density through its visible mouse controls. Layout
+    /// preferences must preserve the song, history and current selection.
+    pub fn set_track_density(&mut self, preset: &str) -> Value {
+        let before = self.inspect();
+        self.click("View");
+        self.click("Track density");
+        let state = self.click(preset);
+        assert_eq!(state["timeline"]["density"], preset);
+        for field in [
+            "project",
+            "history",
+            "modified",
+            "selected_track",
+            "selected_clip",
+        ] {
+            assert_eq!(
+                state[field], before[field],
+                "Changing track density changed {field}"
+            );
+        }
+        state
+    }
+
     pub fn inspect(&mut self) -> Value {
         self.command(json!({"command": "inspect"}))
     }

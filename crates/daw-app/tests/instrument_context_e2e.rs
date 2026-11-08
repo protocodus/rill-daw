@@ -140,7 +140,9 @@ fn plugin_overview_hides_parameters_until_requested_and_retains_channel_context(
         let routing = latest(&mut app, "Routing");
         assert!(visible(&routing, "Routing of Evening lead 🎹"));
         assert_eq!(routing["selected_track"], channel);
-        let instrument = latest(&mut app, "Instrument");
+        // The first Instrument label is the channel navigation link. Routing
+        // also has an Instrument I/O target selector farther down its body.
+        let instrument = app.click("Instrument");
         assert!(visible(&instrument, "Instrument of Evening lead 🎹"));
         assert_eq!(instrument["selected_track"], channel);
         let channel_view = latest(&mut app, "Channel");

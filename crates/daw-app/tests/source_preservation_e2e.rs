@@ -43,10 +43,16 @@ fn fixture(app: &Harness) -> (Project, std::path::PathBuf, Vec<std::path::PathBu
         1.0,
         sources[2].to_string_lossy(),
     ));
-    // Legacy JSON deliberately retains the real imported paths instead of
-    // extracting private bundle copies, as importing a WAV does in the app.
+    // Explicit legacy JSON retains these external source identities. Ordinary
+    // save always bundles audio, even with a .json suffix, so it would make the
+    // paths targeted below unrelated to the reopened project's active sources.
     let path = app.directory.path().join("Sources.daw.json");
-    project.save(&path).unwrap();
+    project.save_legacy_json(&path).unwrap();
+    assert_eq!(
+        Project::load(&path).unwrap(),
+        project,
+        "Source protection requires the exact external paths after reopen"
+    );
     (project, path, sources)
 }
 
@@ -218,6 +224,8 @@ fn save_as_preserves_imported_and_bundled_sources_and_portable_save_keeps_comple
     // The core API applies the same protection to both formats too.
     assert!(project.save(&sources[0]).is_err());
     assert!(project.save(&bundle_alias).is_err());
+    assert!(project.save_legacy_json(&sources[0]).is_err());
+    assert!(project.save_legacy_json(&bundle_alias).is_err());
     let bundle = app.directory.path().join("Portable.rill");
     app.command(json!({"command":"file_dialog", "kind":"save", "path":bundle}));
     app.click("File");
