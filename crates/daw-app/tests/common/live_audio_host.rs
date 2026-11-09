@@ -43,7 +43,7 @@ fn encode(samples: &[f32]) -> String {
 }
 fn decode(encoded: &str) -> Vec<f32> {
     let mut bytes = Vec::new();
-    for chunk in encoded.as_bytes().chunks_exact(4) {
+    for chunk in encoded.as_bytes().as_chunks::<4>().0 {
         let digit = |v| match v {
             b'A'..=b'Z' => u32::from(v - b'A'),
             b'a'..=b'z' => u32::from(v - b'a' + 26),
@@ -66,7 +66,7 @@ fn decode(encoded: &str) -> Vec<f32> {
         }
     }
     bytes
-        .chunks_exact(4)
+        .as_chunks::<4>().0.iter()
         .map(|v| f32::from_le_bytes(v.try_into().unwrap()))
         .collect()
 }

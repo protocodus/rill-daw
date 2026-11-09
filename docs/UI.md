@@ -216,7 +216,7 @@ Call `daw_ui::theme::apply(ctx)` when creating the application. It configures bo
 | Corners | `RADIUS` 5, `SURFACE_RADIUS` 8 |
 | Edges | `BORDER_WIDTH` 1; `FOCUS_WIDTH` and `WINDOW_BORDER_WIDTH` φ ≈ 1.618 |
 | Typography | Caption/note/canvas 13; button/body/track title `13 + 3/φ` ≈ 14.85; subtitle `13 + 5/φ` ≈ 16.09; title 21; dense scale `8 + 3/φ` ≈ 9.85 |
-| Forms and windows | `FORM_LABEL_WIDTH` 144, `FORM_FIELD_WIDTH` 233; `POPUP_WIDTH_SM` 377, `POPUP_WIDTH_MD` 610, `POPUP_WIDTH_LG` 987 |
+| Forms and windows | `FORM_LABEL_WIDTH` 144, `FORM_FIELD_WIDTH` 233, `FORM_WIDTH` 398 (label + 21 gutter + field); `POPUP_WIDTH_SM` 377, `POPUP_WIDTH_MD` 610, `POPUP_WIDTH_LG` 987 |
 | Mixer and editors | `MIXER_STRIP_WIDTH` 144 (`MIXER_CHANNEL_WIDTH` in `mixer.rs` is its alias), `MIXER_SCALE_GUTTER` 34, `MIXER_FADER_MIN` 144, `MIXER_METER_WIDTH` 13; `PIANO_KEYS_WIDTH` 60, `VELOCITY_LANE_HEIGHT` 89, `NOTE_RADIUS` 3 |
 
 Sizes are logical screen points and follow egui's display scaling. Fibonacci steps establish spacing, padding, corners, and control dimensions; the golden ratio interpolates readable type sizes and controls gradient placement and emphasis. Keep canvas data geometry and rendering budgets independent of this visual scale. Surfaces use neutral graphite in Dark and cool porcelain in Light. Blue identifies commands that change the document, pink AI, green guides, and orange automation. Tools and view controls stay neutral text, so a toolbar reads as quiet text with a few blue commands; the active tool keeps its glowing border. Recording is red, an active Mute is yellow and an active Solo is green (`Palette::recording`, `mute`, `solo`). Controls have flat bases, gently rounded anti-aliased edges, and restrained linear and radial light. The single primary action of a toolbar or dialog footer uses a solid action fill with contrasting text and a small blurred shadow; secondary commands keep the tinted fill. Selected controls and keyboard focus gain a quiet accent halo. Idle secondary toolbar commands remain transparent. Utility windows use a clearer border and broader shadow. Sections use spacing rather than nested outlines, and action targets remain at least 34 points high. Reuse the shared palette and tokens.
@@ -226,8 +226,8 @@ Use the spacing scale consistently:
 | Relationship | Space |
 | --- | --- |
 | Tight caption/detail separation | 5 |
-| Related controls, compact toolbar groups, and horizontal menu-frame insets | 8 |
-| Ordinary sibling rows, form rows, card/inset padding, menu-item horizontal padding | 13 |
+| Related controls, form rows, compact toolbar groups, and horizontal menu-frame insets | 8 |
+| Ordinary sibling rows, card/inset padding, menu-item horizontal padding | 13 |
 | Separate sections, pane gutters, horizontal window padding | 21 |
 | Major workspace separation | 34 |
 
@@ -320,7 +320,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Piano keys, notes, and velocity | `PianoRows`, `piano_key` (keyboard: `raised` white keys, inset dark black keys, lines only at B/C and E/F), `piano_velocity_marker`, `piano_velocity_sibling_marker` (hollow chord sibling), `paint_velocity_lane`; `Palette::piano_row`, `piano_note_fill`, `piano_note_stroke` |
 | Beat grid behind piano roll, audio waveform and curves | `paint_beat_grid(painter, rect, view, snap, beats_per_bar)`, `beat_grid_level`: bar `grid_bar`, beat halfway to it, snap subdivision `grid_minor`; one physical pixel on pixel centers |
 | MIDI drawing duration and boundary | `DrawNoteLength`, `drawing_note_length` (current-value chooser **Length 1/16** beside Snap), `paint_clip_end_label` |
-| Clip editor toolbar end and analysis drawer | `editor_view_controls` (caption slot, zoom, View, Tool help; reservation measured from the controls), `editor_status_caption` (progress, errors, **Bar 3.2 – 4.1** or gesture guidance; drops whole trailing ` · ` clauses before truncating), `editor_bottom_drawer` (fixed panel under the canvas), `clip_nudge_section` (Nudge inside a Clip menu) |
+| Clip editor toolbar end and analysis drawer | `editor_view_controls` (caption slot, View, Tool help; reservation measured from the controls; returns the zoom chosen in the header), `editor_header_zoom` (the editor's zoom family in its workspace header), `editor_status_caption` (progress, errors, **Bar 3.2 – 4.1** or gesture guidance; drops whole trailing ` · ` clauses before truncating), `editor_bottom_drawer` (fixed panel under the canvas), `clip_nudge_section` (Nudge inside a Clip menu) |
 | Clip Editor and Mixer header | `clip_workspace_header` (Back, `HeaderSlot::Navigation` chevron pair, Subtitle title and context line, right-to-left actions), `clip_navigation_header_controls` |
 | Interactive parameter curves | `curve_editor`, `curve_editor_with_segments`, `curve_timeline_editor`, `curve_timeline_editor_with_segments`, `automation_canvas_with_segments_at`, `CurvePoint`, `CurveSegment`, `CurveView`, `CurveTimeline` (`value_label` prints the value axis in the parameter's units: pan **L 100 / C / R 100**, gain **+3.5 dB … −∞**; `percent_value_label` otherwise), `CurveEdit`; bar/beat grid via `paint_beat_grid` and a quiet `automation × 0.10` fill under the curve |
 | Bar.beat position entry | `musical_position_field(beat, beats_per_bar, prefix)` and `parse_musical_position`: a zero-based beat shown and typed as **12.3.2** (automation point position, take range) |
@@ -1395,9 +1395,9 @@ menu and retains the current tool and scale.
 
 The arranger toolbar follows the workflow: the tool families, a rule, the
 precision pair **Snap▾** (`snap_choice`) and **Nudge▾**, then **Add pattern**; the
-gesture caption fills the remaining space and is the only element that shrinks;
-the right-aligned view cluster holds the zoom controls, **View▾** and the `?` Tool
-help. Complete families wrap together on narrow windows.
+gesture caption sits under **Tracks** in the ruler corner;
+the right-aligned view cluster holds **View▾** and the `?` Tool help, and the zoom
+controls sit in the ruler corner beside **Tracks**. Complete families wrap together on narrow windows.
 
 `clip_editing` supplies item-anchored Rename with visible Apply/Cancel, and
 precise Start, Duration and Source offset fields. Duration explicitly chooses
@@ -1782,8 +1782,14 @@ Tabbed utilities (Setup, Library, Properties, Assistant) switch pages with
 `text::section_heading` names groups in sentence case (**Collections**,
 **Recovery folder**); `form_label` captions one row. `form_grid` reserves a
 fixed 144-point label column (`FORM_LABEL_WIDTH`, longer captions truncate with
-the full text on hover); selects and text fields use `FORM_FIELD_WIDTH`. One
-form uses one grid. `section_gap` separates groups in a popup body.
+the full text on hover); selects and text fields use `FORM_FIELD_WIDTH` through
+`form_select` and `form_text_field`, so stacked fields share both edges. Rows
+sit 8 points apart. One form uses one grid; checkboxes and other options take a
+row with an empty caption so they align with the fields. A dialog that is one
+form defaults to `FORM_WIDTH`, which leaves no dead space beside its fields; add
+`SPACE_SM + SELECT_WIDTH` when a few rows carry a trailing quiet action (Setup,
+Recording). Every footer uses `dialog_actions`: the primary action at the right
+edge, Cancel/Done beside it, text only. `section_gap` separates groups in a popup body.
 
 Menus list items in workflow order with separators between groups. Use
 `menu_item(ui, label, Some("Mod+Z"))` for a command with a shortcut: the
@@ -1799,7 +1805,7 @@ The menu bar centers the project name with its muted duration and ends with the
 
 ### Clip editor toolbars and canvases
 
-Both clip editors use one toolbar skeleton: tools, **Snap**, editor choosers or menus, then `editor_view_controls` with zoom, **View** and Tool help at the trailing edge. The audio editor keeps one fixed slot after Pitch for the active tool's options (fade length and curve) or, otherwise, the gesture caption and status, so changing tools never changes how the row wraps and the ruler and canvas never move. Nudge is a section of the audio **Clip** menu. Transient detection and grid slicing open in `editor_bottom_drawer` below the canvas. Gain is a number field with a **Gain** prefix rather than a separate bold label.
+Both clip editors use one toolbar skeleton: tools, **Snap**, editor choosers or menus, then `editor_view_controls` with **View** and Tool help at the trailing edge. Zoom sits in the workspace header (`editor_header_zoom`), and in the arranger in the ruler corner beside **Tracks**, so the tool row does not spend a second line on view controls. The arranger's gesture caption sits in the strip under **Tracks** (`editor_tool_caption_at`). The audio editor keeps one fixed slot after Pitch for the active tool's options (fade length and curve) or, otherwise, the gesture caption and status, so changing tools never changes how the row wraps and the ruler and canvas never move. Nudge is a section of the audio **Clip** menu. Transient detection and grid slicing open in `editor_bottom_drawer` below the canvas. Gain is a number field with a **Gain** prefix rather than a separate bold label.
 
 The audio canvas starts after a `PIANO_KEYS_WIDTH` gutter holding the **L**/**R** labels, so audio and MIDI canvases share one left edge. Channels are separated by a 1 px `line`, quiet −6 dB guides use `grid_minor`, the waveform blends neutral gray into the track color as audio amplitude rises (selection keeps the accent) and the spectrogram is drawn per channel band with a neutral tint. Fade handles are 13-point rounded squares with a `bg` ring, inset `SPACE_SM` from the top, with a dotted guide while hovered; the gain envelope is inset `SPACE_XS` so unity stays visible as a quiet line.
 

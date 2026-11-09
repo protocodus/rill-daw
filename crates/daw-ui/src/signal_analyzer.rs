@@ -119,7 +119,7 @@ fn levels(ui: &mut Ui, data: &SignalAnalyzerData<'_>, height: f32) -> SignalAnal
     for db in [-60, -48, -36, -24, -12, 0] {
         let color = if db == 0 { colors.warning } else { colors.line };
         ui.painter()
-            .hline(meters.x_range(), y(db as f32), Stroke::new(1.0, color));
+            .hline(meters.x_range(), y(db as f32), Stroke::new(1.0_f32, color));
         axis(
             ui,
             Pos2::new(meters.left() - 5.0, y(db as f32)),
@@ -153,7 +153,7 @@ fn levels(ui: &mut Ui, data: &SignalAnalyzerData<'_>, height: f32) -> SignalAnal
                 bar.x_range(),
                 y(peak),
                 Stroke::new(
-                    2.0,
+                    2.0_f32,
                     if peak >= 0.0 {
                         colors.warning
                     } else {
@@ -237,8 +237,11 @@ fn spectrum(ui: &mut Ui, data: &SignalAnalyzerData<'_>, height: f32) -> SignalAn
     let x = |hz: f32| rect.left() + ((hz / 20.0).ln() / log_range).clamp(0.0, 1.0) * rect.width();
     let y = |db: f32| rect.bottom() - ((db + 96.0) / 102.0).clamp(0.0, 1.0) * rect.height();
     for db in [-96, -72, -48, -24, 0] {
-        ui.painter()
-            .hline(rect.x_range(), y(db as f32), Stroke::new(1.0, colors.line));
+        ui.painter().hline(
+            rect.x_range(),
+            y(db as f32),
+            Stroke::new(1.0_f32, colors.line),
+        );
         axis(
             ui,
             Pos2::new(rect.left() - 5.0, y(db as f32)),
@@ -254,7 +257,7 @@ fn spectrum(ui: &mut Ui, data: &SignalAnalyzerData<'_>, height: f32) -> SignalAn
     ] {
         if hz <= maximum {
             ui.painter()
-                .vline(x(hz), rect.y_range(), Stroke::new(1.0, colors.line));
+                .vline(x(hz), rect.y_range(), Stroke::new(1.0_f32, colors.line));
             axis(
                 ui,
                 Pos2::new(x(hz), rect.bottom() + 5.0),
@@ -376,7 +379,7 @@ fn correlation(ui: &mut Ui, data: &SignalAnalyzerData<'_>, height: f32) -> Signa
             },
         );
         ui.painter()
-            .vline(at, bar.y_range(), Stroke::new(2.0, colors.text));
+            .vline(at, bar.y_range(), Stroke::new(2.0_f32, colors.text));
     }
     for (fraction, label) in [(0.0, "−1 · Opposite"), (0.5, "0"), (1.0, "+1 · Mono")] {
         axis(
@@ -406,12 +409,12 @@ fn phase(ui: &mut Ui, data: &SignalAnalyzerData<'_>, height: f32) -> SignalAnaly
     ui.painter().hline(
         rect.x_range(),
         rect.center().y,
-        Stroke::new(1.0, colors.line),
+        Stroke::new(1.0_f32, colors.line),
     );
     ui.painter().vline(
         rect.center().x,
         rect.y_range(),
-        Stroke::new(1.0, colors.line),
+        Stroke::new(1.0_f32, colors.line),
     );
     axis(
         ui,

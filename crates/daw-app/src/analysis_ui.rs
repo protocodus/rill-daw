@@ -143,8 +143,8 @@ impl DawApp {
                 })));
                 footer.show(ui, |ui| {
                     daw_ui::dialog_actions(ui, |ui| {
-                        done = daw_ui::quiet_button(ui, "Done").clicked();
-                        reset = daw_ui::quiet_button(ui, "Reset measurement").clicked();
+                        done = daw_ui::dialog_button(ui, "Done").clicked();
+                        reset = daw_ui::dialog_button(ui, "Reset measurement").clicked();
                     }, |ui| { daw_ui::hover_text(daw_ui::text::note(ui, status), match self.analysis.target {
                         SignalMonitorTarget::Master => "Post-insert Master output, after volume and pan; before device clipping, dry input monitoring and metronome",
                         SignalMonitorTarget::Channel(_) => "Channel after inserts, volume, pan and mute; before output/send destination gain",

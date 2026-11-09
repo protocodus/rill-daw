@@ -395,7 +395,7 @@ impl DawApp {
             .join(", ");
         daw_ui::popup("Export WAV", ctx)
             .id(egui::Id::new("export_options"))
-            .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
+            .default_width(daw_ui::tokens::FORM_WIDTH)
             .vscroll(false)
             .open(&mut open)
             .show(ctx, |ui| {
@@ -413,37 +413,41 @@ impl DawApp {
                 if let Ok(specification) = &specification {
                     daw_ui::text::note(ui, specification.summary());
                 }
-                ui.add_space(daw_ui::tokens::SPACE_MD);
+                ui.add_space(daw_ui::tokens::SPACE_SM);
+                let integer = self.settings.export.encoding != daw_engine::WavEncoding::Float32;
                 daw_ui::form_grid(ui, "wav_delivery_choices", |ui| {
-                    daw_ui::form_label(ui, "Format");
-                    daw_ui::choice_menu(ui, encoding_label(self.settings.export.encoding), |ui| {
+                    let label = daw_ui::form_label(ui, "Format");
+                    daw_ui::form_select("wav_format", encoding_label(self.settings.export.encoding)).show_ui(ui, |ui| {
                         for encoding in [daw_engine::WavEncoding::Pcm16, daw_engine::WavEncoding::Pcm24, daw_engine::WavEncoding::Float32] {
-                            if daw_ui::selectable_value(ui, &mut self.settings.export.encoding, encoding, encoding_label(encoding)).clicked() { ui.close(); }
+                            daw_ui::selectable_value(ui, &mut self.settings.export.encoding, encoding, encoding_label(encoding));
                         }
-                    });
+                    }).response.labelled_by(label.id);
                     ui.end_row();
-                    daw_ui::form_label(ui, "Rate");
+                    let label = daw_ui::form_label(ui, "Rate");
                     let rate_label = self.settings.export.sample_rate.map_or_else(|| "Follow audio setup".to_owned(), |rate| format!("{} kHz", f64::from(rate) / 1000.0));
-                    daw_ui::choice_menu(ui, rate_label, |ui| {
-                        if daw_ui::selectable_value(ui, &mut self.settings.export.sample_rate, None, "Follow audio setup").clicked() { ui.close(); }
+                    daw_ui::form_select("wav_rate", rate_label).show_ui(ui, |ui| {
+                        daw_ui::selectable_value(ui, &mut self.settings.export.sample_rate, None, "Follow audio setup");
                         for rate in [44_100,48_000,88_200,96_000,176_400,192_000] {
-                            if daw_ui::selectable_value(ui, &mut self.settings.export.sample_rate, Some(rate), format!("{} kHz", f64::from(rate) / 1000.0)).clicked() { ui.close(); }
+                            daw_ui::selectable_value(ui, &mut self.settings.export.sample_rate, Some(rate), format!("{} kHz", f64::from(rate) / 1000.0));
                         }
-                    });
+                    }).response.labelled_by(label.id);
                     ui.end_row();
-                    daw_ui::form_label(ui, "Range");
-                    daw_ui::choice_menu(ui, if loop_mode { "Loop range" } else { "Arrangement" }, |ui| {
+                    let label = daw_ui::form_label(ui, "Range");
+                    daw_ui::form_select("wav_range", if loop_mode { "Loop range" } else { "Arrangement" }).show_ui(ui, |ui| {
                         for (mode, label) in [(ExportRangeMode::Arrangement,"Arrangement"),(ExportRangeMode::Loop,"Loop range")] {
-                            if daw_ui::selectable_value(ui, &mut self.settings.export.range_mode, mode, label).clicked() { ui.close(); }
+                            daw_ui::selectable_value(ui, &mut self.settings.export.range_mode, mode, label);
                         }
-                    });
+                    }).response.labelled_by(label.id);
+                    ui.end_row();
+                    // Options sit in the field column, under the choices they qualify.
+                    ui.label("");
+                    ui.add_enabled_ui(!loop_mode, |ui| daw_ui::checkbox(ui, &mut self.settings.export.include_effect_tails, "Include effect tails")
+                        .on_hover_text("Keep instrument releases and effect tails after the arrangement. Turn off to end exactly at the arrangement boundary."));
+                    ui.end_row();
+                    ui.label("");
+                    ui.add_enabled_ui(integer, |ui| daw_ui::checkbox(ui, &mut self.settings.export.dither, "Dither (TPDF)"));
                     ui.end_row();
                 });
-                ui.add_space(daw_ui::tokens::SPACE_MD);
-                ui.add_enabled_ui(!loop_mode, |ui| daw_ui::checkbox(ui, &mut self.settings.export.include_effect_tails, "Include effect tails")
-                    .on_hover_text("Keep instrument releases and effect tails after the arrangement. Turn off to end exactly at the arrangement boundary."));
-                let integer = self.settings.export.encoding != daw_engine::WavEncoding::Float32;
-                ui.add_enabled_ui(integer, |ui| daw_ui::checkbox(ui, &mut self.settings.export.dither, "Dither (TPDF)"));
                 if loop_mode {
                     daw_ui::text::note(ui, format!("Loop markers · Beats {}–{} · exact length",
                         daw_ui::parameter_value_text(self.project.loop_start+1.0), daw_ui::parameter_value_text(self.project.loop_end+1.0)));

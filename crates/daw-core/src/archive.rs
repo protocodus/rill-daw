@@ -633,12 +633,26 @@ mod tests {
         }
     }
 
+    // A same-size rewrite is detected by modification time. On coarse
+    // filesystem clocks the rewrite can land in the tick of the original
+    // write, so the original is aged first.
+    fn backdate(path: &Path) {
+        let earlier = std::time::SystemTime::now() - std::time::Duration::from_secs(60);
+        fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(earlier)
+            .unwrap();
+    }
+
     #[test]
     fn streamed_asset_copy_rejects_same_size_mutation_and_truncation() {
         for truncate in [false, true] {
             let directory = tempfile::tempdir().unwrap();
             let path = directory.path().join("source.wav");
             fs::write(&path, vec![0; COPY_BUFFER * 3]).unwrap();
+            backdate(&path);
             let asset = Asset {
                 metadata: path.metadata().unwrap(),
                 path: path.clone(),
@@ -697,6 +711,7 @@ mod tests {
         for (name, value) in [("left", 1), ("right", 2)] {
             let path = directory.path().join(name);
             fs::write(&path, vec![value; COPY_BUFFER * 3 + 7]).unwrap();
+            backdate(&path);
             assets.push(Asset {
                 metadata: path.metadata().unwrap(),
                 path,

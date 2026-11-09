@@ -84,7 +84,7 @@ fn history_limit_apply_cancel_persistence_and_saved_document_identity() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|label| label == "128 MiB memory cap may retain fewer actions")
+            .any(|label| label == "128 MiB memory cap")
     );
     let draft = enter_limit(&mut app, 128, 2);
     assert_eq!(draft["setup_draft"]["history_limit"], 2);

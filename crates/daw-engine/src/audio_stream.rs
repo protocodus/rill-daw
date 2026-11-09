@@ -106,6 +106,8 @@ impl Drop for WindowPair {
     }
 }
 pub(crate) fn windows() -> Result<Box<WindowPair>> {
+    // `try_update` replaces this from Rust 1.95, above the workspace MSRV.
+    #[allow(deprecated)]
     let reserved = WINDOW_ALLOCATED.fetch_update(Ordering::AcqRel, Ordering::Acquire, |bytes| {
         bytes
             .checked_add(2 * WINDOW_BYTES)

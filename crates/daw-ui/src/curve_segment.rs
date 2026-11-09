@@ -152,7 +152,7 @@ pub(crate) fn segment_bend_at(
                 position + Vec2::new(-radius, 0.0),
             ],
             colors.bg,
-            Stroke::new(1.5, colors.automation),
+            Stroke::new(1.5_f32, colors.automation),
         ));
         crate::hover_text(
             response,

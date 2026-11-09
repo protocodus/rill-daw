@@ -2918,10 +2918,25 @@ impl DawApp {
                 let mut footer = daw_ui::popup_footer(ui, "about_actions");
                 let window_ui = ui;
                 let ui = footer.body();
-                ui.set_width(daw_ui::tokens::POPUP_WIDTH_SM);
+                // The titlebar can make the window wider than the requested
+                // body; center within the width the window really has.
+                ui.set_width(ui.available_width().max(daw_ui::tokens::POPUP_WIDTH_SM));
                 ui.vertical_centered(|ui| {
-                    daw_ui::brand_lockup(ui, daw_ui::BrandSize::Hero);
-                    ui.add_space(daw_ui::tokens::SPACE_LG);
+                    // A horizontal row starts at the left edge. Inset it by the
+                    // width measured last frame so the mark sits over the
+                    // centered text below.
+                    let width_id = egui::Id::new("about_lockup_width");
+                    let measured = ui
+                        .data(|data| data.get_temp::<f32>(width_id))
+                        .unwrap_or(0.0);
+                    ui.horizontal(|ui| {
+                        ui.add_space(((ui.available_width() - measured) * 0.5).max(0.0));
+                        let width = daw_ui::brand_lockup(ui, daw_ui::BrandSize::Hero)
+                            .rect
+                            .width();
+                        ui.data_mut(|data| data.insert_temp(width_id, width));
+                    });
+                    ui.add_space(daw_ui::tokens::SPACE_MD);
                     daw_ui::text::body(ui, "Audio workstation");
                     daw_ui::text::note(ui, format!("Version {}", env!("CARGO_PKG_VERSION")));
                 });
@@ -3199,7 +3214,10 @@ impl DawApp {
             return;
         }
         let mut open = true;
-        daw_ui::popup("Setup", ctx).open(&mut open).default_width(daw_ui::tokens::POPUP_WIDTH_MD).vscroll(false).show(ctx, |ui| {
+        // One form column plus the quiet action that trails a few rows.
+        let width =
+            daw_ui::tokens::FORM_WIDTH + daw_ui::tokens::SPACE_SM + daw_ui::tokens::SELECT_WIDTH;
+        daw_ui::popup("Setup", ctx).open(&mut open).default_width(width).vscroll(false).show(ctx, |ui| {
             daw_ui::popup_tabs(ui, &mut self.setup_page, &[
                 (SetupPage::Audio, "Audio"),
                 (SetupPage::Appearance, "Appearance"),
@@ -3280,24 +3298,32 @@ impl DawApp {
                         .on_hover_text(format!("The render queue adds up to {:.1} ms, with a 512-frame minimum. Device and plug-in latency may add more. Smaller buffers reduce device latency and increase callback overhead; larger buffers give demanding mixes more scheduling headroom.", self.setup_draft.audio().render_queue_frames() as f64 * 1000.0 / rate));
                 }
                 SetupPage::Storage => {
-                    daw_ui::text::section_heading(ui, "Undo history");
                     daw_ui::form_grid(ui, "history_settings", |ui| {
                         let label = daw_ui::form_label(ui, "Undo actions");
-                        ui.add_sized(
-                            [daw_ui::tokens::FORM_FIELD_WIDTH, daw_ui::tokens::CONTROL_HEIGHT],
-                            daw_ui::number(&mut self.setup_draft.history_limit)
-                                .range(1..=daw_core::MAX_HISTORY_STEPS)
-                                .speed(1.0),
-                        ).labelled_by(label.id).on_hover_text("Shared by manual edits, workflow tools and AI. Drag to change, or double-click to enter an exact count. Apply trims older history immediately; Cancel leaves it unchanged.");
+                        ui.horizontal(|ui| {
+                            ui.add_sized(
+                                [daw_ui::tokens::SELECT_WIDTH, daw_ui::tokens::CONTROL_HEIGHT],
+                                daw_ui::number(&mut self.setup_draft.history_limit)
+                                    .range(1..=daw_core::MAX_HISTORY_STEPS)
+                                    .speed(1.0),
+                            ).labelled_by(label.id).on_hover_text("Shared by manual edits, workflow tools and AI. Drag to change, or double-click to enter an exact count. Apply trims older history immediately; Cancel leaves it unchanged.");
+                            daw_ui::text::note(ui, "128 MiB memory cap")
+                                .on_hover_text("History is also capped at 128 MiB of memory, which may retain fewer actions.");
+                        });
+                        ui.end_row();
+                        daw_ui::form_label(ui, "Recovery folder");
+                        // The grid column hugs its content; bound the path so
+                        // Choose… stays beside it at the shared field edge.
+                        ui.allocate_ui(egui::vec2(daw_ui::tokens::FORM_FIELD_WIDTH + daw_ui::tokens::SPACE_SM + daw_ui::tokens::SELECT_WIDTH, daw_ui::tokens::CONTROL_HEIGHT), |ui| {
+                            let mut chosen = None;
+                            let row = daw_ui::path_row(ui, &self.setup_draft.scratch_dir, |ui| {
+                                if daw_ui::button(ui, "Choose…").clicked() { chosen = daw_ui::with_native_dialog_menu(|| rfd::FileDialog::new().pick_folder()); }
+                            });
+                            if let Some(path) = chosen { self.setup_draft.scratch_dir = path; }
+                            row.response.on_hover_text("Committed edits are checkpointed here in the background. Plug-in state is refreshed every 30 seconds; the previous checkpoint is retained too.");
+                        });
                         ui.end_row();
                     });
-                    daw_ui::text::note(ui, "128 MiB memory cap may retain fewer actions");
-                    ui.add_space(daw_ui::tokens::SPACE_LG);
-                    daw_ui::text::section_heading(ui, "Recovery folder");
-                    daw_ui::text::truncated(ui, daw_ui::text::TextRole::Body, self.setup_draft.scratch_dir.display().to_string())
-                        .on_hover_text("Committed edits are checkpointed here in the background. Plug-in state is refreshed every 30 seconds; the previous checkpoint is retained too.");
-                    ui.add_space(daw_ui::tokens::SPACE_MD);
-                    if daw_ui::button(ui, "Choose…").clicked() && let Some(path) = daw_ui::with_native_dialog_menu(|| rfd::FileDialog::new().pick_folder()) { self.setup_draft.scratch_dir = path; }
                     daw_ui::text::note(ui, "Recover from File → Recover last session…");
                 }
                 SetupPage::Plugins => {
@@ -3322,7 +3348,7 @@ impl DawApp {
                     let path_key = egui::Id::new("plugin_scan_folder_input");
                     let mut folder = ctx.data_mut(|data| data.get_temp::<String>(path_key)).unwrap_or_default();
                     ui.horizontal_wrapped(|ui| {
-                        daw_ui::text_field(ui, &mut folder, "Folder path", daw_ui::tokens::FORM_FIELD_WIDTH);
+                        daw_ui::form_text_field(ui, &mut folder, "Folder path");
                         daw_ui::toolbar_group(ui, |ui| {
                             if daw_ui::button(ui, "Add folder").clicked() {
                                 let path = PathBuf::from(folder.trim());
@@ -3616,6 +3642,16 @@ impl DawApp {
                             return;
                         }
                     }
+                    if workspace == WorkspaceView::Clip
+                        && let Some(clip) = self.selected()
+                    {
+                        let context = if matches!(clip.content, ClipContent::Midi { .. }) {
+                            daw_ui::ToolHintContext::Midi
+                        } else {
+                            daw_ui::ToolHintContext::Audio
+                        };
+                        daw_ui::editor_header_zoom(ui, context);
+                    }
                     if workspace == WorkspaceView::Mixer {
                         self.mixer_track_navigation(ui);
                         self.mixer_order_menu(ui);
@@ -3799,6 +3835,20 @@ impl DawApp {
                 }
             }
             "clip" => self.view = WorkspaceView::Clip,
+            "piano" => {
+                let target = self.project.tracks.iter().find_map(|track| {
+                    track
+                        .clips
+                        .iter()
+                        .find(|clip| matches!(clip.content, ClipContent::Midi { .. }))
+                        .map(|clip| (track.id, clip.id))
+                });
+                if let Some((track, clip)) = target {
+                    self.selected_track = Some(track);
+                    self.selected_clip = Some(clip);
+                    self.view = WorkspaceView::Clip;
+                }
+            }
             "expression" => {
                 let target = self.project.tracks.iter().find_map(|track| {
                     track
@@ -3821,6 +3871,19 @@ impl DawApp {
                 }
             }
             "library" => self.open_popup(PopupKind::Library),
+            "about" => self.open_popup(PopupKind::About),
+            "history" => self.open_popup(PopupKind::History),
+            "recording" => self.open_popup(PopupKind::Recording),
+            "export" => self.open_popup(PopupKind::Export),
+            "setup-appearance" | "setup-storage" | "setup-plugins" | "setup-ai" => {
+                self.open_popup(PopupKind::Setup);
+                self.setup_page = match view {
+                    "setup-appearance" => SetupPage::Appearance,
+                    "setup-storage" => SetupPage::Storage,
+                    "setup-plugins" => SetupPage::Plugins,
+                    _ => SetupPage::Ai,
+                };
+            }
             "automation" => self.open_popup(PopupKind::Automation),
             "crossfade" => self.open_popup(PopupKind::Crossfade),
             "join" => self.open_popup(PopupKind::Join),

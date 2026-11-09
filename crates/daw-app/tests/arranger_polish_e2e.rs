@@ -96,14 +96,16 @@ fn toolbar_follows_the_workflow_with_snap_and_nudge_beside_the_tools() {
         assert!(
             (add_row - row).abs() <= 2.0 && x("Nudge") < x("Add pattern") || add_row > row + 2.0
         );
-        // View controls form one right-aligned cluster: zoom, View, Tool help.
+        // View and Tool help end the toolbar; zoom sits below it in the ruler
+        // corner beside Tracks, so it never costs the toolbar a row.
         let fit = bounds(label(&state, "Fit"));
         let view = bounds(label(&state, "View"));
         let help = bounds(label(&state, "Tool help"));
-        assert!(fit[2] <= view[0] && view[2] <= help[0]);
-        assert!(
-            (center_y(label(&state, "Fit")) - center_y(label(&state, "Tool help"))).abs() <= 2.0
-        );
+        let tracks = bounds(label(&state, "Tracks"));
+        assert!(view[2] <= help[0]);
+        assert!(center_y(label(&state, "Fit")) > center_y(label(&state, "Tool help")) + 2.0);
+        assert!(tracks[2] <= fit[0]);
+        assert!((center_y(label(&state, "Fit")) - center_y(label(&state, "Tracks"))).abs() <= 2.0);
         assert!(help[2] <= f64::from(width));
     }
     // Snap still changes through the visible chooser.

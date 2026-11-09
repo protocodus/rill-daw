@@ -31,7 +31,7 @@ fn real_formats_decode_to_finite_gapless_float_wav_without_changing_sources() {
         for (channel, frequency, expected) in [(0, 440.0, 0.4), (1, 880.0, 0.25)] {
             let mut sine = 0.0;
             let mut cosine = 0.0;
-            for (frame, samples) in audio.samples.chunks_exact(2).enumerate() {
+            for (frame, samples) in audio.samples.as_chunks::<2>().0.iter().enumerate() {
                 let phase = frame as f64 * std::f64::consts::TAU * frequency / 48_000.0;
                 sine += f64::from(samples[channel]) * phase.sin();
                 cosine += f64::from(samples[channel]) * phase.cos();

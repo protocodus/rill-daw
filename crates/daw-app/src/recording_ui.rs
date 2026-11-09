@@ -1011,8 +1011,11 @@ impl DawApp {
             .map(|track| format!("Recording · {}", track.name))
             .unwrap_or_else(|| "Recording".into());
         let mut open = true;
+        // One form column plus the action that trails the device row.
+        let recording_width =
+            daw_ui::tokens::FORM_WIDTH + daw_ui::tokens::SPACE_SM + daw_ui::tokens::SELECT_WIDTH;
         daw_ui::popup(title, ctx).id(egui::Id::new("recording_popup")).open(&mut open)
-            .default_width(daw_ui::tokens::POPUP_WIDTH_MD).min_width(daw_ui::popup_body_size(ctx).x.min(daw_ui::tokens::POPUP_WIDTH_MD))
+            .default_width(recording_width).min_width(daw_ui::popup_body_size(ctx).x.min(recording_width))
             .default_height(610.0).vscroll(false).show(ctx, |ui| {
             let busy = self.recording_busy();
             let mut footer = daw_ui::popup_footer(ui, "recording_actions");
@@ -1098,7 +1101,7 @@ impl DawApp {
                         }
                         let label = daw_ui::form_label(ui, "Monitor");
                         daw_ui::select("input_monitor_mode", mode.label()).width(field).show_ui(ui, |ui| { for choice in [MonitorMode::Off,MonitorMode::Auto,MonitorMode::On] { daw_ui::selectable_value(ui, &mut mode, choice, choice.label()); } }).response.labelled_by(label.id)
-                            .on_hover_text(if midi { "Hear the input through this track's instrument" } else { "Hear the dry input signal, before effects" });
+                            .on_hover_text(if midi { "Hear the input through this track's instrument" } else { "Hear the dry input signal, before effects. Dry monitoring follows channel and output-bus levels. Inserts and sends are bypassed; recorded audio stays unchanged." });
                         ui.end_row();
                         if !midi {
                             let label = daw_ui::form_label(ui, "Record into");
@@ -1139,7 +1142,6 @@ impl DawApp {
                 } else {
                     let peaks = self.engine.as_ref().map_or([0.0;2], |engine| engine.input_peaks(track.id));
                     daw_ui::input_meter(ui, peaks);
-                    daw_ui::text::note(ui, "Dry monitoring follows channel and output-bus levels. Inserts and sends are bypassed; recorded audio stays unchanged.");
                     if self.project.loop_enabled { daw_ui::text::note(ui, "Loop recording keeps each pass as a separate take."); }
                 }
             } else { daw_ui::text::note(ui, "Select an audio or MIDI track to choose its input."); }
@@ -1150,18 +1152,19 @@ impl DawApp {
                 self.begin_edit(); self.project.precount_bars = precount; self.project.metronome_enabled = click; self.project.metronome_gain = gain;
                 self.edit_label = Some("Recording timing".into()); self.changed();
             }
-            ui.horizontal_wrapped(|ui| {
+            // The shared footer order: Record owns the right edge, follow-ups sit beside it.
+            daw_ui::dialog_actions(ui, |ui| {
                 if daw_ui::record_button(ui, busy, !self.recording_finalizing()).clicked() {
                     if busy { self.finish_recording(AfterRecording::Continue); } else { self.begin_recording(); }
                 }
-                if self.recording.failed_input && daw_ui::button(ui, "Retry input").clicked() {
+                if self.recording.failed_input && daw_ui::dialog_button(ui, "Retry input").clicked() {
                     self.recording.failed_input = false; self.recording.signature = None; self.recording.midi_signature = None;
                 }
                 if let Some(clip) = self.selected().cloned() {
-                    if daw_ui::button(ui, "Edit recording").clicked() { self.close_popups(); self.view = WorkspaceView::Clip; }
-                    if clip.take_group().is_some() && daw_ui::button(ui, "Takes…").clicked() { self.open_audio_takes(&clip, None); }
+                    if daw_ui::dialog_button(ui, "Edit recording").clicked() { self.close_popups(); self.view = WorkspaceView::Clip; }
+                    if clip.take_group().is_some() && daw_ui::dialog_button(ui, "Takes…").clicked() { self.open_audio_takes(&clip, None); }
                 }
-            });
+            }, |_| {});
             });
         });
         self.recording_open &= open;

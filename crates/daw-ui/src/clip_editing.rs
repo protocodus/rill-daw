@@ -676,8 +676,39 @@ fn inline_name_editor_contents(
 const EDITOR_VIEW_CONTROLS_ESTIMATE: f32 =
     crate::tokens::CONTROL_HEIGHT * 7.0 + crate::tokens::SPACE_SM * 4.0;
 
+fn header_zoom_id(context: crate::ToolHintContext) -> Id {
+    Id::new(("editor_header_zoom", context))
+}
+
+/// Below this window width the header needs its room for the clip's identity
+/// and song span, so zoom stays in the toolbar's view cluster.
+const HEADER_ZOOM_MIN_WIDTH: f32 = 1280.0;
+
+/// A clip editor's zoom controls, drawn in its workspace header so the tool
+/// row does not spend a second line on view controls. The click is handed to
+/// [`editor_view_controls`], which the editor lays out later in the same frame.
+/// On narrow windows this draws nothing and the view cluster keeps the zoom.
+pub fn editor_header_zoom(ui: &mut Ui, context: crate::ToolHintContext) {
+    if ui.ctx().content_rect().width() < HEADER_ZOOM_MIN_WIDTH {
+        return;
+    }
+    let id = header_zoom_id(context);
+    let frame = ui.ctx().cumulative_frame_nr();
+    ui.ctx()
+        .data_mut(|data| data.insert_temp(id.with("frame"), frame));
+    let selection = ui
+        .ctx()
+        .data(|data| data.get_temp::<bool>(id.with("selection")))
+        .unwrap_or(false);
+    let action = crate::timeline_zoom_controls(ui, selection);
+    if action != crate::TimelineViewAction::None {
+        ui.ctx().data_mut(|data| data.insert_temp(id, action));
+    }
+}
+
 /// The trailing end of a clip editor toolbar, left to right: caption slot,
-/// zoom controls, View and Tool help. The reservation is the width the controls
+/// zoom (unless the header shows it), View and Tool help. Returns the zoom
+/// chosen here or in the header this frame. The reservation is the width the controls
 /// used last frame, so the row wraps only when they genuinely do not fit.
 /// `caption` fills whatever remains between the leading tools and the zoom.
 pub fn editor_view_controls(
@@ -724,8 +755,22 @@ fn view_cluster(
     {
         let help = crate::editor_tool_help(ui, tool, context);
         let view = crate::quiet_view_menu(ui, "View", view_menu).response;
-        let action = crate::timeline_zoom_controls(ui, selection_available);
-        // Everything placed so far, right to left: help, View, then zoom.
+        let zoom = header_zoom_id(context);
+        let frame = ui.ctx().cumulative_frame_nr();
+        let (in_header, header_action) = ui.ctx().data_mut(|data| {
+            data.insert_temp(zoom.with("selection"), selection_available);
+            (
+                data.get_temp::<u64>(zoom.with("frame")) == Some(frame),
+                data.remove_temp::<crate::TimelineViewAction>(zoom)
+                    .unwrap_or_default(),
+            )
+        });
+        let action = if in_header {
+            header_action
+        } else {
+            crate::timeline_zoom_controls(ui, selection_available)
+        };
+        // Everything placed so far, right to left: help, then View.
         let left = ui.min_rect().left().min(view.rect.left()) - ui.spacing().item_spacing.x;
         ui.ctx().data_mut(|data| {
             data.insert_temp(id, (help.rect.right() - left).ceil());

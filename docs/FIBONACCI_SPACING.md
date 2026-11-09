@@ -19,8 +19,8 @@ Measured bounds round outward where captions or keys must fit completely.
 | Value | Relationship | Application |
 | --- | --- | --- |
 | 5 | Tight details | Caption pairs and small internal offsets |
-| 8 | Related compact controls | Toolbar groups, keyboard gaps, sidebar entries, menu frames and gaps |
-| 13 | Ordinary rows and insets | Item spacing, form rows, card padding, menu-item horizontal padding, vertical window padding |
+| 8 | Related compact controls | Toolbar groups, form rows, keyboard gaps, sidebar entries, menu frames and gaps |
+| 13 | Ordinary rows and insets | Item spacing, card padding, menu-item horizontal padding, vertical window padding |
 | 21 | Separate sections | Pane gutters, horizontal window padding, section boundaries |
 | 34 | Full control target | Buttons, inputs, and count-item rows |
 | 55 | Captioned parameter row | Control line plus scale captions |
