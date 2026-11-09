@@ -216,25 +216,30 @@ impl Instrument {
                 for index in 0..events.getEventCount() {
                     let mut event:Event=std::mem::zeroed();
                     if events.getEvent(index,&mut event)!=kResultOk || event.sampleOffset!=frame {continue;}
+                    // The generated enum constants are i32 on MSVC and u32 elsewhere.
+                    const NOTE_ON:u32=Event_::EventTypes_::kNoteOnEvent as u32;
+                    const NOTE_OFF:u32=Event_::EventTypes_::kNoteOffEvent as u32;
+                    const NOTE_EXPRESSION:u32=Event_::EventTypes_::kNoteExpressionValueEvent as u32;
+                    const POLY_PRESSURE:u32=Event_::EventTypes_::kPolyPressureEvent as u32;
                     match event.r#type as u32 {
-                        Event_::EventTypes_::kNoteOnEvent => {
+                        NOTE_ON => {
                             let note=event.__field0.noteOn;
                             voices.retain(|voice| if note.noteId>=0 {voice.id!=note.noteId} else {voice.channel!=note.channel || voice.pitch!=note.pitch});
                             voices.push(ExpressiveVoice{channel:note.channel,pitch:note.pitch,id:note.noteId,velocity:f64::from(note.velocity),expression:1.0});
                             self.last_velocity.store(f64::from(note.velocity).to_bits(),Relaxed);
                             self.last_tuning.store(f64::from(note.tuning).to_bits(),Relaxed);
                         }
-                        Event_::EventTypes_::kNoteOffEvent => {
+                        NOTE_OFF => {
                             let note=event.__field0.noteOff;
                             voices.retain(|voice|if note.noteId>=0 {voice.id!=note.noteId} else {voice.channel!=note.channel || voice.pitch!=note.pitch});
                             self.last_release.store(f64::from(note.velocity).to_bits(),Relaxed);
                         }
-                        Event_::EventTypes_::kNoteExpressionValueEvent => {
+                        NOTE_EXPRESSION => {
                             let expression=event.__field0.noteExpressionValue;
                             for voice in voices.iter_mut().filter(|voice|voice.id==expression.noteId) {voice.expression=expression.value;}
                             self.last_expression.store(expression.value.to_bits(),Relaxed);
                         }
-                        Event_::EventTypes_::kPolyPressureEvent => {
+                        POLY_PRESSURE => {
                             let expression=event.__field0.polyPressure;
                             for voice in voices.iter_mut().filter(|voice|if expression.noteId>=0 {voice.id==expression.noteId} else {voice.channel==expression.channel && voice.pitch==expression.pitch}) {voice.expression=f64::from(expression.pressure);}
                             self.last_expression.store(f64::from(expression.pressure).to_bits(),Relaxed);
