@@ -2792,7 +2792,7 @@ impl DawApp {
                             daw_ui::form_grid(ui, "clip_properties", |ui| {
                                 let label = daw_ui::form_label(ui, "Name");
                                 let name = ui.horizontal(|ui| {
-                                    let name = daw_ui::text_field(ui, &mut clip.name, "Clip name", daw_ui::tokens::FORM_FIELD_WIDTH);
+                                    let name = daw_ui::form_text_field(ui, &mut clip.name, "Clip name");
                                     if ui.add(daw_ui::quiet_button_widget("Keyboard…").small()).on_hover_text("Name this clip with the mouse").clicked() {
                                         name_keyboard = Some(true);
                                     }
@@ -2921,7 +2921,7 @@ impl DawApp {
                         daw_ui::form_grid(ui, "track_properties", |ui| {
                             let label = daw_ui::form_label(ui, "Name");
                             changed |= ui.horizontal(|ui| {
-                                let name = daw_ui::text_field(ui, &mut track.name, "Track name", daw_ui::tokens::FORM_FIELD_WIDTH).labelled_by(label.id);
+                                let name = daw_ui::form_text_field(ui, &mut track.name, "Track name").labelled_by(label.id);
                                 if ui.add(daw_ui::quiet_button_widget("Keyboard…").small()).on_hover_text("Name this track with the mouse").clicked() {
                                     name_keyboard = Some(false);
                                 }

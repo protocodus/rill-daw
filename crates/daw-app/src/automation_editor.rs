@@ -187,7 +187,13 @@ impl DawApp {
                 } else {
                     "automation_create"
                 }))
-                .default_width(880.0)
+                // The plug-in parameter browser needs its wide table; choosing
+                // a track and channel parameter is a two-row form.
+                .default_width(if parameter_page {
+                    880.0
+                } else {
+                    daw_ui::tokens::FORM_WIDTH
+                })
                 .default_height(if parameter_page { 620.0 } else { 180.0 })
                 .vscroll(false)
         };
@@ -233,15 +239,21 @@ impl DawApp {
         let Some(source) = state.source else {
             daw_ui::text::note(ui, "Add an audio, instrument, or bus track first.");
             return footer
-                .show(window_ui, |ui| daw_ui::button(ui, back).clicked())
+                .show(window_ui, |ui| {
+                    daw_ui::dialog_actions(
+                        ui,
+                        |ui| daw_ui::dialog_button(ui, back).clicked(),
+                        |_| {},
+                    )
+                    .inner
+                    .0
+                })
                 .inner;
         };
         let mut selected_source = Some(source);
-        let control_width =
-            (ui.available_width() - daw_ui::tokens::SELECT_WIDTH - daw_ui::tokens::SPACE_LG)
-                .clamp(160.0, 320.0);
+        let control_width = daw_ui::tokens::FORM_FIELD_WIDTH;
         daw_ui::form_grid(ui, "automation_source", |ui| {
-            daw_ui::text::label(ui, "Track");
+            daw_ui::form_label(ui, "Track");
             daw_ui::select(
                 "automation_source_choice",
                 tracks
@@ -307,7 +319,7 @@ impl DawApp {
         }
         state.parameter = state.parameter.min(choices.len() - 1);
         daw_ui::form_grid(ui, "automation_parameter", |ui| {
-            daw_ui::text::label(ui, "Parameter");
+            daw_ui::form_label(ui, "Parameter");
             daw_ui::select("automation_parameter_choice", &choices[state.parameter].1)
                 .width(control_width)
                 .truncate()
@@ -433,16 +445,20 @@ impl DawApp {
         }
         let (activate, cancel) = footer
             .show(window_ui, |ui| {
-                daw_ui::action_row(
+                // The shared footer: primary at the right edge, Cancel/Back beside it.
+                daw_ui::dialog_actions(
                     ui,
                     |ui| {
-                        ui.add_enabled_ui(ready, |ui| daw_ui::primary_button(ui, action))
+                        let activate = ui
+                            .add_enabled_ui(ready, |ui| daw_ui::dialog_primary(ui, action))
                             .inner
-                            .clicked()
+                            .clicked();
+                        (activate, daw_ui::dialog_button(ui, back).clicked())
                     },
-                    |ui| daw_ui::button(ui, back).clicked(),
+                    |_| {},
                 )
                 .inner
+                .0
             })
             .inner;
         if ready && (activate || browser_activate) {

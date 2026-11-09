@@ -70,6 +70,9 @@ pub const SWITCH_HEIGHT: f32 = 21.0;
 pub const FORM_LABEL_WIDTH: f32 = 144.0;
 /// Ordinary form field (select, text, number) width inside a form grid.
 pub const FORM_FIELD_WIDTH: f32 = SEARCH_CHOICE_WIDTH;
+/// Body width of a dialog that is one form: label, gutter and field with no
+/// dead space beside the fields.
+pub const FORM_WIDTH: f32 = FORM_LABEL_WIDTH + SPACE_LG + FORM_FIELD_WIDTH;
 pub const POPUP_WIDTH_SM: f32 = 377.0;
 pub const POPUP_WIDTH_MD: f32 = 610.0;
 pub const POPUP_WIDTH_LG: f32 = 987.0;

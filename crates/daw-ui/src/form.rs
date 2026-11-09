@@ -14,7 +14,9 @@ pub fn form_grid<R>(
     egui::Grid::new(id_salt)
         .num_columns(2)
         .min_col_width(tokens::FORM_LABEL_WIDTH)
-        .spacing(egui::vec2(tokens::SPACE_LG, tokens::SPACE_MD))
+        // Rows are related controls of one form: the 8-point step keeps a
+        // dialog compact while every 34-point target stays separate.
+        .spacing(egui::vec2(tokens::SPACE_LG, tokens::SPACE_SM))
         .min_row_height(tokens::CONTROL_HEIGHT)
         .show(ui, contents)
 }
@@ -33,6 +35,26 @@ pub fn form_label(ui: &mut Ui, value: impl Into<String>) -> egui::Response {
         },
     )
     .inner
+}
+
+/// A form select at the shared field width, so stacked fields share both
+/// edges. Long choices truncate instead of widening the dialog.
+pub fn form_select(
+    id_salt: impl Hash,
+    selected_text: impl Into<egui::WidgetText>,
+) -> egui::ComboBox {
+    crate::select(id_salt, selected_text)
+        .width(tokens::FORM_FIELD_WIDTH)
+        .truncate()
+}
+
+/// Text inputs add their padding outside the requested width. Request this
+/// width so a text field shares both edges with the selects above and below.
+pub const FORM_TEXT_WIDTH: f32 = tokens::FORM_FIELD_WIDTH - 2.0 * tokens::BUTTON_PADDING_X;
+
+/// A single-line text input at the shared form field width.
+pub fn form_text_field(ui: &mut Ui, value: &mut String, hint: &str) -> egui::Response {
+    crate::text_field(ui, value, hint, FORM_TEXT_WIDTH)
 }
 
 /// Keep actions reachable beside arbitrarily long paths. The path elides in

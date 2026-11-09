@@ -80,7 +80,7 @@ fn form_rows_leave_clear_space_between_labels_and_adjacent_controls_at_display_s
                                 let row = label.rect.union(control.rect);
                                 if let Some(previous) = previous {
                                     assert!(
-                                        row.top() - previous.bottom() >= 12.5,
+                                        row.top() - previous.bottom() >= 7.5,
                                         "adjacent field targets crowd at {density}×: {previous:?}, {row:?}"
                                     );
                                 }

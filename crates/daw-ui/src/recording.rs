@@ -29,9 +29,9 @@ pub fn recording_timing_controls(
 ) -> bool {
     let before = (*precount, *click, *gain);
     crate::form_grid(ui, "recording_timing", |ui| {
-        let label = text::label(ui, "Pre-count");
+        let label = crate::form_label(ui, "Pre-count");
         ui.add_enabled_ui(timing_enabled, |ui| {
-            crate::select("recording_precount", match *precount { 1 => "1 bar", 2 => "2 bars", _ => "No pre-count" })
+            crate::form_select("recording_precount", match *precount { 1 => "1 bar", 2 => "2 bars", _ => "No pre-count" })
                 .show_ui(ui, |ui| {
                     for (value, title) in [(0, "No pre-count"), (1, "1 bar"), (2, "2 bars")] {
                         crate::selectable_value(ui, precount, value, title);
@@ -40,12 +40,12 @@ pub fn recording_timing_controls(
                 .on_hover_text("Count in before recording from stopped. Recording during playback starts immediately.");
         });
         ui.end_row();
-        text::label(ui, "Metronome");
+        crate::form_label(ui, "Metronome");
         crate::toggle(ui, click, "Click").on_hover_text(
             "Play a metronome during playback and recording. Pre-count clicks always play.",
         );
         ui.end_row();
-        let label = text::label(ui, "Click level");
+        let label = crate::form_label(ui, "Click level");
         ui.add(crate::slider(gain, 0.0..=1.0)).labelled_by(label.id);
         ui.end_row();
     });

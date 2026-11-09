@@ -1028,7 +1028,7 @@ impl DawApp {
     pub(crate) fn ai_setup(&mut self, ui: &mut egui::Ui) {
         daw_ui::form_grid(ui, "ai_settings", |ui| {
             let label = daw_ui::form_label(ui, "Provider");
-            daw_ui::select("ai_provider", self.setup_draft.ai.provider.name())
+            daw_ui::form_select("ai_provider", self.setup_draft.ai.provider.name())
                 .show_ui(ui, |ui| {
                     for provider in [daw_ai::Provider::OpenAi, daw_ai::Provider::Anthropic] {
                         let previous_provider = self.setup_draft.ai.provider;
@@ -1053,7 +1053,7 @@ impl DawApp {
                 .labelled_by(label.id);
             ui.end_row();
             let label = daw_ui::form_label(ui, "Model");
-            let response = daw_ui::text_field(ui, &mut self.setup_draft.ai.model, "Model", 280.0)
+            let response = daw_ui::form_text_field(ui, &mut self.setup_draft.ai.model, "Model")
                 .labelled_by(label.id);
             ui.ctx()
                 .data_mut(|data| data.insert_temp(egui::Id::new("ai_model_rect"), response.rect));
@@ -1064,8 +1064,13 @@ impl DawApp {
             } else {
                 "API key"
             };
-            let response = daw_ui::secret_field(ui, &mut self.assistant.key_draft, hint, 280.0)
-                .labelled_by(label.id);
+            let response = daw_ui::secret_field(
+                ui,
+                &mut self.assistant.key_draft,
+                hint,
+                daw_ui::FORM_TEXT_WIDTH,
+            )
+            .labelled_by(label.id);
             ui.ctx()
                 .data_mut(|data| data.insert_temp(egui::Id::new("ai_key_rect"), response.rect));
             ui.end_row();

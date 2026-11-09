@@ -216,7 +216,7 @@ Call `daw_ui::theme::apply(ctx)` when creating the application. It configures bo
 | Corners | `RADIUS` 5, `SURFACE_RADIUS` 8 |
 | Edges | `BORDER_WIDTH` 1; `FOCUS_WIDTH` and `WINDOW_BORDER_WIDTH` φ ≈ 1.618 |
 | Typography | Caption/note/canvas 13; button/body/track title `13 + 3/φ` ≈ 14.85; subtitle `13 + 5/φ` ≈ 16.09; title 21; dense scale `8 + 3/φ` ≈ 9.85 |
-| Forms and windows | `FORM_LABEL_WIDTH` 144, `FORM_FIELD_WIDTH` 233; `POPUP_WIDTH_SM` 377, `POPUP_WIDTH_MD` 610, `POPUP_WIDTH_LG` 987 |
+| Forms and windows | `FORM_LABEL_WIDTH` 144, `FORM_FIELD_WIDTH` 233, `FORM_WIDTH` 398 (label + 21 gutter + field); `POPUP_WIDTH_SM` 377, `POPUP_WIDTH_MD` 610, `POPUP_WIDTH_LG` 987 |
 | Mixer and editors | `MIXER_STRIP_WIDTH` 144 (`MIXER_CHANNEL_WIDTH` in `mixer.rs` is its alias), `MIXER_SCALE_GUTTER` 34, `MIXER_FADER_MIN` 144, `MIXER_METER_WIDTH` 13; `PIANO_KEYS_WIDTH` 60, `VELOCITY_LANE_HEIGHT` 89, `NOTE_RADIUS` 3 |
 
 Sizes are logical screen points and follow egui's display scaling. Fibonacci steps establish spacing, padding, corners, and control dimensions; the golden ratio interpolates readable type sizes and controls gradient placement and emphasis. Keep canvas data geometry and rendering budgets independent of this visual scale. Surfaces use neutral graphite in Dark and cool porcelain in Light. Blue identifies commands that change the document, pink AI, green guides, and orange automation. Tools and view controls stay neutral text, so a toolbar reads as quiet text with a few blue commands; the active tool keeps its glowing border. Recording is red, an active Mute is yellow and an active Solo is green (`Palette::recording`, `mute`, `solo`). Controls have flat bases, gently rounded anti-aliased edges, and restrained linear and radial light. The single primary action of a toolbar or dialog footer uses a solid action fill with contrasting text and a small blurred shadow; secondary commands keep the tinted fill. Selected controls and keyboard focus gain a quiet accent halo. Idle secondary toolbar commands remain transparent. Utility windows use a clearer border and broader shadow. Sections use spacing rather than nested outlines, and action targets remain at least 34 points high. Reuse the shared palette and tokens.
@@ -226,8 +226,8 @@ Use the spacing scale consistently:
 | Relationship | Space |
 | --- | --- |
 | Tight caption/detail separation | 5 |
-| Related controls, compact toolbar groups, and horizontal menu-frame insets | 8 |
-| Ordinary sibling rows, form rows, card/inset padding, menu-item horizontal padding | 13 |
+| Related controls, form rows, compact toolbar groups, and horizontal menu-frame insets | 8 |
+| Ordinary sibling rows, card/inset padding, menu-item horizontal padding | 13 |
 | Separate sections, pane gutters, horizontal window padding | 21 |
 | Major workspace separation | 34 |
 
@@ -1782,8 +1782,14 @@ Tabbed utilities (Setup, Library, Properties, Assistant) switch pages with
 `text::section_heading` names groups in sentence case (**Collections**,
 **Recovery folder**); `form_label` captions one row. `form_grid` reserves a
 fixed 144-point label column (`FORM_LABEL_WIDTH`, longer captions truncate with
-the full text on hover); selects and text fields use `FORM_FIELD_WIDTH`. One
-form uses one grid. `section_gap` separates groups in a popup body.
+the full text on hover); selects and text fields use `FORM_FIELD_WIDTH` through
+`form_select` and `form_text_field`, so stacked fields share both edges. Rows
+sit 8 points apart. One form uses one grid; checkboxes and other options take a
+row with an empty caption so they align with the fields. A dialog that is one
+form defaults to `FORM_WIDTH`, which leaves no dead space beside its fields; add
+`SPACE_SM + SELECT_WIDTH` when a few rows carry a trailing quiet action (Setup,
+Recording). Every footer uses `dialog_actions`: the primary action at the right
+edge, Cancel/Done beside it, text only. `section_gap` separates groups in a popup body.
 
 Menus list items in workflow order with separators between groups. Use
 `menu_item(ui, label, Some("Mod+Z"))` for a command with a shortcut: the
