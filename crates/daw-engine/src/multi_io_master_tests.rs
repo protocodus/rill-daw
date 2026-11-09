@@ -102,7 +102,7 @@ fn muted_audio_is_not_loaded_and_reveals_the_next_visible_source() {
     hidden.muted = true;
     project.track_mut(source).unwrap().clips.insert(0, hidden);
     let result = render(&project, 8_000, 0.8).unwrap();
-    for frame in result.chunks_exact(2) {
+    for frame in result.as_chunks::<2>().0 {
         approx(frame[0], 0.2);
         approx(frame[1], -0.1);
     }
@@ -770,7 +770,7 @@ fn freeze_prints_pre_fader_source_position_and_rolls_back_failed_batches() {
     assert_eq!(output.frames, 4_000);
     assert_eq!(output.length_beats, 1.0);
     let data = AudioData::load_wav(&output.path).unwrap();
-    for frame in data.samples.chunks_exact(2) {
+    for frame in data.samples.as_chunks::<2>().0 {
         approx(frame[0], 0.8);
         approx(frame[1], 0.4);
     }
@@ -848,7 +848,7 @@ fn freeze_multi_output_batch_keeps_pairs_distinct_and_preflights_total_media_siz
             .unwrap();
         assert_eq!(output.start_beat, 1.0);
         let data = AudioData::load_wav(&output.path).unwrap();
-        for frame in data.samples.chunks_exact(2) {
+        for frame in data.samples.as_chunks::<2>().0 {
             approx(frame[0], expected[0]);
             approx(frame[1], expected[1]);
         }

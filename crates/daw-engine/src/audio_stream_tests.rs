@@ -113,7 +113,7 @@ fn disk_windows_seek_reverse_and_loop_without_whole_file_pcm() {
     let mut renderer = Renderer::new(&looped, RATE, true).unwrap();
     renderer.seek(looped.loop_start).unwrap();
     let audio = block(&mut renderer, 8);
-    for pair in audio.chunks_exact(2) {
+    for pair in audio.as_chunks::<2>().0 {
         near(pair[0], 0.6);
         near(pair[1], -0.7);
     }

@@ -160,7 +160,7 @@ fn integer_dither_has_bounded_unbiased_decorrelated_error_and_can_be_disabled() 
         let mut means = [0.0; 2];
         let mut powers = [0.0; 2];
         let mut cross = 0.0;
-        for frame in encoded.chunks_exact(2) {
+        for frame in encoded.as_chunks::<2>().0 {
             let errors = [
                 f64::from(frame[0]) - levels[0] * scale,
                 f64::from(frame[1]) - levels[1] * scale,

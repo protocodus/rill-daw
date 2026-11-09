@@ -141,7 +141,12 @@ fn large_source_is_prepared_as_disk_audio_with_correct_pitch_duration_and_stereo
                 .unwrap(),
             8192
         );
-        let mono: Vec<_> = middle.chunks_exact(2).map(|frame| frame[0]).collect();
+        let mono: Vec<_> = middle
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|frame| frame[0])
+            .collect();
         let crossings = mono
             .windows(2)
             .filter(|pair| pair[0] <= 0.0 && pair[1] > 0.0)
@@ -161,7 +166,9 @@ fn large_source_is_prepared_as_disk_audio_with_correct_pitch_duration_and_stereo
         assert!(rms > 0.08 && rms < 0.4, "{algorithm:?}: RMS{rms}");
         assert!(
             middle
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .all(|frame| (frame[0] * 0.5 - frame[1]).abs() < 0.001)
         );
     }

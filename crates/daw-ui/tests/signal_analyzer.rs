@@ -56,7 +56,9 @@ fn phase_geometry_uses_mid_side_axes_and_rejects_nonfinite_samples() {
             .unwrap();
         let centers: Vec<_> = mesh
             .vertices
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|quad| (quad[0].pos + quad[2].pos.to_vec2()) * 0.5)
             .collect();
         let axis = if vertical {

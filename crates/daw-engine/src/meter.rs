@@ -54,6 +54,8 @@ impl ChannelMeter {
         let peaks = peaks.map(|peak| if peak.is_finite() { peak.abs() } else { 0.0 });
         // Capture raw block maxima before ballistics. A UI frame may arrive
         // much later, or the mixer may be closed when this transient occurs.
+        // `try_update` replaces this from Rust 1.95, above the workspace MSRV.
+        #[allow(deprecated)]
         let _ = self
             .held
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |packed| {
