@@ -244,6 +244,7 @@ impl DawApp {
             });
         let view_before = viewport;
         let mut view_action = daw_ui::TimelineViewAction::None;
+        let mut fit = false;
         let header_id = egui::Id::new("arrangement_header_width");
         let max_header = (ui.available_width() - 200.0).clamp(224.0, 600.0);
         let mut header_width = ui
@@ -267,7 +268,6 @@ impl DawApp {
             self.tool = daw_ui::EditorTool::Select;
         }
         daw_ui::editor_tool_shortcuts(ui, &mut self.tool, &supported);
-        let mut fit = false;
         let mut nudge = 0;
         let mut add_pattern = false;
         let mut density_choice = None;
@@ -276,7 +276,19 @@ impl DawApp {
             data.get_temp::<daw_ui::WaveformAmplitudeScale>(amplitude_id)
                 .unwrap_or_default()
         });
-        let compact_toolbar = ui.available_width() < 1200.0;
+        // Full padding needs about 1520 points for the tools, View and help on
+        // one row; tighter padding keeps them together on laptop-width windows.
+        let compact_toolbar = ui.available_width() < 1520.0;
+        // Zoom lives beside the ruler, which is drawn after this frame's view
+        // changes are applied, so its click arrives one frame later.
+        let corner_zoom_id = egui::Id::new("arrangement_corner_zoom");
+        if let Some(action) = ui
+            .ctx()
+            .data_mut(|data| data.remove_temp::<daw_ui::TimelineViewAction>(corner_zoom_id))
+        {
+            view_action = action;
+            fit = action == daw_ui::TimelineViewAction::FitAll;
+        }
         let trailing_id = egui::Id::new("arrangement_toolbar_trailing_width");
         let trailing_width = ui
             .ctx()
@@ -334,28 +346,9 @@ impl DawApp {
                         max_header,
                     );
                 });
-                let zoom = daw_ui::measured_toolbar_group(
-                    ui,
-                    "arrangement_zoom",
-                    daw_ui::tokens::SPACE_XS,
-                    |ui| {
-                        daw_ui::timeline_zoom_controls(
-                            ui,
-                            !self.arranger_selection_ids().is_empty(),
-                        )
-                    },
-                );
-                if zoom.inner != daw_ui::TimelineViewAction::None {
-                    view_action = zoom.inner;
-                    fit = zoom.inner == daw_ui::TimelineViewAction::FitAll;
-                }
-                let controls = help
-                    .rect
-                    .union(view.response.rect)
-                    .union(zoom.response.rect);
+                let controls = help.rect.union(view.response.rect);
                 ui.ctx()
                     .data_mut(|data| data.insert_temp(trailing_id, controls.width()));
-                daw_ui::editor_tool_caption(ui, self.tool, daw_ui::ToolHintContext::Arrangement);
             });
         });
         if let Some(density) = density_choice
@@ -666,6 +659,52 @@ impl DawApp {
             ruler.min,
             Vec2::new(header_width, daw_ui::tokens::TIMELINE_RULER_HEIGHT),
         );
+        // The timeline's zoom sits in the ruler corner, where the header column
+        // is otherwise empty, instead of costing the toolbar a second row.
+        let zoom_size = Vec2::new(
+            daw_ui::tokens::CONTROL_HEIGHT * 4.0 + daw_ui::tokens::SPACE_XS * 3.0,
+            daw_ui::tokens::CONTROL_HEIGHT,
+        );
+        let zoom_rect = Rect::from_min_size(
+            egui::pos2(
+                header_cell.right() - zoom_size.x - daw_ui::tokens::SPACE_SM,
+                header_cell.center().y - zoom_size.y * 0.5,
+            ),
+            zoom_size,
+        );
+        // The gesture caption fills the otherwise empty strip beside the loop
+        // band, so it stays visible without a toolbar row of its own.
+        let tracks_left = daw_ui::TrackHeaderLayout::new(Rect::from_min_size(
+            ruler.min,
+            Vec2::new(header_width, ROW),
+        ))
+        .icon
+        .left();
+        daw_ui::editor_tool_caption_at(
+            ui,
+            Rect::from_min_max(
+                egui::pos2(tracks_left, header_cell.bottom()),
+                egui::pos2(
+                    header_cell.right() - daw_ui::tokens::SPACE_SM,
+                    ruler.bottom(),
+                ),
+            ),
+            self.tool,
+            daw_ui::ToolHintContext::Arrangement,
+        );
+        let mut zoom_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .id_salt("arrangement_zoom")
+                .max_rect(zoom_rect)
+                .layout(egui::Layout::left_to_right(egui::Align::Center)),
+        );
+        let zoom =
+            daw_ui::timeline_zoom_controls(&mut zoom_ui, !self.arranger_selection_ids().is_empty());
+        if zoom != daw_ui::TimelineViewAction::None {
+            ui.ctx()
+                .data_mut(|data| data.insert_temp(corner_zoom_id, zoom));
+            ui.ctx().request_repaint();
+        }
         daw_ui::track_list_menu_at(
             ui,
             header_cell,

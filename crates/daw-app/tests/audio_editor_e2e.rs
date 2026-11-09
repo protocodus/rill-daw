@@ -437,12 +437,17 @@ fn audio_toolbar_is_one_row_and_tools_and_drawers_never_move_the_canvas() {
                 "{name} left the tool row at {width}"
             );
         }
-        for name in ["View", "Fit"] {
-            assert!(
-                (center_y(label_rect(&state, name)) - trailing).abs() < 1.0,
-                "{name} left the view cluster at {width}"
-            );
-        }
+        assert!(
+            (center_y(label_rect(&state, "View")) - trailing).abs() < 1.0,
+            "View left the view cluster at {width}"
+        );
+        // At these widths zoom sits in the workspace header, beside Properties.
+        assert!(
+            (center_y(label_rect(&state, "Fit")) - center_y(label_rect(&state, "Properties")))
+                .abs()
+                < 1.0,
+            "Fit left the editor header at {width}"
+        );
         assert!(
             !state["visible_labels"]
                 .as_array()

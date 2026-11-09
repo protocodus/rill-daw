@@ -157,18 +157,38 @@ pub fn editor_tool_caption(
         ui.allocate_ui_with_layout(
             egui::vec2(width, tokens::CONTROL_HEIGHT),
             egui::Layout::left_to_right(egui::Align::Center),
-            |ui| {
-                ui.add(
-                    Label::new(TextRole::Note.rich(ui.ctx(), context.gesture(tool)))
-                        .truncate()
-                        .selectable(false)
-                        .sense(Sense::hover()),
-                )
-                .on_hover_text(context.hint(tool))
-            },
+            |ui| caption_label(ui, tool, context),
         )
         .inner,
     )
+}
+
+fn caption_label(ui: &mut Ui, tool: EditorTool, context: ToolHintContext) -> Response {
+    ui.add(
+        Label::new(TextRole::Note.rich(ui.ctx(), context.gesture(tool)))
+            .truncate()
+            .selectable(false)
+            .sense(Sense::hover()),
+    )
+    .on_hover_text(context.hint(tool))
+}
+
+/// The same caption in a rectangle the caller already owns, such as the strip
+/// under the arranger's ruler corner. It allocates nothing in `ui`.
+pub fn editor_tool_caption_at(
+    ui: &mut Ui,
+    rect: egui::Rect,
+    tool: EditorTool,
+    context: ToolHintContext,
+) -> Response {
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .id_salt(("editor_tool_caption", context))
+            .max_rect(rect)
+            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+    );
+    child.set_clip_rect(rect.intersect(ui.clip_rect()));
+    caption_label(&mut child, tool, context)
 }
 
 /// Keep the active interaction legible without letting instructions consume the

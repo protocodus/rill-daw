@@ -3642,6 +3642,16 @@ impl DawApp {
                             return;
                         }
                     }
+                    if workspace == WorkspaceView::Clip
+                        && let Some(clip) = self.selected()
+                    {
+                        let context = if matches!(clip.content, ClipContent::Midi { .. }) {
+                            daw_ui::ToolHintContext::Midi
+                        } else {
+                            daw_ui::ToolHintContext::Audio
+                        };
+                        daw_ui::editor_header_zoom(ui, context);
+                    }
                     if workspace == WorkspaceView::Mixer {
                         self.mixer_track_navigation(ui);
                         self.mixer_order_menu(ui);
@@ -3825,6 +3835,20 @@ impl DawApp {
                 }
             }
             "clip" => self.view = WorkspaceView::Clip,
+            "piano" => {
+                let target = self.project.tracks.iter().find_map(|track| {
+                    track
+                        .clips
+                        .iter()
+                        .find(|clip| matches!(clip.content, ClipContent::Midi { .. }))
+                        .map(|clip| (track.id, clip.id))
+                });
+                if let Some((track, clip)) = target {
+                    self.selected_track = Some(track);
+                    self.selected_clip = Some(clip);
+                    self.view = WorkspaceView::Clip;
+                }
+            }
             "expression" => {
                 let target = self.project.tracks.iter().find_map(|track| {
                     track
