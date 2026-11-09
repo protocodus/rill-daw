@@ -134,3 +134,45 @@ fn form_grid_keeps_labels_single_line_and_controls_in_a_shared_column() {
         );
     }
 }
+
+#[test]
+fn form_selects_and_text_fields_share_both_edges() {
+    for density in [1.0, 1.25, 2.0] {
+        let context = Context::default();
+        theme::apply(&context);
+        context.set_pixels_per_point(density);
+        let mut value = String::from("gpt");
+        for _ in 0..3 {
+            let _ = context.run(
+                RawInput {
+                    screen_rect: Some(Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(620.0, 440.0),
+                    )),
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        controls::form_grid(ui, "shared_edges", |ui| {
+                            controls::form_label(ui, "Provider");
+                            let select = controls::form_select("provider", "OpenAI")
+                                .show_ui(ui, |_| {})
+                                .response;
+                            ui.end_row();
+                            controls::form_label(ui, "Model");
+                            let field = controls::form_text_field(ui, &mut value, "Model");
+                            ui.end_row();
+                            assert!((select.rect.left() - field.rect.left()).abs() <= 0.5);
+                            assert!(
+                                (select.rect.right() - field.rect.right()).abs() <= 1.0,
+                                "{:?} {:?} at {density}×",
+                                select.rect,
+                                field.rect
+                            );
+                        });
+                    });
+                },
+            );
+        }
+    }
+}
