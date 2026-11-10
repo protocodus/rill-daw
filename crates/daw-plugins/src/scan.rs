@@ -1,5 +1,6 @@
-//! Metadata discovery for formats whose descriptors live in native code (CLAP) or
-//! need a host library (LV2). Each bundle is read in a disposable helper with a deadline.
+//! Metadata discovery for formats whose descriptors live in native code (CLAP), need a
+//! host library (LV2) or a system registry (Audio Units). Each bundle, and the AU
+//! registry as a whole, is read in a disposable helper with a deadline.
 use crate::{PluginFormat, PluginInfo, helper_path};
 use anyhow::{Context, Result, bail, ensure};
 use std::io::{Read, Write};
@@ -22,6 +23,8 @@ pub(crate) fn helper_main() -> Result<()> {
         Some(PluginFormat::Clap) => crate::clap::scan(&path),
         #[cfg(target_os = "linux")]
         Some(PluginFormat::Lv2) => crate::lv2::scan(&path),
+        #[cfg(target_os = "macos")]
+        Some(PluginFormat::Au) => crate::au::scan(),
         _ => Err(anyhow::anyhow!("Unsupported plug-in bundle")),
     };
     let reply = found.map_err(|error| format!("{error:#}"));
@@ -31,7 +34,8 @@ pub(crate) fn helper_main() -> Result<()> {
     Ok(())
 }
 
-/// Read one CLAP/LV2 bundle's descriptors without loading it into this process.
+/// Read one CLAP/LV2 bundle's descriptors, or the installed Audio Units, without
+/// loading plug-in code into this process.
 pub fn scan_bundle(path: &Path) -> Result<Vec<PluginInfo>> {
     scan_with(&helper_path()?, path, SCAN_DEADLINE)
 }

@@ -1,9 +1,9 @@
-//! VST3, CLAP and (on Linux) LV2 discovery and processing, separate from the audio
-//! device backend.
+//! VST3, CLAP, (on Linux) LV2 and (on macOS) Audio Unit discovery and processing,
+//! separate from the audio device backend.
 //!
 //! VST3 scanning reads directory entries and optional `moduleinfo.json` files. CLAP and
-//! LV2 descriptors are read by a disposable helper per bundle, so scanning never loads
-//! native plugin code into this process. Each selected instrument runs in a separate `daw-plugin-host`
+//! LV2 descriptors are read by a disposable helper per bundle, and the Audio Unit
+//! registry by one helper, so scanning never loads native plugin code into this process. Each selected instrument runs in a separate `daw-plugin-host`
 //! process, which contains crashes and hangs. This is process crash isolation, not an OS
 //! permission sandbox: the child retains the user's file and network access. Native plugin
 //! code is never loaded into the DAW process. No in-process fallback is available.
@@ -33,6 +33,9 @@ use audio_buffers::{
     MAX_AUDIO_CHANNELS, copy_stereo_input, validate_audio_bus_layout, validate_pair,
 };
 
+#[cfg(target_os = "macos")]
+mod au;
+pub mod audio_unit;
 pub mod catalog;
 mod clap;
 mod expressive;
@@ -140,7 +143,7 @@ impl PluginInfo {
 }
 
 /// Standard folders of every hostable format, plus `VST3_PATH`, `CLAP_PATH` and
-/// (on Linux) `LV2_PATH` when set.
+/// (on Linux) `LV2_PATH` when set. On macOS this includes the Audio Unit locator.
 pub fn default_locations() -> Vec<PathBuf> {
     PluginFormat::available()
         .flat_map(PluginFormat::default_locations)
@@ -198,6 +201,7 @@ pub fn helper_path() -> Result<PathBuf> {
 }
 
 /// Recursively scan directories or individual `.vst3`, `.clap` and `.lv2` bundles/files.
+/// On macOS the [`audio_unit::AU_LOCATOR`] root lists the installed Audio Units.
 ///
 /// Missing roots are ignored. Symbolic-link cycles and duplicate roots are collapsed by
 /// canonical path. Known effects are included so callers can decide how to display them.
@@ -206,7 +210,15 @@ pub fn scan_paths(paths: &[PathBuf]) -> Result<Vec<PluginInfo>> {
     let mut pending = paths.to_vec();
     let mut visited = HashSet::new();
     let mut found = Vec::new();
+    let mut audio_units = false;
     while let Some(path) = pending.pop() {
+        // The locator is matched as given; resolving it could change its spelling.
+        if PluginFormat::of_bundle(&path) == Some(PluginFormat::Au) {
+            if !std::mem::replace(&mut audio_units, true) {
+                found.extend(bundle_info(&path));
+            }
+            continue;
+        }
         if !path.exists() {
             continue;
         }
@@ -242,6 +254,13 @@ fn is_bundle(path: &Path) -> bool {
 
 fn bundle_info(path: &Path) -> Vec<PluginInfo> {
     let format = PluginFormat::from_path(path);
+    if format == PluginFormat::Au {
+        // The registry has no bundle to list by name when enumeration fails.
+        return scan::scan_bundle(path).unwrap_or_else(|error| {
+            eprintln!("Audio Unit scan failed: {error:#}");
+            Vec::new()
+        });
+    }
     if format != PluginFormat::Vst3 {
         // An unreadable bundle stays listed by name so loading can report the cause.
         return scan::scan_bundle(path).unwrap_or_else(|error| {
@@ -535,6 +554,8 @@ impl VstInstrument {
             "Expected a .vst3, .clap{} plug-in bundle",
             if cfg!(target_os = "linux") {
                 " or .lv2"
+            } else if cfg!(target_os = "macos") {
+                " or Audio Unit"
             } else {
                 ""
             }
@@ -1517,6 +1538,13 @@ fn validate_block(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn the_audio_unit_locator_lists_nothing_off_macos() {
+        let locator = PathBuf::from(audio_unit::AU_LOCATOR);
+        assert!(scan_paths(&[locator]).unwrap().is_empty());
+    }
 
     #[test]
     fn native_bus_layout_admission_rejects_unbounded_allocations() {

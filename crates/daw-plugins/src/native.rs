@@ -18,6 +18,13 @@ pub(crate) const RESTART_PARAM_VALUES_CHANGED: i32 = 1 << 2;
 pub(crate) const RESTART_LATENCY_CHANGED: i32 = 1 << 3;
 pub(crate) const RESTART_PARAM_TITLES_CHANGED: i32 = 1 << 4;
 
+/// Plug-in GUI gestures and value changes, drained by the editor helper.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum ParameterEdit {
+    Begin(u32),
+    Value(u32, f64),
+}
+
 /// Identity reported to the parent after loading.
 pub(crate) struct LoadedInfo {
     pub name: String,
@@ -128,6 +135,10 @@ pub(crate) fn load(request: LoadRequest<'_>) -> Result<Box<dyn NativeProcessor>>
         PluginFormat::Lv2 => crate::lv2::load(&request),
         #[cfg(not(target_os = "linux"))]
         PluginFormat::Lv2 => bail!("LV2 plug-ins are supported only on Linux"),
+        #[cfg(target_os = "macos")]
+        PluginFormat::Au => Ok(Box::new(crate::au::AuProcessor::load(&request)?)),
+        #[cfg(not(target_os = "macos"))]
+        PluginFormat::Au => bail!("Audio Units are supported only on macOS"),
     }
 }
 
@@ -285,7 +296,7 @@ pub(crate) fn normalized_from_plain(min: f64, max: f64, plain: f64) -> f64 {
     }
 }
 
-/// Parameter metadata in wire form for a plain-valued (CLAP/LV2) parameter.
+/// Parameter metadata in wire form for a plain-valued (CLAP/LV2/AU) parameter.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn plain_parameter(
     id: u32,
@@ -320,7 +331,7 @@ pub(crate) fn plain_parameter(
     }
 }
 
-/// CLAP and LV2 transport bookkeeping, advanced after each successful playing block.
+/// CLAP, LV2 and AU transport bookkeeping, advanced after each successful playing block.
 #[derive(Clone, Copy)]
 pub(crate) struct Transport {
     pub position: TransportPosition,

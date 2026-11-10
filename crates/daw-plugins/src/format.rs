@@ -2,7 +2,9 @@
 //!
 //! A project or catalogue reference is a bundle/library path plus an optional
 //! class identifier. The format is a function of the bundle's extension, so legacy
-//! references and index records without an explicit format remain VST3.
+//! references and index records without an explicit format remain VST3. Audio
+//! Units have no bundle per plug-in and share the [`AU_LOCATOR`] path instead.
+use crate::audio_unit::{AU_LOCATOR, AudioUnitId};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -15,16 +17,20 @@ pub enum PluginFormat {
     Clap,
     /// Linux only; other platforms never discover or load LV2 bundles.
     Lv2,
+    /// Audio Units, macOS only; the reference path is [`AU_LOCATOR`].
+    Au,
 }
 
 impl PluginFormat {
-    pub const ALL: [Self; 3] = [Self::Vst3, Self::Clap, Self::Lv2];
+    pub const ALL: [Self; 4] = [Self::Vst3, Self::Clap, Self::Lv2, Self::Au];
 
     /// Formats this build can host on the current platform.
     pub fn available() -> impl Iterator<Item = Self> {
-        Self::ALL
-            .into_iter()
-            .filter(|format| *format != Self::Lv2 || cfg!(target_os = "linux"))
+        Self::ALL.into_iter().filter(|format| match format {
+            Self::Lv2 => cfg!(target_os = "linux"),
+            Self::Au => cfg!(target_os = "macos"),
+            _ => true,
+        })
     }
 
     pub fn label(self) -> &'static str {
@@ -32,6 +38,7 @@ impl PluginFormat {
             Self::Vst3 => "VST3",
             Self::Clap => "CLAP",
             Self::Lv2 => "LV2",
+            Self::Au => "AU",
         }
     }
 
@@ -41,22 +48,35 @@ impl PluginFormat {
             .find(|format| format.label().eq_ignore_ascii_case(label))
     }
 
-    fn extension(self) -> &'static str {
+    fn extension(self) -> Option<&'static str> {
         match self {
-            Self::Vst3 => "vst3",
-            Self::Clap => "clap",
-            Self::Lv2 => "lv2",
+            Self::Vst3 => Some("vst3"),
+            Self::Clap => Some("clap"),
+            Self::Lv2 => Some("lv2"),
+            Self::Au => None,
         }
     }
 
-    /// The format whose bundle extension `path` carries.
+    /// The hostable format whose bundle extension (or the Audio Unit locator) `path` names.
     pub fn of_bundle(path: &Path) -> Option<Self> {
+        if path == Path::new(AU_LOCATOR) {
+            return Self::available().find(|format| *format == Self::Au);
+        }
         let extension = path.extension()?;
-        Self::available().find(|format| extension.eq_ignore_ascii_case(format.extension()))
+        Self::available().find(|format| {
+            format
+                .extension()
+                .is_some_and(|known| extension.eq_ignore_ascii_case(known))
+        })
     }
 
-    /// Persisted references without a recognised extension keep their historic VST3 meaning.
+    /// Persisted references without a recognised extension keep their historic VST3
+    /// meaning. The Audio Unit locator names AU everywhere, so such references fail to
+    /// load with a clear reason off macOS instead of being read as VST3.
     pub fn from_path(path: &Path) -> Self {
+        if path == Path::new(AU_LOCATOR) {
+            return Self::Au;
+        }
         Self::of_bundle(path).unwrap_or_default()
     }
 
@@ -72,16 +92,19 @@ impl PluginFormat {
             {
                 Err("Plug-in ID must be 1-1,024 printable characters")
             }
+            Self::Au => AudioUnitId::parse(id).map(|_| ()),
             _ => Ok(()),
         }
     }
 
-    /// Standard install folders plus the format's search-path variable.
+    /// Standard install folders plus the format's search-path variable. Audio
+    /// Units are enumerated from the system registry through their locator.
     pub fn default_locations(self) -> Vec<PathBuf> {
         let (variable, mut paths) = match self {
             Self::Vst3 => ("VST3_PATH", vst3_host::discovery::scan_standard_paths()),
             Self::Clap => ("CLAP_PATH", clap_standard_paths()),
             Self::Lv2 => ("LV2_PATH", lv2_standard_paths()),
+            Self::Au => return vec![PathBuf::from(AU_LOCATOR)],
         };
         if let Some(extra) = std::env::var_os(variable) {
             paths.extend(std::env::split_paths(&extra).filter(|p| !p.as_os_str().is_empty()));
@@ -169,6 +192,39 @@ mod tests {
                 .is_ok()
         );
         assert!(PluginFormat::Lv2.validate_class_id(Some("")).is_err());
+    }
+
+    #[test]
+    fn audio_units_use_their_locator_everywhere_but_are_hosted_only_on_macos() {
+        let locator = Path::new(AU_LOCATOR);
+        assert_eq!(PluginFormat::from_path(locator), PluginFormat::Au);
+        assert_eq!(
+            PluginFormat::of_bundle(locator),
+            cfg!(target_os = "macos").then_some(PluginFormat::Au)
+        );
+        assert_eq!(
+            PluginFormat::from_path(Path::new("/Library/Frameworks/Other.framework")),
+            PluginFormat::Vst3
+        );
+        assert_eq!(PluginFormat::from_label("au"), Some(PluginFormat::Au));
+        assert_eq!(
+            PluginFormat::available().any(|f| f == PluginFormat::Au),
+            cfg!(target_os = "macos")
+        );
+        assert_eq!(
+            PluginFormat::Au.default_locations(),
+            [PathBuf::from(AU_LOCATOR)]
+        );
+        assert!(
+            PluginFormat::Au
+                .validate_class_id(Some("aumu:dls :appl"))
+                .is_ok()
+        );
+        assert!(
+            PluginFormat::Au
+                .validate_class_id(Some("org.example.synth"))
+                .is_err()
+        );
     }
 
     #[test]

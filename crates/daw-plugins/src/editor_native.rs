@@ -201,17 +201,33 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
         "This plug-in has no native editor"
     );
     let platform = Platform::new()?;
-    if crate::PluginFormat::from_path(&path) == crate::PluginFormat::Clap {
-        return clap::run(
-            output,
-            &commands,
-            &platform,
-            &path,
-            class_id.as_deref(),
-            &state,
-            parameters,
-            visible,
-        );
+    match crate::PluginFormat::from_path(&path) {
+        crate::PluginFormat::Clap => {
+            return clap::run::<crate::clap::ClapProcessor>(
+                output,
+                &commands,
+                &platform,
+                &path,
+                class_id.as_deref(),
+                &state,
+                parameters,
+                visible,
+            );
+        }
+        #[cfg(target_os = "macos")]
+        crate::PluginFormat::Au => {
+            return clap::run::<crate::au::AuProcessor>(
+                output,
+                &commands,
+                &platform,
+                &path,
+                class_id.as_deref(),
+                &state,
+                parameters,
+                visible,
+            );
+        }
+        _ => {}
     }
     let mut host = Vst3Host::builder()
         .with_process_isolation(false)
