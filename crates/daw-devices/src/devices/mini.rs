@@ -852,7 +852,9 @@ struct Note {
 
 #[derive(Clone, Copy, Debug)]
 struct Pending {
-    note: Note,
+    /// `None` when the note was dropped during the fade (a voice mode
+    /// change, or the voice now beyond a lowered limit): the voice goes idle.
+    note: Option<Note>,
     /// Cleared when the key is released during the fade.
     held: bool,
     glide_from: f32,
@@ -1064,16 +1066,20 @@ impl Mini {
             values[PARAMETERS.iter().position(|spec| spec.id == id).unwrap()]
         });
         if settings.mode != self.settings.mode {
-            // Voices held under the old mode would never see their note-off.
+            // Voices held under the old mode would never see their note-off,
+            // and a steal under way would replace the new mode's note.
             for voice in &mut self.voices {
                 voice.held = false;
                 voice.sustained = false;
                 voice.release();
+                if let Some(pending) = &mut voice.pending {
+                    pending.note = None;
+                }
             }
             self.held_count = 0;
         }
         // Voices beyond a lowered limit release; one fading for a steal
-        // drops its note when the fade ends.
+        // drops its note when the fade ends (checked there).
         for voice in &mut self.voices[settings.voices..] {
             voice.held = false;
             voice.sustained = false;
@@ -1255,7 +1261,7 @@ impl Mini {
         let voice = &mut self.voices[index];
         // A voice already fading takes the newer note instead.
         voice.pending = Some(Pending {
-            note,
+            note: Some(note),
             held: true,
             glide_from,
         });
@@ -1276,6 +1282,16 @@ impl Mini {
         self.held_count += 1;
         let legato = self.settings.mode == VoiceMode::Legato;
         let voice = &mut self.voices[0];
+        if let Some(pending) = &mut voice.pending {
+            // Still fading out a note from before a mode change: this note
+            // starts when the fade ends.
+            *pending = Pending {
+                note: Some(note),
+                held: true,
+                glide_from: if legato { note.pitch } else { glide_from },
+            };
+            return;
+        }
         if !voice.amp.is_active() {
             self.start(0, note, if legato { note.pitch } else { glide_from });
             return;
@@ -1319,7 +1335,7 @@ impl Mini {
         let sustain = self.sustain;
         for voice in &mut self.voices {
             if let Some(pending) = &mut voice.pending
-                && pending.note.id == id
+                && pending.note.is_some_and(|note| note.id == id)
             {
                 pending.held = false;
             }
@@ -1436,11 +1452,10 @@ impl Mini {
                 voice.fade = 1.0;
                 voice.amp.reset();
                 voice.filter_envelope.reset();
-                if index >= self.settings.voices {
-                    // Polyphony was lowered during the fade: the note is dropped.
+                let Some(note) = pending.note.filter(|_| index < self.settings.voices) else {
                     continue;
-                }
-                self.start(index, pending.note, pending.glide_from);
+                };
+                self.start(index, note, pending.glide_from);
                 if !pending.held {
                     // Released during the fade: the same pedal rules as a sounding note.
                     let voice = &mut self.voices[index];

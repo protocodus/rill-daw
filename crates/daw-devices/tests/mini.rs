@@ -350,6 +350,27 @@ fn lowering_the_voice_count_releases_the_voices_beyond_it() {
 }
 
 #[test]
+fn a_mode_change_during_a_steal_fade_keeps_the_next_mono_note() {
+    let values = [sine_values(), vec![(VOICES, 1.0)]].concat();
+    let mut device = synth(&values);
+    // The second note steals the only voice and is released at once; the
+    // render stops inside its 5 ms fade.
+    render(
+        &mut *device,
+        19.0 * BLOCK as f32 / RATE,
+        &[
+            (0, note_on(0, 1, 60.0, 1.0).kind),
+            (4700, note_on(0, 2, 64.0, 1.0).kind),
+            (4750, note_off(0, 2).kind),
+        ],
+    );
+    let spec = mini::DESCRIPTOR.parameter(VOICE_MODE).unwrap();
+    device.set_parameter(VOICE_MODE, spec.to_normalized(1.0));
+    let output = render(&mut *device, 1.0, &[(0, note_on(0, 3, 67.0, 1.0).kind)]);
+    assert!(rms(&output[30_000..40_000]) > 0.05);
+}
+
+#[test]
 fn drawn_response_follows_cutoff_and_resonance() {
     let settings = |cutoff: f32, resonance: f32| {
         Settings::from_normalized(|id| {
