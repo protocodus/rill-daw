@@ -13,7 +13,7 @@ use std::{
 
 #[path = "stretch_file.rs"]
 mod file;
-pub(crate) use file::{StreamWriter, prepare_file};
+pub(crate) use file::{StreamWriter, prepare_file_mapped};
 
 unsafe extern "C" {
     fn rill_stretch_create(channels: u32, sample_rate: u32, semitones: f64) -> *mut c_void;
@@ -37,10 +37,146 @@ unsafe extern "C" {
         channels: u32,
         sample_rate: u32,
         rate: f64,
+        knots: *const f64,
+        knot_count: usize,
         semitones: f64,
         cancel_context: *mut c_void,
         cancelled: unsafe extern "C" fn(*mut c_void) -> i32,
     ) -> i32;
+}
+
+/// Piecewise-linear map from output frames to source frames. Knots are
+/// `[source, output]` pairs with output zero at source zero; outside them the
+/// constant `rate` (source frames per output frame) applies. One continuous
+/// DSP instance follows the varying rate, so segment joins have no seams.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct TimeMap {
+    rate: f64,
+    pub(crate) knots: Vec<[f64; 2]>,
+}
+
+impl TimeMap {
+    pub(crate) fn constant(rate: f64) -> Self {
+        Self {
+            rate,
+            knots: Vec::new(),
+        }
+    }
+
+    pub(crate) fn warped(rate: f64, knots: Vec<[f64; 2]>) -> Self {
+        Self { rate, knots }
+    }
+
+    pub(crate) fn rate(&self) -> f64 {
+        self.rate
+    }
+
+    pub(crate) fn is_identity(&self) -> bool {
+        self.rate == 1.0 && self.knots.is_empty()
+    }
+
+    pub(crate) fn validate(&self) -> Result<()> {
+        let admitted =
+            |rate: f64| (MIN_SOURCE_RATE * 0.999_999..=MAX_SOURCE_RATE * 1.000_001).contains(&rate);
+        ensure!(
+            self.rate.is_finite() && (MIN_SOURCE_RATE..=MAX_SOURCE_RATE).contains(&self.rate),
+            "Invalid stretch rate"
+        );
+        ensure!(self.knots.len() <= 4096, "Too many warp markers");
+        ensure!(
+            self.knots
+                .iter()
+                .all(|knot| knot[0].is_finite() && knot[1].is_finite()),
+            "Invalid warp map"
+        );
+        for pair in self.knots.windows(2) {
+            let output = pair[1][1] - pair[0][1];
+            ensure!(
+                output > 0.0 && admitted((pair[1][0] - pair[0][0]) / output),
+                "Warp segment rate must stay between 25% and 400%"
+            );
+        }
+        Ok(())
+    }
+
+    pub(crate) fn input_at(&self, output: f64) -> f64 {
+        let Some(first) = self.knots.first() else {
+            return output * self.rate;
+        };
+        let index = self.knots.partition_point(|knot| knot[1] <= output);
+        if index == 0 {
+            return first[0] + (output - first[1]) * self.rate;
+        }
+        let left = self.knots[index - 1];
+        match self.knots.get(index) {
+            Some(right) => {
+                left[0] + (output - left[1]) * (right[0] - left[0]) / (right[1] - left[1])
+            }
+            None => left[0] + (output - left[1]) * self.rate,
+        }
+    }
+
+    pub(crate) fn output_at(&self, input: f64) -> f64 {
+        let Some(first) = self.knots.first() else {
+            return input / self.rate;
+        };
+        let index = self.knots.partition_point(|knot| knot[0] <= input);
+        if index == 0 {
+            return first[1] + (input - first[0]) / self.rate;
+        }
+        let left = self.knots[index - 1];
+        match self.knots.get(index) {
+            Some(right) => {
+                left[1] + (input - left[0]) * (right[1] - left[1]) / (right[0] - left[0])
+            }
+            None => left[1] + (input - left[0]) / self.rate,
+        }
+    }
+
+    pub(crate) fn initial_rate(&self) -> f64 {
+        match self.knots.first() {
+            Some(first) if first[1] <= 0.0 => self.knots.get(1).map_or(self.rate, |second| {
+                (second[0] - first[0]) / (second[1] - first[1])
+            }),
+            _ => self.rate,
+        }
+    }
+
+    pub(crate) fn output_frames(&self, input_frames: usize) -> usize {
+        if self.knots.is_empty() {
+            (input_frames as f64 / self.rate).ceil() as usize
+        } else {
+            self.output_at(input_frames as f64).ceil().max(0.0) as usize
+        }
+    }
+
+    fn scaled(&self, factor: f64) -> Self {
+        Self {
+            rate: self.rate,
+            knots: self
+                .knots
+                .iter()
+                .map(|knot| [knot[0] * factor, knot[1] * factor])
+                .collect(),
+        }
+    }
+
+    pub(crate) fn flat_knots(&self) -> Vec<f64> {
+        self.knots.iter().flatten().copied().collect()
+    }
+
+    /// Cache identity of the prepared variant; zero for an unwarped map.
+    pub(crate) fn key(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        if self.knots.is_empty() {
+            return 0;
+        }
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        for value in self.knots.iter().flatten() {
+            value.to_bits().hash(&mut hasher);
+        }
+        hasher.finish() | 1
+    }
 }
 
 struct Stretch(NonNull<c_void>);
@@ -64,7 +200,7 @@ fn check_cancelled(cancel: Option<&AtomicBool>) -> Result<()> {
 /// preparation always processes the original at the project/output rate.
 pub(crate) fn prepare_preview(
     source: &AudioData,
-    rate: f64,
+    map: &TimeMap,
     semitones: f64,
     algorithm: AudioProcessingAlgorithm,
     cancel: Option<&AtomicBool>,
@@ -76,7 +212,13 @@ pub(crate) fn prepare_preview(
         crate::ResampleQuality::High,
         cancel,
     )?;
-    let stretched = prepare_processed(&proxy, rate, semitones, algorithm, cancel)?;
+    let stretched = prepare_mapped(
+        &proxy,
+        &map.scaled(f64::from(proxy.sample_rate) / f64::from(source.sample_rate)),
+        semitones,
+        algorithm,
+        cancel,
+    )?;
     let mut result = crate::quality::prepare_audio_cancelled(
         stretched,
         source.sample_rate,
@@ -85,7 +227,7 @@ pub(crate) fn prepare_preview(
     )?;
     // Two integer rate conversions can add a handful of padded tail frames.
     // Placement, trims and the refinement swap must use the exact same length.
-    let samples = (source.frames() as f64 / rate).ceil() as usize * source.channels;
+    let samples = map.output_frames(source.frames()) * source.channels;
     result.samples.resize(samples, 0.0);
     check_cancelled(cancel)?;
     Ok(result)
@@ -110,6 +252,7 @@ pub(crate) fn prepare_stretched(
     )
 }
 
+#[cfg(test)]
 pub(crate) fn prepare_processed(
     source: &AudioData,
     rate: f64,
@@ -117,12 +260,26 @@ pub(crate) fn prepare_processed(
     algorithm: AudioProcessingAlgorithm,
     cancel: Option<&AtomicBool>,
 ) -> Result<AudioData> {
+    prepare_mapped(
+        source,
+        &TimeMap::constant(rate),
+        transpose_semitones,
+        algorithm,
+        cancel,
+    )
+}
+
+pub(crate) fn prepare_mapped(
+    source: &AudioData,
+    map: &TimeMap,
+    transpose_semitones: f64,
+    algorithm: AudioProcessingAlgorithm,
+    cancel: Option<&AtomicBool>,
+) -> Result<AudioData> {
     check_cancelled(cancel)?;
     source.validate()?;
-    ensure!(
-        rate.is_finite() && (MIN_SOURCE_RATE..=MAX_SOURCE_RATE).contains(&rate),
-        "Invalid stretch rate"
-    );
+    map.validate()?;
+    let rate = map.rate;
     ensure!(
         transpose_semitones.is_finite() && (-24.0..=24.0).contains(&transpose_semitones),
         "Audio transpose must be between -24 and +24 semitones"
@@ -131,10 +288,10 @@ pub(crate) fn prepare_processed(
         (1..=2).contains(&source.channels) && (8000..=384000).contains(&source.sample_rate),
         "Invalid stretch source format"
     );
-    if (rate == 1.0 && transpose_semitones == 0.0) || source.frames() == 0 {
+    if (map.is_identity() && transpose_semitones == 0.0) || source.frames() == 0 {
         return Ok(source.clone());
     }
-    let frames = (source.frames() as f64 / rate).ceil() as usize;
+    let frames = map.output_frames(source.frames());
     let channels = source.channels;
     let samples = frames
         .checked_mul(channels)
@@ -150,6 +307,7 @@ pub(crate) fn prepare_processed(
     output.resize(samples, 0.0);
     match algorithm {
         AudioProcessingAlgorithm::Bungee => {
+            let knots = map.flat_knots();
             // SAFETY: disjoint slices cover all stated frames. The callback
             // borrows cancel only during this synchronous call; C++ contains
             // exceptions and consults the atomic between bounded audio grains.
@@ -162,6 +320,8 @@ pub(crate) fn prepare_processed(
                     channels as u32,
                     source.sample_rate,
                     rate,
+                    knots.as_ptr(),
+                    map.knots.len(),
                     transpose_semitones,
                     cancel.map_or(std::ptr::null_mut(), |flag| {
                         std::ptr::from_ref(flag).cast_mut().cast()
@@ -205,7 +365,14 @@ pub(crate) fn prepare_processed(
     input[..preload].copy_from_slice(&source.samples[..preload]);
     // SAFETY: input contains input_latency complete interleaved frames.
     ensure!(
-        unsafe { rill_stretch_seek(handle, input.as_ptr(), input_latency as u32, rate) } != 0,
+        unsafe {
+            rill_stretch_seek(
+                handle,
+                input.as_ptr(),
+                input_latency as u32,
+                map.initial_rate(),
+            )
+        } != 0,
         "Prepare audio stretch pre-roll"
     );
     let mut block = vec![0.0; output_latency.max(4096) * channels];
@@ -214,8 +381,8 @@ pub(crate) fn prepare_processed(
     while produced < frames {
         check_cancelled(cancel)?;
         let count = (frames - produced).min(4096);
-        let next_consumed =
-            (((produced + count) as f64 * rate).round() as usize).min(source.frames());
+        let next_consumed = (map.input_at((produced + count) as f64).round().max(0.0) as usize)
+            .min(source.frames());
         let input_frames = next_consumed - consumed;
         ensure!(
             input_frames <= 16384,

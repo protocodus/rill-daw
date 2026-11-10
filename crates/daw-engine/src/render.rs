@@ -54,6 +54,9 @@ mod automation_render_tests;
 #[cfg(test)]
 #[path = "stretch_render_tests.rs"]
 mod stretch_render_tests;
+#[cfg(test)]
+#[path = "warp_render_tests.rs"]
+mod warp_render_tests;
 
 #[cfg(test)]
 #[path = "effect_state_tests.rs"]
@@ -153,6 +156,7 @@ struct AudioClip {
     source_rate: f64,
     processing: daw_core::AudioProcessing,
     is_preview: bool,
+    warp: u64,
     original: Arc<crate::audio_asset::AudioAsset>,
     start: u64,
     source_offset: f64,

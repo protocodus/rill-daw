@@ -55,9 +55,8 @@ pub fn validate_warp_markers(markers: &[WarpMarker]) -> Result<()> {
 }
 
 fn segment_rate_allowed(rate: f64) -> bool {
-    rate.is_finite()
-        && rate >= MIN_SOURCE_RATE * (1.0 - RATE_TOLERANCE)
-        && rate <= MAX_SOURCE_RATE * (1.0 + RATE_TOLERANCE)
+    (MIN_SOURCE_RATE * (1.0 - RATE_TOLERANCE)..=MAX_SOURCE_RATE * (1.0 + RATE_TOLERANCE))
+        .contains(&rate)
 }
 
 /// Source beat at a forward clip-local beat through a non-empty marker list.

@@ -1,6 +1,6 @@
 //! Disk-backed preparation uses the same continuous DSP history as the resident
 //! path. Only fixed-size input windows and output blocks live in memory.
-use super::{Stretch, check_cancelled};
+use super::{Stretch, TimeMap, check_cancelled};
 use crate::audio_asset::{AudioAsset, TempPathLease};
 use anyhow::{Context, Result, ensure};
 use daw_core::{
@@ -138,6 +138,7 @@ impl<'a> StreamWriter<'a> {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn prepare_file(
     source: &AudioFile,
     rate: f64,
@@ -145,7 +146,25 @@ pub(crate) fn prepare_file(
     algorithm: AudioProcessingAlgorithm,
     cancel: Option<&AtomicBool>,
 ) -> Result<Arc<AudioAsset>> {
+    prepare_file_mapped(
+        source,
+        &TimeMap::constant(rate),
+        semitones,
+        algorithm,
+        cancel,
+    )
+}
+
+pub(crate) fn prepare_file_mapped(
+    source: &AudioFile,
+    map: &TimeMap,
+    semitones: f64,
+    algorithm: AudioProcessingAlgorithm,
+    cancel: Option<&AtomicBool>,
+) -> Result<Arc<AudioAsset>> {
     check_cancelled(cancel)?;
+    map.validate()?;
+    let rate = map.rate();
     ensure!(
         rate.is_finite() && (MIN_SOURCE_RATE..=MAX_SOURCE_RATE).contains(&rate),
         "Invalid stretch rate"
@@ -155,14 +174,14 @@ pub(crate) fn prepare_file(
         "Audio transpose must be between -24 and +24 semitones"
     );
     let info = source.info();
-    let frames = (info.frames as f64 / rate).ceil() as usize;
+    let frames = map.output_frames(info.frames);
     let mut writer = StreamWriter::new(info.sample_rate, info.channels, frames, cancel)?;
     let mut reader = source.reader()?;
     if frames == 0 {
         source.check_unchanged()?;
         return writer.finish();
     }
-    if rate == 1.0 && semitones == 0.0 {
+    if map.is_identity() && semitones == 0.0 {
         let mut buffer = vec![0.0; BLOCK_FRAMES * info.channels];
         let mut offset = 0;
         while offset < info.frames {
@@ -187,7 +206,7 @@ pub(crate) fn prepare_file(
             info.channels,
             info.sample_rate,
             frames,
-            rate,
+            map,
             semitones,
             &mut writer,
             cancel,
@@ -202,6 +221,7 @@ pub(crate) fn prepare_file(
             };
             // SAFETY: the synchronous bridge invokes callbacks sequentially with
             // this live context. All native windows have a fixed admitted bound.
+            let knots = map.flat_knots();
             let status = unsafe {
                 rill_bungee_process_stream(
                     info.frames,
@@ -209,6 +229,8 @@ pub(crate) fn prepare_file(
                     info.channels as u32,
                     info.sample_rate,
                     rate,
+                    knots.as_ptr(),
+                    map.knots.len(),
                     semitones,
                     std::ptr::from_mut(&mut io).cast(),
                     native_read,
@@ -261,7 +283,7 @@ fn prepare_signalsmith(
     channels: usize,
     sample_rate: u32,
     frames: usize,
-    rate: f64,
+    map: &TimeMap,
     semitones: f64,
     writer: &mut StreamWriter<'_>,
     cancel: Option<&AtomicBool>,
@@ -292,8 +314,14 @@ fn prepare_signalsmith(
     check_cancelled(cancel)?;
     // SAFETY: complete interleaved frames, including zero padding to latency.
     ensure!(
-        unsafe { super::rill_stretch_seek(handle, input.as_ptr(), input_latency as u32, rate) }
-            != 0,
+        unsafe {
+            super::rill_stretch_seek(
+                handle,
+                input.as_ptr(),
+                input_latency as u32,
+                map.initial_rate(),
+            )
+        } != 0,
         "Prepare disk audio stretch pre-roll"
     );
     let mut output = vec![0.0; output_latency.max(BLOCK_FRAMES) * channels];
@@ -302,7 +330,7 @@ fn prepare_signalsmith(
         check_cancelled(cancel)?;
         let count = (frames - produced).min(BLOCK_FRAMES);
         let next_consumed =
-            (((produced + count) as f64 * rate).round() as usize).min(source_frames);
+            (map.input_at((produced + count) as f64).round().max(0.0) as usize).min(source_frames);
         let input_frames = next_consumed - consumed;
         ensure!(
             input_frames <= 16384,
@@ -433,6 +461,8 @@ unsafe extern "C" {
         channels: u32,
         sample_rate: u32,
         rate: f64,
+        knots: *const f64,
+        knot_count: usize,
         semitones: f64,
         context: *mut c_void,
         read: unsafe extern "C" fn(*mut c_void, usize, usize, *mut f32) -> i32,
