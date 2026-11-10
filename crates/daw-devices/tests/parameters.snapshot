@@ -1,4 +1,4 @@
-r1-filter 1 model "Model" choice Clean|Ladder|Sallen-Key|State Variable|Comb|Vowel
+r1-filter 1 model "Model" choice Clean|M Ladder|K Sallen-Key|X Pole-Mix|V Digital|SP Diode|State Variable|Comb|Vowel
 r1-filter 2 type "Type" choice Low-pass|High-pass|Band-pass|Notch
 r1-filter 3 slope "Slope" choice 12 dB|24 dB
 r1-filter 4 cutoff "Cutoff" log 20 20000

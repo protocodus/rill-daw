@@ -115,7 +115,7 @@ fn filter_hides_controls_that_do_not_apply() {
     let clean = model(0.0);
     assert!((layout.visible)(filter::SLOPE, &clean));
     assert!(!(layout.visible)(filter::MORPH, &clean));
-    let vowel = model(5.0);
+    let vowel = model(8.0);
     assert!((layout.visible)(filter::MORPH, &vowel));
     assert!(!(layout.visible)(filter::TYPE, &vowel));
     let sallen_key = model(2.0);
@@ -123,4 +123,7 @@ fn filter_hides_controls_that_do_not_apply() {
         (layout.options)(filter::TYPE, &sallen_key).unwrap().len(),
         2
     );
+    let pole_mix = model(3.0);
+    assert!((layout.visible)(filter::SLOPE, &pole_mix));
+    assert_eq!((layout.options)(filter::TYPE, &pole_mix).unwrap().len(), 4);
 }

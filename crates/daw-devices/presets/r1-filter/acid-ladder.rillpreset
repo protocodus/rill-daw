@@ -7,7 +7,7 @@
   "tags": ["ladder", "bass"],
   "description": "Squelchy transistor ladder that follows the input level.",
   "parameters": {
-    "model": "Ladder",
+    "model": "M Ladder",
     "cutoff": 400.0,
     "resonance": 80.0,
     "drive": 9.0,

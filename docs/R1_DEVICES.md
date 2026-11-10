@@ -463,7 +463,7 @@ path, so a drawn curve cannot drift from what is heard.
 | Parameter smoothing | Linear ramp (gains, mixes) and one-pole (times); filter coefficients interpolated per sample. |
 | Oversampling | 2×/4×/8× polyphase half-band FIR, linear phase, latency reported to the engine. Used around every nonlinearity. |
 | Linear filters | Zero-delay-feedback (TPT) state-variable filter as the default; biquads with matched magnitude at Nyquist (Vicanek's matched design) so bells and shelves near 10–20 kHz are not cramped at 44.1/48 kHz. |
-| Nonlinear filters | ZDF transistor ladder (4-pole, `tanh` stages, resonance to self-oscillation) and Sallen-Key with clipped feedback, each solved with one Newton step per sample, run at 2×. |
+| Nonlinear filters | ZDF transistor ladder (4-pole, `tanh` stages, resonance to self-oscillation, with pole-output taps for multimode mixing), Sallen-Key with clipped feedback, and a state-variable filter with a clipped band state, each solved with one Newton step per sample, run at 2×. |
 | Waveshapers | Static curves with first-order antiderivative anti-aliasing, inside the oversampler. |
 | Delay lines | Power-of-two ring buffers with third-order Lagrange (modulated delays) or allpass (fixed fractional) interpolation. |
 | Reverb core | 16-line feedback delay network, Hadamard mixing, per-line absorption filters for frequency-dependent decay, slow delay modulation against metallic ringing, allpass input diffusion, multitap early reflections. |
@@ -669,9 +669,9 @@ type or slope, Frequency, Gain, Q), with the selected band highlighted.
 
 | Parameter | Range / choices | Default |
 | --- | --- | --- |
-| Model | Clean, Ladder, Sallen-Key, State Variable, Comb, Vowel | Clean |
-| Type | Low-pass, High-pass, Band-pass, Notch (Clean, Sallen-Key LP/HP only); Morph for State Variable | Low-pass |
-| Slope | 12, 24 dB/oct (Clean) | 12 |
+| Model | Clean, M Ladder, K Sallen-Key, X Pole-Mix, V Digital, SP Diode, State Variable, Comb, Vowel | Clean |
+| Type | Low-pass, High-pass, Band-pass, Notch (Clean, X, V; K: LP/HP; SP: LP/HP/BP); Morph for State Variable | Low-pass |
+| Slope | 12, 24 dB/oct (Clean, X, V) | 12 |
 | Cutoff | 20 Hz – 20 kHz (log) | 1 kHz |
 | Resonance | 0 – 100 % | 20 % |
 | Drive | 0 – 24 dB | 0 dB |
@@ -683,13 +683,20 @@ type or slope, Frequency, Gain, Q), with the selected band highlighted.
 | Envelope attack / release | 0.1 – 100 ms / 10 ms – 2 s | 5 ms / 150 ms |
 
 **DSP.** *Clean*: linear ZDF state-variable filter, stable under fast
-modulation. *Ladder*: nonlinear four-pole transistor ladder with the
-characteristic bass thinning at high resonance and self-oscillation.
-*Sallen-Key*: two-pole with clipped feedback, aggressive and screaming at high
-resonance. *State Variable*: two-pole with continuous low-pass/notch/high-pass
+modulation. Circuit-modelled models are named by a letter for the circuit
+family they follow, never by a manufacturer. *M Ladder*: nonlinear four-pole
+transistor ladder with the characteristic bass thinning at high resonance and
+self-oscillation. *K Sallen-Key*: two-pole with clipped feedback, aggressive
+and screaming at high resonance. *X Pole-Mix*: four-pole OTA cascade with a
+`tanh` at every stage; low-, high-, band-pass and notch at 12 or 24 dB come
+from binomial mixes of the pole outputs, all sharing the four-pole resonance.
+*V Digital*: bright digital multimode; at 24 dB both stages resonate with a
+saturator between them, and the passband does not thin. *SP Diode*: two-pole
+multimode whose resonance path is clipped like a diode pair; starts dull
+(two real poles) and screams into self-oscillation. *State Variable*: two-pole with continuous low-pass/notch/high-pass
 morph, smooth resonance. *Comb*: tuned feedback delay, Cutoff sets the pitch,
 Resonance the (signed) feedback. *Vowel*: three parallel formant band-passes
-morphing between vowels. Nonlinear models run at 2×. The same kernels are the
+morphing between vowels. M, K, X and SP run at 2×. The same kernels are the
 filters inside Mini, Maxi and Sampler.
 
 **Panel.** `frequency_plot` with one node (drag = cutoff and resonance) whose
@@ -762,7 +769,7 @@ modulation: 3 envelopes, 4 LFOs, 4 macros, note sources ─ 32-slot matrix ─ a
 | Slot kind | Count | Module types at first release | Room for later |
 | --- | --- | --- | --- |
 | Oscillator | 3 | Wavetable, Analog (saw, pulse, triangle, sine with PWM and sync), Noise (white, pink, with color filter), Off | Sample, granular, additive |
-| Filter | 2 | every R1 Filter model (Clean, Ladder, Sallen-Key, State Variable, Comb, Vowel), Off | further models arrive in R1 Filter and Maxi together |
+| Filter | 2 | every R1 Filter model (Clean, M Ladder, K Sallen-Key, X Pole-Mix, V Digital, SP Diode, State Variable, Comb, Vowel), Off | further models arrive in R1 Filter and Maxi together |
 | Modulator | 3 envelopes, 4 LFOs | AHDSR with per-segment curves; LFO with sine, triangle, saw, square, S&H | drawable shapes, step sequencer, random generators |
 | Effect | 8, reorderable | every R1 effect kernel: Saturator, Modulator, Echo, Reverb, Compressor, Equalizer, Filter; Off | any future R1 effect |
 

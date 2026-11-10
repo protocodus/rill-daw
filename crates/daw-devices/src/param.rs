@@ -106,7 +106,7 @@ impl ParamSpec {
         }
     }
 
-    /// Display text with unit, the same everywhere: "1.20 kHz", "−6.0 dB", "Ladder".
+    /// Display text with unit, the same everywhere: "1.20 kHz", "−6.0 dB", "M Ladder".
     pub fn format(&self, normalized: f32) -> String {
         let plain = self.to_plain(normalized);
         match self.range {

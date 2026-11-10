@@ -68,7 +68,19 @@ fn clean_models_match_their_drawn_response_within_a_tenth_of_a_db() {
         &[(TYPE, 1.0), (CUTOFF, 300.0), (RESONANCE, 30.0)],
         &[(TYPE, 2.0), (CUTOFF, 2000.0), (RESONANCE, 60.0)],
         &[(SLOPE, 1.0), (CUTOFF, 3000.0), (RESONANCE, 40.0)],
-        &[(MODEL, 3.0), (CUTOFF, 1500.0), (MORPH, 70.0)],
+        &[(MODEL, 6.0), (CUTOFF, 1500.0), (MORPH, 70.0)],
+        &[
+            (MODEL, 4.0),
+            (SLOPE, 1.0),
+            (CUTOFF, 2000.0),
+            (RESONANCE, 20.0),
+        ],
+        &[
+            (MODEL, 4.0),
+            (TYPE, 2.0),
+            (CUTOFF, 800.0),
+            (RESONANCE, 30.0),
+        ],
         &[
             (CUTOFF, 12_000.0),
             (RESONANCE, 20.0),
@@ -111,6 +123,34 @@ fn nonlinear_models_follow_their_drawn_shape() {
             (CUTOFF, 800.0),
             (RESONANCE, 30.0),
         ][..],
+        &[(MODEL, 3.0), (CUTOFF, 800.0), (RESONANCE, 30.0)][..],
+        &[
+            (MODEL, 3.0),
+            (SLOPE, 1.0),
+            (CUTOFF, 800.0),
+            (RESONANCE, 30.0),
+        ][..],
+        &[(MODEL, 3.0), (TYPE, 1.0), (SLOPE, 1.0), (CUTOFF, 800.0)][..],
+        &[(MODEL, 3.0), (TYPE, 2.0), (SLOPE, 1.0), (CUTOFF, 800.0)][..],
+        &[
+            (MODEL, 3.0),
+            (TYPE, 3.0),
+            (CUTOFF, 800.0),
+            (RESONANCE, 20.0),
+        ][..],
+        &[(MODEL, 5.0), (CUTOFF, 800.0), (RESONANCE, 30.0)][..],
+        &[
+            (MODEL, 5.0),
+            (TYPE, 1.0),
+            (CUTOFF, 800.0),
+            (RESONANCE, 30.0),
+        ][..],
+        &[
+            (MODEL, 5.0),
+            (TYPE, 2.0),
+            (CUTOFF, 800.0),
+            (RESONANCE, 60.0),
+        ][..],
     ] {
         let settings = settings(case);
         for frequency in [100.0, 800.0, 4000.0] {
@@ -122,6 +162,10 @@ fn nonlinear_models_follow_their_drawn_shape() {
                 &[frequency],
                 &mut drawn,
             );
+            // Deep in the stop band the measurement is noise, not the filter.
+            if drawn[0] < -60.0 {
+                continue;
+            }
             let measured = measured_gain_db(case, frequency, 48_000.0);
             assert!(
                 (measured - drawn[0]).abs() < 1.5,
@@ -161,7 +205,8 @@ fn dry_path_is_aligned_with_the_reported_latency() {
 
 #[test]
 fn every_model_low_passes_high_frequencies() {
-    for model in [0.0, 1.0, 2.0, 3.0] {
+    // Clean, M, K, X, V, SP and State Variable.
+    for model in [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0] {
         let values = [(filter::MODEL, model), (filter::CUTOFF, 500.0)];
         let low = measured_gain_db(&values, 100.0, 48_000.0);
         let high = measured_gain_db(&values, 8000.0, 48_000.0);
@@ -170,17 +215,23 @@ fn every_model_low_passes_high_frequencies() {
 }
 
 #[test]
-fn ladder_self_oscillates_and_stays_bounded() {
-    let mut device = (descriptor("r1-filter").unwrap().create)();
-    device.prepare(48_000.0, 256);
-    set(
-        &mut *device,
-        &[
-            (filter::MODEL, 1.0),
+fn resonant_models_self_oscillate_and_stay_bounded() {
+    // M, K, X and SP.
+    for model in [1.0, 2.0, 3.0, 5.0] {
+        let peak = ring_out(&[
+            (filter::MODEL, model),
             (filter::RESONANCE, 100.0),
             (filter::CUTOFF, 1000.0),
-        ],
-    );
+        ]);
+        assert!((0.05..4.0).contains(&peak), "model {model}: {peak}");
+    }
+}
+
+/// Peak output long after a single short burst.
+fn ring_out(values: &[(u32, f32)]) -> f32 {
+    let mut device = (descriptor("r1-filter").unwrap().create)();
+    device.prepare(48_000.0, 256);
+    set(&mut *device, values);
     let mut peak = 0.0_f32;
     for block in 0..200 {
         let mut left = vec![if block == 0 { 0.1 } else { 0.0 }; 256];
@@ -198,5 +249,5 @@ fn ladder_self_oscillates_and_stays_bounded() {
             peak = left.iter().fold(peak, |peak, x| peak.max(x.abs()));
         }
     }
-    assert!((0.05..4.0).contains(&peak), "{peak}");
+    peak
 }

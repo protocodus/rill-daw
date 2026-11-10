@@ -1,4 +1,4 @@
-//! R1 Filter: one filter with six models, an LFO and an envelope follower on
+//! R1 Filter: one filter with nine models, an LFO and an envelope follower on
 //! the cutoff. See `docs/R1_DEVICES.md#r1-filter`.
 use crate::dsp::{
     Complex, DelayLine, EnvelopeFollower, Ladder, Lfo, LfoShape, Oversampler2x, SallenKey,
@@ -33,10 +33,14 @@ pub const TELEMETRY_CUTOFF_LEFT: usize = 0;
 pub const TELEMETRY_CUTOFF_RIGHT: usize = 1;
 pub const TELEMETRY_LFO_PHASE: usize = 2;
 
+/// Circuit-modelled families carry a letter instead of a manufacturer's name.
 pub const MODELS: &[&str] = &[
     "Clean",
-    "Ladder",
-    "Sallen-Key",
+    "M Ladder",
+    "K Sallen-Key",
+    "X Pole-Mix",
+    "V Digital",
+    "SP Diode",
     "State Variable",
     "Comb",
     "Vowel",
@@ -284,8 +288,16 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Model {
     Clean,
+    /// M: transistor ladder.
     Ladder,
+    /// K: Sallen-Key with clipped positive feedback.
     SallenKey,
+    /// X: OTA four-pole cascade, multimode by mixing the pole outputs.
+    PoleMix,
+    /// V: digital multimode, resonance on every stage, saturation between.
+    Digital,
+    /// SP: diode-clipped two-pole multimode.
+    Diode,
     StateVariable,
     Comb,
     Vowel,
@@ -336,15 +348,21 @@ impl Settings {
         let model = match index(MODEL) {
             1 => Model::Ladder,
             2 => Model::SallenKey,
-            3 => Model::StateVariable,
-            4 => Model::Comb,
-            5 => Model::Vowel,
+            3 => Model::PoleMix,
+            4 => Model::Digital,
+            5 => Model::Diode,
+            6 => Model::StateVariable,
+            7 => Model::Comb,
+            8 => Model::Vowel,
             _ => Model::Clean,
         };
-        let filter_type = match (model, index(TYPE)) {
-            (Model::Clean, 1) | (Model::SallenKey, 1 | 3) => FilterType::HighPass,
-            (Model::Clean, 2) => FilterType::BandPass,
-            (Model::Clean, 3) => FilterType::Notch,
+        // A type the model lacks, left over from another model, falls back
+        // to the model's last type.
+        let offered = type_options(model).len();
+        let filter_type = match index(TYPE).min(offered.saturating_sub(1)) {
+            1 => FilterType::HighPass,
+            2 => FilterType::BandPass,
+            3 => FilterType::Notch,
             _ => FilterType::LowPass,
         };
         let sync = SYNC_BEATS[index(LFO_SYNC).min(SYNC_BEATS.len() - 1)];
@@ -374,8 +392,11 @@ impl Settings {
 /// ones that do not.
 pub fn applies(id: u32, settings: &Settings) -> bool {
     match id {
-        TYPE => matches!(settings.model, Model::Clean | Model::SallenKey),
-        SLOPE => settings.model == Model::Clean,
+        TYPE => !type_options(settings.model).is_empty(),
+        SLOPE => matches!(
+            settings.model,
+            Model::Clean | Model::PoleMix | Model::Digital
+        ),
         MORPH => matches!(
             settings.model,
             Model::StateVariable | Model::Comb | Model::Vowel
@@ -388,8 +409,9 @@ pub fn applies(id: u32, settings: &Settings) -> bool {
 /// Type options that a model offers, for the panel's selector.
 pub fn type_options(model: Model) -> &'static [&'static str] {
     match model {
-        Model::Clean => TYPES,
+        Model::Clean | Model::PoleMix | Model::Digital => TYPES,
         Model::SallenKey => &TYPES[..2],
+        Model::Diode => &TYPES[..3],
         _ => &[],
     }
 }
@@ -410,6 +432,47 @@ fn ladder_k(resonance: f32) -> f32 {
 
 fn sallen_key_k(resonance: f32) -> f32 {
     2.05 * resonance
+}
+
+/// Weights of the loop input and the four stage outputs. Each stage output
+/// is the loop input over (1 + s)^n, so binomial weights build any 12 or
+/// 24 dB response over the same resonant loop.
+fn pole_mix(filter_type: FilterType, steep: bool) -> [f32; 5] {
+    match (filter_type, steep) {
+        (FilterType::LowPass, false) => [0.0, 0.0, 1.0, 0.0, 0.0],
+        (FilterType::LowPass, true) => [0.0, 0.0, 0.0, 0.0, 1.0],
+        (FilterType::HighPass, false) => [1.0, -2.0, 1.0, 0.0, 0.0],
+        (FilterType::HighPass, true) => [1.0, -4.0, 6.0, -4.0, 1.0],
+        (FilterType::BandPass, false) => [0.0, 2.0, -2.0, 0.0, 0.0],
+        (FilterType::BandPass, true) => [0.0, 0.0, 4.0, -8.0, 4.0],
+        (FilterType::Notch, false) => [1.0, -2.0, 2.0, 0.0, 0.0],
+        (FilterType::Notch, true) => [1.0, -4.0, 8.0, -8.0, 4.0],
+    }
+}
+
+/// The low-pass loses bass as resonance rises; this restores half of it in
+/// dB, as the M ladder does.
+fn pole_mix_gain(filter_type: FilterType, k: f32) -> f32 {
+    if filter_type == FilterType::LowPass {
+        (1.0 + k).sqrt()
+    } else {
+        1.0
+    }
+}
+
+fn digital_q(resonance: f32) -> f32 {
+    0.707 * 20.0_f32.powf(resonance)
+}
+
+/// SVF damping (1/Q): two real poles at 0, slightly negative at 100 % so the
+/// clipped loop self-oscillates.
+fn diode_damping(resonance: f32) -> f32 {
+    2.0 - 2.05 * resonance
+}
+
+/// Band-pass gain that keeps the peak from vanishing as damping reaches 0.
+fn diode_band_gain(damping: f32) -> f32 {
+    damping.max(0.25)
 }
 
 fn comb_feedback(resonance: f32) -> f32 {
@@ -464,7 +527,7 @@ fn soft_drive(input: f32, drive_db: f32) -> f32 {
 fn drive_gain(model: Model, drive_db: f32) -> f32 {
     let gain = db_to_gain(drive_db);
     match model {
-        Model::Ladder | Model::SallenKey => gain.sqrt(),
+        Model::Ladder | Model::SallenKey | Model::PoleMix | Model::Diode => gain.sqrt(),
         _ => 1.0 + drive_db / 24.0 * (gain.sqrt() - 1.0),
     }
 }
@@ -529,7 +592,7 @@ impl Channel {
     fn process(&mut self, input: f32, s: &Settings, state: &Frame, sample_rate: f32) -> f32 {
         let cutoff = state.cutoff;
         let wet = match s.model {
-            Model::Ladder | Model::SallenKey => {
+            Model::Ladder | Model::SallenKey | Model::PoleMix | Model::Diode => {
                 let gain = db_to_gain(s.drive_db);
                 let g = prewarp(cutoff, 2.0 * sample_rate);
                 let upsampled = self.oversampler.upsample(input * gain);
@@ -537,6 +600,21 @@ impl Channel {
                     (Model::Ladder, _) => {
                         let k = ladder_k(state.resonance);
                         self.ladder.process(x, g, k) * (1.0 + k).sqrt()
+                    }
+                    (Model::PoleMix, _) => {
+                        let k = ladder_k(state.resonance);
+                        let taps = self.ladder.process_taps(x, g, k, f32::tanh);
+                        let mixed: f32 = pole_mix(s.filter_type, s.steep)
+                            .iter()
+                            .zip(taps)
+                            .map(|(weight, tap)| weight * tap)
+                            .sum();
+                        mixed * pole_mix_gain(s.filter_type, k)
+                    }
+                    (Model::Diode, _) => {
+                        let k = diode_damping(state.resonance);
+                        let out = self.svf[0].process_clipped(x, g, k);
+                        pick(out, s.filter_type, diode_band_gain(k))
                     }
                     (_, FilterType::HighPass) => {
                         self.sallen_key
@@ -567,6 +645,18 @@ impl Channel {
                     } else {
                         first
                     }
+                }
+            }
+            Model::Digital => {
+                let x = soft_drive(input, s.drive_db);
+                let g = prewarp(cutoff, sample_rate);
+                let k = 1.0 / digital_q(state.resonance);
+                let first = pick(self.svf[0].process(x, g, k), s.filter_type, k);
+                if s.steep {
+                    let second = self.svf[1].process(first.tanh(), g, k);
+                    pick(second, s.filter_type, k)
+                } else {
+                    first
                 }
             }
             Model::StateVariable => {
@@ -605,13 +695,14 @@ impl Channel {
     }
 }
 
+/// `band_gain` is normally the damping k, for a constant-peak band-pass, so
+/// resonance narrows instead of boosting.
 #[inline]
-fn pick(out: crate::dsp::SvfOutputs, filter_type: FilterType, k: f32) -> f32 {
+fn pick(out: crate::dsp::SvfOutputs, filter_type: FilterType, band_gain: f32) -> f32 {
     match filter_type {
         FilterType::LowPass => out.low,
         FilterType::HighPass => out.high,
-        // Constant-peak band-pass, so resonance narrows instead of boosting.
-        FilterType::BandPass => out.band * k,
+        FilterType::BandPass => out.band * band_gain,
         FilterType::Notch => out.notch(),
     }
 }
@@ -883,6 +974,36 @@ pub fn response_db(
                     Complex::ONE
                 };
                 numerator / denominator
+            }
+            Model::PoleMix => {
+                let x = analog(2.0 * sample_rate, cutoff);
+                let k = ladder_k(s.resonance);
+                let t = Complex::ONE + x;
+                let powers = [t * t * t * t, t * t * t, t * t, t, Complex::ONE];
+                let numerator = pole_mix(s.filter_type, s.steep)
+                    .iter()
+                    .zip(powers)
+                    .fold(Complex::real(0.0), |sum, (weight, power)| {
+                        sum + power.scale(f64::from(*weight))
+                    });
+                (numerator / (powers[0] + Complex::real(f64::from(k))))
+                    .scale(f64::from(pole_mix_gain(s.filter_type, k)))
+            }
+            Model::Digital => {
+                let x = analog(sample_rate, cutoff);
+                let stage = svf_response(x, s.filter_type, 1.0 / digital_q(s.resonance));
+                if s.steep { stage * stage } else { stage }
+            }
+            Model::Diode => {
+                let x = analog(2.0 * sample_rate, cutoff);
+                let k = diode_damping(s.resonance);
+                if s.filter_type == FilterType::BandPass {
+                    // svf_response scales the band by k; use the clamped gain.
+                    (x / (x * x + x.scale(f64::from(k)) + Complex::ONE))
+                        .scale(f64::from(diode_band_gain(k)))
+                } else {
+                    svf_response(x, s.filter_type, k)
+                }
             }
             Model::StateVariable => {
                 let x = analog(sample_rate, cutoff);

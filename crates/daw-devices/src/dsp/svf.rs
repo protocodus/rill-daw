@@ -43,6 +43,16 @@ impl Svf {
             high: input - k * v1 - v2,
         }
     }
+
+    /// [`Self::process`] with the band state soft-clipped, like a diode pair
+    /// in the resonance path: bounded at any damping, including slightly
+    /// negative damping, which self-oscillates.
+    #[inline]
+    pub fn process_clipped(&mut self, input: f32, g: f32, k: f32) -> SvfOutputs {
+        let outputs = self.process(input, g, k);
+        self.ic1 = self.ic1.tanh();
+        outputs
+    }
 }
 
 /// Zero-delay-feedback one-pole low-pass; high-pass is `input - low`.
