@@ -19,8 +19,18 @@ fn visible(state: &Value, label: &str) -> bool {
 #[test]
 fn unassigned_clip_offers_instrument_setup_without_leaving_the_editor_first() {
     let mut app = Harness::new();
-    app.click("Track");
-    app.click("Add MIDI track");
+    // New tracks start with R1 Mini; an imported part can still be unassigned.
+    let mut project = daw_core::Project::new();
+    let track = project.add_midi_track("Imported part");
+    project
+        .track_mut(track)
+        .unwrap()
+        .clips
+        .push(daw_core::Clip::midi("Phrase", 0.0, 4.0, vec![]));
+    let path = app.directory.path().join("unassigned.rill");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open","path":path}));
+    app.click("Phrase");
     app.click("Window");
     let before = app.click("Clip Editor");
     assert!(visible(&before, "Choose instrument…"));

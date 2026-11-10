@@ -317,7 +317,8 @@ fn favorite_action_remains_in_the_footer_on_small_screens_and_persists() {
     compact_layout(&app.inspect());
     let cleared = app.click("Clear");
     assert!(visible(&cleared, "Search instruments"));
-    assert_eq!(cleared["library"]["total"], 2);
+    // The two fixtures and the built-in R1 Mini.
+    assert_eq!(cleared["library"]["total"], 3);
     select_device(&mut app, "Rill Fixture B");
     assert!(app.inspect()["library"]["details"].is_null());
     let marked = footer_favorite(&mut app);
