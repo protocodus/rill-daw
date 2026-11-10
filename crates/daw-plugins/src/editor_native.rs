@@ -195,6 +195,11 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
         state.len() <= 64 * 1024 * 1024,
         "Plugin state exceeds 64 MiB"
     );
+    // LV2 parameters are edited in Rill's generic parameter browser instead.
+    ensure!(
+        crate::PluginFormat::from_path(&path) != crate::PluginFormat::Lv2,
+        "This plug-in has no native editor"
+    );
     let platform = Platform::new()?;
     if crate::PluginFormat::from_path(&path) == crate::PluginFormat::Clap {
         return clap::run(

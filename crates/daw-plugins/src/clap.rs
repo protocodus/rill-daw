@@ -1628,8 +1628,18 @@ impl ClapProcessor {
     }
 }
 
-fn midi_bytes(event: MidiEvent) -> Option<[u8; 3]> {
+pub(crate) fn midi_bytes(event: MidiEvent) -> Option<[u8; 3]> {
     Some(match event {
+        MidiEvent::NoteOn {
+            channel,
+            note,
+            velocity,
+        } => [0x90 | channel.as_index(), note & 0x7F, velocity & 0x7F],
+        MidiEvent::NoteOff {
+            channel,
+            note,
+            velocity,
+        } => [0x80 | channel.as_index(), note & 0x7F, velocity & 0x7F],
         MidiEvent::ControlChange {
             channel,
             controller,

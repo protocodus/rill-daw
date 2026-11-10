@@ -119,7 +119,7 @@ fn clap_standard_paths() -> Vec<PathBuf> {
     paths
 }
 
-/// lilv's default `LV2_PATH` on Linux.
+/// lilv's default `LV2_PATH` on Linux, plus the multiarch folder.
 fn lv2_standard_paths() -> Vec<PathBuf> {
     if !cfg!(target_os = "linux") {
         return Vec::new();
@@ -127,6 +127,11 @@ fn lv2_standard_paths() -> Vec<PathBuf> {
     let mut paths: Vec<_> = home().map(|home| home.join(".lv2")).into_iter().collect();
     paths.push(PathBuf::from("/usr/local/lib/lv2"));
     paths.push(PathBuf::from("/usr/lib/lv2"));
+    // Debian and Ubuntu multiarch packages.
+    paths.push(PathBuf::from(format!(
+        "/usr/lib/{}-linux-gnu/lv2",
+        std::env::consts::ARCH
+    )));
     paths
 }
 

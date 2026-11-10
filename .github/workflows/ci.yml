@@ -55,7 +55,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++ pkg-config libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev \
             libx11-6 libx11-xcb1 libxi6 libxcursor1 libxrandr2 libxkbcommon-x11-0 \
-            libgl1 libegl1 libegl-mesa0 libgl1-mesa-dri libglx-mesa0 xvfb xauth
+            libgl1 libegl1 libegl-mesa0 libgl1-mesa-dri libglx-mesa0 xvfb xauth liblilv-0-0
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Linux launcher installation tests
