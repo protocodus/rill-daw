@@ -17,6 +17,14 @@ recommendation preserves it, applies the rate-aware balanced recommendation at
 96 kHz, and checks persistence across app restart. Run with
 `cargo test --locked -p daw-app --test buffer_setup_e2e`.
 
+`audio_driver_e2e` runs device-free audio with fake drivers (`RILL_E2E_AUDIO_HOSTS`,
+for example `ALSA,JACK:44100:128`; the first is the default and `Name:rate:frames`
+makes a server-dictated driver). It checks that the Setup Driver control lists the
+hosts and is hidden for one host, that choosing JACK adopts its fixed rate and buffer,
+that the choice persists across restart, that an unavailable saved driver falls back to
+the default with an error notice, and that `get_setup`/`configure_setup` report and set
+the driver. Run with `cargo test --locked -p daw-app --test audio_driver_e2e`.
+
 `mixer_identity_navigation_e2e` checks lowered bus/send-return strips and large
 type headings in light/dark and compact/tall layouts. It follows a distant mixer
 channel into nested collapsed arranger folders and back, checks persistent

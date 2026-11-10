@@ -374,6 +374,12 @@ impl Harness {
         app.virtual_audio = std::env::var_os("RILL_E2E_VIRTUAL_AUDIO").is_some();
         app.audio_device_enabled =
             app.virtual_audio || std::env::var_os("RILL_E2E_AUDIO_DEVICE").is_some();
+        if let Some(spec) = std::env::var_os("RILL_E2E_AUDIO_HOSTS") {
+            let hosts = crate::audio_driver::VirtualHost::parse_list(&spec.to_string_lossy());
+            if !hosts.is_empty() {
+                app.virtual_hosts = hosts;
+            }
+        }
         // Native editor capture stays opt-in for tests, which supply an
         // isolated helper through DAW_PLUGIN_HOST.
         app.automatic_plugin_previews = std::env::var_os("RILL_E2E_PLUGIN_PREVIEWS").is_some();
@@ -382,6 +388,7 @@ impl Harness {
             ..app.settings.clone()
         };
         app.setup_draft = app.settings.clone();
+        app.reconcile_audio_host();
         // Subprocess tests discover only explicitly supplied fixtures; installed
         // system plug-ins must not change their inventory or launch real code.
         app.plugin_scan_roots = Some(

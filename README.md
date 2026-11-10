@@ -101,6 +101,8 @@ Use the menus and on-screen tools, or speed up familiar actions with keyboard sh
 
 ## Current scope
 
+Audio runs through the platform driver (ALSA, WASAPI or CoreAudio) or, from Setup → Audio → Driver, JACK on Linux. ASIO on Windows is an opt-in build (`--features asio`, see [releasing](docs/RELEASING.md)); no release archive includes it, and it has not been tested on hardware.
+
 Rill is in active development and focuses on audio/MIDI music production. It hosts **VST3** and **CLAP** on every platform and **LV2** on Linux (through the system lilv library); instruments and effects are installed separately. LV2 plug-ins use Rill's generic parameter browser instead of their own editor windows. Songs can change meter at bar lines and carry named markers. Tempo maps, surround mixing, Audio Units/VST2/AAX/ARA, and video/scoring-to-picture workflows are not supported. See the [current capabilities and limits](docs/PRODUCT_DIRECTION.md).
 
 `.rill` projects preserve high-resolution MIDI note/controller data. Native UMP input targets macOS 11 and newer; Linux and Windows use MIDI 1.0 input. Audible expression depends on the instrument's supported mappings (VST3 note expressions, CLAP note expressions, MIDI for LV2); per-note pitch-bend packets are retained but not currently played. Exporting richer performances as `.mid` requires an explicit MIDI 1.0 copy. This is not universal MIDI 2.0 device or plug-in compatibility; see [MIDI recording and expression](docs/USER_GUIDE.md#midi-recording-and-pre-count).

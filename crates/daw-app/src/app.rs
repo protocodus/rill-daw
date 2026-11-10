@@ -221,6 +221,9 @@ pub struct DawApp {
     midi_advisory_ack: Option<(u64, u64, u64)>,
     live_edit_error: Option<(u64, String)>,
     pub devices: Vec<DeviceInfo>,
+    pub(crate) audio_hosts: Vec<daw_engine::HostInfo>,
+    /// Headless stand-ins for drivers; set from `RILL_E2E_AUDIO_HOSTS`.
+    pub(crate) virtual_hosts: Vec<crate::audio_driver::VirtualHost>,
     pub status: String,
     pub error: bool,
     pub(crate) last_error_report: Option<crate::error_ui::ErrorReport>,
@@ -380,6 +383,11 @@ impl DawApp {
             midi_advisory_ack: None,
             live_edit_error: None,
             devices: Vec::new(),
+            audio_hosts: Vec::new(),
+            virtual_hosts: vec![crate::audio_driver::VirtualHost {
+                name: "Rill virtual".into(),
+                fixed: None,
+            }],
             status: "Ready · Space to play · Drop audio anywhere in the arrangement".into(),
             error: false,
             last_error_report: None,
@@ -905,24 +913,26 @@ impl DawApp {
     }
 
     pub(crate) fn refresh_devices(&mut self) {
-        self.refresh_input_devices();
+        self.refresh_devices_for(self.settings.audio_host.clone());
+    }
+
+    /// Devices come from the chosen driver; Setup lists the draft's driver
+    /// before it is applied.
+    pub(crate) fn refresh_devices_for(&mut self, host: Option<String>) {
+        self.refresh_hosts();
+        self.refresh_input_devices_for(host.as_deref());
         self.refresh_midi_devices();
         if !self.audio_device_enabled || self.virtual_audio {
             // Offline/headless work uses the portable render rates, independent
             // of whatever audio hardware happens to be attached to this host.
             self.devices = if self.virtual_audio {
-                vec![DeviceInfo {
-                    name: "Rill virtual output".into(),
-                    is_default: true,
-                    supported_sample_rates: vec![44100, 48000, 88200, 96000],
-                    channels: 2,
-                }]
+                vec![self.virtual_device(host.as_deref(), false)]
             } else {
                 Vec::new()
             };
             return;
         }
-        match daw_engine::list_output_devices() {
+        match daw_engine::list_output_devices(host.as_deref()) {
             Ok(devices) => self.devices = devices,
             Err(error) => self.message(Err(error), ""),
         }
@@ -3281,6 +3291,27 @@ impl DawApp {
                 }
                 SetupPage::Audio => {
                     daw_ui::form_grid(ui, "audio_settings", |ui| {
+                        let previous_host = self.setup_draft.audio_host.clone();
+                        if self.audio_hosts.len() > 1 {
+                            let driver_label = daw_ui::form_label(ui, "Driver");
+                            let current = crate::audio_driver::driver_name(&self.audio_hosts, self.setup_draft.audio_host.as_deref());
+                            daw_ui::select("audio_driver", current).width(daw_ui::tokens::FORM_FIELD_WIDTH).show_ui(ui, |ui| {
+                                for host in &self.audio_hosts {
+                                    let value = (!host.is_default).then(|| host.name.clone());
+                                    daw_ui::selectable_value(ui, &mut self.setup_draft.audio_host, value, &host.name);
+                                }
+                            }).response.labelled_by(driver_label.id).on_hover_text("The audio system Rill talks to. Devices, sample rates and buffer sizes come from the chosen driver; JACK and ASIO set their own.");
+                            ui.end_row();
+                        }
+                        let host_changed = self.setup_draft.audio_host != previous_host;
+                        if host_changed {
+                            // Device names belong to one driver.
+                            self.setup_draft.device_name = None;
+                            self.setup_draft.input_device_name = None;
+                            self.refresh_devices_for(self.setup_draft.audio_host.clone());
+                        }
+                        let single_device = crate::audio_driver::driver_name(&self.audio_hosts, self.setup_draft.audio_host.as_deref());
+                        let single_device = daw_engine::is_single_device_host(&single_device);
                         let previous_device = self.setup_draft.device_name.clone();
                         let output_label = daw_ui::form_label(ui, "Output");
                         ui.horizontal(|ui| {
@@ -3288,14 +3319,15 @@ impl DawApp {
                             daw_ui::selectable_value(ui, &mut self.setup_draft.device_name, None, "System default");
                             for device in &self.devices { daw_ui::selectable_value(ui, &mut self.setup_draft.device_name, Some(device.name.clone()), &device.name); }
                         }).response.labelled_by(output_label.id).on_hover_text(self.setup_draft.device_name.as_deref().unwrap_or("System default"));
-                        if daw_ui::quiet_button(ui, "Refresh devices").clicked() { self.refresh_devices(); }
+                        if daw_ui::quiet_button(ui, "Refresh devices").clicked() { self.refresh_devices_for(self.setup_draft.audio_host.clone()); }
                         });
                         ui.end_row();
                         let input_label = daw_ui::form_label(ui, "Input device");
-                        let picker = daw_ui::select("input_device", self.setup_draft.input_device_name.as_deref().unwrap_or("System default input")).width(daw_ui::tokens::FORM_FIELD_WIDTH).truncate().show_ui(ui, |ui| {
+                        if single_device { self.setup_draft.input_device_name = self.setup_draft.device_name.clone(); }
+                        let picker = ui.add_enabled_ui(!single_device, |ui| daw_ui::select("input_device", self.setup_draft.input_device_name.as_deref().unwrap_or("System default input")).width(daw_ui::tokens::FORM_FIELD_WIDTH).truncate().show_ui(ui, |ui| {
                             daw_ui::selectable_value(ui, &mut self.setup_draft.input_device_name, None, "System default input");
                             for device in &self.input_devices { daw_ui::selectable_value(ui, &mut self.setup_draft.input_device_name, Some(device.name.clone()), &device.name); }
-                        }).response.labelled_by(input_label.id);
+                        }).response.labelled_by(input_label.id).on_disabled_hover_text("ASIO drives one device for both input and output; the input follows the output.")).inner;
                         ctx.data_mut(|data| data.insert_temp(egui::Id::new("input_device_picker_rect"), picker.rect));
                         ui.end_row();
                         let midi_label = daw_ui::form_label(ui, "MIDI input");
@@ -3306,21 +3338,26 @@ impl DawApp {
                         }).response.labelled_by(midi_label.id);
                         ui.end_row();
                         let rates = self.devices.iter().find(|d| self.setup_draft.device_name.as_ref().map_or(d.is_default, |name| name == &d.name)).map(|d| d.supported_sample_rates.clone()).unwrap_or_else(|| vec![44_100, 48_000, 88_200, 96_000]);
-                        if self.setup_draft.device_name != previous_device && !rates.is_empty() && !rates.contains(&self.setup_draft.sample_rate) {
+                        if (host_changed || self.setup_draft.device_name != previous_device) && !rates.is_empty() && !rates.contains(&self.setup_draft.sample_rate) {
                             self.setup_draft.sample_rate = if rates.contains(&48_000) { 48_000 } else { rates[0] };
                         }
+                        crate::audio_driver::follow_driver_limits(&self.devices, &mut self.setup_draft);
+                        let output_device = self.devices.iter().find(|d| self.setup_draft.device_name.as_ref().map_or(d.is_default, |name| name == &d.name)).cloned();
+                        let driver_sets_rate = self.setup_draft.audio_host.is_some() && rates.len() == 1;
                         let sample_rate_label = daw_ui::form_label(ui, "Sample rate");
-                        daw_ui::select("sample_rate", format!("{} Hz", self.setup_draft.sample_rate)).width(daw_ui::tokens::FORM_FIELD_WIDTH).show_ui(ui, |ui| {
+                        ui.add_enabled_ui(!driver_sets_rate, |ui| daw_ui::select("sample_rate", format!("{} Hz", self.setup_draft.sample_rate)).width(daw_ui::tokens::FORM_FIELD_WIDTH).show_ui(ui, |ui| {
                             for rate in rates { daw_ui::selectable_value(ui, &mut self.setup_draft.sample_rate, rate, format!("{rate} Hz")); }
-                        }).response.labelled_by(sample_rate_label.id);
+                        }).response.labelled_by(sample_rate_label.id).on_disabled_hover_text("Set by the audio driver. Change it in the driver's own settings."));
                         ui.end_row();
                         let buffer_label = daw_ui::form_label(ui, "Buffer");
+                        let buffer_fixed = crate::audio_driver::buffer_is_fixed(output_device.as_ref());
                         ui.horizontal(|ui| {
-                        daw_ui::select("buffer", format!("{} samples", self.setup_draft.buffer_frames)).width(daw_ui::tokens::FORM_FIELD_WIDTH).show_ui(ui, |ui| {
-                            for size in [64, 128, 256, 512, 1024, 2048] { daw_ui::selectable_value(ui, &mut self.setup_draft.buffer_frames, size, format!("{size} samples")); }
-                        }).response.labelled_by(buffer_label.id);
-                        if daw_ui::quiet_button(ui, "Recommended").on_hover_text("Balanced starting point for Apple Silicon MacBooks and other modern computers: 256 samples at 44.1/48 kHz, 512 at 88.2/96 kHz. Use a larger buffer if a demanding mix drops out.").clicked() {
+                        ui.add_enabled_ui(!buffer_fixed, |ui| daw_ui::select("buffer", format!("{} samples", self.setup_draft.buffer_frames)).width(daw_ui::tokens::FORM_FIELD_WIDTH).show_ui(ui, |ui| {
+                            for size in crate::audio_driver::buffer_choices(output_device.as_ref()) { daw_ui::selectable_value(ui, &mut self.setup_draft.buffer_frames, size, format!("{size} samples")); }
+                        }).response.labelled_by(buffer_label.id).on_disabled_hover_text("Set by the audio driver. Change it in the driver's own settings."));
+                        if ui.add_enabled_ui(!buffer_fixed, |ui| daw_ui::quiet_button(ui, "Recommended").on_hover_text("Balanced starting point for Apple Silicon MacBooks and other modern computers: 256 samples at 44.1/48 kHz, 512 at 88.2/96 kHz. Use a larger buffer if a demanding mix drops out.")).inner.clicked() {
                             self.setup_draft.buffer_frames = daw_engine::DeviceSettings::recommended_buffer_frames(self.setup_draft.sample_rate);
+                            crate::audio_driver::follow_driver_limits(&self.devices, &mut self.setup_draft);
                         }
                         });
                         ui.end_row();
@@ -3332,6 +3369,7 @@ impl DawApp {
                         ui.end_row();
                     });
                     let rate = self.setup_draft.sample_rate.max(1) as f64;
+                    if let Some(note) = self.driver_note() { daw_ui::text::note(ui, note); }
                     daw_ui::text::note(ui, format!("{:.1} ms device buffer", self.setup_draft.buffer_frames as f64 * 1000.0 / rate))
                         .on_hover_text(format!("The render queue adds up to {:.1} ms, with a 512-frame minimum. Device and plug-in latency may add more. Smaller buffers reduce device latency and increase callback overhead; larger buffers give demanding mixes more scheduling headroom.", self.setup_draft.audio().render_queue_frames() as f64 * 1000.0 / rate));
                 }
