@@ -355,6 +355,124 @@ fn reverse_trim_and_stretch_map_one_cached_source_into_the_correct_timeline_span
     app.quit();
 }
 
+/// Every spectral paint of `clip` must show the source frames its playback
+/// mapping assigns to the painted edges, and the paints must tile the clip.
+fn assert_clip_mapping(state: &Value, track: u64, clip: u64) -> usize {
+    let project: Project = serde_json::from_value(state["project"].clone()).unwrap();
+    let model = project.clip(track, clip).unwrap();
+    let rect = &state["timeline"]["clips"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == clip)
+        .unwrap()["rect"];
+    let x = rect["min"][0].as_f64().unwrap();
+    let width = rect["max"][0].as_f64().unwrap() - x;
+    let mut paints: Vec<_> = painted(state, "arranger")
+        .into_iter()
+        .filter(|paint| paint["clip"] == clip)
+        .collect();
+    assert!(!paints.is_empty(), "No spectrum painted for clip {clip}");
+    paints.sort_by(|a, b| {
+        a["rect"][0]
+            .as_f64()
+            .unwrap()
+            .total_cmp(&b["rect"][0].as_f64().unwrap())
+    });
+    for pair in paints.windows(2) {
+        assert!(
+            (pair[0]["rect"][2].as_f64().unwrap() - pair[1]["rect"][0].as_f64().unwrap()).abs()
+                < 1e-3,
+            "Warp segments must be contiguous: {pair:?}"
+        );
+    }
+    for paint in &paints {
+        assert_real_underlay(state, paint);
+        for (field, edge) in [("source_left", 0), ("source_right", 2)] {
+            let local = (paint["rect"][edge].as_f64().unwrap() - x) / width * model.length;
+            let expected = model.audio_source_frame(local, project.tempo, RATE);
+            assert!(
+                (paint[field].as_f64().unwrap() - expected).abs() <= 2.0,
+                "{field} mapped incorrectly: {paint}, expected {expected}"
+            );
+        }
+    }
+    paints.len()
+}
+
+#[test]
+fn warping_stretching_and_cutting_keep_the_spectrum_aligned_with_the_audio() {
+    let mut app = Harness::new();
+    let path = app.directory.path().join("edited-spectrum.wav");
+    tone(&path, 512.0, 4096.0);
+    let mut project = Project::new();
+    project.tempo = 120.0;
+    let track = project.add_audio_track("Edited spectra");
+    let clip = Clip::audio("Edited", 0.0, 4.0, path.to_string_lossy());
+    let id = clip.id;
+    project.track_mut(track).unwrap().clips.push(clip);
+    let before = open(&mut app, &project, "edited-spectra");
+    app.click("Fit");
+    ready(&mut app, 1);
+    assert_eq!(assert_clip_mapping(&paint_frame(&mut app), track, id), 1);
+    let edit = |app: &mut Harness, edit: Value| {
+        let state = app.inspect();
+        let result = app.command(
+            json!({"command":"song_tool","name":"apply_edits","arguments":{
+                "session_id":state["song_session"]["id"],
+                "expected_revision":state["song_session"]["revision"],
+                "label":"Edit","edits":[edit]
+            }}),
+        );
+        assert_eq!(result["tool_result"]["ok"], true, "{result}");
+        paint_frame(app)
+    };
+
+    // The 512 Hz half ends at source beat 2; pulling it onto beat 1 squeezes
+    // it, so a single linear span would show it running to beat 2.
+    let state = edit(
+        &mut app,
+        json!({"op":"set_warp_markers","track":track,"clip":id,
+        "markers":[{"source":0.0,"beat":0.0},{"source":2.0,"beat":1.0},{"source":4.0,"beat":4.0}]}),
+    );
+    assert_eq!(assert_clip_mapping(&state, track, id), 2);
+
+    let state = edit(
+        &mut app,
+        json!({"op":"stretch_clip","track":track,"clip":id,"length":8.0}),
+    );
+    assert_eq!(assert_clip_mapping(&state, track, id), 2);
+
+    let state = edit(
+        &mut app,
+        json!({"op":"split_clip","track":track,"clip":id,"beat":4.0}),
+    );
+    let project: Project = serde_json::from_value(state["project"].clone()).unwrap();
+    let clips = &project.track(track).unwrap().clips;
+    assert_eq!(clips.len(), 2);
+    for clip in clips {
+        assert_clip_mapping(&state, track, clip.id);
+    }
+
+    // Every edit reuses the one source analysis; only the mapping changes.
+    assert_eq!(spectrum(&state)["completed"], 1);
+    assert_ne!(state["project"], before["project"]);
+
+    // Undo restores the warped, stretched clip and its two-segment mapping.
+    app.command(json!({"command":"key","key":"Z","cmd":true}));
+    let state = paint_frame(&mut app);
+    assert_eq!(
+        state["project"]["tracks"][0]["clips"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(assert_clip_mapping(&state, track, id), 2);
+    assert_eq!(spectrum(&state)["completed"], 1);
+    app.quit();
+}
+
 #[test]
 fn background_previews_preserve_playback_export_history_and_drop_old_project_results() {
     let mut app = Harness::with_virtual_audio(None, None);

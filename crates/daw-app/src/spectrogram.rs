@@ -940,16 +940,34 @@ pub(crate) fn paint(
         return;
     };
     let at = |x: f32| beats.0 + (beats.1 - beats.0) * f64::from((x - rect.left()) / rect.width());
-    let source_left = clip.audio_source_frame(
-        at(visible.left()) - clip.start,
-        tempo,
-        ready.summary.sample_rate,
-    );
-    let source_right = clip.audio_source_frame(
-        at(visible.right()) - clip.start,
-        tempo,
-        ready.summary.sample_rate,
-    );
+    let source_at =
+        |x: f32| clip.audio_source_frame(at(x) - clip.start, tempo, ready.summary.sample_rate);
+    // Warp markers make source time piecewise linear, so each warp segment is
+    // mapped on its own; one texture span across them would misplace content
+    // after any marker drag. Sub-pixel segments merge into their neighbour.
+    let reverse = matches!(clip.content, ClipContent::Audio { reverse: true, .. });
+    let mut edges = vec![visible.left()];
+    let mut markers: Vec<f32> = clip
+        .warp_markers
+        .iter()
+        .map(|marker| {
+            let local = if reverse {
+                clip.length - marker.beat
+            } else {
+                marker.beat
+            };
+            rect.left()
+                + rect.width() * ((clip.start + local - beats.0) / (beats.1 - beats.0)) as f32
+        })
+        .filter(|x| *x > visible.left() + 0.5 && *x < visible.right() - 0.5)
+        .collect();
+    markers.sort_by(f32::total_cmp);
+    for x in markers {
+        if x - edges[edges.len() - 1] >= 0.5 {
+            edges.push(x);
+        }
+    }
+    edges.push(visible.right());
     let tint_scale = if painter.ctx().style().visuals.dark_mode {
         0.80
     } else {
@@ -972,36 +990,40 @@ pub(crate) fn paint(
         min_frequency: ready.summary.min_frequency,
         max_frequency: ready.summary.max_frequency,
     };
-    // Horizontal cropping changes the source endpoints above. Keep the full
-    // frequency axis vertically, so a partially visible row clips its bands
-    // instead of squeezing the entire spectrum into the visible row fragment.
-    let mapping_rect = egui::Rect::from_min_max(
-        egui::pos2(visible.left(), rect.top()),
-        egui::pos2(visible.right(), rect.bottom()),
-    );
-    if let Some(painted) = daw_ui::paint_audio_spectrogram(
-        painter,
-        mapping_rect,
-        source,
-        (source_left, source_right),
-        processing.transpose_semitones as f32,
-        tint,
-    ) && let Ok(mut cache) = shared.lock()
-    {
-        cache.painted.push(Painted {
-            view,
-            clip: clip.id,
-            path: Arc::clone(&ready.path),
-            source_left,
-            source_right,
-            transpose: processing.transpose_semitones,
-            texture,
-            opacity,
-            tint_alpha: tint.a(),
-            palette: settings.palette,
-            rect: painted.rect,
-            uv: painted.uv,
-        });
+    for span in edges.windows(2) {
+        let (left, right) = (span[0], span[1]);
+        let (source_left, source_right) = (source_at(left), source_at(right));
+        // Horizontal cropping changes the source endpoints above. Keep the full
+        // frequency axis vertically, so a partially visible row clips its bands
+        // instead of squeezing the entire spectrum into the visible row fragment.
+        let mapping_rect = egui::Rect::from_min_max(
+            egui::pos2(left, rect.top()),
+            egui::pos2(right, rect.bottom()),
+        );
+        if let Some(painted) = daw_ui::paint_audio_spectrogram(
+            painter,
+            mapping_rect,
+            source,
+            (source_left, source_right),
+            processing.transpose_semitones as f32,
+            tint,
+        ) && let Ok(mut cache) = shared.lock()
+        {
+            cache.painted.push(Painted {
+                view,
+                clip: clip.id,
+                path: Arc::clone(&ready.path),
+                source_left,
+                source_right,
+                transpose: processing.transpose_semitones,
+                texture,
+                opacity,
+                tint_alpha: tint.a(),
+                palette: settings.palette,
+                rect: painted.rect,
+                uv: painted.uv,
+            });
+        }
     }
 }
 
