@@ -92,9 +92,8 @@ impl DawApp {
                     let count = track.inserts.len();
                     for (index, slot) in track.inserts.iter_mut().enumerate() {
                         ui.push_id(slot.id, |ui| {
-                            let Effect::Vst3 { path, class_id } = &slot.effect;
                             let model =
-                                crate::library::plugin_model(&self.vst_catalog, path, class_id);
+                                crate::library::effect_model(&self.vst_catalog, &slot.effect);
                             let row = widgets::effect_slot(
                                 ui,
                                 (track_id, slot.id),
@@ -143,8 +142,11 @@ impl DawApp {
                                     .on_hover_text("Insert actions");
                                 },
                             );
-                            let Effect::Vst3 { path, .. } = &slot.effect;
-                            changed |= row.inner.0.on_hover_text(path).changed();
+                            let location = match &slot.effect {
+                                Effect::Vst3 { path, .. } => path.as_str(),
+                                Effect::Builtin { .. } => "Built-in device",
+                            };
+                            changed |= row.inner.0.on_hover_text(location).changed();
                             if let Some(payload) =
                                 widgets::reorder_drop_target::<(u64, u64)>(ui, &row.response)
                                 && payload.0 == track_id

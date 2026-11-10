@@ -200,6 +200,14 @@ VST3). `class_id` is a 32-hex VST3 class ID, a CLAP plug-in ID or an LV2 plug-in
 CLAP state is the plug-in's own stream; LV2 state is lilv's Turtle text. No
 project-version change was needed.
 
+Rill's built-in devices are a separate variant, `"Builtin": {"device": "r1-filter"}`,
+for both instruments and inserts. `device` is 1–32 characters of `a-z`, `0-9`
+and `-`; their state is only the normalized `parameters` overrides keyed by the
+device's stable parameter IDs, so `state` must be empty. A device ID this
+version does not know stays in the project unchanged: an unknown insert passes
+audio through and an unknown instrument is silent. Older Rill versions reject
+the variant.
+
 Plug-in binaries and external sample libraries managed by a plug-in are not
 included. Plug-in paths are made absolute when saving a bundle and retained when
 loading. A different machine still needs compatible plug-ins and their external

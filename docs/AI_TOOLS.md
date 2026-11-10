@@ -70,7 +70,8 @@ discovery remains authoritative as the catalog expands.
 | Composition theory | `composer_catalog`, `composer_scale`, `composer_chord`, `composer_progression`, `composer_euclidean`: native, bounded theory queries adapted from midi-composer-mcp; no song edits |
 | Multi-part composition | `compose_progression`: create chord, arpeggio, and bass clips together in one fenced, undoable commit; reuse existing MIDI tracks or create new ones |
 | Musical edits | `apply_edits`, `create_midi_part`, `generate_part`, `transform_phrase`, `set_mix`, `join_clips`: atomic typed batches, complete patterns, seeded generation, phrase transforms, multi-channel settings, and MIDI/audio consolidation |
-| Instruments | `list_plugins`, `organize_plugin`, `assign_plugin`, `create_instrument_part`, `plugin_describe_parameters`: discover catalog IDs with favorites, categories and plug-in format (`VST3`, `CLAP`, `LV2`, `AU`; optional `format` filter, optionally rescanning plug-in folders), organize the library, assign instruments/inserts (an optional `format` must match the catalog entry), create notes plus instrument in one commit, and inspect actual parameter metadata |
+| Instruments | `list_plugins`, `organize_plugin`, `assign_plugin`, `create_instrument_part`, `plugin_describe_parameters`: discover catalog IDs with favorites, categories and plug-in format (`VST3`, `CLAP`, `LV2`, `AU`; optional `format` filter, optionally rescanning plug-in folders), organize the library, assign instruments/inserts (an optional `format` must match the catalog entry), create notes plus instrument in one commit, and inspect actual parameter metadata. Rill's built-in devices are listed with format `Built-in` and IDs such as `rill:r1-filter` |
+| Built-in devices | `set_device_parameters`, `list_device_presets`, `load_device_preset`, `save_device_preset`: set built-in device parameters by key in their own units (`"200 Hz"`, `-6`, `"Ladder"`, `true`), as described by `plugin_describe_parameters`; browse, load (one Undo step) and save `.rillpreset` presets. Saving writes only into the user preset directory |
 | Audio | `audio_analyze`, `audio_analyze_clip`, `audio_process_clip`: measure a rendered excerpt; analyze source regions and propose edits; normalize, split at transients, strip silence, place warp markers at transients (`warp_transients`) or quantize audio toward a grid (`quantize`, with `grid_beats`, `strength` and `max_move_beats`; the result reports `warp.moved`, `largest_move_beats` and `largest_move_ms`) with one checked background operation |
 | Transport | `transport`: inspect, play, pause, stop, or seek the active song |
 | Recording | `get_recording`, `configure_recording`, `start_recording`, `stop_recording`, `retry_recording_input`: inspect phase, bulk-configure inputs/arming/monitoring/placement/timing, capture, finalize, and recover inputs through the existing recording lifecycle |
@@ -83,7 +84,8 @@ read-only controls. Audio analysis returns local measurements and edit
 proposals; it does not send audio to a model or provide perceptual listening.
 `create_midi_part` alone leaves a new MIDI track unassigned; use
 `create_instrument_part` with a catalog VST3 ID to create notes and assign an
-instrument together. Rill supplies no bundled instruments.
+instrument together. Rill's built-in effects need no scan; built-in
+instruments follow in later steps of [R1_DEVICES.md](R1_DEVICES.md).
 
 Configure the provider, model, and user API key in **Window → Setup → AI**, then
 choose **Apply**. Open the menu bar’s **AI** button or **Window → Assistant** to

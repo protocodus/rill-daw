@@ -395,25 +395,30 @@ impl ToolHost for DawApp {
                 if (args.refresh || self.vst_catalog.is_empty()) && !self.plugin_sync.scanning() {
                     self.refresh_plugins();
                 }
-                let plugins: Vec<_> = self
-                    .vst_catalog
+                // Built-ins have no plug-in format; a format filter leaves them out.
+                let builtins = crate::builtin_devices::catalog()
                     .iter()
-                    .filter(|entry| {
-                        format.is_none_or(|format| entry.plugin.format == format)
-                            && format!("{} {}", entry.plugin.name, entry.plugin.vendor)
+                    .filter(|_| format.is_none());
+                let plugins: Vec<_> =
+                    builtins
+                        .chain(self.vst_catalog.iter().filter(|entry| {
+                            format.is_none_or(|format| entry.plugin.format == format)
+                        }))
+                        .filter(|entry| {
+                            format!("{} {}", entry.plugin.name, entry.plugin.vendor)
                                 .to_lowercase()
                                 .contains(&query)
-                    })
-                    .take(256)
-                    .map(|entry| {
-                        json!({"id":catalog_id(entry),"name":entry.plugin.name,
+                        })
+                        .take(256)
+                        .map(|entry| {
+                            json!({"id":catalog_id(entry),"name":entry.plugin.name,
                     "vendor":entry.plugin.vendor,"category":entry.plugin.category,
-                    "format":entry.plugin.format.label(),
+                    "format":crate::builtin_devices::format_label(&entry.plugin),
                     "is_instrument":entry.plugin.is_instrument(),
                     "favorite":self.plugin_favorite(&entry.plugin),
                     "categories":self.plugin_categories(&entry.plugin)})
-                    })
-                    .collect();
+                        })
+                        .collect();
                 Ok(json!({"plugins":plugins,"scanning":self.plugin_sync.scanning()}))
             }
             "organize_plugin" => {
@@ -438,9 +443,9 @@ impl ToolHost for DawApp {
                         "Use up to 32 non-empty categories of at most 64 characters, without commas",
                     ));
                 }
-                let plugin = self
-                    .vst_catalog
+                let plugin = crate::builtin_devices::catalog()
                     .iter()
+                    .chain(&self.vst_catalog)
                     .find(|entry| catalog_id(entry) == args.plugin_id)
                     .ok_or_else(|| {
                         ToolError::new("not_found", "Choose a plug-in ID returned by list_plugins")
@@ -485,17 +490,21 @@ impl ToolHost for DawApp {
                 let args: Args = parse_arguments(arguments)?;
                 let format = args.format.as_deref().map(plugin_format).transpose()?;
                 self.check_tool_revision(args.session_id, args.expected_revision)?;
-                let entry = self
-                    .vst_catalog
+                let entry = crate::builtin_devices::catalog()
                     .iter()
+                    .chain(&self.vst_catalog)
                     .find(|entry| catalog_id(entry) == args.plugin_id)
                     .ok_or_else(|| {
                         ToolError::new("not_found", "Choose a plug-in ID returned by list_plugins")
                     })?;
-                if format.is_some_and(|format| format != entry.plugin.format) {
+                let builtin = crate::builtin_devices::is_builtin(&entry.plugin);
+                if format.is_some_and(|format| builtin || format != entry.plugin.format) {
                     return Err(ToolError::new(
                         "invalid_arguments",
-                        format!("This catalog plug-in is {}", entry.plugin.format.label()),
+                        format!(
+                            "This catalog plug-in is {}",
+                            crate::builtin_devices::format_label(&entry.plugin)
+                        ),
                     ));
                 }
                 let classification = entry.plugin.is_instrument();
@@ -509,10 +518,11 @@ impl ToolHost for DawApp {
                     ));
                 }
                 let mut candidate = self.project.clone();
-                let path = entry.plugin.path.to_string_lossy().into_owned();
-                let class_id = entry.plugin.class_id.clone();
                 let effect_id = if args.insert {
-                    let slot = EffectSlot::new(&entry.plugin.name, Effect::Vst3 { path, class_id });
+                    let slot = EffectSlot::new(
+                        &entry.plugin.name,
+                        crate::builtin_devices::effect(&entry.plugin),
+                    );
                     let id = slot.id;
                     candidate
                         .track_mut(args.track_id)
@@ -522,15 +532,183 @@ impl ToolHost for DawApp {
                     Some(id)
                 } else {
                     candidate
-                        .set_instrument(args.track_id, Instrument::Vst3 { path, class_id })
+                        .set_instrument(
+                            args.track_id,
+                            crate::builtin_devices::instrument(&entry.plugin),
+                        )
                         .map_err(failure)?;
                     None
                 };
                 self.commit_song_candidate(candidate, "Assign plug-in")?;
                 self.record_plugin_use(&used_plugin);
                 Ok(
-                    json!({"session_id":self.song_session.id,"revision":self.song_session.revision,"track_id":args.track_id,"insert_id":effect_id,"format":used_plugin.format.label()}),
+                    json!({"session_id":self.song_session.id,"revision":self.song_session.revision,"track_id":args.track_id,"insert_id":effect_id,"format":crate::builtin_devices::format_label(&used_plugin)}),
                 )
+            }
+            "set_device_parameters" => {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Parameter {
+                    parameter: Value,
+                    value: Value,
+                }
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Args {
+                    session_id: u64,
+                    expected_revision: u64,
+                    track_id: u64,
+                    insert_id: Option<u64>,
+                    parameters: Vec<Parameter>,
+                }
+                let args: Args = parse_arguments(arguments)?;
+                self.check_tool_revision(args.session_id, args.expected_revision)?;
+                let descriptor = self.tool_device(args.track_id, args.insert_id)?;
+                if args.parameters.is_empty() || args.parameters.len() > descriptor.parameters.len()
+                {
+                    return Err(ToolError::new(
+                        "invalid_arguments",
+                        format!(
+                            "Set 1 to {} parameters per call",
+                            descriptor.parameters.len()
+                        ),
+                    ));
+                }
+                let mut values = Vec::with_capacity(args.parameters.len());
+                for parameter in &args.parameters {
+                    let spec = match &parameter.parameter {
+                        Value::String(key) => descriptor.parameter_by_key(key),
+                        Value::Number(id) => id
+                            .as_u64()
+                            .and_then(|id| u32::try_from(id).ok())
+                            .and_then(|id| descriptor.parameter(id)),
+                        _ => None,
+                    }
+                    .ok_or_else(|| {
+                        ToolError::new(
+                            "invalid_arguments",
+                            format!(
+                                "{} has no parameter {}; use a key or ID from plugin_describe_parameters",
+                                descriptor.name, parameter.parameter
+                            ),
+                        )
+                    })?;
+                    let normalized =
+                        crate::builtin_devices::normalized_from_tool(spec, &parameter.value)
+                            .map_err(|message| ToolError::new("invalid_arguments", message))?;
+                    values.push((spec, normalized));
+                }
+                let mut candidate = self.project.clone();
+                store_values(
+                    device_parameters_mut(&mut candidate, args.track_id, args.insert_id)?,
+                    values
+                        .iter()
+                        .map(|(spec, normalized)| (spec.id, *normalized)),
+                );
+                self.commit_song_candidate(candidate, "Device parameters")?;
+                let parameters: Vec<_> = values
+                    .iter()
+                    .map(|(spec, normalized)| {
+                        crate::builtin_devices::describe_parameter(spec, *normalized)
+                    })
+                    .collect();
+                Ok(
+                    json!({"session_id":self.song_session.id,"revision":self.song_session.revision,
+                    "track_id":args.track_id,"insert_id":args.insert_id,"parameters":parameters}),
+                )
+            }
+            "list_device_presets" | "load_device_preset" | "save_device_preset" => {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Args {
+                    track_id: u64,
+                    insert_id: Option<u64>,
+                    name: Option<String>,
+                    #[serde(default)]
+                    query: String,
+                    session_id: Option<u64>,
+                    expected_revision: Option<u64>,
+                }
+                let args: Args = parse_arguments(arguments)?;
+                let descriptor = self.tool_device(args.track_id, args.insert_id)?;
+                let preset_name = || {
+                    args.name
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|name| !name.is_empty() && name.len() <= 128)
+                        .ok_or_else(|| {
+                            ToolError::new(
+                                "invalid_arguments",
+                                "Give a preset name of 1 to 128 bytes",
+                            )
+                        })
+                };
+                match name {
+                    "list_device_presets" => {
+                        let query = args.query.to_lowercase();
+                        let presets: Vec<_> = crate::builtin_devices::all_presets(descriptor)
+                            .into_iter()
+                            .filter(|(_, preset)| {
+                                std::iter::once(&preset.name)
+                                    .chain([&preset.category, &preset.description])
+                                    .chain(&preset.tags)
+                                    .any(|text| text.to_lowercase().contains(&query))
+                            })
+                            .map(|(factory, preset)| json!({"name":preset.name,"category":preset.category,
+                                "tags":preset.tags,"description":preset.description,"source":if factory {"factory"} else {"user"}}))
+                            .collect();
+                        Ok(json!({"device":descriptor.id,"presets":presets}))
+                    }
+                    "load_device_preset" => {
+                        let (Some(session_id), Some(expected_revision)) =
+                            (args.session_id, args.expected_revision)
+                        else {
+                            return Err(ToolError::new(
+                                "invalid_arguments",
+                                "Loading a preset needs session_id and expected_revision",
+                            ));
+                        };
+                        self.check_tool_revision(session_id, expected_revision)?;
+                        let name = preset_name()?;
+                        let preset = crate::builtin_devices::all_presets(descriptor)
+                            .into_iter()
+                            .map(|(_, preset)| preset)
+                            .find(|preset| preset.name.eq_ignore_ascii_case(name))
+                            .ok_or_else(|| {
+                                ToolError::new(
+                                    "not_found",
+                                    "No such preset; list the device's presets first",
+                                )
+                            })?;
+                        let resolved = preset.resolve(descriptor).map_err(failure)?;
+                        let mut candidate = self.project.clone();
+                        store_values(
+                            device_parameters_mut(&mut candidate, args.track_id, args.insert_id)?,
+                            resolved
+                                .values
+                                .iter()
+                                .map(|(id, value)| (*id, f64::from(*value))),
+                        );
+                        self.commit_song_candidate(candidate, "Device preset")?;
+                        Ok(
+                            json!({"session_id":self.song_session.id,"revision":self.song_session.revision,
+                            "preset":preset.name,"skipped":resolved.skipped}),
+                        )
+                    }
+                    _ => {
+                        let name = preset_name()?;
+                        let overrides =
+                            device_parameters(&self.project, args.track_id, args.insert_id)
+                                .unwrap_or_default();
+                        let preset = daw_devices::Preset::capture(descriptor, name, |id| {
+                            crate::builtin_devices::value(descriptor, overrides, id) as f32
+                        });
+                        crate::builtin_devices::save_user_preset(&preset).map_err(|error| {
+                            ToolError::new("settings_failed", format!("{error:#}"))
+                        })?;
+                        Ok(json!({"device":descriptor.id,"saved":preset.name}))
+                    }
+                }
             }
             _ if crate::tool_jobs::handles(name) => Err(ToolError::new(
                 "worker_required",
@@ -584,6 +762,85 @@ impl DawApp {
             }
         }
         Ok(())
+    }
+}
+
+impl DawApp {
+    /// The built-in device assigned as this track's instrument or insert.
+    fn tool_device(
+        &self,
+        track_id: u64,
+        insert_id: Option<u64>,
+    ) -> Result<&'static daw_devices::DeviceDescriptor, ToolError> {
+        let track = self
+            .project
+            .track(track_id)
+            .ok_or_else(|| ToolError::new("not_found", "Track not found"))?;
+        let device = match insert_id {
+            Some(id) => track
+                .inserts
+                .iter()
+                .find(|slot| slot.id == id)
+                .ok_or_else(|| ToolError::new("not_found", "Insert not found on this track"))?
+                .effect
+                .builtin_device(),
+            None => track.instrument.builtin_device(),
+        }
+        .ok_or_else(|| {
+            ToolError::new(
+                "invalid_arguments",
+                "This is not a Rill built-in device; use set_plugin_parameters for hosted plug-ins",
+            )
+        })?;
+        daw_devices::descriptor(device).ok_or_else(|| {
+            ToolError::new(
+                "unavailable",
+                format!("Built-in device \"{device}\" is not available in this version"),
+            )
+        })
+    }
+}
+
+fn device_parameters(
+    project: &Project,
+    track_id: u64,
+    insert_id: Option<u64>,
+) -> Option<&[PluginParameterValue]> {
+    let track = project.track(track_id)?;
+    Some(match insert_id {
+        Some(id) => &track.inserts.iter().find(|slot| slot.id == id)?.parameters,
+        None => &track.instrument_parameters,
+    })
+}
+
+fn device_parameters_mut(
+    project: &mut Project,
+    track_id: u64,
+    insert_id: Option<u64>,
+) -> Result<&mut Vec<PluginParameterValue>, ToolError> {
+    let track = project
+        .track_mut(track_id)
+        .ok_or_else(|| ToolError::new("not_found", "Track not found"))?;
+    Ok(match insert_id {
+        Some(id) => {
+            &mut track
+                .inserts
+                .iter_mut()
+                .find(|slot| slot.id == id)
+                .ok_or_else(|| ToolError::new("not_found", "Insert not found on this track"))?
+                .parameters
+        }
+        None => &mut track.instrument_parameters,
+    })
+}
+
+/// Replaces stored values by ID and appends new ones.
+fn store_values(stored: &mut Vec<PluginParameterValue>, values: impl Iterator<Item = (u32, f64)>) {
+    for (id, value) in values {
+        match stored.iter_mut().find(|parameter| parameter.id == id) {
+            Some(parameter) => parameter.value = value,
+            None => stored.push(PluginParameterValue { id, value }),
+        }
     }
 }
 

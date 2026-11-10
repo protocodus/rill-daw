@@ -255,6 +255,20 @@ fn describe_parameters(
     let track = project
         .track(args.track_id)
         .ok_or_else(|| "Track not found".to_string())?;
+    let builtin = match args.insert_id {
+        Some(insert_id) => track
+            .inserts
+            .iter()
+            .find(|insert| insert.id == insert_id)
+            .and_then(|insert| Some((insert.effect.builtin_device()?, &insert.parameters))),
+        None => track
+            .instrument
+            .builtin_device()
+            .map(|device| (device, &track.instrument_parameters)),
+    };
+    if let Some((device, overrides)) = builtin {
+        return builtin_parameter_page(device, overrides, args);
+    }
     let metadata_error = || {
         "Unable to discover this plug-in's parameters; check that the assigned VST3 and helper are available".to_string()
     };
@@ -264,7 +278,9 @@ fn describe_parameters(
             .iter()
             .find(|insert| insert.id == insert_id)
             .ok_or_else(|| "Insert not found on this track".to_string())?;
-        let Effect::Vst3 { path, class_id } = &insert.effect;
+        let Effect::Vst3 { path, class_id } = &insert.effect else {
+            unreachable!("built-in inserts are answered above")
+        };
         check_cancelled(cancel)?;
         let mut plugin = VstEffect::load_class(
             Path::new(path),
@@ -342,6 +358,46 @@ fn parameter_page(parameters: Vec<ParameterInfo>, args: ParameterArgs) -> Result
         "total_parameters":total,"matched_parameters":matched,"parameters":page,
         "next_offset":(next_offset<matched).then_some(next_offset),
         "value_format":"Normalized 0..1 values; unit labels do not establish a conversion to physical units",
+        "automation_note":"Returned values are stored manual/preset values. Enabled automation may override them at playback time."
+    }))
+}
+
+/// Built-in devices describe themselves in plain units; no helper process.
+fn builtin_parameter_page(
+    device: &str,
+    overrides: &[daw_core::PluginParameterValue],
+    args: ParameterArgs,
+) -> Result<Value, String> {
+    let descriptor = daw_devices::descriptor(device)
+        .ok_or_else(|| format!("Built-in device \"{device}\" is not available in this version"))?;
+    let query = args.query.to_lowercase();
+    let matching: Vec<_> = descriptor
+        .parameters
+        .iter()
+        .filter(|spec| {
+            format!("{} {}", spec.group, spec.name)
+                .to_lowercase()
+                .contains(&query)
+                || spec.key.contains(&query)
+                || spec.id.to_string() == query
+        })
+        .collect();
+    let matched = matching.len();
+    let page: Vec<_> = matching
+        .into_iter()
+        .skip(args.offset)
+        .take(args.limit)
+        .map(|spec| {
+            let normalized = crate::builtin_devices::value(descriptor, overrides, spec.id);
+            crate::builtin_devices::describe_parameter(spec, normalized)
+        })
+        .collect();
+    let next_offset = args.offset.saturating_add(page.len());
+    Ok(json!({
+        "track_id":args.track_id,"insert_id":args.insert_id,"device":device,
+        "total_parameters":descriptor.parameters.len(),"matched_parameters":matched,"parameters":page,
+        "next_offset":(next_offset<matched).then_some(next_offset),
+        "value_format":"Plain values in each parameter's unit; choices by label; toggles as booleans. set_plugin_parameters accepts the same forms.",
         "automation_note":"Returned values are stored manual/preset values. Enabled automation may override them at playback time."
     }))
 }

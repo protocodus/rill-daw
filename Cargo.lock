@@ -1013,6 +1013,8 @@ dependencies = [
  "anyhow",
  "daw-ai",
  "daw-core",
+ "daw-devices",
+ "daw-devices-ui",
  "daw-engine",
  "daw-mcp",
  "daw-plugins",

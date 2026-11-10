@@ -337,12 +337,13 @@ impl DawApp {
         if let AutomationParameter::VstParameter { effect, .. } = parameter {
             let path = effect
                 .and_then(|id| track.inserts.iter().find(|slot| slot.id == id))
-                .map(|slot| {
-                    let Effect::Vst3 { path, class_id } = &slot.effect;
-                    (path.clone(), class_id.clone())
+                .map(|slot| match &slot.effect {
+                    Effect::Vst3 { path, class_id } => (path.clone(), class_id.clone()),
+                    Effect::Builtin { device } => crate::builtin_devices::locator(device),
                 })
                 .or_else(|| match &track.instrument {
                     Instrument::Vst3 { path, class_id } => Some((path.clone(), class_id.clone())),
+                    Instrument::Builtin { device } => Some(crate::builtin_devices::locator(device)),
                     _ => None,
                 });
             if let Some((path, class_id)) = path {
@@ -1062,6 +1063,15 @@ fn start_parameter_read(
     state.loading = Some(result.clone());
     state.requested_signature = state.snapshot_signature;
     state.load_error = None;
+    if let Some(device) = crate::builtin_devices::device_of_locator(&source.path) {
+        let parameters = crate::builtin_devices::parameters(device, overrides).ok_or_else(|| {
+            format!("Built-in device \"{device}\" is not available in this version")
+        });
+        if let Ok(mut result) = result.lock() {
+            *result = Some(parameters);
+        }
+        return;
+    }
     let saved_state = saved_state.to_vec();
     let overrides = overrides.to_vec();
     std::thread::spawn(move || {
