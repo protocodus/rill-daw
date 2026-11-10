@@ -199,7 +199,12 @@ fn routing_inspection_enables_real_native_output_pairs_and_connects_a_master_sid
     reveal_routing_action(&mut app, "Inspect I/O", false);
     app.click("Inspect I/O");
     let inspected = wait_until(&mut app, |state| {
-        state["plugin_io"]["status"] == "ready" && state["plugin_io"]["track"] == MASTER_CHANNEL_ID
+        // The inspector reports ready a frame before the routing panel draws its controls.
+        state["plugin_io"]["status"] == "ready"
+            && state["plugin_io"]["track"] == MASTER_CHANNEL_ID
+            && state["visible_labels"]
+                .as_array()
+                .is_some_and(|labels| labels.iter().any(|label| label == "Add source…"))
     });
     assert_eq!(
         inspected["plugin_io"]["details"]["inputs"]
