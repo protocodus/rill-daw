@@ -16,7 +16,7 @@ use clack_extensions::{
         AudioPortFlags, AudioPortInfoBuffer, AudioPortRescanFlags, HostAudioPorts,
         HostAudioPortsImpl, PluginAudioPorts,
     },
-    gui::{GuiApiType, GuiConfiguration, GuiSize, HostGui, HostGuiImpl, PluginGui, Window},
+    gui::{GuiConfiguration, GuiSize, HostGui, HostGuiImpl, PluginGui, Window},
     latency::{HostLatency, HostLatencyImpl, PluginLatency},
     log::{HostLog, HostLogImpl, LogSeverity},
     note_ports::{
@@ -598,7 +598,7 @@ impl ClapProcessor {
     }
 
     fn shared<R>(&self, access: impl FnOnce(&Shared) -> R) -> R {
-        self.instance.access_shared_handler(|shared| access(shared))
+        self.instance.access_shared_handler(access)
     }
 
     fn audio_section<R>(&mut self, call: impl FnOnce(&mut Self) -> R) -> R {
@@ -778,10 +778,10 @@ impl ClapProcessor {
                 params.flush_active(&mut processor.plugin_handle(), &input, &mut output);
                 instance.access_shared_handler(|s| s.audio_section.store(false, Ordering::Release));
             }
-        } else if let Some(mut handle) = self.instance.inactive_plugin_handle() {
-            if let Some(params) = handle.get_extension::<PluginParams>() {
-                params.flush(&mut handle, &input, &mut output);
-            }
+        } else if let Some(mut handle) = self.instance.inactive_plugin_handle()
+            && let Some(params) = handle.get_extension::<PluginParams>()
+        {
+            params.flush(&mut handle, &input, &mut output);
         }
         self.events.clear();
         self.collect_output_edits();
@@ -1007,6 +1007,13 @@ impl ClapProcessor {
         }
     }
 
+    pub(crate) fn set_gui_scale(&mut self, scale: f32) {
+        let handle = self.instance.plugin_handle();
+        if let Some(gui) = handle.get_extension::<PluginGui>() {
+            let _ = gui.set_scale(&handle, f64::from(scale));
+        }
+    }
+
     pub(crate) fn gui_closed(&self) -> bool {
         self.shared(|s| s.gui_closed.load(Ordering::Acquire))
     }
@@ -1016,15 +1023,6 @@ impl ClapProcessor {
         if let Some(gui) = handle.get_extension::<PluginGui>() {
             gui.destroy(&handle);
         }
-    }
-
-    pub(crate) fn gui_api() -> GuiApiType<'static> {
-        #[cfg(target_os = "macos")]
-        return GuiApiType::COCOA;
-        #[cfg(target_os = "windows")]
-        return GuiApiType::WIN32;
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-        GuiApiType::X11
     }
 }
 
@@ -1552,8 +1550,6 @@ impl NativeProcessor for ClapProcessor {
             Some(&transport),
         );
         shared.access_shared_handler(|s| s.audio_section.store(false, Ordering::Release));
-        drop(inputs);
-        drop(outputs);
         self.events.clear();
         status
             .map_err(|error| anyhow::anyhow!("{error}"))

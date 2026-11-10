@@ -443,7 +443,7 @@ impl Worker {
                 };
                 if let Err(error) = plugin.process_bus_audio(&mut buffers) {
                     self.bus_outputs = buffers.outputs;
-                    return Err(error.into());
+                    return Err(error);
                 }
                 return Ok(HostResponse::BusAudioOutput {
                     outputs: buffers.outputs,

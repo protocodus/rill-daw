@@ -75,6 +75,9 @@ jobs:
       - name: Native parameter menu on a private Xvfb display
         if: runner.os == 'Linux'
         run: cargo test --locked -p daw-plugins --test native_context_menu -- --ignored --nocapture
+      - name: Native CLAP editor on a private Xvfb display
+        if: runner.os == 'Linux'
+        run: cargo test --locked -p daw-plugins --test clap_editor -- --ignored --nocapture
       - name: App state and UI interaction tests
         run: cargo test --locked -p daw-app --bin rill
       - name: Headless end-to-end tests

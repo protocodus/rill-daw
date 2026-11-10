@@ -1,5 +1,8 @@
 //! Native editor lifetime and IPC. This module runs only in the isolated helper.
 
+#[path = "editor_clap.rs"]
+mod clap;
+
 use crate::{
     ParameterInfo,
     editor::{EditorCommand, EditorEvent},
@@ -193,6 +196,18 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
         "Plugin state exceeds 64 MiB"
     );
     let platform = Platform::new()?;
+    if crate::PluginFormat::from_path(&path) == crate::PluginFormat::Clap {
+        return clap::run(
+            output,
+            &commands,
+            &platform,
+            &path,
+            class_id.as_deref(),
+            &state,
+            parameters,
+            visible,
+        );
+    }
     let mut host = Vst3Host::builder()
         .with_process_isolation(false)
         .sample_rate(48_000.0)
