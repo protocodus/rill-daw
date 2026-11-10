@@ -153,3 +153,8 @@ cargo test --locked -p daw-plugins --test multi_bus
 cargo test --locked -p daw-plugins --test expressive
 cargo test --locked -p daw-engine --lib midi2_render_tests
 ```
+
+Isolated `Vst3Host::load_plugin_class` forwards the class identifier to the helper
+without requiring a VST3 32-hex UID. Rill's helper hosts CLAP and LV2 behind the
+same command protocol, where identifiers are reverse-DNS IDs or URIs; in-process
+loads and the helper's own VST3 path still validate VST3 UIDs.

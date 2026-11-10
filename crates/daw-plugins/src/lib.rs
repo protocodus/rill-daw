@@ -1,7 +1,9 @@
-//! VST3 instrument discovery and processing, separate from the audio device backend.
+//! VST3, CLAP and (on Linux) LV2 discovery and processing, separate from the audio
+//! device backend.
 //!
-//! Scanning reads directory entries and optional `moduleinfo.json` files; it never loads
-//! native plugin code. Each selected instrument runs in a separate `daw-plugin-host`
+//! VST3 scanning reads directory entries and optional `moduleinfo.json` files. CLAP and
+//! LV2 descriptors are read by a disposable helper per bundle, so scanning never loads
+//! native plugin code into this process. Each selected instrument runs in a separate `daw-plugin-host`
 //! process, which contains crashes and hangs. This is process crash isolation, not an OS
 //! permission sandbox: the child retains the user's file and network access. Native plugin
 //! code is never loaded into the DAW process. No in-process fallback is available.
@@ -32,10 +34,18 @@ use audio_buffers::{
 };
 
 pub mod catalog;
+mod clap;
 mod expressive;
+mod format;
+#[cfg(target_os = "linux")]
+mod lv2;
+mod native;
+mod scan;
 pub use expressive::{
     ExpressiveController, ExpressiveMidiData, ExpressiveMidiMessage, ExpressiveVelocity,
 };
+pub use format::PluginFormat;
+pub use scan::scan_bundle;
 mod editor;
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 mod editor_context_menu;
@@ -97,6 +107,9 @@ pub struct PluginInfo {
     /// Binary folders inside the bundle, such as `x86_64-linux` or `MacOS`.
     #[serde(default)]
     pub architectures: Vec<String>,
+    /// Absent in indexes and settings written before CLAP/LV2 support.
+    #[serde(default)]
+    pub format: PluginFormat,
 }
 
 impl PluginInfo {
@@ -126,13 +139,12 @@ impl PluginInfo {
     }
 }
 
-/// Locations specified by the VST3 convention, plus `VST3_PATH` when set.
+/// Standard folders of every hostable format, plus `VST3_PATH`, `CLAP_PATH` and
+/// (on Linux) `LV2_PATH` when set.
 pub fn default_locations() -> Vec<PathBuf> {
-    let mut paths = vst3_host::discovery::scan_standard_paths();
-    if let Some(extra) = std::env::var_os("VST3_PATH") {
-        paths.extend(std::env::split_paths(&extra));
-    }
-    paths
+    PluginFormat::available()
+        .flat_map(PluginFormat::default_locations)
+        .collect()
 }
 
 /// Discover bundles without executing third-party plugin code.
@@ -185,7 +197,7 @@ pub fn helper_path() -> Result<PathBuf> {
     )
 }
 
-/// Recursively scan directories or individual `.vst3` bundles/files.
+/// Recursively scan directories or individual `.vst3`, `.clap` and `.lv2` bundles/files.
 ///
 /// Missing roots are ignored. Symbolic-link cycles and duplicate roots are collapsed by
 /// canonical path. Known effects are included so callers can decide how to display them.
@@ -225,11 +237,27 @@ pub fn scan_paths(paths: &[PathBuf]) -> Result<Vec<PluginInfo>> {
 }
 
 fn is_bundle(path: &Path) -> bool {
-    path.extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("vst3"))
+    PluginFormat::of_bundle(path).is_some()
 }
 
 fn bundle_info(path: &Path) -> Vec<PluginInfo> {
+    let format = PluginFormat::from_path(path);
+    if format != PluginFormat::Vst3 {
+        // An unreadable bundle stays listed by name so loading can report the cause.
+        return scan::scan_bundle(path).unwrap_or_else(|error| {
+            eprintln!("Plug-in scan failed for {}: {error:#}", path.display());
+            vec![PluginInfo {
+                name: path
+                    .file_stem()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned(),
+                path: path.to_owned(),
+                format,
+                ..PluginInfo::default()
+            }]
+        });
+    }
     let architectures = bundle_architectures(path);
     if let Ok(Some(module)) = vst3_host::discovery::read_module_info(path) {
         let classes: Vec<_> = module
@@ -252,6 +280,7 @@ fn bundle_info(path: &Path) -> Vec<PluginInfo> {
                     class.version
                 },
                 architectures: architectures.clone(),
+                format: PluginFormat::Vst3,
             })
             .collect();
         if !classes.is_empty() {
@@ -501,7 +530,15 @@ impl VstInstrument {
             (1..=65_536).contains(&max_block),
             "Invalid plugin maximum block size"
         );
-        ensure!(is_bundle(path), "Expected a .vst3 bundle or file");
+        ensure!(
+            is_bundle(path),
+            "Expected a .vst3, .clap{} plug-in bundle",
+            if cfg!(target_os = "linux") {
+                " or .lv2"
+            } else {
+                ""
+            }
+        );
         let mut host = Vst3Host::builder()
             .sample_rate(sample_rate)
             .block_size(max_block)
@@ -541,6 +578,7 @@ impl VstInstrument {
             category: raw.category.clone(),
             class_id: Some(raw.uid.clone()),
             version: raw.version.clone(),
+            format: PluginFormat::from_path(path),
             ..PluginInfo::default()
         };
         plugin
