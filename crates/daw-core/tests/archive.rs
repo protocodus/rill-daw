@@ -125,7 +125,9 @@ fn portable_bundle_preserves_audio_and_presets_after_originals_are_removed() {
         restored.track(midi).unwrap().instrument_state,
         vec![1, 2, 3]
     );
-    let Effect::Vst3 { path, .. } = &restored.tracks[0].inserts[0].effect;
+    let Effect::Vst3 { path, .. } = &restored.tracks[0].inserts[0].effect else {
+        panic!("expected a hosted plug-in")
+    };
     assert!(Path::new(path).is_absolute());
     assert!(!Path::new(path).starts_with(&scratch));
     let resaved = temp.path().join("again.rill");

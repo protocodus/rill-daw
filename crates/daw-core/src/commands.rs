@@ -1521,8 +1521,8 @@ fn apply_one(
                     .parameters
             } else {
                 ensure!(
-                    matches!(track.instrument, Instrument::Vst3 { .. }),
-                    "Track has no plug-in instrument"
+                    track.instrument.is_processor(),
+                    "Track has no instrument"
                 );
                 &mut track.instrument_parameters
             };

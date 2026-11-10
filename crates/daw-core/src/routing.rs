@@ -7,10 +7,13 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 impl Effect {
     pub(crate) fn validate(&self) -> Result<()> {
-        let Self::Vst3 { path, class_id } = self;
-        ensure!(!path.is_empty(), "Missing plug-in insert path");
-        crate::model::validate_plugin_class_id(path, class_id.as_deref())?;
-        Ok(())
+        match self {
+            Self::Vst3 { path, class_id } => {
+                ensure!(!path.is_empty(), "Missing plug-in insert path");
+                crate::model::validate_plugin_class_id(path, class_id.as_deref())
+            }
+            Self::Builtin { device } => crate::model::validate_device_id(device),
+        }
     }
 }
 
