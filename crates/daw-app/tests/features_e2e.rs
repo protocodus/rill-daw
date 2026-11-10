@@ -733,6 +733,9 @@ fn instrument_chooser_keyboard_and_double_click_create_ready_patterns_and_assign
             && (state["native_editor"]["open"] == true
                 || state["native_editor"]["error"].is_string())
     });
+    // The error adds a Details button to the footer, which grows to fit it a
+    // frame later; until then the actions row is clipped.
+    common::wait_visible(&mut app, "Change instrument");
     app.click("Change instrument");
     app.command(json!({"command":"text","text":"Fixture B"}));
     common::wait_visible(&mut app, "Rill Fixture B");
