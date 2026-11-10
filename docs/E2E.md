@@ -1028,6 +1028,33 @@ with every output sample matching the edited song. Native egui clipboard-event
 coverage complements the keyboard-driven E2Es. See
 [audio editor coverage](AUDIO_EDITOR.md) for controls and remaining advanced tools.
 
+### Warp markers and audio quantize
+
+```sh
+cargo test --locked -p daw-app --test audio_warp_e2e -- --test-threads=1
+cargo test --locked -p daw-engine warp_render_tests -- --test-threads=1
+cargo test --locked -p daw-core --lib warp
+```
+
+`audio_warp_e2e` uses an off-grid click fixture. The mouse case selects the
+Warp tool, waits for detected attacks, adds a marker that snaps to an attack
+(and a Shift-placed one), drags its flag to the grid, checks one Undo step,
+Undo/Redo and the flag menu's Delete warp marker, saves and reopens, and checks
+the exported click lands on the new beat while neighbours stretch linearly. The
+quantize case previews Process → Quantize audio… (moved count, largest move and
+targets, with the clip unchanged), applies one Undo step and checks every
+exported click on the grid, then verifies Markers only leaves timing unchanged.
+The tool case runs `audio_process_clip` with `quantize`, checks the reported
+moves and exported timing, reads markers through `get_clip`, and applies valid,
+invalid and clearing `set_warp_markers` edits. Exported onsets allow 384 samples
+(8 ms) because Signalsmith's long grains can pull an attack at a rate change;
+the engine tests hold Bungee to 48 samples.
+
+The engine tests compare warped preparation against a reference for pitch and
+seams, resident against disk-streamed rendering, and live edits against export.
+Core tests cover the map, validation and atomic rejection, and split, trim,
+slip, reverse, stretch, region, duplicate and ghost behaviour.
+
 ### Clip editor toolbars, snap and canvas stability
 
 ```sh

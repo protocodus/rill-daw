@@ -20,6 +20,8 @@ claim of feature parity with every established DAW.
 | Crossfades | Optional overlap crossfades and spline controls, including take comp boundaries. The newest-starting audio region wins when crossfading is off. |
 | Time and pitch | Pitch-preserving stretch (`S`), transposition and selectable Signalsmith or Bungee processing. |
 | Transients | Energy-rise or amplitude-gate analysis, sensitivity and minimum spacing, visible preview, marker navigation and splitting within a selected range. |
+| Warp markers | Warp (`K`) shows detected attacks and numbered marker flags. Click adds a marker, snapping to a nearby attack (Shift places it exactly); drag a flag to move that audio while its neighbours stay fixed; the flag menu deletes it. Process → Clear warp markers returns to whole-clip stretch. |
+| Audio quantize | Process → Quantize audio… previews each attack's move toward the grid with Strength and Max move, then applies one undoable warp edit. Markers only places markers on the attacks without moving them. |
 | Spectral preview | A faint frequency diagram appears beneath audio waveforms in the arranger, audio editor, neighbouring clips and take thumbnails. Background analysis and a shared source cache keep editing responsive. |
 | Waveform amplitude | Arranger View → Waveform amplitude offers Default and Fit. Fit scales each clip's waveform to its available height, using one reference across stereo channels and the full trimmed source window. It changes the view without changing gain or audio. |
 | Strip silence | Process → Strip silence previews retained regions before applying a source-preserving cut. Threshold, minimum silence and padding are adjustable; selected time limits the operation. |
@@ -87,6 +89,43 @@ current project, including muted clips and retained takes. This includes symboli
 links and hard links to those sources. Choose a separate project or mixdown file.
 Portable projects embed the complete referenced WAV files, preserving audio
 outside the edited clip windows.
+
+## Warp markers and audio quantize
+
+A warp marker pins a source position to a beat inside the clip. Between
+markers the audio stretches linearly; before the first and after the last it
+plays at the clip's ordinary stretch rate. A clip without markers behaves
+exactly as before. Every segment must stay within 25%–400% speed and markers
+must be in order in both source and time; invalid edits are rejected without
+changing the song.
+
+Choose Warp (`K`) in the audio editor. Detected attacks appear as faint ticks
+using the current Transients sensitivity and minimum spacing. Clicking the
+waveform adds a marker; within 8 pixels of an attack it lands exactly on that
+attack, and Shift bypasses the snap. The first marker also pins the clip's start
+and end, so moving it stretches only the audio on either side. The loop lane
+shows numbered flags while Warp is active: drag one to move that source position
+(grid snapping applies, Shift bypasses it), click it to seek, or right-click for
+Delete warp marker. Each gesture is one Undo step, and the waveform redraws the
+warped audio immediately.
+
+Process → Quantize audio… opens a drawer with the transient sensitivity and gap,
+the grid (the editor's snap choices, following bar lines across meter changes),
+Strength 0–100% and Max move. Arrows preview where each attack will move and a
+summary reports how many attacks move and the largest move. Attacks further from
+the grid than Max move stay where they are; the clip's start and end are always
+pinned. Apply quantize commits one Undo step; Markers only places markers on
+the attacks without moving any audio.
+
+Playback and export render the warp map through one continuous stretcher
+(Signalsmith or Bungee) with pitch unchanged and no seams at markers. Resident
+and disk-streamed sources, live playback and export produce the same result.
+Split, trim and region edits keep markers on both sides; slip moves the audio
+and its markers together; reverse plays the same map mirrored; Stretch scales
+it; duplicates copy markers, and ghost occurrences keep their own markers like
+their stretch rate. Join and Freeze print the warped audio. Signalsmith's long
+analysis grains may soften or pull an attack sitting exactly on a rate change by
+a few milliseconds; Bungee is tighter.
 
 ## Strip silence
 
@@ -188,6 +227,12 @@ redraws, both appearances and display densities, all waveform views, and impulse
 excluded by forward/reverse trim boundaries. Core tests compare pyramid queries
 against exact PCM extrema; shared renderer tests check physical edge width,
 clipping, and mesh storage reuse.
+`crates/daw-app/tests/audio_warp_e2e.rs` adds, moves and deletes warp markers
+by mouse with attack snapping, Undo/Redo and save/reopen, quantizes off-grid
+clicks from the drawer and through `audio_process_clip`, and checks exported
+click timing. Engine tests in `crates/daw-engine/src/warp_render_tests.rs`
+check pitch, seams, grid timing for both stretchers, resident versus streamed
+rendering and live versus export.
 `crates/daw-app/tests/freeze_e2e.rs` checks rendered placement and mix equivalence,
 all native output prints in one pass, retained originals/media, split pieces,
 Return/Undo/Redo, portable recall and cancellation/failure/stale-job guards.
@@ -200,13 +245,14 @@ CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=2 cargo test --locked --release -p daw-app 
 CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=2 cargo test --locked --release -p daw-app --test audio_silence_e2e -- --test-threads=1
 CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=2 cargo test --locked --release -p daw-app --test spectrum_e2e -- --test-threads=1
 cargo test --locked -p daw-app --test waveform_refinement_e2e -- --test-threads=1
+cargo test --locked -p daw-app --test audio_warp_e2e -- --test-threads=1
 cargo run --locked --release -p daw-ui --example waveform_bench
 ```
 
 ## Remaining specialized workflows
 
-RILL does not yet provide editable warp-marker maps, automatic audio
-quantization, multitrack phase-locked comping/edit groups,
+RILL does not yet provide automatic tempo-following warp, multitrack
+phase-locked comping/edit groups, a warp-aware spectral underlay,
 spectral repair, pitch-curve correction or a dedicated sample-level repair
 pencil. Destructive file processing is also outside this editor's current scope.
 These should be considered separately from

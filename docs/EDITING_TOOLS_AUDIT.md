@@ -40,7 +40,8 @@ captures.
 | Select, move, trim and exact positioning | **Implemented.** Both clip edges, source slip, numeric timing, grid/millisecond/sample nudge, selection-driven arrangement edits and shared two-axis navigation. Source windows remain recoverable. |
 | Split, crop, clipboard, duplicate and join | **Implemented.** Clip and range operations, ghost sources, grid/transient slicing, single-track ripple deletion and audio consolidation. Consolidation excludes plug-ins and channel routing; it is distinct from Freeze. |
 | Clip gain, normalize, reverse and transitions | **Implemented.** Sample-peak normalization, source-window reversal, musical fades, occurrence-local boundary fades and shaped crossfades. Applied fades retain a subtle preview; handles reveal near the pointer. |
-| Explicit stretch and pitch | **Implemented.** Source-preserving clip speed/stretch and pitch shifts, with prepared high-quality processing. This is not an editable warp-marker map, automatic beat conform or vocal-note editor. |
+| Explicit stretch and pitch | **Implemented.** Source-preserving clip speed/stretch and pitch shifts, with prepared high-quality processing. |
+| Warp markers and audio quantize | **Implemented.** Editable per-clip warp-marker maps (Warp tool), transient-based audio quantize with strength and max move, and markers at transients, rendered through one continuous stretcher. Automatic beat conform and vocal-note editing remain absent. |
 | Silence and transient editing | **Implemented.** Bounded background previews for strip silence and transient analysis, followed by explicit source-preserving edits. Detection is not a musical groove extractor. |
 | Recording and alternative takes | **Implemented.** Audio/MIDI recording, loop takes, retained source alternatives, comp regions and boundary crossfades. Separate track takes do not supply phase-locked multitrack edit groups. |
 | Ordinary note editing | **Implemented.** Both note edges, cut/glue, copy/paste, duplicate, legato, velocity painting, scale/chord guidance and scale-folded rows. Different pitches and partial overlaps remain separate; ordinary creation/movement resolves same-pitch containment. |
@@ -98,8 +99,9 @@ is faster, easier or more reliable for a matched RILL task.
 2. **Coordinated editing.** Add clear edit groups and phase-coherent multitrack
    operations when recording multiple microphones. Folders, ghosts, bus groups
    and instrument-output groups solve different problems and are not substitutes.
-3. **Timing depth.** Develop groove extraction/templates, audio quantization and
-   explicit warp-marker editing around the existing transient and stretch tools.
+3. **Timing depth.** Develop groove extraction/templates and automatic
+   tempo-following warp around the existing warp markers, audio quantize,
+   transient and stretch tools.
    Tempo/meter maps require a deliberate project time-model change; a global
    tempo value plus clip stretching cannot provide equivalent behavior.
 4. **Finishing and media continuity.** Extend Freeze with understandable source

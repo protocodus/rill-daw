@@ -100,7 +100,8 @@ support and integrated workflow are more durable distinctions.
 ## What Rill already does well
 
 Rill combines non-destructive audio/MIDI arrangement, recording, loop takes and
-comping, clip gain/reverse/fades, stretch/pitch, piano-roll editing, composition
+comping, clip gain/reverse/fades, stretch/pitch, warp markers and audio quantize,
+piano-roll editing, composition
 generators, folders, buses, pre/post-fader sends, ordered inserts, sidechain
 inputs, independently mixed instrument outputs and stage-aware delay
 compensation. Master has its own trim, inserts, pan and volume automation.
@@ -162,7 +163,9 @@ compatibility needs real testing.
 
 The channel graph is stereo and acyclic. Wide plug-in buses are exposed as
 independent stereo/mono pairs, not a surround/immersive mixing model. Tempo
-remains constant; meter changes at bar lines and song markers are supported. Gesture-recording modes such as Read/Touch/Write remain
+remains constant; meter changes at bar lines and song markers are supported.
+Audio clips support manual warp markers and transient quantize, but not
+automatic tempo-following warp or groove templates. Gesture-recording modes such as Read/Touch/Write remain
 separate from drawing curves and overriding/resuming them.
 
 Expressive project storage and target translation do not equal a complete MIDI
