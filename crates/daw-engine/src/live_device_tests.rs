@@ -302,6 +302,24 @@ fn stopping_cancels_a_pending_preparation_without_waiting_for_its_gate() {
 
 #[test]
 fn progressive_audio_keeps_playing_and_obsolete_refinement_cannot_replace_newer_edit() {
+    // Each real stretch processes the full eight-second source. Its wall time
+    // under parallel CI load is independent of the playback behavior under test.
+    const STRETCH_TIMEOUT: Duration = Duration::from_secs(30);
+    let wait_for_edit = |engine: &AudioEngine, revision, refining| {
+        let deadline = Instant::now() + STRETCH_TIMEOUT;
+        loop {
+            let state = engine.snapshot();
+            assert_eq!(state.edit_errors, 0, "{:?}", engine.take_edit_error());
+            if state.applied_revision == revision && state.refining_audio == refining {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "Timed out waiting for revision {revision} (refining={refining}): {state:?}"
+            );
+            thread::sleep(Duration::from_millis(1));
+        }
+    };
     let _cpu = crate::allocation_test_support::heavy_audio_test_guard();
     let (_directory, mut project, id) = fixture();
     let daw_core::ClipContent::Audio { path, .. } = &project.track(id).unwrap().clips[0].content
@@ -327,12 +345,10 @@ fn progressive_audio_keeps_playing_and_obsolete_refinement_cannot_replace_newer_
     let (started, release) = engine.live_updates.as_ref().unwrap().gate_next_refinement();
     project.track_mut(id).unwrap().clips[0].source_rate = 0.8;
     assert!(engine.try_update_project(&project, 1).unwrap());
-    started.recv_timeout(Duration::from_secs(5)).unwrap();
-    wait_for(|| engine.snapshot().applied_revision == 1);
-    assert!(
-        engine.snapshot().refining_audio,
-        "preview must be visible while final preparation is pending"
-    );
+    started
+        .recv_timeout(STRETCH_TIMEOUT)
+        .expect("The preview must reach the refinement gate");
+    wait_for_edit(&engine, 1, true);
     let output = engine.pump_virtual(8192).unwrap();
     assert!(
         output
@@ -341,10 +357,10 @@ fn progressive_audio_keeps_playing_and_obsolete_refinement_cannot_replace_newer_
     );
     assert_eq!(engine.snapshot().engine_id, initial.engine_id);
     assert_eq!(engine.snapshot().generation, initial.generation);
-    project.track_mut(id).unwrap().clips[0].source_rate = 0.5;
+    project.track_mut(id).unwrap().clips[0].source_rate = 2.0;
     assert!(engine.try_update_project(&project, 2).unwrap());
     drop(release);
-    wait_for(|| engine.snapshot().applied_revision == 2 && !engine.snapshot().refining_audio);
+    wait_for_edit(&engine, 2, false);
     let output = engine.pump_virtual(8192).unwrap();
     assert!(
         output

@@ -63,6 +63,27 @@ fn pump(app: &mut Harness, frames: usize) -> Value {
     state
 }
 
+fn wait_for_render_meters(app: &mut Harness, track: u64, expected: [f64; 2]) -> Value {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let state = app.inspect();
+        let matches = |actual: [f64; 2]| {
+            actual
+                .into_iter()
+                .zip(expected)
+                .all(|(actual, expected)| (actual - expected).abs() < 2e-6)
+        };
+        if matches(master(&state)) && matches(channel(&state, track)) {
+            return state;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Render meters did not settle at {expected:?}: {state}"
+        );
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+
 #[test]
 fn master_and_channel_meters_match_actual_bus_send_and_muted_mix_pcm() {
     let mut app = Harness::with_virtual_audio(None, None);
@@ -180,19 +201,31 @@ fn master_keeps_a_short_transient_visible_after_the_next_silent_callback() {
     wait_for_engine(&mut app);
     let hit = pump(&mut app, 256);
     near(device(&hit), [0.4, 0.2]);
-    for (value, source) in master(&hit).into_iter().zip(channel(&hit, track)) {
-        assert!(
-            (value - source).abs() < 0.002,
-            "Master and source share post-fader render-meter ballistics"
-        );
-    }
-    near(stereo(&hit["mixer"]["master"]["peak_hold"]), [0.4, 0.2]);
     assert!(
         hit["audio_output"]
             .as_array()
             .unwrap()
             .iter()
             .all(|value| stereo(value)[0] > 0.39)
+    );
+    // The callback is deterministic, but the render worker refills its bounded
+    // queue asynchronously. Wait for those silent frames before comparing
+    // render meters or testing that repeated UI reads do not consume peaks.
+    let settings = daw_engine::DeviceSettings {
+        sample_rate: hit["settings"]["sample_rate"].as_u64().unwrap() as u32,
+        buffer_frames: hit["settings"]["buffer_frames"].as_u64().unwrap() as u32,
+        ..Default::default()
+    };
+    let render_peaks = |consumed_frames: usize| {
+        let silent_frames = consumed_frames + settings.render_queue_frames() - 256;
+        let release =
+            10.0_f64.powf(-24.0 * silent_frames as f64 / f64::from(settings.sample_rate) / 20.0);
+        [0.4 * release, 0.2 * release]
+    };
+    let hit_meters = wait_for_render_meters(&mut app, track, render_peaks(256));
+    near(
+        stereo(&hit_meters["mixer"]["master"]["peak_hold"]),
+        [0.4, 0.2],
     );
     let silence = pump(&mut app, 256);
     assert!(
@@ -204,12 +237,7 @@ fn master_keeps_a_short_transient_visible_after_the_next_silent_callback() {
     );
     let release = 10.0_f64.powf(-24.0 * (256.0 / 48_000.0) / 20.0);
     near(device(&silence), [0.4 * release, 0.2 * release]);
-    for (value, source) in master(&silence).into_iter().zip(channel(&silence, track)) {
-        assert!(
-            (value - source).abs() < 0.002,
-            "The pre-device Master releases on the renderer's channel clock"
-        );
-    }
+    let silence = wait_for_render_meters(&mut app, track, render_peaks(512));
     near(stereo(&silence["mixer"]["master"]["peak_hold"]), [0.4, 0.2]);
     assert!(
         !silence["visible_labels"]

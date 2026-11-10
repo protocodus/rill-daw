@@ -1,9 +1,8 @@
-name: Test and package
+name: Nightly tests and packages
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  schedule:
+    - cron: "17 2 * * *"
   workflow_dispatch:
   workflow_call:
 
@@ -13,8 +12,8 @@ permissions:
 jobs:
   check:
     name: ${{ matrix.target }}
-    # Intel macOS needs time for both full suites and release packaging.
-    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 75 || 45 }}
+    # Both full E2E passes and packaging must fit, even with a cold cache.
+    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 120 || 90 }}
     strategy:
       fail-fast: false
       matrix:
@@ -33,29 +32,10 @@ jobs:
     env:
       RILL_TARGET: ${{ matrix.target }}
       RUSTFLAGS: ${{ matrix.target == 'x86_64-pc-windows-msvc' && '-C target-feature=+crt-static' || '' }}
-      RUST_BACKTRACE: "1"
-      CARGO_TERM_COLOR: always
       MACOSX_DEPLOYMENT_TARGET: "11.0"
     steps:
       - uses: actions/checkout@v4
-      - name: Isolate application settings
-        shell: bash
-        run: |
-          echo "RILL_CONFIG_DIR=$RUNNER_TEMP/rill-ci-config" >> "$GITHUB_ENV"
-          echo "RILL_CACHE_DIR=$RUNNER_TEMP/rill-ci-cache" >> "$GITHUB_ENV"
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}-${{ runner.os == 'Windows' && 'crt-static' || 'default' }}
-      - name: Linux system libraries
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y g++ pkg-config libasound2-dev libjack-jackd2-dev libudev-dev libxkbcommon-dev libwayland-dev \
-            libx11-6 libx11-xcb1 libxi6 libxcursor1 libxrandr2 libxkbcommon-x11-0 \
-            libgl1 libegl1 libegl-mesa0 libgl1-mesa-dri libglx-mesa0 xvfb xauth liblilv-0-0
+      - uses: ./.github/actions/setup-ci
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Linux launcher installation tests

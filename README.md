@@ -25,7 +25,7 @@ Independent instrument and effect chains can run across multiple CPU cores. Shar
 
 ## Download
 
-Get a development build for your platform. These links serve the latest successful `main` build through [nightly.link](https://nightly.link/protocodus/rill-daw/workflows/ci/main), without a GitHub login.
+Get a development build for your platform. These links serve the latest successful nightly build of `main` through [nightly.link](https://nightly.link/protocodus/rill-daw/workflows/ci/main), without a GitHub login.
 
 | Platform | Download | Launch |
 | --- | --- | --- |
