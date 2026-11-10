@@ -266,5 +266,14 @@ fn panel_keyboard_and_wheels_play_the_track_and_let_go_when_the_panel_closes() {
     );
     assert!(closed["native_editor"]["performance"]["wheels"].is_null());
     pointer(&mut app, "up", middle_c);
+
+    // Reopening reattaches the mod wheel it still shows, with the bend centred.
+    menu(&mut app, "Window", "Instrument");
+    common::wait_visible(&mut app, "Cutoff");
+    let reopened = app.inspect();
+    let wheels = &reopened["native_editor"]["performance"]["wheels"];
+    assert_eq!(wheels[0], track, "{wheels}");
+    assert_eq!(wheels[1], 0.0, "{wheels}");
+    assert!(wheels[2].as_f64().unwrap() > 0.2, "{wheels}");
     app.quit();
 }

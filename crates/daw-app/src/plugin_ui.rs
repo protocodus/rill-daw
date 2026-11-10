@@ -1362,7 +1362,11 @@ impl DawApp {
                             if let Some(note) = host.audition {
                                 panel_note = Some(note);
                             }
-                            panel_wheels = host.wheels.or(panel_wheels);
+                            // Every frame, not only on a change: reopening the
+                            // panel must reattach the wheels it still shows.
+                            panel_wheels = Some(
+                                host.wheels.unwrap_or((panel.pitch_wheel, panel.mod_wheel)),
+                            );
                             device_requests =
                                 Some((host.updates, host.batch, host.navigation, host.saved));
                             self.instrument_ui.device_panel = panel;
