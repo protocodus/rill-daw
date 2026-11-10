@@ -1,9 +1,9 @@
 # R1 built-in devices: design draft
 
-Status: **draft for review, nothing is implemented.** This document proposes the
+Status: **design approved on 2026-11-10, nothing is implemented.** This document proposes the
 architecture, the shared UI additions and the per-device specifications for
 Rill's first built-in instruments and effects. Implementation follows in
-separate changes. The review answers so far are recorded in
+separate changes. The review answers are recorded in
 [Decisions](#decisions).
 
 This reverses the current product position ("Built-in instruments and effects
@@ -1021,11 +1021,5 @@ Settled in review on 2026-11-10:
 | Factory samples | None. |
 | Maxi | Modular flagship synth, delivered in three stages. |
 | Names | Crates `daw-devices` and `daw-devices-ui`; device IDs `r1-spacer`, `r1-modulator`, `r1-saturator`, `r1-compressor`, `r1-equalizer`, `r1-filter`, `r1-mini`, `r1-maxi`, `r1-sampler`, `r1-drums`. |
+| Hosting | In process with failure containment at the device boundary, as described under [Engine](#engine-daw-engine). |
 | Extensibility and uniformity | One device contract and registry, one panel grammar, one preset format and browser for all devices. |
-
-Open:
-
-- **Hosting.** The draft runs devices in process with failure containment and
-  explains the cost of a process per instance under
-  [Engine](#engine-daw-engine). A separate process remains possible without
-  changing devices, panels, presets or projects.
