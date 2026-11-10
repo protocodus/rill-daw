@@ -290,7 +290,18 @@ pub enum Instrument {
     Builtin { device: String },
 }
 
+/// The built-in instrument a new MIDI track starts with, so a part is
+/// audible without installing a plug-in. Loaded projects keep what they have.
+pub const DEFAULT_INSTRUMENT_DEVICE: &str = "r1-mini";
+
 impl Instrument {
+    /// What a new MIDI track starts with: R1 Mini at its default preset.
+    pub fn new_track_default() -> Self {
+        Self::Builtin {
+            device: DEFAULT_INSTRUMENT_DEVICE.into(),
+        }
+    }
+
     pub fn builtin_device(&self) -> Option<&str> {
         match self {
             Self::Builtin { device } => Some(device),
@@ -635,8 +646,17 @@ impl Project {
         self.insert_new_track(Track::new(name, TrackKind::Audio))
     }
 
+    /// A MIDI track without an instrument, for imports and internal use.
+    /// Tracks a person or a tool creates use [`Self::add_instrument_track`].
     pub fn add_midi_track(&mut self, name: impl Into<String>) -> u64 {
         self.insert_new_track(Track::new(name, TrackKind::Midi))
+    }
+
+    /// A new MIDI track with the default instrument, audible at once.
+    pub fn add_instrument_track(&mut self, name: impl Into<String>) -> u64 {
+        let mut track = Track::new(name, TrackKind::Midi);
+        track.instrument = Instrument::new_track_default();
+        self.insert_new_track(track)
     }
 
     pub fn track(&self, id: u64) -> Option<&Track> {

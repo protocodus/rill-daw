@@ -311,7 +311,8 @@ fn favorites_categories_filters_and_list_view_work_by_mouse_and_persist() {
     let cleared = app.click("Clear filters");
     assert_eq!(cleared["library"]["category"], "");
     assert_eq!(cleared["library"]["developer"], "");
-    assert_eq!(cleared["library"]["total"], 2);
+    // The two fixtures and the built-in R1 Mini.
+    assert_eq!(cleared["library"]["total"], 3);
 
     // Installation information follows the I/O and parameter summary in the
     // independently scrolling detail pane. Keep the pinned actions stationary.

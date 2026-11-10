@@ -1,5 +1,6 @@
 //! R1 Filter: the shared filter kernel with every model, an LFO and an
 //! envelope follower on the cutoff. See `docs/R1_DEVICES.md#r1-filter`.
+use super::param;
 use crate::dsp::filter::{self, FilterKernel, FilterModel, FilterShape, FilterType, LatencyDelay};
 use crate::dsp::{Complex, EnvelopeFollower, Lfo, LfoShape, Smoothed, db_to_gain};
 use crate::{
@@ -48,28 +49,7 @@ pub const SLOPES: &[&str] = &["12 dB", "24 dB"];
 pub const SYNC: &[&str] = &[
     "Off", "4 bars", "2 bars", "1 bar", "1/2", "1/4", "1/8", "1/16",
 ];
-const SYNC_BEATS: [f64; 8] = [0.0, 16.0, 8.0, 4.0, 2.0, 1.0, 0.5, 0.25];
-
-const fn param(
-    id: u32,
-    key: &'static str,
-    name: &'static str,
-    group: &'static str,
-    unit: &'static str,
-    range: ParamRange,
-    default: f32,
-) -> ParamSpec {
-    ParamSpec {
-        id,
-        key,
-        name,
-        group,
-        unit,
-        range,
-        default,
-        modulatable: !matches!(range, ParamRange::Choice(_) | ParamRange::Toggle),
-    }
-}
+pub(crate) const SYNC_BEATS: [f64; 8] = [0.0, 16.0, 8.0, 4.0, 2.0, 1.0, 0.5, 0.25];
 
 pub static PARAMETERS: [ParamSpec; 17] = [
     param(

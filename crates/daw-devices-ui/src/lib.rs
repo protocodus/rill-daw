@@ -3,7 +3,7 @@
 //! A panel talks to whatever owns the parameter values through [`DeviceHost`],
 //! so the same panel runs in the app, in the gallery and in tests. See
 //! `docs/R1_DEVICES.md#panel-host`.
-use daw_devices::{DeviceDescriptor, ParamRange, ParamSpec, Preset, factory_presets};
+use daw_devices::{DeviceDescriptor, DeviceKind, ParamRange, ParamSpec, Preset, factory_presets};
 use daw_ui::{AutomationControl, AutomationNavigation, AutomationState};
 use egui::Ui;
 
@@ -26,6 +26,11 @@ pub trait DeviceHost {
     /// Presets the user saved for this device.
     fn user_presets(&self) -> Vec<Preset>;
     fn save_preset(&mut self, preset: Preset);
+    /// Instruments: sound one note (MIDI pitch, velocity 0–1) from the panel
+    /// keyboard until the next call; `None` releases it.
+    fn audition(&mut self, note: Option<(u8, f32)>);
+    /// Instruments: the panel's pitch wheel (−1–1) and mod wheel (0–1).
+    fn wheels(&mut self, pitch: f32, modulation: f32);
 }
 
 /// Per-panel UI state the host keeps between frames.
@@ -35,6 +40,12 @@ pub struct PanelState {
     pub preset: Option<String>,
     /// Draft name while "Save as…" is open.
     pub save_name: Option<String>,
+    /// Pitch wheel, −1–1; springs back to 0 on release.
+    pub pitch_wheel: f32,
+    /// Mod wheel, 0–1; stays where it is left.
+    pub mod_wheel: f32,
+    /// Last drawn pitch wheel, mod wheel and keyboard, for host diagnostics.
+    pub performance_rects: Option<[egui::Rect; 3]>,
 }
 
 /// Knob diameters from the panel grammar.
@@ -42,41 +53,108 @@ pub const KNOB_DENSE: f32 = 48.0;
 pub const KNOB_HERO: f32 = 64.0;
 const CELL_WIDTH: f32 = 84.0;
 
-/// Draws a device's panel: header with presets, then one section per
-/// parameter group in signal order.
+/// The panel's width, for the window that hosts it.
+pub fn panel_width(descriptor: &DeviceDescriptor) -> f32 {
+    panels::layout(descriptor).width
+}
+
+/// Draws a device's panel: header with presets, the response, then the
+/// sections in signal order, side by side where they share a row.
+/// Instruments end with an audition keyboard and pitch and mod wheels.
 pub fn show(
     ui: &mut Ui,
     descriptor: &DeviceDescriptor,
     host: &mut dyn DeviceHost,
     state: &mut PanelState,
 ) {
-    ui.set_width(daw_ui::tokens::POPUP_WIDTH_MD.min(ui.available_width()));
+    let layout = panels::layout(descriptor);
+    ui.set_width(layout.width.min(ui.available_width()));
     preset_bar(ui, descriptor, host, state);
     daw_ui::section_gap(ui);
-    let layout = panels::layout(descriptor);
     if let Some(view) = &layout.response {
         response(ui, descriptor, view, host);
         daw_ui::section_gap(ui);
     }
-    for section in &layout.sections {
-        let visible: Vec<_> = section
-            .parameters
+    let rows = layout.sections.iter().map(|section| section.row).max();
+    for row in 0..=rows.unwrap_or(0) {
+        let sections: Vec<_> = layout
+            .sections
             .iter()
-            .filter_map(|id| descriptor.parameter(*id))
-            .filter(|spec| (layout.visible)(spec.id, &|id| host.value(id)))
+            .filter(|section| section.row == row)
+            .filter_map(|section| {
+                let visible: Vec<_> = section
+                    .parameters
+                    .iter()
+                    .filter_map(|id| descriptor.parameter(*id))
+                    .filter(|spec| (layout.visible)(spec.id, &|id| host.value(id)))
+                    .collect();
+                (!visible.is_empty()).then_some((section.title, visible))
+            })
             .collect();
-        if visible.is_empty() {
+        if sections.is_empty() {
             continue;
         }
-        daw_ui::text::subtitle(ui, section.title);
-        ui.horizontal_wrapped(|ui| {
-            for spec in visible {
-                let hero = layout.hero == Some(spec.id);
-                control(ui, descriptor, spec, host, hero, &layout);
+        // Top-aligned: a centered wrap staggers knobs and menus of unequal height.
+        let wrap = egui::Layout::left_to_right(egui::Align::TOP).with_main_wrap(true);
+        ui.with_layout(wrap, |ui| {
+            ui.spacing_mut().item_spacing.x = daw_ui::tokens::SPACE_LG;
+            for (title, visible) in sections {
+                ui.vertical(|ui| {
+                    daw_ui::text::subtitle(ui, title);
+                    ui.with_layout(wrap, |ui| {
+                        ui.spacing_mut().item_spacing.x = daw_ui::tokens::SPACE_XS;
+                        for spec in visible {
+                            let hero = layout.hero == Some(spec.id);
+                            control(ui, descriptor, spec, host, hero, &layout);
+                        }
+                    });
+                });
             }
         });
         daw_ui::section_gap(ui);
     }
+    if descriptor.kind == DeviceKind::Instrument {
+        performance(ui, host, state);
+    }
+}
+
+const KEYBOARD_FIRST: u8 = 36;
+const KEYBOARD_OCTAVES: u8 = 4;
+const KEYBOARD_HEIGHT: f32 = 55.0;
+const WHEEL_WIDTH: f32 = 21.0;
+
+/// Pitch and mod wheels beside an audition keyboard. The wheels apply to
+/// every note the instrument plays while it is previewed, not only to the
+/// keyboard's.
+fn performance(ui: &mut Ui, host: &mut dyn DeviceHost, state: &mut PanelState) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = daw_ui::tokens::SPACE_XS;
+        let size = egui::vec2(WHEEL_WIDTH, KEYBOARD_HEIGHT);
+        let pitch = daw_ui::wheel(ui, &mut state.pitch_wheel, true, "Pitch", size)
+            .on_hover_text("Pitch wheel: drag to bend; springs back on release");
+        let modulation = daw_ui::wheel(ui, &mut state.mod_wheel, false, "Mod", size)
+            .on_hover_text("Mod wheel: drag to set; double-click to reset");
+        if pitch.changed() || modulation.changed() {
+            host.wheels(state.pitch_wheel, state.mod_wheel);
+        }
+        let width = ui.available_width();
+        let keyboard =
+            egui::Rect::from_min_size(ui.cursor().min, egui::vec2(width, KEYBOARD_HEIGHT));
+        state.performance_rects = Some([pitch.rect, modulation.rect, keyboard]);
+        let keys = daw_ui::keyboard_strip(
+            ui,
+            KEYBOARD_FIRST,
+            KEYBOARD_OCTAVES,
+            &[],
+            Some(60),
+            egui::vec2(width, KEYBOARD_HEIGHT),
+        );
+        if let Some(note) = keys.pressed {
+            host.audition(Some(note));
+        } else if keys.released.is_some() {
+            host.audition(None);
+        }
+    });
 }
 
 const RESPONSE_POINTS: usize = 128;
@@ -172,21 +250,36 @@ fn control(
                     }
                     action
                 }
-                ParamRange::Choice(options) => {
-                    let current = spec.to_plain(normalized as f32) as usize;
-                    let offered =
-                        (layout.options)(spec.id, &|id| host.value(id)).unwrap_or(options);
-                    let label = options.get(current).copied().unwrap_or("");
+                ParamRange::Choice(_) | ParamRange::Integer { .. } => {
+                    // Plain values with their labels: option indices for
+                    // choices, the numbers themselves for integers.
+                    let options: Vec<(f32, String)> = match spec.range {
+                        ParamRange::Choice(labels) => {
+                            let offered =
+                                (layout.options)(spec.id, &|id| host.value(id)).unwrap_or(labels);
+                            offered
+                                .iter()
+                                .map(|option| {
+                                    let index = labels.iter().position(|o| o == option);
+                                    (index.unwrap_or(0) as f32, (*option).to_string())
+                                })
+                                .collect()
+                        }
+                        _ => (spec.plain_min() as i32..=spec.plain_max() as i32)
+                            .map(|value| {
+                                let plain = value as f32;
+                                (plain, spec.format(spec.to_normalized(plain)))
+                            })
+                            .collect(),
+                    };
+                    let current = spec.to_plain(normalized as f32);
+                    let label = spec.format(normalized as f32);
                     let response = daw_ui::select(id, label)
                         .width(CELL_WIDTH - daw_ui::tokens::SPACE_XS)
                         .show_ui(ui, |ui| {
-                            for option in offered {
-                                let index = options.iter().position(|o| o == option).unwrap_or(0);
-                                if daw_ui::selectable(ui, index == current, *option).clicked() {
-                                    host.set_value(
-                                        spec.id,
-                                        f64::from(spec.to_normalized(index as f32)),
-                                    );
+                            for (plain, option) in &options {
+                                if daw_ui::selectable(ui, *plain == current, option).clicked() {
+                                    host.set_value(spec.id, f64::from(spec.to_normalized(*plain)));
                                 }
                             }
                         })
@@ -256,7 +349,11 @@ fn preset_bar(
             let from = current.map_or(if offset > 0 { -1 } else { 0 }, |index| index as isize);
             (from + offset).rem_euclid(count) as usize
         };
-        if daw_ui::small_button(ui, "◂")
+        if ui
+            .add(daw_ui::IconButton::icon_only(
+                daw_ui::Icon::Back,
+                "Previous preset",
+            ))
             .on_hover_text("Previous preset")
             .clicked()
             && !presets.is_empty()
@@ -283,7 +380,11 @@ fn preset_bar(
                     }
                 }
             });
-        if daw_ui::small_button(ui, "▸")
+        if ui
+            .add(daw_ui::IconButton::icon_only(
+                daw_ui::Icon::ChevronRight,
+                "Next preset",
+            ))
             .on_hover_text("Next preset")
             .clicked()
             && !presets.is_empty()

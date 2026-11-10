@@ -235,7 +235,7 @@ fn instrument_and_library_selection_are_undoable_and_escape_closes_the_popup() {
     menu(&mut app, "Track", "Add MIDI track");
     let state = menu(&mut app, "Window", "Instrument");
     assert_only_popup(&state, "instrument");
-    assert!(visible(&state, "No instrument assigned"));
+    assert!(visible(&state, "R1 Mini"));
     app.key("Escape");
     common::fixture_library(&mut app);
     app.click("Rill Fixture A");
@@ -819,14 +819,18 @@ fn adding_midi_track_immediately_assigns_instrument_and_cancel_keeps_ready_patte
     let state = menu(&mut app, "Track", "Add MIDI track");
     assert_only_popup(&state, "library");
     assert_eq!(state["project"]["tracks"].as_array().unwrap().len(), 1);
-    assert_eq!(state["project"]["tracks"][0]["instrument"], "None");
+    // Audible at once: the built-in synth plays until something else is chosen.
+    assert_eq!(
+        state["project"]["tracks"][0]["instrument"],
+        json!({"Builtin":{"device":"r1-mini"}})
+    );
     let clips = state["project"]["tracks"][0]["clips"].clone();
     assert_eq!(clips[0]["length"], 4.0);
     let state = app.key("Escape");
     assert_only_popup(&state, "none");
     assert_eq!(state["project"]["tracks"][0]["clips"], clips);
     menu(&mut app, "Window", "Instrument");
-    app.click("Choose instrument");
+    app.click("Change instrument");
     app.command(json!({"command":"text","text":"Fixture B"}));
     common::wait_visible(&mut app, "Rill Fixture B");
     let state = app.key("Enter");

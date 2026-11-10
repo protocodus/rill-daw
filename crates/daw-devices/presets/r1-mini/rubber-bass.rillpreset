@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "device": "r1-mini",
+  "name": "Rubber Bass",
+  "author": "Rill",
+  "category": "Bass",
+  "tags": ["mono", "warm"],
+  "description": "Short plucky bass: saw and sub through a closed ladder that snaps open on each note.",
+  "parameters": {
+    "osc1.octave": -1,
+    "osc2.wave": "Pulse",
+    "osc2.octave": -1,
+    "osc2.detune": 4.0,
+    "osc2.width": 30.0,
+    "mix.osc2": 45.0,
+    "mix.sub": 70.0,
+    "filter.cutoff": 180.0,
+    "filter.resonance": 35.0,
+    "filter.env": 3.2,
+    "filter.keytrack": 30.0,
+    "fenv.attack": 1.0,
+    "fenv.decay": 220.0,
+    "fenv.sustain": 0.0,
+    "fenv.release": 120.0,
+    "aenv.attack": 1.0,
+    "aenv.decay": 600.0,
+    "aenv.sustain": 60.0,
+    "aenv.release": 120.0,
+    "voice.mode": "Mono",
+    "voice.glide": 25.0
+  }
+}

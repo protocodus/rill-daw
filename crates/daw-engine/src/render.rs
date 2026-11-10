@@ -1465,6 +1465,7 @@ pub(crate) struct Renderer {
     pub(crate) plugin_errors: u64,
     preview: bool,
     audition: Option<(u64, u8, u8)>,
+    audition_wheels: Option<(u64, f32, f32)>,
     midi_input_notes: Vec<(u64, u8, u8)>,
     expressive_input: Vec<(u64, u8, u8, daw_plugins::ExpressiveMidiData)>,
     live_edit_context: Arc<LiveEditContext>,
@@ -2386,6 +2387,7 @@ impl Renderer {
             plugin_errors: 0,
             preview: false,
             audition: None,
+            audition_wheels: None,
             midi_input_notes: Vec::with_capacity(4096),
             expressive_input: Vec::with_capacity(16384),
             live_edit_context: Arc::new(LiveEditContext::new(
@@ -2548,11 +2550,14 @@ impl Renderer {
         self.end_sample = self.timeline_end_sample;
         if !loop_wrap {
             self.audition = None;
+            // Instruments reset on a seek; send the wheels again.
+            self.audition_wheels = None;
             self.midi_input_notes.clear();
             self.expressive_input.clear();
         }
         self.source_sample = sample;
         self.logical_sample = sample;
+        let wheels = self.audition_wheels;
         for track in self.tracks.iter_mut().flatten() {
             track.audio_transition_cursor = track.audio_transition.len();
             for parameter in &mut track.instrument_automation {
@@ -2608,6 +2613,21 @@ impl Renderer {
             track
                 .expression
                 .seek(sample, track.instrument_input_latency, !loop_wrap);
+            // A loop wrap resets touched controllers to their defaults; the
+            // panel's wheels are still where the user holds them.
+            if let Some((_, pitch, modulation)) = wheels.filter(|(id, _, _)| *id == track.id) {
+                use daw_plugins::ExpressiveController as Controller;
+                track.expression.chase_after_seek(
+                    0,
+                    Controller::PitchBend,
+                    (f64::from(pitch) + 1.0) / 2.0,
+                );
+                track.expression.chase_after_seek(
+                    0,
+                    Controller::ControlChange(1),
+                    f64::from(modulation),
+                );
+            }
             track.chase.clear();
             if loop_wrap {
                 // Looping restarts sequencer notes, not the independent live
@@ -2727,6 +2747,58 @@ impl Renderer {
             self.audition = note;
         }
         Ok(())
+    }
+
+    /// Sends changed panel wheels to their track's instrument as pitch bend
+    /// and mod wheel, through the live input queue. Detaching the wheels
+    /// centres the bend they left behind, as a wheel springs back; the mod
+    /// wheel stays where it was, as a hardware one does.
+    pub(crate) fn set_audition_wheels(&mut self, wheels: Option<(u64, f32, f32)>) {
+        use daw_plugins::ExpressiveController as Controller;
+        let previous = std::mem::replace(&mut self.audition_wheels, wheels);
+        if previous == wheels {
+            return;
+        }
+        if let Some((id, pitch, _)) = previous
+            && pitch != 0.0
+            && wheels.is_none_or(|(next, _, _)| next != id)
+        {
+            self.send_live_controller(id, Controller::PitchBend, 0.5);
+        }
+        if let Some((id, pitch, modulation)) = wheels {
+            self.send_live_controller(id, Controller::PitchBend, (f64::from(pitch) + 1.0) / 2.0);
+            self.send_live_controller(id, Controller::ControlChange(1), f64::from(modulation));
+        }
+    }
+
+    fn send_live_controller(
+        &mut self,
+        id: u64,
+        controller: daw_plugins::ExpressiveController,
+        value: f64,
+    ) {
+        use daw_plugins::{ExpressiveMidiData as Data, ExpressiveMidiMessage as Message};
+        let Some(track) = self
+            .tracks
+            .iter_mut()
+            .flatten()
+            .find(|track| track.id == id)
+        else {
+            return;
+        };
+        if track.expression.live.len() < 4096 {
+            track.expression.live.push((
+                0,
+                Message {
+                    offset: 0,
+                    data: Data::Controller {
+                        channel: 0,
+                        controller,
+                        value,
+                    },
+                },
+            ));
+        }
     }
 
     /// Normalize the complete held MIDI input chord on the render worker. A

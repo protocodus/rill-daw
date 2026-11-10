@@ -1,14 +1,17 @@
-//! Rill's shared DSP: the blocks every built-in device is made of, also
+//! Rill's shared DSP: the blocks every built-in device is made of (filters,
+//! circuit-modelled oscillators, envelopes, modulators), also
 //! usable by the app and engine directly (a track high-pass, an EQ band).
 //! Each block is deterministic, allocation-free after construction and
 //! unit-tested on its own. No other `daw-*` crate, no I/O.
 #![forbid(unsafe_code)]
 mod complex;
 mod delay;
+mod envelope;
 pub mod filter;
 mod follower;
 mod lfo;
 mod nonlinear;
+pub mod oscillator;
 mod oversample;
 mod random;
 mod smooth;
@@ -16,10 +19,12 @@ mod svf;
 
 pub use complex::Complex;
 pub use delay::DelayLine;
+pub use envelope::{Adsr, Stage};
 pub use filter::{FilterKernel, FilterModel, FilterShape, FilterType, LatencyDelay};
 pub use follower::EnvelopeFollower;
 pub use lfo::{Lfo, LfoShape};
 pub use nonlinear::{Ladder, SallenKey, tanh_fast};
+pub use oscillator::{Drift, Oscillator, OscillatorModel, SubOscillator, Waveform};
 pub use oversample::Oversampler2x;
 pub use random::Random;
 pub use smooth::Smoothed;

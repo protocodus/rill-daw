@@ -1,5 +1,8 @@
 use super::*;
-use daw_devices::{devices::filter, registry};
+use daw_devices::{
+    devices::{filter, mini},
+    registry,
+};
 use std::collections::HashMap;
 
 /// A plain value table, as the gallery and tests use instead of an engine.
@@ -10,6 +13,8 @@ struct TableHost {
     batches: usize,
     saved: Vec<Preset>,
     navigation: Vec<AutomationNavigation>,
+    auditions: Vec<Option<(u8, f32)>>,
+    wheels: Vec<(f32, f32)>,
 }
 
 impl TableHost {
@@ -54,6 +59,12 @@ impl DeviceHost for TableHost {
     fn save_preset(&mut self, preset: Preset) {
         self.saved.push(preset);
     }
+    fn audition(&mut self, note: Option<(u8, f32)>) {
+        self.auditions.push(note);
+    }
+    fn wheels(&mut self, pitch: f32, modulation: f32) {
+        self.wheels.push((pitch, modulation));
+    }
 }
 
 fn render(
@@ -94,12 +105,13 @@ fn every_registered_panel_renders_within_its_width() {
                 appearance,
             );
             assert!(
-                used.width() <= daw_ui::tokens::POPUP_WIDTH_MD + 1.0,
+                used.width() <= panel_width(descriptor) + 1.0,
                 "{} is {} points wide",
                 descriptor.id,
                 used.width()
             );
             assert_eq!(host.values, host.defaults, "rendering changed values");
+            assert!(host.auditions.is_empty() && host.wheels.is_empty());
         }
     }
 }
@@ -129,4 +141,36 @@ fn filter_hides_controls_that_do_not_apply() {
         (layout.options)(filter::TYPE, &ota_cascade).unwrap().len(),
         4
     );
+}
+
+#[test]
+fn mini_uses_the_wide_panel_and_shows_pulse_width_only_for_pulse() {
+    assert_eq!(
+        panel_width(&mini::DESCRIPTOR),
+        daw_ui::tokens::POPUP_WIDTH_LG
+    );
+    let layout = panels::layout(&mini::DESCRIPTOR);
+    let wave = |index: f32| {
+        let spec = mini::DESCRIPTOR.parameter(mini::OSC1_WAVE).unwrap();
+        let value = f64::from(spec.to_normalized(index));
+        move |id: u32| {
+            if id == mini::OSC1_WAVE {
+                value
+            } else {
+                f64::from(mini::DESCRIPTOR.parameter(id).unwrap().default_normalized())
+            }
+        }
+    };
+    assert!(!(layout.visible)(mini::OSC1_WIDTH, &wave(0.0)));
+    assert!((layout.visible)(mini::OSC1_WIDTH, &wave(1.0)));
+    assert!((layout.visible)(mini::LFO_WIDTH, &wave(1.0)));
+    assert!(!(layout.visible)(mini::OSC2_WIDTH, &wave(1.0)));
+    // Every parameter has a section, so every one has a control and a
+    // right-click Automate.
+    let placed: Vec<u32> = layout
+        .sections
+        .iter()
+        .flat_map(|section| section.parameters.clone())
+        .collect();
+    assert_eq!(placed.len(), mini::DESCRIPTOR.parameters.len());
 }

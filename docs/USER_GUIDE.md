@@ -6,7 +6,7 @@ A reference for composing, recording, editing, mixing, and saving in Rill.
 
 ## First session
 
-The initial session contains an original generated audio loop. Rill includes no instruments or insert effects; MIDI tracks remain unassigned until you choose a VST3 instrument. Use **File → New** to start empty. Press **Space** to play or pause.
+The initial session contains an original generated audio loop. Rill includes a built-in synth, **R1 Mini**, and the **R1 Filter** effect. A new MIDI track starts with R1 Mini, so its notes are audible at once; choose a plug-in instrument to replace it. Use **File → New** to start empty. Press **Space** to play or pause.
 
 An empty song offers three starting points: **Choose instrument…** opens your
 installed sounds, **Import audio or MIDI…** brings in a recording or sequence,
@@ -108,7 +108,7 @@ See [AI architecture, tool inventory, and verification](AI_TOOLS.md).
 
 ## Working with the editors
 
-The **File**, **Edit**, **Track**, and **Window** menus hold application commands. Transport and contextual editing tools stay beside the canvas. Use **Track → Add audio track / Add MIDI track / Add bus / Add folder** to build the session and **File → Import…** to import media. **Add MIDI track** creates a four-beat pattern at the cursor and immediately opens the instrument chooser. Choose a VST3 to assign it and return to your caller; closing the chooser leaves the pattern unassigned.
+The **File**, **Edit**, **Track**, and **Window** menus hold application commands. Transport and contextual editing tools stay beside the canvas. Use **Track → Add audio track / Add MIDI track / Add bus / Add folder** to build the session and **File → Import…** to import media. **Add MIDI track** creates a four-beat pattern at the cursor and immediately opens the instrument chooser. Choose an instrument to replace R1 Mini and return to your caller; closing the chooser keeps R1 Mini.
 
 **File → Import audio…** always creates a new audio track and clip at the cursor.
 WAV, MP3, FLAC and OGG/Vorbis decoding runs in an isolated background worker;

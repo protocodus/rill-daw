@@ -956,9 +956,6 @@ impl DawApp {
                                             } else {
                                                 "No VST3 effects found"
                                             });
-                                            if state.kind == DeviceKind::Instrument {
-                                                daw_ui::text::note(ui, "MIDI notes stay silent until a VST3 instrument is assigned.");
-                                            }
                                             daw_ui::text::note(ui, if state.kind == DeviceKind::Instrument {
                                                 "Install a VST3 instrument, then Refresh. Use Plug-in folders if it is installed elsewhere."
                                             } else {
@@ -1328,7 +1325,9 @@ impl DawApp {
             && target
                 .and_then(|id| self.project.track(id))
                 .is_some_and(|track| {
-                    track.name == "New instrument" && track.instrument == Instrument::None
+                    track.name == "New instrument"
+                        && (track.instrument == Instrument::None
+                            || track.instrument == Instrument::new_track_default())
                 });
         let instrument_name = self
             .available_instrument_name(&plugin.name, if name_new_track { target } else { None });

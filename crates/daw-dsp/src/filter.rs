@@ -354,7 +354,17 @@ impl FilterKernel {
         let gain = db_to_gain(s.drive_db);
         let g = prewarp(cutoff, 2.0 * sample_rate);
         let upsampled = self.oversampler.upsample(input * gain);
-        let filtered = upsampled.map(|x| match s.model {
+        let filtered = upsampled.map(|x| self.circuit(x, s, g, resonance));
+        self.oversampler.downsample(filtered) / gain.sqrt()
+    }
+
+    /// One sample of a saturating circuit model at the oversampled rate, for
+    /// callers that already run oversampled (a synth voice). `g` is
+    /// [`prewarp`] at that rate; drive and its level compensation are the
+    /// caller's. Linear models pass the input through.
+    #[inline]
+    pub fn circuit(&mut self, x: f32, s: &FilterShape, g: f32, resonance: f32) -> f32 {
+        match s.model {
             FilterModel::TransistorLadder => {
                 let k = ladder_k(resonance);
                 self.ladder.process(x, g, k)[4] * bass_gain(FilterType::LowPass, k)
@@ -390,12 +400,12 @@ impl FilterKernel {
                 let out = self.svf[0].process_clipped(tanh_fast(x), g, k);
                 pick(out, s.filter_type, resonant_band_gain(k))
             }
-            _ if s.filter_type == FilterType::HighPass => {
+            FilterModel::SallenKey if s.filter_type == FilterType::HighPass => {
                 self.sallen_key.high_pass(x, g, sallen_key_k(resonance))
             }
-            _ => self.sallen_key.low_pass(x, g, sallen_key_k(resonance)),
-        });
-        self.oversampler.downsample(filtered) / gain.sqrt()
+            FilterModel::SallenKey => self.sallen_key.low_pass(x, g, sallen_key_k(resonance)),
+            _ => x,
+        }
     }
 }
 

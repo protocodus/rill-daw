@@ -2531,7 +2531,7 @@ impl DawApp {
                     let start = start.clamp(0.0, MAX_BEAT - 4.0);
                     let new_track = id == 0;
                     let id = if id == 0 {
-                        self.project.add_midi_track("New instrument")
+                        self.project.add_instrument_track("New instrument")
                     } else {
                         id
                     };

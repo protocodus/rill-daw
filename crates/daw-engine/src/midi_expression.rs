@@ -468,6 +468,20 @@ impl Runtime {
             self.unsupported.insert(k);
         }
     }
+    /// Queues a controller value after everything [`Self::seek`] chased,
+    /// so a value held from outside the timeline wins over its default.
+    pub fn chase_after_seek(&mut self, channel: u8, controller: Controller, value: f64) {
+        self.chase.push(Timed {
+            sample: u64::MAX,
+            channel,
+            data: Data::Controller {
+                channel,
+                controller,
+                value,
+            },
+        });
+    }
+
     pub fn seek(&mut self, sample: u64, delay: u32, clear_live: bool) {
         self.cursor = self
             .content

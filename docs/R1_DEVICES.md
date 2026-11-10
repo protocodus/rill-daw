@@ -1,9 +1,10 @@
 # R1 built-in devices: design draft
 
-Status: **design approved on 2026-11-10. Step 2 of the
-[implementation order](#implementation-order) is in place:** the device
-foundation, model/engine/app/tools integration and R1 Filter. The other
-devices are not implemented yet. This document proposes the
+Status: **design approved on 2026-11-10. Steps 2 and 4 of the
+[implementation order](#implementation-order) are in place:** the device
+foundation, model/engine/app/tools integration, R1 Filter, and R1 Mini as the
+default instrument of new MIDI tracks. The other devices are not implemented
+yet. This document proposes the
 architecture, the shared UI additions and the per-device specifications for
 Rill's first built-in instruments and effects. Implementation follows in
 separate changes. The review answers are recorded in
@@ -115,7 +116,7 @@ pub struct ParamSpec {
     pub name: &'static str,          // "Filter cutoff"
     pub group: &'static str,         // "Filter"
     pub unit: &'static str,          // "Hz", "dB", "ms", "%", ""
-    pub range: ParamRange,           // Linear{min,max} | Log{min,max} | Choice(&[&str]) | Toggle
+    pub range: ParamRange,           // Linear{min,max} | Log{min,max} | Integer{min,max} | Choice(&[&str]) | Toggle
     pub default: f32,                // plain value
     pub modulatable: bool,           // Maxi mod-matrix destination
 }
@@ -468,7 +469,7 @@ The `daw-dsp` crate, used by all devices and unit-tested on its own. `daw_dsp::f
 | Waveshapers | Static curves with first-order antiderivative anti-aliasing, inside the oversampler. |
 | Delay lines | Power-of-two ring buffers with third-order Lagrange (modulated delays) or allpass (fixed fractional) interpolation. |
 | Reverb core | 16-line feedback delay network, Hadamard mixing, per-line absorption filters for frequency-dependent decay, slow delay modulation against metallic ringing, allpass input diffusion, multitap early reflections. |
-| Oscillators | PolyBLEP saw/pulse/triangle (Mini); wavetable with one band-limited mip level per octave built by FFT at load, crossfaded between levels and frames (Maxi). |
+| Oscillators | `daw_dsp::oscillator`: circuit-modelled VCO (charging-capacitor ramp with slight curvature, finite reset time, analog drift) and DCO (exact divider pitch, ramp level following the per-range charge current) with saw, pulse (comparator), triangle (rectifier) and sine (differential-pair shaper), hard sync and a flip-flop sub-oscillator; band-limited with 4-point B-spline BLEP/BLAMP corrections at 2× (aliasing below −80 dB for a 4.7 kHz saw). Wavetable with one band-limited mip level per octave built by FFT at load, crossfaded between levels and frames (Maxi). |
 | Envelopes and LFOs | Exponential-segment ADSR/AHDSR with click-free retrigger; LFO shapes sine, triangle, saw, square, sample-and-hold, with tempo sync. |
 | Level detection | Peak and RMS followers, log-domain gain computer with soft knee. |
 | Sample playback | 16-tap windowed-sinc polyphase interpolation whose cutoff lowers when pitching up, to keep aliasing out. |
@@ -714,7 +715,9 @@ All instruments share: **Volume**, **Voice mode** (Poly, Mono, Legato),
 **Voices**, **Glide** (0 – 2 s), **Bend range** (0 – 24 semitones), and
 velocity as a float from the engine. Voice stealing takes the quietest
 releasing voice first, then the oldest, with a 5 ms fade to avoid clicks.
-Each panel has a `keyboard_strip` at the bottom for mouse audition.
+Each panel has pitch and mod wheels and a `keyboard_strip` at the bottom for
+mouse audition; the wheels play through the track's live expression, like a
+controller's.
 
 ### R1 Mini
 
@@ -723,18 +726,20 @@ layout. Everything is visible at once; about 45 parameters.
 
 | Section | Parameters |
 | --- | --- |
-| Oscillator 1 | Wave (saw, pulse, triangle, sine), Octave (−2 – +2), Pulse width (5 – 95 %) |
-| Oscillator 2 | Wave, Octave, Semitones (±12), Detune (±50 cents), Pulse width, Sync to oscillator 1 (toggle) |
+| Oscillator 1 | Model (VCO, DCO), Wave (saw, pulse, triangle, sine), Octave (−2 – +2), Pulse width (5 – 95 %) |
+| Oscillator 2 | Model, Wave, Octave, Semitones (±12), Detune (±50 cents), Pulse width, Sync to oscillator 1 (toggle) |
 | Mixer | Oscillator 1, Oscillator 2, Sub (square one octave down), Noise levels |
-| Filter | Cutoff, Resonance, Envelope amount (±), Key tracking (0 – 100 %), Drive |
+| Filter | Model (the five R1 Filter circuits), Cutoff, Resonance, Envelope amount (±), Key tracking (0 – 100 %), Drive |
 | Filter envelope | Attack, Decay, Sustain, Release |
 | Amp envelope | Attack, Decay, Sustain, Release |
 | LFO | Rate, Sync, Shape, → Pitch, → Cutoff, → Pulse width; mod wheel scales LFO depth |
 | Velocity | → Amp, → Cutoff |
 | Voice | Mode, Voices (1 – 8), Glide, Bend range, Drift (0 – 100 %), Volume |
 
-**DSP.** PolyBLEP oscillators with hard sync, mixed into the shared nonlinear
-ladder filter, whole voice at 2× oversampling. Drift adds a slow, seeded
+**DSP.** The `daw_dsp` VCO or DCO per oscillator, with hard sync, mixed into
+the shared nonlinear filter kernel, whole voice at 2× oversampling. Modulation
+runs at a control rate of 8 samples with linear ramps between updates. Eight
+voices take about 5 % of one core in real time (`devices_bench` example). Drift adds a slow, seeded
 per-voice random walk to pitch and cutoff so stacked notes do not sound
 static. The mixer can overdrive the filter input, as on the hardware this
 layout comes from.

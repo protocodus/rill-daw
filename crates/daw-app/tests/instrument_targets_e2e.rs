@@ -32,6 +32,8 @@ fn initial_midi_assignment_and_replacement_keep_the_same_track_and_pattern() {
     let pattern = tracks(&initial)[0]["clips"][0].clone();
     common::wait_library_device(&mut app, "Rill Fixture A");
     assert!(visible(&app.inspect(), "Assign to New instrument"));
+    // The built-in R1 Mini is listed first; pick the plug-in.
+    app.click("Rill Fixture A");
     let assigned = app.click("Assign instrument");
     assert_eq!(tracks(&assigned).len(), 1);
     assert_eq!(tracks(&assigned)[0]["id"], track);
@@ -94,6 +96,7 @@ fn assigning_from_clip_editor_returns_to_the_same_phrase_without_opening_an_edit
     let clips = tracks(&before)[0]["clips"].clone();
     app.click("Choose instrument…");
     common::wait_library_device(&mut app, "Rill Fixture A");
+    app.click("Rill Fixture A");
     let assigned = app.click("Assign instrument");
     assert_eq!(assigned["view"], "Clip");
     assert_eq!(assigned["selected_track"], track);
@@ -122,6 +125,7 @@ fn explicit_add_instrument_keeps_an_intentionally_empty_track() {
     menu(&mut app, "Track", "Add instrument track…");
     common::wait_library_device(&mut app, "Rill Fixture A");
     assert!(visible(&app.inspect(), "Create a new MIDI track"));
+    app.click("Rill Fixture A");
     let added = app.click("Add instrument track");
     assert_eq!(tracks(&added).len(), 2);
     assert_eq!(tracks(&added)[0], original);
