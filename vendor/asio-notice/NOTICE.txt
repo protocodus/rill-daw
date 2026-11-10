@@ -1,0 +1,10 @@
+Rill for Windows and the Steinberg ASIO SDK
+
+The Windows executable in this archive is built with the Steinberg ASIO SDK,
+used under its GNU General Public License version 3 option. Rill's own source
+code is MIT licensed and available at https://github.com/protocodus/rill-daw.
+The combined Windows executable is distributed under the terms of the GPL
+version 3; see GPL-3.0.txt in this directory. The ASIO SDK source is available
+from Steinberg at https://www.steinberg.net/asiosdk.
+
+ASIO is a trademark and software of Steinberg Media Technologies GmbH.

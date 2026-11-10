@@ -101,7 +101,7 @@ Use the menus and on-screen tools, or speed up familiar actions with keyboard sh
 
 ## Current scope
 
-Audio runs through the platform driver (ALSA, WASAPI or CoreAudio) or, from Setup → Audio → Driver, JACK on Linux. ASIO on Windows is an opt-in build (`--features asio`, see [releasing](docs/RELEASING.md)); no release archive includes it, and it has not been tested on hardware.
+Audio runs through the platform driver (ALSA, WASAPI or CoreAudio) or, from Setup → Audio → Driver, JACK on Linux. Windows builds also offer ASIO, built with Steinberg's ASIO SDK under its GPLv3 option, so the Windows executable is distributed under the GPLv3 while Rill's source stays MIT (see [releasing](docs/RELEASING.md)). ASIO has not been tested on hardware.
 
 Rill is in active development and focuses on audio/MIDI music production. It hosts **VST3** and **CLAP** on every platform and **LV2** on Linux (through the system lilv library); instruments and effects are installed separately. LV2 plug-ins use Rill's generic parameter browser instead of their own editor windows. Songs can change meter at bar lines and carry named markers; audio clips can be warped with markers and quantized to the grid. Tempo maps, surround mixing, Audio Units/VST2/AAX/ARA, and video/scoring-to-picture workflows are not supported. See the [current capabilities and limits](docs/PRODUCT_DIRECTION.md).
 

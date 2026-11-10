@@ -52,21 +52,23 @@ Native VST3 and CLAP editors on Linux require X11 or XWayland. Thumbnail capture
 
 LV2 hosting on Linux loads the system lilv library (`liblilv-0.so.0`) at run time; it is not bundled or linked, so the archive starts without it. Install `liblilv-0-0` (Ubuntu/Debian) to use LV2 plug-ins; without it LV2 bundles fail to scan or load with an error that names the package. CI and `Dockerfile.e2e` install it for the LV2 tests. CLAP needs no extra runtime. Plug-ins of every format must match the application's CPU architecture.
 
-### Optional ASIO build (Windows only, not part of CI or release archives)
+### ASIO in Windows builds
 
-Setup → Audio offers ALSA/JACK, WASAPI, or CoreAudio drivers as the platform provides. The Steinberg ASIO driver is behind the `asio` cargo feature, off by default, and is not enabled by `package-windows.ps1` or CI. With the feature off, Windows builds are unchanged.
+Setup → Audio offers ALSA/JACK, WASAPI, or CoreAudio drivers as the platform provides. On Windows the Steinberg ASIO driver is behind the `asio` cargo feature. Ordinary `cargo build` and the CI test steps leave it off; `package-windows.ps1`, and therefore every Windows CI artifact and release archive, turns it on.
 
 ```powershell
 # Requires LLVM (libclang for bindgen) and the MSVC build tools.
 winget install LLVM.LLVM
 $env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
-# Optional: a local, already-licensed ASIO SDK. Without it the build downloads
+# Optional: a local copy of the ASIO SDK. Without it the build downloads
 # the SDK from https://www.steinberg.net/asiosdk into %TEMP%\asio_sdk.
 $env:CPAL_ASIO_DIR = "C:\sdk\asiosdk"
-cargo build --locked --release --features asio -p daw-app
+cargo build --locked --release --workspace --features daw-app/asio
 ```
 
-`asio-sys` compiles the SDK's C++ host sources and runs bindgen on its headers, hence the SDK and LLVM. The feature only adds a driver to the list; the same executable still runs without any ASIO driver installed. Licensing: the ASIO SDK is dual-licensed under Steinberg's proprietary agreement or GPLv3, and the name and logo are Steinberg trademarks. A release binary that links the SDK is therefore either a GPLv3 combination or needs Steinberg's signed proprietary licence; it cannot ship under plain MIT terms. Do not commit or redistribute the SDK itself. Obtain legal confirmation of the current terms before publishing any ASIO-enabled binary.
+`asio-sys` compiles the SDK's C++ host sources and runs bindgen on its headers, hence the SDK and LLVM. The feature only adds a driver to the list; the same executable still runs without any ASIO driver installed.
+
+Licensing: Steinberg offers the ASIO SDK under its proprietary agreement or the GPL version 3. Rill uses the GPL option. Rill's source stays MIT, which is GPL-compatible, but a Windows executable that links the SDK is a combined work distributed under the GPL version 3. The Windows archive therefore carries `licenses/asio-sdk/` (from `vendor/asio-notice/`) with the GPL text and a notice, and `INSTALL.txt` says so. The SDK itself is never committed. macOS and Linux archives contain no ASIO code and are unaffected. "ASIO" is a Steinberg trademark. ASIO has been compiled only by CI and has not been run against an audio interface.
 
 Native VST3 editors on Linux require X11 or XWayland. Thumbnail capture also needs the XRes and Composite extensions on that display.
 
