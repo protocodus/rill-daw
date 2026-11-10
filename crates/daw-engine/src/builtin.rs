@@ -210,6 +210,62 @@ pub(crate) const INSTRUMENT_CONTROLLERS: [(Controller, f64); 3] = [
 #[cfg(test)]
 mod tests {
     use super::*;
+    use daw_devices::{DeviceDescriptor, Telemetry};
+    use std::sync::Arc;
+
+    /// Misbehaves on purpose: panics or writes NaN, and counts resets.
+    struct Faulty {
+        panic: bool,
+        resets: usize,
+    }
+
+    impl Device for Faulty {
+        fn descriptor(&self) -> &'static DeviceDescriptor {
+            &daw_devices::devices::filter::DESCRIPTOR
+        }
+        fn prepare(&mut self, _: f32, _: usize) {}
+        fn set_parameter(&mut self, _: u32, _: f32) {}
+        fn process(&mut self, _: &ProcessContext, _: &[Event], io: StereoIo<'_>) {
+            assert!(!self.panic, "device bug");
+            io.left.fill(f32::NAN);
+        }
+        fn reset(&mut self) {
+            self.resets += 1;
+        }
+        fn telemetry(&self) -> Arc<Telemetry> {
+            Arc::default()
+        }
+    }
+
+    fn faulty(panic: bool) -> BuiltinDevice {
+        BuiltinDevice {
+            device: Box::new(Faulty { panic, resets: 0 }),
+            events: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_panic_is_contained_and_reported() {
+        let mut device = faulty(true);
+        let mut left = vec![0.5; 64];
+        let mut right = left.clone();
+        let error = device
+            .process_effect(&ProcessContext::default(), &mut left, &mut right)
+            .unwrap_err();
+        assert!(error.to_string().contains("R1 Filter"));
+        assert!(left.iter().chain(&right).all(|sample| *sample == 0.0));
+    }
+
+    #[test]
+    fn nonfinite_output_is_silenced_and_the_device_reset() {
+        let mut device = faulty(false);
+        let mut left = vec![0.5; 64];
+        let mut right = left.clone();
+        device
+            .process_effect(&ProcessContext::default(), &mut left, &mut right)
+            .unwrap();
+        assert!(left.iter().chain(&right).all(|sample| *sample == 0.0));
+    }
 
     #[test]
     fn filter_processes_in_place_and_reports_latency() {
