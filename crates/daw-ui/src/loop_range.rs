@@ -25,9 +25,9 @@ struct LoopDrag {
 
 /// Musical context for the strip's label. Without it the strip stays unlabelled.
 #[derive(Clone, Copy, Debug)]
-pub struct TimelineLoopLabel {
+pub struct TimelineLoopLabel<'a> {
     pub tempo: f64,
-    pub beats_per_bar: u8,
+    pub meter: &'a crate::MeterMap,
     pub playhead: f64,
 }
 
@@ -43,8 +43,8 @@ pub struct TimelineLoopResponse {
 
 /// "1.1" for a downbeat, "9.2.3" otherwise: the ruler's form without a
 /// redundant first sixteenth.
-fn short_position(beat: f64, beats_per_bar: u8) -> String {
-    let label = crate::musical_position_label(beat, beats_per_bar);
+fn short_position(beat: f64, meter: &crate::MeterMap) -> String {
+    let label = crate::musical_position_label(beat, meter);
     match label.strip_suffix(".1") {
         Some(short) => short.to_owned(),
         None => label,
@@ -52,11 +52,11 @@ fn short_position(beat: f64, beats_per_bar: u8) -> String {
 }
 
 /// Short strip label: "1.1 – 9.1 · 0:17.1" (start, end, duration).
-pub fn loop_strip_label(start: f64, end: f64, tempo: f64, beats_per_bar: u8) -> String {
+pub fn loop_strip_label(start: f64, end: f64, tempo: f64, meter: &crate::MeterMap) -> String {
     format!(
         "{} – {} · {}",
-        short_position(start, beats_per_bar),
-        short_position(end, beats_per_bar),
+        short_position(start, meter),
+        short_position(end, meter),
         crate::format_clock_time((end - start) * 60.0 / tempo.max(1.0), 1),
     )
 }
@@ -74,7 +74,7 @@ pub fn timeline_loop_editor(
     range: &mut TimelineLoop,
     grid: f64,
     limit: f64,
-    label: Option<TimelineLoopLabel>,
+    label: Option<TimelineLoopLabel<'_>>,
 ) -> TimelineLoopResponse {
     let before = *range;
     let bypass = ui.input(|input| input.modifiers.shift);
@@ -176,9 +176,9 @@ pub fn timeline_loop_editor(
                 |beat: f64| crate::duration::format_seconds(beat * 60.0 / label.tempo.max(1.0));
             format!(
                 "Loop from {} ({}) to {} ({}) · {}\n{hint}",
-                crate::duration::musical_position(range.start, label.beats_per_bar),
+                crate::duration::musical_position(range.start, label.meter),
                 seconds(range.start),
-                crate::duration::musical_position(range.end, label.beats_per_bar),
+                crate::duration::musical_position(range.end, label.meter),
                 seconds(range.end),
                 seconds(range.end - range.start),
             )
@@ -213,7 +213,7 @@ pub fn timeline_loop_editor(
         && visible.is_positive()
     {
         let galley = painter.layout_no_wrap(
-            loop_strip_label(range.start, range.end, label.tempo, label.beats_per_bar),
+            loop_strip_label(range.start, range.end, label.tempo, label.meter),
             egui::FontId::proportional(crate::tokens::FONT_CAPTION),
             crate::theme::contrast_text(fill),
         );

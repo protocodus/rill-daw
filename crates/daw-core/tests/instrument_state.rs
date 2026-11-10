@@ -178,6 +178,50 @@ fn processor_class_is_persistent_and_changing_class_clears_obsolete_state() {
             "invalid class selection must not clear saved data"
         );
     }
+    // CLAP and LV2 identify plug-ins by text; the format follows the extension.
+    // Audio Units share one locator and name their four-character codes.
+    let audio_unit = "/System/Library/Frameworks/AudioToolbox.framework";
+    for (path, class_id) in [
+        ("Synth.clap", "org.example.synth"),
+        ("amp.lv2", "http://example.org/amp"),
+        (audio_unit, "aumu:dls :appl"),
+        (audio_unit, "aufx:0x01020304:appl"),
+    ] {
+        project
+            .set_instrument(
+                track,
+                Instrument::Vst3 {
+                    path: path.into(),
+                    class_id: Some(class_id.into()),
+                },
+            )
+            .unwrap();
+    }
+    assert!(
+        project
+            .set_instrument(
+                track,
+                Instrument::Vst3 {
+                    path: "Synth.clap".into(),
+                    class_id: Some("bad\nid".into()),
+                },
+            )
+            .is_err()
+    );
+    for bad in ["org.example.synth", "aufx:dely", "aufx:delay:appl"] {
+        assert!(
+            project
+                .set_instrument(
+                    track,
+                    Instrument::Vst3 {
+                        path: audio_unit.into(),
+                        class_id: Some(bad.into()),
+                    },
+                )
+                .is_err(),
+            "{bad}"
+        );
+    }
 }
 
 #[test]

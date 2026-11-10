@@ -17,6 +17,14 @@ recommendation preserves it, applies the rate-aware balanced recommendation at
 96 kHz, and checks persistence across app restart. Run with
 `cargo test --locked -p daw-app --test buffer_setup_e2e`.
 
+`audio_driver_e2e` runs device-free audio with fake drivers (`RILL_E2E_AUDIO_HOSTS`,
+for example `ALSA,JACK:44100:128`; the first is the default and `Name:rate:frames`
+makes a server-dictated driver). It checks that the Setup Driver control lists the
+hosts and is hidden for one host, that choosing JACK adopts its fixed rate and buffer,
+that the choice persists across restart, that an unavailable saved driver falls back to
+the default with an error notice, and that `get_setup`/`configure_setup` report and set
+the driver. Run with `cargo test --locked -p daw-app --test audio_driver_e2e`.
+
 `mixer_identity_navigation_e2e` checks lowered bus/send-return strips and large
 type headings in light/dark and compact/tall layouts. It follows a distant mixer
 channel into nested collapsed arranger folders and back, checks persistent
@@ -480,6 +488,35 @@ cargo test --locked -p daw-plugins --lib editor_context_menu
 
 On Linux, `cargo test --locked -p daw-plugins --test native_context_menu -- --ignored` creates its own private Xvfb display and drives the real menu worker with X11 pointer/keyboard events. It checks selection of action zero, disabled items, Escape cancellation, and physical positioning at 1× and 2× scale. It requires Xvfb and Mesa, connects only to its private display, and is included in container tests and Linux CI.
 
+`clap_e2e` and `lv2_e2e` (Linux only) compile in-tree CLAP and LV2 fixtures and run them through the production `daw-plugin-host`. Each scans the fixture folder, checks the Library card's format badge, assigns the instrument through Window → Instrument → Choose instrument, exports audible audio, inserts the gain effect and checks that its 32-sample latency is compensated (same peak and onset), then checks Undo/Redo and save/reopen with identical export. `lv2_e2e` also opens the generic parameter browser through “Automate…”, because LV2 native UIs are not hosted. A second `clap_e2e` test checks that `list_plugins` reports and filters by `format`, and that `assign_plugin` rejects a mismatched format. The LV2 target needs the system lilv runtime (`liblilv-0-0`).
+
+```sh
+cargo build --locked --workspace --bins
+cargo test --locked -p daw-app --test clap_e2e --test lv2_e2e
+```
+
+The plug-in level tests cover the same fixtures directly: scanning metadata, isolation-process crash and hang recovery, identical audio across block transports, state round trips, parameter automation split at block offsets, latency reporting, sidechain buses and the LV2 worker extension.
+
+`audio_unit_e2e` (macOS only) uses Apple's system Audio Units, which every Mac ships, so it needs no fixture. It scans the AU locator, checks the **AU** badge, assigns DLSMusicDevice (`aumu:dls :appl`) and exports audible audio, inserts AUDelay (`aufx:dely:appl`) and checks that the export changes, then checks Undo/Redo, save/reopen with the same tracks and peak, and `list_plugins` filtered by `AU`. `daw-plugins --test audio_unit` covers the same units directly: registry scan with vendor and kind, AUDelay processing and its mix parameter set directly and as block automation, AULowpass filtering, AUPeakLimiter latency/tail, DLS audibility, binary-plist state round trip, recovery after the helper is killed, inspection and clean errors. No AU editor window is opened, because macOS CI has no GUI session. On other platforms both targets compile to nothing.
+
+```sh
+cargo test --locked -p daw-plugins --test audio_unit
+cargo test --locked -p daw-app --test audio_unit_e2e
+```
+
+```sh
+cargo test --locked -p daw-plugins --test clap --test lv2
+```
+
+On Linux, `cargo test --locked -p daw-plugins --test clap_editor -- --ignored` creates its own private Xvfb display with Composite, embeds the CLAP fixture's native editor in the isolated editor helper, captures its pixels, and checks parameter pick, change and state events, close-time saving and reopen restore. It is included in Linux CI.
+
+`installed_bundle_smoke` is an optional, ignored test for real installed plug-ins of any format. It scans one bundle or folder, loads up to `RILL_TEST_PLUGIN_LIMIT` (default 8) plug-ins whose names contain `RILL_TEST_PLUGIN_NAME`, processes audio, and round-trips state; `RILL_TEST_PLUGIN_EDITOR=1` also captures the first plug-in's editor on a display. CI does not run it.
+
+```sh
+RILL_TEST_PLUGIN_BUNDLE=/usr/lib/lv2/calf.lv2 cargo test --locked -p daw-plugins \
+  --test installed_bundle_smoke -- --ignored --nocapture
+```
+
 `workspace_switch_e2e` exercises the persistent Arranger/Mixer switch from both workspaces, Clip Editor, and contextual utilities, including selecting the already active caller to dismiss a popup. It checks bounds at 800×600 and 1100×720, both appearances and densities, and preserves project/history/selection. `channel_properties_e2e` verifies separate Clip/Track/Channel scopes, audio-only clip gain, channel gain/pan, and navigation among Mixer, Channel, Effects, Instrument, and Routing. `instrument_context_e2e` checks concise native-editor overviews, the on-demand **Automate…** parameter page, contextual titles, effect-editor-to-instrument navigation, and clean failure of metadata-only plugin fixtures.
 
 `cursor_visibility_e2e` places the cursor through the mouse in the arranger,
@@ -823,6 +860,13 @@ includes `exported_file`, `clipboard_text`, and `automation_editor` geometry for
 observing these interactions. Clipboard diagnostics observe output emitted by
 the headless app; they do not read the operating system clipboard.
 
+`export_formats_e2e` exports the mix as FLAC, Ogg Vorbis and MP3 through the
+dialog and decodes each with the importer, selects stem channels by mouse and
+checks that the stems line up with the mix, cancels a running stem export
+(`RILL_E2E_EXPORT_DELAY_MS`, honoured only with `RILL_AUTOMATION_DIR`) and
+verifies no files remain, and drives `document_action` export with `format`,
+`stems`, `channels`, `include_mix` and `replace_existing`.
+
 `export_options_e2e` opens File → Export WAV, checks the displayed duration,
 toggles Include effect tails, and validates an exact 60-second WAV versus the
 default release tail. Popup and destination-picker cancellation preserve the
@@ -1028,6 +1072,33 @@ with every output sample matching the edited song. Native egui clipboard-event
 coverage complements the keyboard-driven E2Es. See
 [audio editor coverage](AUDIO_EDITOR.md) for controls and remaining advanced tools.
 
+### Warp markers and audio quantize
+
+```sh
+cargo test --locked -p daw-app --test audio_warp_e2e -- --test-threads=1
+cargo test --locked -p daw-engine warp_render_tests -- --test-threads=1
+cargo test --locked -p daw-core --lib warp
+```
+
+`audio_warp_e2e` uses an off-grid click fixture. The mouse case selects the
+Warp tool, waits for detected attacks, adds a marker that snaps to an attack
+(and a Shift-placed one), drags its flag to the grid, checks one Undo step,
+Undo/Redo and the flag menu's Delete warp marker, saves and reopens, and checks
+the exported click lands on the new beat while neighbours stretch linearly. The
+quantize case previews Process → Quantize audio… (moved count, largest move and
+targets, with the clip unchanged), applies one Undo step and checks every
+exported click on the grid, then verifies Markers only leaves timing unchanged.
+The tool case runs `audio_process_clip` with `quantize`, checks the reported
+moves and exported timing, reads markers through `get_clip`, and applies valid,
+invalid and clearing `set_warp_markers` edits. Exported onsets allow 384 samples
+(8 ms) because Signalsmith's long grains can pull an attack at a rate change;
+the engine tests hold Bungee to 48 samples.
+
+The engine tests compare warped preparation against a reference for pitch and
+seams, resident against disk-streamed rendering, and live edits against export.
+Core tests cover the map, validation and atomic rejection, and split, trim,
+slip, reverse, stretch, region, duplicate and ghost behaviour.
+
 ### Clip editor toolbars, snap and canvas stability
 
 ```sh
@@ -1187,6 +1258,14 @@ phrase repeat with rests and partial final windows, bounded allocations,
 re-export after successful and failed attempts, remembered tail options, and
 reset on Open. `time_signature_e2e` chooses 3/4 entirely through the UI, verifies
 Undo/Redo and portable recall, and disables the choice during live capture.
+`meter_change_e2e` inserts a 3/4 change from the ruler context menu, moves it
+with its flag's dialog and removes it from the flag menu, checking that clips keep
+their beats, Undo/Redo, MIDI time-signature export/import and portable recall;
+song tools set and remove changes through the same history. `markers_e2e` adds
+markers from the menu and ruler, drags one with snap, renames it by double-click,
+seeks by click, steps with menu items and `,`/`.`, adds with M, deletes from the
+flag menu, and checks exact Undo/Redo, MIDI marker export, portable recall and
+tool-driven add/move/rename/remove.
 
 ## Empty workspaces and first actions
 

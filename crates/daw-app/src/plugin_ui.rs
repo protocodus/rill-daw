@@ -527,7 +527,8 @@ impl DawApp {
         path: PathBuf,
         specification: crate::export_ui::ExportSpecification,
     ) {
-        if self.defer_document_request(DocumentRequest::Export(path.clone(), specification)) {
+        if self.defer_document_request(DocumentRequest::Export(path.clone(), specification.clone()))
+        {
             return;
         }
         if self.export_job.is_some() {

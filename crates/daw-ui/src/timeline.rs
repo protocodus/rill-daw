@@ -18,6 +18,7 @@ pub enum EditorTool {
     Ghost,
     Stretch,
     Slip,
+    Warp,
 }
 
 impl EditorTool {
@@ -26,7 +27,7 @@ impl EditorTool {
     #[allow(non_upper_case_globals)]
     pub const Split: Self = Self::Cut;
 
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Select,
         Self::Pencil,
         Self::Cut,
@@ -40,6 +41,7 @@ impl EditorTool {
         Self::Ghost,
         Self::Stretch,
         Self::Slip,
+        Self::Warp,
     ];
 
     pub fn label(self) -> &'static str {
@@ -57,6 +59,7 @@ impl EditorTool {
             Self::Ghost => "Ghost copy",
             Self::Stretch => "Stretch",
             Self::Slip => "Slip",
+            Self::Warp => "Warp",
         }
     }
 
@@ -75,6 +78,7 @@ impl EditorTool {
             Self::Ghost => Key::G,
             Self::Stretch => Key::S,
             Self::Slip => Key::L,
+            Self::Warp => Key::K,
         }
     }
 
@@ -105,6 +109,9 @@ impl EditorTool {
             Self::Slip => {
                 "Drag the audio inside fixed clip edges. Source bounds are preserved; Shift bypasses grid snap."
             }
+            Self::Warp => {
+                "Click the waveform to add a warp marker; it snaps to a nearby transient unless Shift is held. Drag a marker flag to move that audio in time while its neighbours stay fixed; right-click a flag to delete it."
+            }
         }
     }
 
@@ -112,7 +119,7 @@ impl EditorTool {
         match self {
             Self::Select => egui::CursorIcon::Default,
             Self::Slip => egui::CursorIcon::Grab,
-            Self::Stretch => egui::CursorIcon::ResizeHorizontal,
+            Self::Stretch | Self::Warp => egui::CursorIcon::ResizeHorizontal,
             Self::Duplicate => egui::CursorIcon::Copy,
             Self::Ghost => egui::CursorIcon::Alias,
             Self::Glue => egui::CursorIcon::PointingHand,
@@ -200,6 +207,7 @@ fn editor_tool_families(
         &[
             EditorTool::Stretch,
             EditorTool::Slip,
+            EditorTool::Warp,
             EditorTool::FadeIn,
             EditorTool::FadeOut,
         ],
@@ -379,9 +387,14 @@ pub fn nudge_menu(ui: &mut Ui, enabled: bool) -> i32 {
 /// The current project model counts quarter-note beats per bar. This compact
 /// choice deliberately exposes only its supported numerators and denominator.
 pub fn time_signature_choice(ui: &mut Ui, beats_per_bar: &mut u8) -> Response {
+    meter_choice(ui, "time_signature", beats_per_bar)
+}
+
+/// The same 1/4–32/4 chooser for any meter, such as a meter change.
+pub fn meter_choice(ui: &mut Ui, id_salt: &str, beats_per_bar: &mut u8) -> Response {
     let before = *beats_per_bar;
     let height = (ui.ctx().content_rect().height() - 100.0).clamp(68.0, 240.0);
-    let mut response = crate::select("time_signature", format!("{}/4", *beats_per_bar))
+    let mut response = crate::select(id_salt, format!("{}/4", *beats_per_bar))
         .width(56.0)
         .height(height)
         .show_ui(ui, |ui| {
@@ -465,7 +478,7 @@ pub fn paint_timeline_ruler(
     rect: Rect,
     view: TimelineViewport,
     tempo: f64,
-    beats_per_bar: u8,
+    meter: &crate::MeterMap,
 ) {
     if !rect.is_finite()
         || !rect.is_positive()
@@ -479,14 +492,17 @@ pub fn paint_timeline_ruler(
     if !end_beat.is_finite() {
         return;
     }
-    let bar = usize::from(beats_per_bar.max(1));
     const LABEL_SPACING: f32 = 80.0;
-    let step = ((LABEL_SPACING / view.pixels_per_beat).ceil() as usize)
-        .max(bar)
-        .div_ceil(bar)
-        .saturating_mul(bar);
-    let start = (view.start_beat.max(0.0) as usize / step) * step;
-    let end = end_beat.ceil().max(0.0) as usize;
+    let shortest_bar = meter
+        .segments()
+        .iter()
+        .map(|segment| segment.beats_per_bar)
+        .min()
+        .unwrap_or(1);
+    let bar_step = (LABEL_SPACING / (view.pixels_per_beat * f32::from(shortest_bar)))
+        .ceil()
+        .clamp(1.0, u32::MAX as f32) as u32;
+    let first_bar = (meter.position(view.start_beat).0 - 1) / bar_step * bar_step + 1;
     let painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
     let palette = crate::theme::palette(painter.ctx());
     let font = egui::FontId::proportional(crate::tokens::FONT_CANVAS);
@@ -540,16 +556,14 @@ pub fn paint_timeline_ruler(
     };
     // Reserve the primary bar and clock labels first so finer anchors cannot
     // displace them, including at large bar numbers or a clipped viewport edge.
-    for beat in (start..=end).step_by(step).take(2048) {
-        let x = view.x_at(rect, beat as f64);
-        label(
-            format!("{}", (beat / bar).saturating_add(1)),
-            x,
-            true,
-            palette.text,
-            &mut upper,
-        );
-        if let Some(text) = clock(beat as f64) {
+    let bars = (first_bar..u32::MAX)
+        .step_by(bar_step as usize)
+        .map(|bar| (bar, meter.bar_start(bar)))
+        .take_while(|(_, beat)| *beat <= end_beat.ceil());
+    for (bar, beat) in bars.take(2048) {
+        let x = view.x_at(rect, beat);
+        label(format!("{bar}"), x, true, palette.text, &mut upper);
+        if let Some(text) = clock(beat) {
             label(text, x, false, palette.muted, &mut lower);
         }
         tick(x, 8.0);
@@ -564,17 +578,18 @@ pub fn paint_timeline_ruler(
     let first = (view.start_beat.max(0.0) * 4.0).floor() as usize / tick_step * tick_step;
     let last = (end_beat.max(0.0) * 4.0).ceil() as usize;
     for quarter in (first..=last).step_by(tick_step).take(2048) {
-        if quarter % (bar * 4) == 0 {
+        let beat = quarter as f64 / 4.0;
+        if meter.is_downbeat(beat) {
             continue;
         }
-        let beat = quarter as f64 / 4.0;
         let x = view.x_at(rect, beat);
-        let bar_number = (quarter / (bar * 4)).saturating_add(1);
-        let beat_number = quarter / 4 % bar + 1;
+        let (bar_number, offset) = meter.position(beat);
+        let sixteenth = (offset * 4.0).round() as usize;
+        let beat_number = sixteenth / 4 + 1;
         let text = if quarter.is_multiple_of(4) {
             format!("{bar_number}.{beat_number}")
         } else {
-            format!("{bar_number}.{beat_number}.{}", quarter % 4 + 1)
+            format!("{bar_number}.{beat_number}.{}", sixteenth % 4 + 1)
         };
         label(text, x, true, palette.muted, &mut upper);
         if let Some(text) = clock(beat) {

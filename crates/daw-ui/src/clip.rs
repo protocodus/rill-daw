@@ -220,7 +220,7 @@ pub fn clip_occurrence_hover(
     track: &str,
     range: std::ops::Range<f64>,
     tempo: f64,
-    beats_per_bar: u8,
+    meter: &crate::MeterMap,
     linked: bool,
 ) -> Response {
     let seconds_per_beat = 60.0 / tempo;
@@ -228,7 +228,7 @@ pub fn clip_occurrence_hover(
         response,
         format!(
             "{title}\n{track} · {}\n{}–{}{}",
-            crate::duration::musical_position(range.start, beats_per_bar),
+            crate::duration::musical_position(range.start, meter),
             crate::duration::format_seconds(range.start * seconds_per_beat),
             crate::duration::format_seconds(range.end * seconds_per_beat),
             if linked {

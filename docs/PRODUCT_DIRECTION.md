@@ -100,7 +100,8 @@ support and integrated workflow are more durable distinctions.
 ## What Rill already does well
 
 Rill combines non-destructive audio/MIDI arrangement, recording, loop takes and
-comping, clip gain/reverse/fades, stretch/pitch, piano-roll editing, composition
+comping, clip gain/reverse/fades, stretch/pitch, warp markers and audio quantize,
+piano-roll editing, composition
 generators, folders, buses, pre/post-fader sends, ordered inserts, sidechain
 inputs, independently mixed instrument outputs and stage-aware delay
 compensation. Master has its own trim, inserts, pan and volume automation.
@@ -133,8 +134,10 @@ WAV delivery offers 16/24-bit PCM or 32-bit float, independent sample rate,
 optional TPDF dither and exact loop bounds. Temporary output is replaced only
 after successful rendering. PCM overload reporting and preserved float headroom
 are useful. The reported peak is a rendered sample peak, not true peak or a
-compliance certificate. Stem/batch export, compressed delivery and professional
-session interchange remain separate gaps. See the [user guide](USER_GUIDE.md).
+compliance certificate. FLAC, Ogg Vorbis and MP3 delivery and all-or-nothing
+stem export (tracks, buses and folders, optionally pre-Master) are available.
+Batch export of several ranges and professional session interchange remain
+separate gaps. See the [user guide](USER_GUIDE.md).
 
 Rill's AI architecture is a strength: scoped typed operations, revision checks,
 candidate validation and shared manual/tool/AI Undo provide a reviewable editing
@@ -161,8 +164,10 @@ gaps. Live latency changes still require graph rebuilding; broad plug-in/driver
 compatibility needs real testing.
 
 The channel graph is stereo and acyclic. Wide plug-in buses are exposed as
-independent stereo/mono pairs, not a surround/immersive mixing model. Tempo and
-meter remain constant. Gesture-recording modes such as Read/Touch/Write remain
+independent stereo/mono pairs, not a surround/immersive mixing model. Tempo
+remains constant; meter changes at bar lines and song markers are supported.
+Audio clips support manual warp markers and transient quantize, but not
+automatic tempo-following warp or groove templates. Gesture-recording modes such as Read/Touch/Write remain
 separate from drawing curves and overriding/resuming them.
 
 Expressive project storage and target translation do not equal a complete MIDI
@@ -172,7 +177,7 @@ VST3 supports only the musical mappings exposed by the destination plug-in.
 Keep these boundaries visible when comparing Rill with established expressive
 performance and controller workflows.
 
-VST3 support does not imply AU, CLAP, AAX, LV2 or ARA compatibility. A few tested
+VST3, CLAP, (Linux) LV2 and (macOS) Audio Unit support does not imply AAX or ARA compatibility. A few tested
 plugins do not establish a broad vendor matrix. Conversely, Cubase 16 no longer
 supports VST2, so a stale checklist would unfairly overstate its advantage.
 [Steinberg format guidance](https://helpcenter.steinberg.de/hc/en-us/articles/22554401894162-Using-VST-2-Plug-ins-in-Cubase-Nuendo-14-and-15).
@@ -181,13 +186,14 @@ supports VST2, so a stale checklist would unfairly overstate its advantage.
 
 Rust is not the principal obstacle; each format needs discovery, identity,
 bus/events, automation, state recall, native editors, isolation and fault tests.
-No safe dependency-only addition was verified during this audit.
+CLAP, LV2 and AU now use the helper's format seam (see
+[Plug-in formats](ARCHITECTURE.md#plug-in-formats)); a further format is one adapter.
 
 | Format | Practical assessment |
 | --- | --- |
-| CLAP | The strongest next candidate. [`clack-host` 0.2](https://docs.rs/clack-host/0.2.0/clack_host/) supplies Rust wrappers, but Rill must implement host callbacks, lifecycle and isolated processing/editor adapters. |
-| AU v2/v3 | Feasible on macOS through [Apple Audio Units](https://developer.apple.com/documentation/AudioToolbox/AUAudioUnit) and Rust bindings. It needs AU-specific identities/parameters and real Mac validation. |
-| LV2 | Feasible with current Rust hosting libraries such as [`livi`](https://docs.rs/livi/0.9.0/livi/). State/worker/URI handling, native UI toolkits and portable assets still need a complete Rill integration. |
+| CLAP | Hosted on macOS, Linux and Windows through [`clack-host` 0.2](https://docs.rs/clack-host/0.2.0/clack_host/): discovery, audio ports including sidechain/multi-out, notes and note expressions, parameters and gestures, state, latency and embedded editors. Remaining gaps: CLAP-specific extensions such as voice info, remote controls, preset discovery and the context-menu extension; the transport carries no loop range. |
+| AU v2/v3 | Hosted on macOS through the AUv2 C API ([`objc2-audio-toolbox`](https://docs.rs/objc2-audio-toolbox/0.3.2/)), which also loads AUv3 through Apple's bridge: registry discovery, instruments, effects and MIDI-controlled effects, input/output elements, MIDI, parameters and gestures, ClassInfo state, latency/tail, host transport and Cocoa or generic editors. Validated only against Apple's system units in macOS CI. Remaining gaps: MIDI into `aumf` inserts, MIDI output, note expressions, AUv3-only APIs (`AUAudioUnit`, parameter trees, user presets), offline-only units (`auol`) and a vendor matrix. |
+| LV2 | Hosted on Linux through a run-time binding to the system lilv library: discovery, audio/control/atom MIDI ports, URID, options, worker, state and latency. Remaining gaps: native LV2 UIs (the generic parameter browser is used), MIDI output, `time:Position` transport atoms, CV ports, plug-ins requiring other host features (for example `state:makePath`), and LV2 on macOS/Windows. |
 | AAX | No practical generic host path was verified. [Avid's public SDK](https://developer.avid.com/aax/) primarily supports producing plug-ins for Avid products; public SDK availability/licensing does not establish arbitrary commercial AAX hosting. |
 | ARA | A deeper document/random-access extension, not another ordinary loader. [Celemony's SDK](https://github.com/Celemony/ARA_SDK) is Apache-2.0; integration needs source readers, region/modification graphs, archive state and edit/Undo lifecycle coordination. |
 
@@ -219,6 +225,8 @@ exceptions. Compare restoration coverage and fault tests, not just counts.
 [Live recovery](https://help.ableton.com/hc/en-us/articles/115001878844-Recovering-a-Set-manually-after-a-crash),
 [REAPER guide](https://dlx.reaper.fm/userguide/html/),
 [Cubase history](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/project_window/project_window_edit_history_dialog_r.html).
+
+Setup offers a Driver choice: ALSA/JACK on Linux, WASAPI/ASIO on Windows, CoreAudio on macOS. JACK was exercised only against a dummy-backend server, and ASIO (in Windows packages, under the SDK's GPLv3 option) has only been compiled; neither has been checked against a physical interface.
 
 A 256-frame device buffer at 48 kHz is a starting configuration, not a
 demonstrated optimum for every M1-or-newer MacBook. Rill's render queue and
@@ -295,7 +303,7 @@ Official screenshot references, **not firsthand pixel comparisons**:
 3. **Record automation performances predictably.** Add deliberate Read/Touch
    behavior before expanding modes, preserving override/resume and one-gesture
    Undo. Test capture, playback, editing and recovery together.
-4. **Deepen timing and expressive interoperability.** Evaluate tempo/meter maps
+4. **Deepen timing and expressive interoperability.** Evaluate tempo maps
    and controller/MIDI 2.0 device interoperability against producer sessions.
    Preserve rich source data and make every delivery downgrade explicit.
 5. **Continue measured interface refinement.** Reduce secondary toolbar height,

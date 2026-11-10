@@ -2,8 +2,8 @@
 //! No plugin, file I/O, allocation, or locking belongs in these callbacks.
 use super::{AudioEngine, Controls};
 use anyhow::{Result, ensure};
-use daw_core::Project;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use daw_core::{MAX_METER_CHANGES, Project};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, AtomicUsize, Ordering, fence};
 
 const IDLE: usize = 0;
 const ARMED: usize = 1;
@@ -42,7 +42,13 @@ pub(super) struct TimingShared {
     phase: AtomicUsize,
     sample_rate: AtomicU32,
     tempo: AtomicU64,
-    beats_per_bar: AtomicU8,
+    /// Meter segments packed as `start_beat << 8 | beats_per_bar`, guarded by
+    /// the even/odd `meter_version` sequence so the callback never locks.
+    meters: Box<[AtomicU64]>,
+    meter_count: AtomicUsize,
+    meter_version: AtomicU64,
+    /// Bar length of the pre-count, taken from the meter where recording starts.
+    count_meter: AtomicU8,
     precount_bars: AtomicU8,
     click_enabled: AtomicBool,
     click_gain: AtomicU32,
@@ -68,7 +74,12 @@ impl TimingShared {
             phase: AtomicUsize::new(IDLE),
             sample_rate: AtomicU32::new(48000),
             tempo: AtomicU64::new(120.0_f64.to_bits()),
-            beats_per_bar: AtomicU8::new(4),
+            meters: (0..=MAX_METER_CHANGES)
+                .map(|index| AtomicU64::new(if index == 0 { 4 } else { 0 }))
+                .collect(),
+            meter_count: AtomicUsize::new(1),
+            meter_version: AtomicU64::new(0),
+            count_meter: AtomicU8::new(4),
             precount_bars: AtomicU8::new(0),
             click_enabled: AtomicBool::new(false),
             click_gain: AtomicU32::new(0.25_f32.to_bits()),
@@ -89,22 +100,73 @@ impl TimingShared {
         )
     }
     pub(super) fn sync_project(&self, project: &Project) -> Result<()> {
+        let meter = project.meter_map();
+        let packed: Vec<u64> = meter
+            .segments()
+            .iter()
+            .map(|segment| (segment.start as u64) << 8 | u64::from(segment.beats_per_bar))
+            .collect();
         ensure!(
             project.tempo.is_finite()
                 && project.tempo > 0.0
-                && (1..=32).contains(&project.beats_per_bar),
+                && (1..=32).contains(&project.beats_per_bar)
+                && packed.len() <= self.meters.len(),
             "Invalid metronome tempo or time signature"
         );
+        let unchanged = self.meter_count.load(Ordering::Acquire) == packed.len()
+            && packed
+                .iter()
+                .zip(self.meters.iter())
+                .all(|(value, stored)| stored.load(Ordering::Relaxed) == *value);
         ensure!(
             !self.busy()
-                || (self.tempo.load(Ordering::Acquire) == project.tempo.to_bits()
-                    && self.beats_per_bar.load(Ordering::Acquire) == project.beats_per_bar),
+                || (self.tempo.load(Ordering::Acquire) == project.tempo.to_bits() && unchanged),
             "Finish recording before changing tempo or time signature"
         );
         self.tempo.store(project.tempo.to_bits(), Ordering::Release);
-        self.beats_per_bar
-            .store(project.beats_per_bar, Ordering::Release);
+        if !unchanged {
+            let version = self.meter_version.load(Ordering::Relaxed);
+            self.meter_version.store(version + 1, Ordering::Relaxed);
+            fence(Ordering::Release);
+            for (stored, value) in self.meters.iter().zip(&packed) {
+                stored.store(*value, Ordering::Relaxed);
+            }
+            self.meter_count.store(packed.len(), Ordering::Relaxed);
+            self.meter_version.store(version + 2, Ordering::Release);
+        }
         Ok(())
+    }
+    /// Meter segment `(start beat, beats per bar)` containing a whole song beat.
+    /// A write in progress is retried briefly, then treated as unaccented.
+    fn meter_at(&self, beat: u64) -> Option<(u64, u64)> {
+        for _ in 0..4 {
+            let version = self.meter_version.load(Ordering::Acquire);
+            if version & 1 == 1 {
+                std::hint::spin_loop();
+                continue;
+            }
+            let count = self
+                .meter_count
+                .load(Ordering::Relaxed)
+                .clamp(1, self.meters.len());
+            let mut segment = self.meters[0].load(Ordering::Relaxed);
+            for stored in &self.meters[1..count] {
+                let value = stored.load(Ordering::Relaxed);
+                if value >> 8 > beat {
+                    break;
+                }
+                segment = value;
+            }
+            fence(Ordering::Acquire);
+            if self.meter_version.load(Ordering::Relaxed) == version {
+                return Some((segment >> 8, (segment & 0xff).max(1)));
+            }
+        }
+        None
+    }
+    fn accented(&self, beat: u64) -> bool {
+        self.meter_at(beat)
+            .is_some_and(|(start, meter)| beat >= start && (beat - start).is_multiple_of(meter))
     }
     pub(super) fn configure(
         &self,
@@ -259,10 +321,12 @@ impl TimingShared {
         };
         if let Some(beat) = pulse {
             self.click_age.store(0, Ordering::Relaxed);
-            self.click_accent.store(
-                beat.is_multiple_of(u64::from(self.beats_per_bar.load(Ordering::Relaxed))),
-                Ordering::Relaxed,
-            );
+            let accent = if gate.counting {
+                beat.is_multiple_of(u64::from(self.count_meter.load(Ordering::Relaxed).max(1)))
+            } else {
+                self.accented(beat)
+            };
+            self.click_accent.store(accent, Ordering::Relaxed);
         }
         let age = self.click_age.load(Ordering::Relaxed);
         let rate = self.sample_rate.load(Ordering::Relaxed);
@@ -306,11 +370,16 @@ impl AudioEngine {
         timing.was_playing.store(playing, Ordering::Relaxed);
         timing.audio.store(audio, Ordering::Relaxed);
         timing.midi.store(midi, Ordering::Relaxed);
+        let start = f64::from_bits(self.controls.position.load(Ordering::Acquire));
+        let count_meter = timing
+            .meter_at(start.max(0.0).floor() as u64)
+            .map_or(4, |(_, meter)| meter as u8);
+        timing.count_meter.store(count_meter, Ordering::Relaxed);
         let frames = if playing {
             0
         } else {
             (f64::from(timing.precount_bars.load(Ordering::Relaxed))
-                * f64::from(timing.beats_per_bar.load(Ordering::Relaxed))
+                * f64::from(count_meter)
                 * f64::from(self.sample_rate)
                 * 60.0
                 / f64::from_bits(timing.tempo.load(Ordering::Relaxed)))
@@ -405,6 +474,57 @@ mod tests {
         assert!(frames.iter().any(|frame| frame[0].abs() > 0.6));
         assert!(engine.snapshot().playing);
         assert!((engine.position_beats() - 0.04).abs() < 1e-8);
+    }
+    #[test]
+    fn metronome_accents_follow_meter_changes() {
+        let mut project = Project::new();
+        project.metronome_enabled = true;
+        project.metronome_gain = 0.75;
+        project.set_meter_change(2, 3).unwrap();
+        let mut engine = engine(&project);
+        let beat_frames = engine.sample_rate() as usize / 2;
+        engine.set_playing(true);
+        let frames = engine.pump_virtual(beat_frames * 11).unwrap();
+        let accents: Vec<_> = frames
+            .chunks(beat_frames)
+            .enumerate()
+            .filter(|(_, beat)| beat.iter().any(|frame| frame[0].abs() > 0.6))
+            .map(|(index, _)| index)
+            .collect();
+        // 4/4 for bar 1, then 3/4: downbeats at beats 0, 4, 7 and 10.
+        assert_eq!(accents, [0, 4, 7, 10]);
+        // A live edit moves the accents without restarting playback.
+        project.remove_meter_change(2).unwrap();
+        engine.try_update_project(&project, 1).unwrap();
+        let frames = engine.pump_virtual(beat_frames * 9).unwrap();
+        let accents: Vec<_> = frames
+            .chunks(beat_frames)
+            .enumerate()
+            .filter(|(_, beat)| beat.iter().any(|frame| frame[0].abs() > 0.6))
+            .map(|(index, _)| index + 11)
+            .collect();
+        assert_eq!(accents, [12, 16]);
+    }
+    #[test]
+    fn precount_uses_the_meter_at_the_recording_start() {
+        let mut project = Project::new();
+        project.precount_bars = 1;
+        project.set_meter_change(3, 3).unwrap();
+        let engine = engine(&project);
+        engine
+            .configure_recording_timing(
+                &project,
+                RecordingTiming {
+                    precount_bars: 1,
+                    click_enabled: false,
+                    click_gain: 0.25,
+                },
+            )
+            .unwrap();
+        engine.seek(8.0);
+        engine.arm_recording_timing(true, false).unwrap();
+        assert!((engine.timing_snapshot().remaining_beats - 3.0).abs() < 1e-6);
+        engine.cancel_recording_timing();
     }
     fn ready(engine: &AudioEngine) {
         let until = Instant::now() + Duration::from_secs(5);

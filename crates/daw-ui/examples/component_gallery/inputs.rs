@@ -80,7 +80,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 ui.end_row();
                 text::label(ui, "Start position");
                 let (_, position) = controls::musical_position_entry(
-                    ui, "gallery_position", state.position, 4, 0.0..=1024.0,
+                    ui, "gallery_position", state.position, &controls::MeterMap::uniform(4), 0.0..=1024.0,
                 );
                 if let Some(position) = position {
                     state.position = position;

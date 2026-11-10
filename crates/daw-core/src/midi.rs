@@ -1,4 +1,7 @@
-use crate::{Clip, ClipContent, MAX_BEAT, Note, Project, Track, TrackKind};
+use crate::{
+    Clip, ClipContent, MAX_BEAT, MAX_METER_CHANGES, MeterChange, MeterMap, Note, Project, Track,
+    TrackKind,
+};
 use anyhow::{Context, Result, bail, ensure};
 use midly::{Format, Header, MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind};
 use std::{
@@ -9,10 +12,12 @@ use std::{
 
 /// The project currently uses one global tempo. Files with a tempo map or SMPTE
 /// timing are rejected explicitly instead of silently changing musical timing.
+/// Time signature changes are read as meter changes at bar lines.
 pub struct MidiImport {
     pub tracks: Vec<Track>,
     pub tempo: Option<f64>,
     pub beats_per_bar: Option<u8>,
+    pub meter_changes: Vec<MeterChange>,
 }
 
 pub fn import_midi(path: impl AsRef<Path>) -> Result<MidiImport> {
@@ -29,8 +34,7 @@ pub fn import_midi(path: impl AsRef<Path>) -> Result<MidiImport> {
     };
     let mut tempo_micros = None;
     let mut tempo_at_zero = false;
-    let mut signature = None;
-    let mut signature_at_zero = false;
+    let mut signatures = Vec::new();
     let mut tracks = Vec::new();
     for (index, events) in smf.tracks.iter().enumerate() {
         let mut tick = 0u64;
@@ -61,11 +65,10 @@ pub fn import_midi(path: impl AsRef<Path>) -> Result<MidiImport> {
                         "Only quarter-note time signatures with 1–32 beats per bar are supported"
                     );
                     ensure!(
-                        signature.is_none_or(|previous| previous == numerator),
-                        "Changing MIDI time signatures are not supported"
+                        signatures.len() <= MAX_METER_CHANGES,
+                        "MIDI file has too many time signature changes"
                     );
-                    signature = Some(numerator);
-                    signature_at_zero |= tick == 0;
+                    signatures.push((tick, numerator));
                 }
                 TrackEventKind::Midi {
                     channel,
@@ -133,10 +136,7 @@ pub fn import_midi(path: impl AsRef<Path>) -> Result<MidiImport> {
         tempo_at_zero || tempo_micros.is_none_or(|value| value == 500_000),
         "MIDI tempo changes after the initial default tempo; tempo maps are unsupported"
     );
-    ensure!(
-        signature_at_zero || signature.is_none_or(|value| value == 4),
-        "MIDI time signature changes after the initial 4/4 meter"
-    );
+    let (beats_per_bar, meter_changes) = meter_from_signatures(signatures, ticks_per_beat)?;
     let tempo = tempo_micros.map(|micros| 60_000_000.0 / f64::from(micros));
     ensure!(
         tempo.is_none_or(|value| (20.0..=400.0).contains(&value)),
@@ -145,30 +145,86 @@ pub fn import_midi(path: impl AsRef<Path>) -> Result<MidiImport> {
     Ok(MidiImport {
         tracks,
         tempo,
-        beats_per_bar: signature,
+        beats_per_bar,
+        meter_changes,
     })
+}
+
+/// Signatures after tick 0 must fall on a bar line of the preceding meter.
+fn meter_from_signatures(
+    mut signatures: Vec<(u64, u8)>,
+    ticks_per_beat: f64,
+) -> Result<(Option<u8>, Vec<MeterChange>)> {
+    signatures.sort_by_key(|(tick, _)| *tick);
+    let initial = signatures
+        .iter()
+        .take_while(|(tick, _)| *tick == 0)
+        .last()
+        .map(|(_, numerator)| *numerator);
+    let mut changes: Vec<MeterChange> = Vec::new();
+    for (tick, numerator) in signatures.into_iter().filter(|(tick, _)| *tick > 0) {
+        let map = MeterMap::new(initial.unwrap_or(4), &changes);
+        let beat = tick as f64 / ticks_per_beat;
+        ensure!(
+            beat <= MAX_BEAT && map.is_downbeat(beat),
+            "MIDI time signature change at beat {beat} is not on a bar line"
+        );
+        let (bar, _) = map.position(beat);
+        match changes.last_mut() {
+            Some(last) if last.bar == bar => last.beats_per_bar = numerator,
+            _ if map.meter_at(beat) == numerator => {}
+            _ => changes.push(MeterChange {
+                bar,
+                beats_per_bar: numerator,
+            }),
+        }
+    }
+    let first = changes.first().map(|change| change.bar);
+    Ok((initial.or(first.map(|_| 4)), changes))
 }
 
 pub fn export_midi(project: &Project, path: impl AsRef<Path>) -> Result<()> {
     project.validate()?;
     project.validate_audio_destination(path.as_ref())?;
     const PPQ: u16 = 960;
-    let mut tracks = vec![vec![
-        TrackEvent {
-            delta: 0.into(),
-            kind: TrackEventKind::Meta(MetaMessage::Tempo(
-                ((60_000_000.0 / project.tempo).round() as u32).into(),
-            )),
-        },
-        TrackEvent {
-            delta: 0.into(),
-            kind: TrackEventKind::Meta(MetaMessage::TimeSignature(project.beats_per_bar, 2, 24, 8)),
-        },
-        TrackEvent {
-            delta: 0.into(),
-            kind: TrackEventKind::Meta(MetaMessage::EndOfTrack),
-        },
-    ]];
+    let meter = project.meter_map();
+    let mut conductor = vec![(
+        0,
+        MetaMessage::Tempo(((60_000_000.0 / project.tempo).round() as u32).into()),
+    )];
+    for segment in meter.segments() {
+        conductor.push((
+            to_tick(segment.start, PPQ)?,
+            MetaMessage::TimeSignature(segment.beats_per_bar, 2, 24, 8),
+        ));
+    }
+    for marker in &project.markers {
+        conductor.push((
+            to_tick(marker.beat, PPQ)?,
+            MetaMessage::Marker(marker.name.as_bytes()),
+        ));
+    }
+    // Stable: tempo, then the meter, then markers at equal ticks.
+    conductor.sort_by_key(|(tick, _)| *tick);
+    let mut last_tick = 0;
+    let mut first_track = Vec::with_capacity(conductor.len() + 1);
+    for (tick, message) in conductor {
+        let delta = tick - last_tick;
+        ensure!(
+            delta <= 0x0fff_ffff,
+            "MIDI event delta exceeds format limit"
+        );
+        last_tick = tick;
+        first_track.push(TrackEvent {
+            delta: delta.into(),
+            kind: TrackEventKind::Meta(message),
+        });
+    }
+    first_track.push(TrackEvent {
+        delta: 0.into(),
+        kind: TrackEventKind::Meta(MetaMessage::EndOfTrack),
+    });
+    let mut tracks = vec![first_track];
     for (index, track) in project
         .tracks
         .iter()
@@ -303,6 +359,10 @@ impl Project {
             }
             if let Some(meter) = imported.beats_per_bar {
                 self.beats_per_bar = meter;
+                // Bar positions only carry over when the file starts the song.
+                if at_beat == 0.0 {
+                    self.meter_changes = imported.meter_changes;
+                }
             }
         }
         let ids = imported

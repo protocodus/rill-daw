@@ -24,6 +24,7 @@ the arranger remain available; the starting actions disappear once a track exist
 - Non-destructive audio gain, normalization, reverse, curve fades, range clipboard editing, and transient split preview.
 - Exclusive audio overlaps, optional spline crossfades, and audio/MIDI clip joining.
 - Transport loop toggle and on-demand start/end beat controls, saved with the project.
+- Meter changes at bar lines and named, colored song markers on the arranger ruler, exported to MIDI.
 - Piano roll with scale/chord highlighting, chord database, octave-stack drawing, both note edges, velocity painting, and held-note plugin audition; randomize and quantize previews, voice-aware legato, transpose, and note clipboard.
 - Generate sustained chords, seven arpeggio patterns, and seeded melodies with optional counterpoint or tintinnabuli voices; preview notes in an editable whole-bar range before adding them in one undoable step.
 - Large searchable instrument/effect browser with developer filters and cached native previews; drag-reorder insert chains and create send returns.
@@ -292,6 +293,27 @@ Choose **Snap → 1 bar** to align edits to the current meter: three beats in 3/
 four in 4/4. Changing the meter later keeps the existing beat increment and shows
 it explicitly, such as **Snap 3 beats**; choose **1 bar** again to use the new meter.
 
+### Meter changes and markers
+
+The transport meter chooser sets the meter of bar 1. To change the meter later in
+the song, right-click the arranger ruler and choose **Insert meter change…**, or use
+**Edit → Markers → Insert meter change at playhead…**. Pick the starting bar and
+the meter, then **Apply meter change**. Clips keep their beat positions; only the
+bar lines around them move. A flag on the ruler marks each change: click it to
+edit or move it, or right-click it to **Remove meter change**. In the arranger,
+**Snap → 1 bar** follows the real bar lines; the clip editors use the bar length
+at the clip's start.
+
+Markers name song positions. Choose **Edit → Markers → Add marker at playhead**
+(**M**), or right-click the ruler and choose **Add marker here**. Click a marker
+flag to move the playhead to it, drag it to move it with snap (Shift bypasses
+snap), and double-click it or choose **Rename marker…** from its context menu to
+rename it. **Delete marker** removes it. **Previous marker** (**,**) and **Next
+marker** (**.**) step the playhead between markers. Every change is one Undo step.
+MIDI export writes meter changes as time signatures and markers as marker events;
+MIDI import reads time signatures that fall on bar lines when importing into an
+empty song.
+
 Clip Properties always shows **Stretch**, starting at **100.0%**, so its timing
 controls stay in place when a duration edit changes between Trim and Stretch.
 
@@ -301,6 +323,28 @@ and Clear. **Apply value** makes one undoable edit; Cancel leaves the value
 unchanged. Generate's Start bar and Length pads accept whole bars only.
 
 Stretch changes duration without replacing the source. Audio keeps its pitch; MIDI note positions and lengths scale in playback and the editor. Stretching one ghost changes only that occurrence's timing. Source-rate factors range from 0.25× to 4×, and each drag remains one Undo step. In Properties, selecting **Stretch** makes the Duration field and **123** keypad show the supported range for that occurrence. For an unstretched four-beat clip it is 1–16 beats; trimmed or already-stretched clips use their current source window. Values outside the range stay as a draft until corrected. Preparing stretched audio happens in the background; the current sound continues until its replacement is ready. Extreme stretches can introduce artifacts, especially in transients and complex material.
+
+### Warp markers and audio quantize
+
+The audio Clip Editor's **Warp** tool (**K**) moves individual attacks without
+cutting the clip. Detected attacks show as faint ticks. Click the waveform to add
+a warp marker; near an attack it snaps onto it, and Shift places it exactly where
+you click. The first marker also pins the clip's start and end. While Warp is
+active the loop lane shows numbered marker flags: drag a flag to move that
+moment of the audio (the grid applies; Shift bypasses it), click it to seek, or
+right-click and choose **Delete warp marker**. The audio between markers
+stretches smoothly with its pitch unchanged. **Process → Clear warp markers**
+returns to ordinary whole-clip stretch. Each add, drag or delete is one Undo step,
+and markers are saved with the project.
+
+**Process → Quantize audio…** (also in the waveform's context menu) moves attacks
+toward the grid. Choose the grid, **Strength** (100% lands exactly on the grid)
+and **Max move**; attacks further from the grid stay put, and the clip's start and
+end never move. Arrows preview each move and the drawer reports how many attacks
+move and the largest move in milliseconds. **Apply quantize** is one Undo step.
+**Markers only** places markers on the attacks without moving anything, ready for
+manual adjustment. Sensitivity and minimum gap are the same transient settings
+used by Process → Transients.
 
 In the audio Clip Editor or Properties, open **Pitch** to transpose by up to two octaves in either direction, including fine tuning to cents, without changing duration. Choose **Signalsmith** or **Bungee** for both pitch and time processing. Combined edits render once from the original audio, never from an earlier processed result. Reset pitch restores the original pitch while retaining stretch. Ghost copies share pitch and algorithm; independent duplicates can differ. Both algorithms are included; no external processing utility is required.
 
@@ -528,11 +572,14 @@ Automation covers the entire song. The first point's value applies before that p
 
 Adjust an automated control to override its curve. **Overridden** and coral-red markers identify the manual value, while the original curve stays intact. Choose **Resume automation** in the lane editor, the control's right-click menu, the channel status menu, or plug-in parameter details to follow the curve again at the current playhead. **Cancel automation override** appears beside AI in the menu bar while any overrides exist; it clears all manual overrides and resumes enabled curves together in one undoable action. **Edit → Cancel all automation overrides** provides the same action. Curve points, bypass states and selection stay unchanged. The lane editor also offers **Override automation** and an exact override value. Overrides save with the project and support Undo/Redo. Disable or mute a lane to use the channel's stored manual value instead; this is shown as **Bypassed**.
 
-For an instrument, open **Window → Instrument**, choose **Open editor**, and adjust a native plug-in control. **Automate last touched** creates its parameter track. You can also search the parameter list, select a control, and choose **Automate parameter**. Effects provide the same native editor, searchable parameter list, and last-touched automation workflow from their insert chain; parameters are also available in the Automation view. Discovery and native editors run in separate helper processes. Mixer controls render sample-accurately; VST3 automation is evaluated once per 256-frame block. Automation lanes do not extend song duration.
+For an instrument, open **Window → Instrument**, choose **Open editor**, and adjust a native plug-in control. **Automate last touched** creates its parameter track. You can also search the parameter list, select a control, and choose **Automate parameter**. Effects provide the same native editor, searchable parameter list, and last-touched automation workflow from their insert chain; parameters are also available in the Automation view. Discovery and native editors run in separate helper processes. Mixer controls render sample-accurately; plug-in automation (VST3, CLAP, LV2, AU) is evaluated once per 256-frame block. Automation lanes do not extend song duration.
 
-## VST3 instruments
+## Plug-in instruments and effects
 
-Open **Window → Setup → Plug-ins**, add folders, and apply the settings; Rill rescans them. Choose **Track → Add instrument…**, type a name or vendor, then press Enter or double-click a result. Rill creates a MIDI track and four-beat clip, assigns the VST, and opens its native editor. **Track → Add MIDI track** opens the same chooser after creating its empty pattern. Double-click the clip to write notes. To use an existing MIDI track, choose **Choose instrument…** in its arrangement or Clip Editor header, or open **Window → Instrument → Choose instrument**; assigning the plug-in preserves its notes. **Window → Library** also provides browsing and explicit add/assign actions. When no VST3 instruments/effects have been found, the library explains installation and links to **Plug-in folders**. When installed inventory is hidden by search or filters, it offers **Clear filters**.
+Rill hosts **VST3** and **CLAP** plug-ins on macOS, Linux and Windows, **LV2** plug-ins on Linux, and **Audio Units** (AU) on macOS. Each library card carries a format badge (VST3, CLAP, LV2 or AU), device details name the format, and typing a format name in the library search filters by it. Rill looks in each format's standard folders and in the `VST3_PATH`, `CLAP_PATH` and `LV2_PATH` variables, plus folders you add. LV2 needs the system lilv library (`liblilv-0-0` on Debian/Ubuntu, `lilv` elsewhere); without it LV2 bundles are listed with an error and other formats are unaffected. On macOS Rill also lists every installed Audio Unit instrument, effect and MIDI-controlled effect from the system registry (Setup → Plug-ins says “plus installed Audio Units”); there is no AU folder to add, and an AU's install path shows `/System/Library/Frameworks/AudioToolbox.framework`. AUv3 extensions appear once their app has been opened. CLAP and AU editors open like VST3 editors; an AU without its own editor shows Apple's generic controls. MIDI-controlled AU effects work as effects but receive no MIDI from an insert. LV2 plug-ins have no embedded editor in Rill: **Open editor** reports that, and **Automate…** lists their controls for editing and automation.
+
+
+Open **Window → Setup → Plug-ins**, add folders, and apply the settings; Rill rescans them. Choose **Track → Add instrument…**, type a name or vendor, then press Enter or double-click a result. Rill creates a MIDI track and four-beat clip, assigns the VST, and opens its native editor. **Track → Add MIDI track** opens the same chooser after creating its empty pattern. Double-click the clip to write notes. To use an existing MIDI track, choose **Choose instrument…** in its arrangement or Clip Editor header, or open **Window → Instrument → Choose instrument**; assigning the plug-in preserves its notes. **Window → Library** also provides browsing and explicit add/assign actions. When no instruments/effects have been found, the library explains installation and links to **Plug-in folders**. When installed inventory is hidden by search or filters, it offers **Clear filters**.
 
 Choosing an instrument in the initial creation flow gives an untouched **New
 instrument** track the device's name; repeated names receive a numeric suffix.
@@ -540,9 +587,9 @@ That naming change belongs to the same Undo step as assignment. Names you set,
 names loaded from projects, and names on tracks assigned through a reopened
 chooser remain intact, even if the name is **New instrument**.
 
-Rill keeps an index of installed plug-ins. Each launch shows the last index immediately, then rescans the plug-in folders in the background; **Refresh** in the library rescans on demand, for example after installing a plug-in. New, updated and removed plug-ins are picked up without restarting. After a scan, Rill opens each verified instrument or effect that has no preview in an isolated helper, screenshots its native editor, and adds the image to the index, one plug-in at a time. The library header shows how many previews remain. Cache entries are invalidated when the plug-in bundle changes. A failed editor or screenshot leaves the plug-in listed under **Without preview**, alongside plug-ins whose image has not been captured; it is not retried on every scan, and it does not close Rill. Plug-ins without classification metadata are labelled **Unverified VST3**; their preview is captured when you select one, and they are checked when loaded. **More → Capture preview** or **Refresh preview** captures one again. **Preview image / Unavailable** refers only to that optional image; details retain the capture error, and the instrument can still be assigned. Loading reports its own errors separately.
+Rill keeps an index of installed plug-ins. Each launch shows the last index immediately, then rescans the plug-in folders in the background; **Refresh** in the library rescans on demand, for example after installing a plug-in. New, updated and removed plug-ins are picked up without restarting. After a scan, Rill opens each verified instrument or effect that has no preview in an isolated helper, screenshots its native editor, and adds the image to the index, one plug-in at a time. The library header shows how many previews remain. Cache entries are invalidated when the plug-in bundle changes. A failed editor or screenshot leaves the plug-in listed under **Without preview**, alongside plug-ins whose image has not been captured; it is not retried on every scan, and it does not close Rill. Plug-ins without classification metadata are labelled **Unverified VST3** (or CLAP/LV2/AU); their preview is captured when you select one, and they are checked when loaded. **More → Capture preview** or **Refresh preview** captures one again. **Preview image / Unavailable** refers only to that optional image; details retain the capture error, and the instrument can still be assigned. Loading reports its own errors separately.
 
-The library sidebar filters by collection (**All plug-ins**, **Favorites**, **With preview**, **Without preview**) and by developer, each with a count. Search, **All categories**, **Sort** (name, developer or recently added) and **View** (grid or list) sit above the catalog. Active filters appear as chips; click one to remove it, or use **Clear filters**. Selecting a device shows its preview, **Favorite**, install path with **Copy path**, categories and VST3 details (kind, version, architecture, preview status) beside the catalog. Categories come from the plug-in's VST3 subcategories until you type your own, separated by commas, and choose **Save**; saving an empty field restores the plug-in's own. **More** and a card's context menu also add or remove favorites. Favorites and categories are stored in `plugin-library.json` next to `settings.json` and are reported by the `list_plugins` tool.
+The library sidebar filters by collection (**All plug-ins**, **Favorites**, **With preview**, **Without preview**) and by developer, each with a count. Search, **All categories**, **Sort** (name, developer or recently added) and **View** (grid or list) sit above the catalog. Active filters appear as chips; click one to remove it, or use **Clear filters**. Selecting a device shows its preview, **Favorite**, install path with **Copy path**, categories and details (kind, format, version, architecture, preview status) beside the catalog. Categories come from the plug-in's own subcategories (VST3 subcategories, CLAP features, LV2 classes, AU component types) until you type your own, separated by commas, and choose **Save**; saving an empty field restores the plug-in's own. **More** and a card's context menu also add or remove favorites. Favorites and categories are stored in `plugin-library.json` next to `settings.json` and are reported by the `list_plugins` tool.
 
 Instrument and effect edits automatically persist normalized parameters and opaque plugin state. Native editors use a separate instance from audio rendering; parameter gestures update the playing instance and debounced state snapshots capture preset changes. Save, export, device changes, and document transitions flush the editor first. Full state changes rebuild playback and can briefly interrupt audio. The native editor and instrument parameter list provide access to the plug-in's controls; Rill does not supply instruments, effects, or a separate preset browser.
 
@@ -587,7 +634,7 @@ failure while retaining the song; offline export keeps its prior destination.
 Normalization, transient analysis and Strip silence also scan large sources in
 bounded chunks instead of loading the full file into memory.
 
-**Window → Setup → Audio** lists input/output devices and supported sample rates, buffer sizes, and High quality/Fast sample conversion. Input must support the selected project rate and channels. Rill defaults to 48 kHz, 32-bit float audio buffers, and 64-bit summing. High quality uses filtered source-rate conversion; Fast trades alias rejection for preparation speed. Changes finish recording, flush native editor state, stop and retire old device/plugin workers, then initialize replacements in the background. Failed device initialization restores the previous settings and reports the error; device errors offer **Audio setup…** directly in the notification. A restart includes a brief pause. **Storage** selects the scratch directory; **Plug-ins** adds VST3 scan roots. Unsupported device settings report an error rather than silently substituting a configuration. The render queue holds two requested buffers, with a minimum of 512 frames; hover the device buffer latency to see its contribution. Setup edits apply only after **Apply**; Cancel, Escape, and closing the popup discard them.
+**Window → Setup → Audio** starts with **Driver** when this computer has more than one audio system (for example ALSA and JACK on Linux, WASAPI and ASIO on Windows; macOS has one, so the control is hidden). Devices, sample rates and buffer sizes come from the chosen driver, and input and output always use the same one. JACK (including PipeWire's JACK) and ASIO dictate their own settings: with JACK the sample rate and buffer size are the server's and those controls are disabled; ASIO limits the buffer to the driver's range and drives one device for both input and output, so Input follows Output; pick input channels in the Recording panel as usual. If JACK reports no devices, start the JACK server and press **Refresh devices**. A saved driver that is missing at launch (uninstalled, or an ASIO build not in use) falls back to the platform default with a notice, and returns when the driver does. The page lists input/output devices and supported sample rates, buffer sizes, and High quality/Fast sample conversion. Input must support the selected project rate and channels. Rill defaults to 48 kHz, 32-bit float audio buffers, and 64-bit summing. High quality uses filtered source-rate conversion; Fast trades alias rejection for preparation speed. Changes finish recording, flush native editor state, stop and retire old device/plugin workers, then initialize replacements in the background. Failed device initialization restores the previous settings and reports the error; device errors offer **Audio setup…** directly in the notification. A restart includes a brief pause. **Storage** selects the scratch directory; **Plug-ins** adds VST3 scan roots. Unsupported device settings report an error rather than silently substituting a configuration. The render queue holds two requested buffers, with a minimum of 512 frames; hover the device buffer latency to see its contribution. Setup edits apply only after **Apply**; Cancel, Escape, and closing the popup discard them.
 
 A recoverable audio-output dropout shows a warning with its count and **Audio setup…**; ordinary playback continues while the audio backend recovers. Try a larger buffer if dropouts recur. The warning stays in one notification instead of repeating for every dropout. If a dropout occurs while recording starts, during pre-count, or during capture, Rill stops capture to preserve timing and retains any recorded prefix; after capture finishes, choose **Retry playback** or press **Play** to reconnect before recording again.
 
@@ -609,6 +656,10 @@ global scratch folder.
 After Save as, the project header shows the saved filename with a dirty marker for later edits; hover it for the full path. Save and WAV/MIDI export pickers reuse that directory and filename stem. Extensionless project saves receive `.rill`. **Export WAV…** warns when visible notes on contributing MIDI tracks have no instrument; Cancel to assign a VST3, or continue without those notes.
 
 The WAV dialog offers **16-bit PCM**, **24-bit PCM**, and **32-bit float**, with an export sample rate independent of playback. **Follow audio setup** uses the current audio rate when Export is pressed. Choose the entire **Arrangement**, or **Loop range** to export between the loop markers at an exact length. The duration summary says **+ tails** when arrangement tails are enabled; loop-range exports always end at the end marker. These choices do not move the transport or change the song.
+
+**Type** chooses WAV, FLAC (16 or 24-bit, lossless), Ogg Vorbis (quality 0-10) or MP3 (128, 192, 256 or 320 kbit/s CBR, up to 48 kHz). Lossy and FLAC files limit samples to 0 dBFS and report the limited count; lossy files can decode slightly above full scale, so leave headroom.
+
+**What: Stems** writes one file per chosen channel into a folder you pick, named `<song> - <NN> <channel>.<ext>` (names are cleaned for every file system, numbered in project order). Tick tracks, buses and folders in the list (**Select all** / **Select none**); **Include full mix** adds `00 Mix` with Master processing. Each stem is the song with only that channel audible, so its inserts, fader, sends and downstream buses sound as in the mix. Stems are taken before Master unless **Through Master processing** is on. Every file has the same start, length and format. Existing files are never replaced unless you confirm in the folder picker; the files are staged together and a failure or **Cancel** leaves none behind. Each instrument output channel is listed as its own "(output)" stem.
 
 **Dither (TPDF)** adds low-level noise when converting to integer PCM. It is ignored for float output. PCM samples above 0 dBFS are clipped; completion reports the clipped sample count. Float output preserves headroom. The completion summary's **Rendered sample peak** describes the mix before PCM conversion, rather than a true-peak measurement of the encoded file.
 
@@ -633,11 +684,11 @@ standard MIDI Clip File export.
 
 ## Plug-in stability
 
-Each VST3 instrument/effect instance runs in a separate `daw-plugin-host` process. Scanning reads metadata without executing plug-in code in the DAW. A crash or timed-out processing command silences that path while the session stays open; **Stop**, then **Play**, creates fresh instances. Export failures preserve an existing destination file.
+Each instrument/effect instance, of any format, runs in a separate `daw-plugin-host` process. Scanning reads metadata without executing plug-in code in the DAW: VST3 metadata is read from `moduleinfo.json`, CLAP/LV2 bundles are read by a short-lived helper per bundle, and macOS Audio Units by one short-lived helper that reads the component registry. A crash or timed-out processing command silences that path while the session stays open; **Stop**, then **Play**, creates fresh instances. Export failures preserve an existing destination file.
 
 This is crash isolation. Helpers retain the user's filesystem and network permissions; they are not an OS permission sandbox. Plug-in IPC runs on the render worker, away from the lock-free device callback. The helper must be next to `rill`, or specified by `DAW_PLUGIN_HOST`.
 
-VST3 audio, supported MIDI/expression mappings, latency, transport, auxiliary inputs, grouped instrument outputs, native instrument/effect editors, parameter automation and state recall are supported. A standalone preset browser and CLAP/VST2/AU/LV2/AAX hosting are not included. ARA requires a separate document/random-access integration; see the [format assessment](PRODUCT_DIRECTION.md#additional-plug-in-formats).
+VST3 and CLAP audio, supported MIDI/expression mappings, latency, transport, auxiliary inputs, grouped instrument outputs, native instrument/effect editors, parameter automation and state recall are supported; LV2 (Linux) supports the same except native editors, MIDI output and transport position. Audio Units (macOS) support the same as VST3 except note expressions, MIDI output and MIDI into MIDI-controlled effects. A standalone preset browser and VST2/AAX hosting are not included. ARA requires a separate document/random-access integration; see the [format assessment](PRODUCT_DIRECTION.md#additional-plug-in-formats).
 
 ## Rendering and verification
 
@@ -653,7 +704,7 @@ cargo run --release -p daw-engine --example render_bench
 
 Real native plug-in tests are opt-in; commands and environment variables are in the test sources. Local validation exercised Surge XT and CHOWTapeModel, including forcibly terminated plug-in children, recovery, sample-offset MIDI, effect input, state roundtrips, and a routed chain with compensated bus latency.
 
-See [architecture and limitations](ARCHITECTURE.md) for the graph, real-time boundaries, file formats and delay compensation. Current media scope includes PCM/float WAV, MP3, FLAC and OGG/Vorbis import, disk-backed large-audio playback, recording and constant-tempo MIDI with rich project performance data. Tempo maps, automatic tempo-following warp markers and surround remain absent. Input gain, volume, pan, note and clip edits update the existing graph; failed audio preparation keeps the last valid audio playing. Structural, plug-in-state and device changes still rebuild playback and may briefly interrupt it. Cosmetic changes do not rebuild the graph, including Undo/Redo.
+See [architecture and limitations](ARCHITECTURE.md) for the graph, real-time boundaries, file formats and delay compensation. Current media scope includes PCM/float WAV, MP3, FLAC and OGG/Vorbis import, disk-backed large-audio playback, recording and constant-tempo MIDI with rich project performance data. Tempo maps, automatic tempo-following warp and surround remain absent; manual warp markers and audio quantize are available in the audio Clip Editor. Input gain, volume, pan, note and clip edits update the existing graph; failed audio preparation keeps the last valid audio playing. Structural, plug-in-state and device changes still rebuild playback and may briefly interrupt it. Cosmetic changes do not rebuild the graph, including Undo/Redo.
 
 ## Build from source
 

@@ -47,6 +47,9 @@ fn array(value: Value, max: usize) -> Value {
 fn choices(values: &[&str]) -> Value {
     json!({"type":"string","enum":values})
 }
+fn choices_int(values: &[u16]) -> Value {
+    json!({"type":"integer","enum":values})
+}
 fn note() -> Value {
     object(
         json!({"pitch":{"type":"integer","minimum":0,"maximum":127},"start":number(),"length":number(),"velocity":{"type":"integer","minimum":1,"maximum":127}}),
@@ -78,9 +81,38 @@ pub fn song_edit_schema() -> Value {
     );
     add!(
         "set_meter",
-        json!({"beats_per_bar":{"type":"integer","minimum":1,"maximum":32}}),
+        json!({"beats_per_bar":{"type":"integer","minimum":1,"maximum":32,"description":"Quarter-note beats per bar from bar 1."}}),
         ["beats_per_bar"]
     );
+    let bar = || json!({"type":"integer","minimum":2,"maximum":1_000_000,"description":"One-based bar number; bar 1 uses set_meter."});
+    add!(
+        "set_meter_change",
+        json!({"bar":bar(),"beats_per_bar":{"type":"integer","minimum":1,"maximum":32,"description":"Quarter-note beats per bar from this bar until the next change."}}),
+        ["bar", "beats_per_bar"]
+    );
+    add!(
+        "move_meter_change",
+        json!({"from_bar":bar(),"to_bar":bar()}),
+        ["from_bar", "to_bar"]
+    );
+    add!("remove_meter_change", json!({"bar":bar()}), ["bar"]);
+    let marker_name = || json!({"type":"string","minLength":1,"maxLength":256});
+    add!(
+        "add_marker",
+        json!({"beat":{"type":"number","minimum":0,"description":"Arrangement beat for the marker."},"name":marker_name(),"color":{"type":"array","minItems":3,"maxItems":3,"items":{"type":"integer","minimum":0,"maximum":255}},"key":key()}),
+        ["beat", "name"]
+    );
+    add!(
+        "rename_marker",
+        json!({"marker":reference(),"name":marker_name()}),
+        ["marker", "name"]
+    );
+    add!(
+        "move_marker",
+        json!({"marker":reference(),"beat":{"type":"number","minimum":0}}),
+        ["marker", "beat"]
+    );
+    add!("remove_marker", json!({"marker":reference()}), ["marker"]);
     add!(
         "set_loop",
         json!({"enabled":boolean(),"start":number(),"end":number()}),
@@ -378,6 +410,11 @@ pub fn song_edit_schema() -> Value {
         "split_audio_transients",
         json!({"track":channel_reference(),"clip":reference(),"beats":array(number(),2048)}),
         ["track", "clip", "beats"]
+    );
+    add!(
+        "set_warp_markers",
+        json!({"track":channel_reference(),"clip":reference(),"markers":array(object(json!({"source":{"type":"number","minimum":0,"description":"Source position in quarter-note beats at the song tempo, the unit of the clip offset."},"beat":{"type":"number","description":"Forward clip-relative beat where that source position plays."}}),&["source","beat"]),2048)}),
+        ["track", "clip", "markers"]
     );
     add!(
         "strip_audio_silence",
@@ -684,17 +721,17 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "audio_analyze_clip",
-            "Analyze an audio source once for normalization, transient splitting and stripping silence. Returns measurements and prepared typed SongEdit proposals; apply_edits commits chosen edits separately. start/end use arrangement beats. Does not edit audio.",
+            "Analyze an audio source once for normalization, transient splitting, stripping silence, warp markers at transients and audio quantize. Returns measurements and prepared typed SongEdit proposals; apply_edits commits chosen edits separately. start/end use arrangement beats. Does not edit audio.",
             object(
-                json!({"track_id":id(),"clip_id":id(),"start_beat":number(),"end_beat":number(),"transient_algorithm":choices(&["energy_rise","amplitude_gate"]),"sensitivity":number(),"minimum_gap_ms":number(),"silence_threshold_db":number(),"minimum_silence_ms":number(),"padding_ms":number(),"normalize_target_db":number()}),
+                json!({"track_id":id(),"clip_id":id(),"grid_beats":{"type":"number","exclusiveMinimum":0,"maximum":64},"strength":{"type":"number","minimum":0,"maximum":1},"max_move_beats":{"type":"number","minimum":0,"maximum":64},"start_beat":number(),"end_beat":number(),"transient_algorithm":choices(&["energy_rise","amplitude_gate"]),"sensitivity":number(),"minimum_gap_ms":number(),"silence_threshold_db":number(),"minimum_silence_ms":number(),"padding_ms":number(),"normalize_target_db":number()}),
                 &["track_id", "clip_id"],
             ),
         ),
         (
             "audio_process_clip",
-            "Normalize, split at detected transients, or strip silence in one undoable action. The host analyzes the existing clip in a background worker and commits only against the requested unchanged song revision. No file paths are accepted.",
+            "Normalize, split at detected transients, strip silence, quantize (place warp markers on detected transients and move them toward the grid) or warp_transients (place warp markers on transients without moving them) in one undoable action. Quantize uses grid_beats (a value equal to the first bar's length follows real bar lines across meter changes), strength 0..1 and max_move_beats; clip start and end stay pinned so the clip length is unchanged. The host analyzes the existing clip in a background worker and commits only against the requested unchanged song revision. No file paths are accepted.",
             object(
-                json!({"session_id":id(),"expected_revision":integer(),"track_id":id(),"clip_id":id(),"operation":choices(&["normalize","split_transients","strip_silence"]),"start_beat":number(),"end_beat":number(),"transient_algorithm":choices(&["energy_rise","amplitude_gate"]),"sensitivity":number(),"minimum_gap_ms":number(),"silence_threshold_db":number(),"minimum_silence_ms":number(),"padding_ms":number(),"normalize_target_db":number()}),
+                json!({"session_id":id(),"expected_revision":integer(),"track_id":id(),"clip_id":id(),"operation":choices(&["normalize","split_transients","strip_silence","quantize","warp_transients"]),"grid_beats":{"type":"number","exclusiveMinimum":0,"maximum":64,"description":"Quantize grid in beats; default 1"},"strength":{"type":"number","minimum":0,"maximum":1,"description":"Quantize strength; default 1"},"max_move_beats":{"type":"number","minimum":0,"maximum":64,"description":"Hits further than this from their grid line stay in place; default half the grid"},"start_beat":number(),"end_beat":number(),"transient_algorithm":choices(&["energy_rise","amplitude_gate"]),"sensitivity":number(),"minimum_gap_ms":number(),"silence_threshold_db":number(),"minimum_silence_ms":number(),"padding_ms":number(),"normalize_target_db":number()}),
                 &[
                     "session_id",
                     "expected_revision",
@@ -722,15 +759,15 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "list_plugins",
-            "Search already scanned and trusted local VST3 instruments/effects, with the user's favorites and categories; use returned catalog plugin_id for assignment. refresh rescans plug-in folders in the background, for example after an install; call again until scanning is false.",
+            "Search already scanned and trusted local VST3, CLAP, (on Linux) LV2 and (on macOS) AU instruments/effects, with the user's favorites and categories; each result names its format, and format filters the search. Use returned catalog plugin_id for assignment. refresh rescans plug-in folders in the background, for example after an install; call again until scanning is false.",
             object(
-                json!({"query":{"type":"string","maxLength":256},"refresh":boolean()}),
+                json!({"query":{"type":"string","maxLength":256},"format":choices(&["VST3","CLAP","LV2","AU"]),"refresh":boolean()}),
                 &[],
             ),
         ),
         (
             "organize_plugin",
-            "Organize the user's plug-in library: mark a catalog plug-in as a favorite and/or replace its categories. An empty categories list restores the plug-in's own VST3 categories. The song is not changed.",
+            "Organize the user's plug-in library: mark a catalog plug-in as a favorite and/or replace its categories. An empty categories list restores the plug-in's own categories. The song is not changed.",
             object(
                 json!({"plugin_id":string(),"favorite":boolean(),"categories":array(json!({"type":"string","minLength":1,"maxLength":64}),32)}),
                 &["plugin_id"],
@@ -738,9 +775,9 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "assign_plugin",
-            "Assign a scanned catalog instrument, or add an insert when insert is true, to the current song. The host resolves plugin_id; paths and opaque plugin states are not accepted.",
+            "Assign a scanned catalog instrument, or add an insert when insert is true, to the current song. The host resolves plugin_id; paths and opaque plugin states are not accepted. An optional format must match the catalog entry's format.",
             object(
-                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"plugin_id":string(),"insert":boolean()}),
+                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"plugin_id":string(),"format":choices(&["VST3","CLAP","LV2","AU"]),"insert":boolean()}),
                 &["session_id", "expected_revision", "track_id", "plugin_id"],
             ),
         ),
@@ -833,7 +870,7 @@ pub fn recording_tool_specs() -> Vec<ToolSpec> {
 /// Full application catalog is available only to explicitly privileged hosts.
 pub fn application_tool_specs() -> Vec<ToolSpec> {
     let audio = object(
-        json!({"device_name":nullable(string()),"input_device_name":nullable(string()),"midi_input_device":nullable(string()),"sample_rate":{"type":"integer","minimum":1},"buffer_frames":{"type":"integer","minimum":1},"resample_quality":choices(&["High","Fast"])}),
+        json!({"audio_host":nullable(json!({"type":"string","description":"Audio driver from get_setup available_devices.hosts, such as ALSA, JACK, WASAPI or ASIO. null selects the platform default. Changing it resets device names and adopts the driver's own sample rate and buffer size unless you also set them."})),"device_name":nullable(string()),"input_device_name":nullable(string()),"midi_input_device":nullable(string()),"sample_rate":{"type":"integer","minimum":1},"buffer_frames":{"type":"integer","minimum":1},"resample_quality":choices(&["High","Fast"])}),
         &[],
     );
     let ai = object(
@@ -848,9 +885,12 @@ pub fn application_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "document_action",
-            "Use the application's guarded New/Open/Save/Save As/Import/Export/Recover pipeline. Paths are accepted only by this explicitly privileged application tool. Unsaved edits are preserved unless discard_unsaved is true. Import beat uses zero-based quarter-note beats.",
+            "Use the application's guarded New/Open/Save/Save As/Import/Export/Recover pipeline. Paths are accepted only by this explicitly privileged application tool. Unsaved edits are preserved unless discard_unsaved is true. Import beat uses zero-based quarter-note beats. Export writes the mix to path as format wav (default, 32-bit float), flac (24-bit default), ogg (quality 0-10, default 5) or mp3 (bitrate_kbps 128/192/256/320, default 192, sample rates up to 48000); sample_rate overrides the audio setup rate. With stems=true, path is an existing folder that receives one file per channel named '<song> - NN <channel>.<ext>' (channels: track ids, default every audio/instrument track; buses and folders may be named), each the song with only that channel audible, all the same length; include_mix adds the full mix, through_master keeps Master processing on each stem, and existing files fail the call unless replace_existing is true. Export runs in the background: the result lists the files it will write, and document_status is pending until they are complete.",
             object(
-                json!({"action":choices(&["new","open","save","save_as","import","export","recover"]),"path":string(),"discard_unsaved":boolean(),"beat":number(),"track_id":id(),"include_tails":boolean()}),
+                json!({"action":choices(&["new","open","save","save_as","import","export","recover"]),"path":string(),"discard_unsaved":boolean(),"beat":number(),"track_id":id(),"include_tails":boolean(),
+                    "format":choices(&["wav","flac","ogg","mp3"]),"bit_depth":choices_int(&[16,24,32]),"quality":{"type":"integer","minimum":0,"maximum":10},
+                    "bitrate_kbps":choices_int(&[128,192,256,320]),"sample_rate":{"type":"integer","minimum":8000,"maximum":192000},
+                    "stems":boolean(),"channels":array(id(),512),"include_mix":boolean(),"through_master":boolean(),"replace_existing":boolean()}),
                 &["action"],
             ),
         ),

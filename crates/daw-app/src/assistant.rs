@@ -538,7 +538,15 @@ impl DawApp {
                 )));
                 return;
             };
-            if !["normalize", "split_transients", "strip_silence"].contains(&op.as_str()) {
+            if ![
+                "normalize",
+                "split_transients",
+                "strip_silence",
+                "quantize",
+                "warp_transients",
+            ]
+            .contains(&op.as_str())
+            {
                 let _ = reply.send(Err(ToolError::new(
                     "invalid_arguments",
                     "Unknown audio processing operation",
@@ -719,7 +727,13 @@ impl DawApp {
                             guarded_tool(|| {
                                 serde_json::from_value::<daw_core::SongEdit>(edit).map_err(|_|ToolError::new("tool_failed","Invalid prepared audio edit"))
                                 .and_then(|edit|self.apply_edits(daw_core::EditBatch{label:format!("Audio: {}",operation.replace('_'," ")),edits:vec![edit]}))
-                                .map(|commit|json!({"changed":commit.changed,"created":commit.created,"operation":operation,"session_id":self.song_session.id,"revision":self.song_session.revision}))
+                                .map(|commit|{
+                                    let mut result = json!({"changed":commit.changed,"created":commit.created,"operation":operation,"session_id":self.song_session.id,"revision":self.song_session.revision});
+                                    if matches!(operation.as_str(), "quantize" | "warp_transients") {
+                                        result["warp"] = value["warp"].clone();
+                                    }
+                                    result
+                                })
                             })
                         };
                         self.assistant.executing_scope = None;
@@ -845,15 +859,16 @@ impl DawApp {
         let name = |value: &str| value.chars().take(80).collect::<String>();
         if !self.assistant.scope.is_global() {
             return format!(
-                "{} BPM · {}/4 · Context stays fixed when selection changes",
-                self.project.tempo, self.project.beats_per_bar,
+                "{} BPM · {} · Context stays fixed when selection changes",
+                self.project.tempo,
+                self.meter_summary(),
             );
         }
         let mut parts = vec![format!(
-            "{} · {} BPM · {}/4",
+            "{} · {} BPM · {}",
             name(&self.project.name),
             self.project.tempo,
-            self.project.beats_per_bar
+            self.meter_summary()
         )];
         if let Some(track) = self.selected_track.and_then(|id| self.project.track(id)) {
             parts.push(format!("Track: {}", name(&track.name)));

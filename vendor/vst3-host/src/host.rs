@@ -234,17 +234,16 @@ impl Vst3Host {
         if !path.exists() {
             return Err(Error::PluginNotFound(path.display().to_string()));
         }
+        // An isolated helper validates the identifier for the bundle's own format.
+        if self.use_process_isolation {
+            return self.load_plugin_isolated(path, Some(class_id));
+        }
         crate::internal::utils::parse_class_uid(class_id).ok_or_else(|| {
             Error::PluginLoadFailed(
                 "class id must be exactly 32 hexadecimal characters".to_string(),
             )
         })?;
-
-        if self.use_process_isolation {
-            self.load_plugin_isolated(path, Some(class_id))
-        } else {
-            self.load_plugin_internal(path, Some(class_id))
-        }
+        self.load_plugin_internal(path, Some(class_id))
     }
 
     /// Probe whether a plugin loads safely, **without risking the host process** — it is

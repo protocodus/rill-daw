@@ -245,6 +245,7 @@ enum TestDocumentDialog {
     ImportAudio,
     Export,
     ExportMidi,
+    ExportStems,
 }
 
 #[derive(Deserialize)]
@@ -373,6 +374,12 @@ impl Harness {
         app.virtual_audio = std::env::var_os("RILL_E2E_VIRTUAL_AUDIO").is_some();
         app.audio_device_enabled =
             app.virtual_audio || std::env::var_os("RILL_E2E_AUDIO_DEVICE").is_some();
+        if let Some(spec) = std::env::var_os("RILL_E2E_AUDIO_HOSTS") {
+            let hosts = crate::audio_driver::VirtualHost::parse_list(&spec.to_string_lossy());
+            if !hosts.is_empty() {
+                app.virtual_hosts = hosts;
+            }
+        }
         // Native editor capture stays opt-in for tests, which supply an
         // isolated helper through DAW_PLUGIN_HOST.
         app.automatic_plugin_previews = std::env::var_os("RILL_E2E_PLUGIN_PREVIEWS").is_some();
@@ -381,12 +388,15 @@ impl Harness {
             ..app.settings.clone()
         };
         app.setup_draft = app.settings.clone();
+        app.reconcile_audio_host();
         // Subprocess tests discover only explicitly supplied fixtures; installed
         // system plug-ins must not change their inventory or launch real code.
         app.plugin_scan_roots = Some(
-            std::env::var_os("VST3_PATH")
-                .map(|paths| std::env::split_paths(&paths).collect())
-                .unwrap_or_default(),
+            ["VST3_PATH", "CLAP_PATH", "LV2_PATH"]
+                .into_iter()
+                .filter_map(std::env::var_os)
+                .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+                .collect(),
         );
         app.refresh_plugins();
         let mut harness = Self {
@@ -1222,6 +1232,7 @@ impl Harness {
                         TestDocumentDialog::ImportAudio => DocumentDialog::ImportAudio,
                         TestDocumentDialog::Export => DocumentDialog::Export,
                         TestDocumentDialog::ExportMidi => DocumentDialog::ExportMidi,
+                        TestDocumentDialog::ExportStems => DocumentDialog::ExportStems,
                     },
                     path,
                     replace_existing,
@@ -1773,6 +1784,10 @@ impl Harness {
         state["popups"]["export"] = json!(self.app.export_open);
         state["export_include_effect_tails"] = json!(self.app.settings.export.include_effect_tails);
         state["export_preferences"] = json!(self.app.settings.export);
+        let mut stem_selection: Vec<_> = self.app.export_stem_selection.iter().collect();
+        stem_selection.sort();
+        state["export_stem_selection"] = json!(stem_selection);
+        state["exported_stems"] = json!(self.app.exported_stems);
         state["audio_import"] = self.app.audio_import_diagnostics();
         state["audio_sources"] = self.app.audio_source_diagnostics();
         state["freeze"] = self.app.freeze_diagnostics();

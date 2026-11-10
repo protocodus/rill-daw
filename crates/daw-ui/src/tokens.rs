@@ -62,6 +62,8 @@ pub const FONT_SCALE: f32 = SPACE_SM + 3.0 * GOLDEN_RATIO_INVERSE;
 pub const TIMELINE_RULER_HEIGHT: f32 = SPACE_XL + SPACE_XS;
 /// One loop strip height for every timeline, directly below the ruler.
 pub const TIMELINE_LOOP_HEIGHT: f32 = SPACE_LG;
+/// Song markers and meter changes below the arranger's loop lane.
+pub const TIMELINE_FLAG_HEIGHT: f32 = SPACE_LG;
 pub const TIMELINE_LOOP_RULER_HEIGHT: f32 = TIMELINE_RULER_HEIGHT + TIMELINE_LOOP_HEIGHT;
 pub const FONT_TRACK: f32 = FONT_BUTTON;
 pub const SWITCH_WIDTH: f32 = 34.0;

@@ -16,6 +16,8 @@ pub struct Settings {
     pub appearance: daw_ui::theme::Appearance,
     pub track_density: daw_ui::TrackDensity,
     pub export: ExportSettings,
+    /// Audio driver (CPAL host), such as JACK or ASIO. None is the platform default.
+    pub audio_host: Option<String>,
     pub device_name: Option<String>,
     pub input_device_name: Option<String>,
     pub midi_input_device: Option<String>,
@@ -39,15 +41,30 @@ pub enum ExportRangeMode {
     Loop,
 }
 
+/// One mix file, or one file per selected channel.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExportWhat {
+    #[default]
+    Mix,
+    Stems,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ExportSettings {
     /// None follows playback; a chosen rate never reconfigures the audio device.
     pub sample_rate: Option<u32>,
+    /// Sample depth for WAV and FLAC.
     pub encoding: daw_engine::WavEncoding,
+    pub format: daw_engine::ExportFormat,
     pub dither: bool,
     pub include_effect_tails: bool,
     pub range_mode: ExportRangeMode,
+    pub what: ExportWhat,
+    /// Stems are taken before Master unless this is on.
+    pub stems_through_master: bool,
+    pub stems_include_mix: bool,
 }
 
 impl Default for ExportSettings {
@@ -55,9 +72,13 @@ impl Default for ExportSettings {
         Self {
             sample_rate: None,
             encoding: daw_engine::WavEncoding::Float32,
+            format: daw_engine::ExportFormat::Wav,
             dither: true,
             include_effect_tails: true,
             range_mode: ExportRangeMode::Arrangement,
+            what: ExportWhat::Mix,
+            stems_through_master: false,
+            stems_include_mix: false,
         }
     }
 }
@@ -112,6 +133,7 @@ impl Default for Settings {
             appearance: daw_ui::theme::Appearance::System,
             track_density: daw_ui::TrackDensity::default(),
             export: ExportSettings::default(),
+            audio_host: None,
             device_name: None,
             input_device_name: None,
             midi_input_device: None,
@@ -155,6 +177,10 @@ impl Settings {
                 .is_none_or(|rate| (8_000..=192_000).contains(&rate)),
             "Invalid export sample rate"
         );
+        self.export
+            .format
+            .validate(daw_engine::WavEncoding::Pcm16, 44_100)
+            .map_err(|_| anyhow::anyhow!("Invalid export format"))?;
         anyhow::ensure!(
             (32..=4096).contains(&self.buffer_frames),
             "Invalid buffer size"
@@ -162,6 +188,12 @@ impl Settings {
         anyhow::ensure!(
             !self.scratch_dir.as_os_str().is_empty(),
             "Choose a scratch directory"
+        );
+        anyhow::ensure!(
+            self.audio_host
+                .as_ref()
+                .is_none_or(|name| !name.trim().is_empty()),
+            "Invalid audio driver name"
         );
         anyhow::ensure!(
             self.device_name
@@ -208,6 +240,7 @@ impl Settings {
     }
     pub fn audio(&self) -> DeviceSettings {
         DeviceSettings {
+            host: self.audio_host.clone(),
             device_name: self.device_name.clone(),
             sample_rate: self.sample_rate,
             buffer_frames: self.buffer_frames,
@@ -356,6 +389,10 @@ mod tests {
                 dither: true,
                 include_effect_tails: false,
                 range_mode: ExportRangeMode::Loop,
+                format: daw_engine::ExportFormat::Mp3 { kbps: 256 },
+                what: ExportWhat::Stems,
+                stems_through_master: true,
+                stems_include_mix: true,
             },
             ..directory.settings()
         };

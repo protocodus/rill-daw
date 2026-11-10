@@ -27,7 +27,7 @@ Audio stretching and transposition compile pinned, vendored Signalsmith Stretch/
 
 Signalsmith's MIT licenses and source provenance ship in `licenses/signalsmith-stretch/`. Bungee Basic and Eigen retain MPL-2.0, with PFFFT's UCAR/NCAR license and Eigen's accompanying notices. Rill's separate source remains MIT. `scripts/native_dsp_licenses.py` includes exact covered source, notices and pinned revision/checksum records in a reproducible `licenses/bungee-basic/source.zip`, alongside readable notices. Every release archive includes these files; standalone macOS bundles include them under `Contents/Resources/licenses/` as well. Preserve these materials when redistributing binaries. Vendored source has `-text` attributes so Windows checkout does not alter the recorded source bytes.
 
-Install Rust 1.92 or newer, Python 3, and the platform's normal Rust native build tools. Linux additionally needs `pkg-config`, `libasound2-dev`, `libudev-dev`, `libxkbcommon-dev`, and `libwayland-dev`. Run from the repository:
+Install Rust 1.92 or newer, Python 3, and the platform's normal Rust native build tools. Linux additionally needs `pkg-config`, `libasound2-dev`, `libjack-jackd2-dev` (the JACK client headers and `jack.pc`; the library itself is loaded at run time), `libudev-dev`, `libxkbcommon-dev`, and `libwayland-dev`. Run from the repository:
 
 ```sh
 # Native macOS or Linux archive and checksum:
@@ -44,9 +44,31 @@ The scripts build the full locked workspace in release mode. Both executable and
 
 `scripts/package-macos.sh` writes `dist/Rill.app`; the release ZIP includes that bundle and its surrounding documentation. Move the app to Applications and keep its contents intact. These builds have no Developer ID signature or notarization, so macOS may require first-launch approval in Privacy & Security.
 
-For Linux, extract the archive and run `./rill`, keeping `daw-plugin-host` beside it. CI uses Ubuntu 22.04, giving the packaged binaries a glibc 2.35 baseline. Desktop use requires a graphical session, an OpenGL-capable driver, the C++ standard library, and ALSA, udev, xkbcommon, and Wayland client runtime libraries. On Ubuntu 22.04 install `libstdc++6 libasound2 libudev1 libxkbcommon0 libwayland-client0 libgl1`; Ubuntu 24.04 names the ALSA package `libasound2t64`. Locally built archives inherit their build machine's runtime baseline.
+For Linux, extract the archive and run `./rill`, keeping `daw-plugin-host` beside it. CI uses Ubuntu 22.04, giving the packaged binaries a glibc 2.35 baseline. Desktop use requires a graphical session, an OpenGL-capable driver, the C++ standard library, and ALSA, udev, xkbcommon, and Wayland client runtime libraries. On Ubuntu 22.04 install `libstdc++6 libasound2 libudev1 libxkbcommon0 libwayland-client0 libgl1`; Ubuntu 24.04 names the ALSA package `libasound2t64`. Locally built archives inherit their build machine's runtime baseline. The JACK driver choice needs nothing at install time: `libjack` is opened with `dlopen` only when the JACK driver is selected, so the binary starts on machines without JACK (`ldd` and `readelf -d` list no `libjack`). Install `libjack-jackd2-0` or `pipewire-jack` to use it; without them JACK reports no devices.
 
 For Windows, extract the complete archive and launch `rill.exe`, keeping `daw-plugin-host.exe` beside it. Windows 10/11 x64 and an OpenGL-capable driver are required. CI statically links the application's MSVC C runtime; installed plug-ins may have their own runtime requirements. The application is not Authenticode signed. No installer, registry writes, or administrator access are needed to unpack the distribution.
+
+Native VST3 and CLAP editors on Linux require X11 or XWayland. Thumbnail capture also needs the XRes and Composite extensions on that display.
+
+LV2 hosting on Linux loads the system lilv library (`liblilv-0.so.0`) at run time; it is not bundled or linked, so the archive starts without it. Install `liblilv-0-0` (Ubuntu/Debian) to use LV2 plug-ins; without it LV2 bundles fail to scan or load with an error that names the package. CI and `Dockerfile.e2e` install it for the LV2 tests. CLAP needs no extra runtime, and Audio Units (macOS) use the system AudioToolbox and CoreAudioKit frameworks. Plug-ins of every format must match the application's CPU architecture.
+
+### ASIO in Windows builds
+
+Setup → Audio offers ALSA/JACK, WASAPI, or CoreAudio drivers as the platform provides. On Windows the Steinberg ASIO driver is behind the `asio` cargo feature. Ordinary `cargo build` and the CI test steps leave it off; `package-windows.ps1`, and therefore every Windows CI artifact and release archive, turns it on.
+
+```powershell
+# Requires LLVM (libclang for bindgen) and the MSVC build tools.
+winget install LLVM.LLVM
+$env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
+# Optional: a local copy of the ASIO SDK. Without it the build downloads
+# the SDK from https://www.steinberg.net/asiosdk into %TEMP%\asio_sdk.
+$env:CPAL_ASIO_DIR = "C:\sdk\asiosdk"
+cargo build --locked --release --workspace --features daw-app/asio
+```
+
+`asio-sys` compiles the SDK's C++ host sources and runs bindgen on its headers, hence the SDK and LLVM. The feature only adds a driver to the list; the same executable still runs without any ASIO driver installed.
+
+Licensing: Steinberg offers the ASIO SDK under its proprietary agreement or the GPL version 3. Rill uses the GPL option. Rill's source stays MIT, which is GPL-compatible, but a Windows executable that links the SDK is a combined work distributed under the GPL version 3. The Windows archive therefore carries `licenses/asio-sdk/` (from `vendor/asio-notice/`) with the GPL text and a notice, and `INSTALL.txt` says so. The SDK itself is never committed. macOS and Linux archives contain no ASIO code and are unaffected. "ASIO" is a Steinberg trademark. ASIO has been compiled only by CI and has not been run against an audio interface.
 
 Native VST3 editors on Linux require X11 or XWayland. Thumbnail capture also needs the XRes and Composite extensions on that display.
 

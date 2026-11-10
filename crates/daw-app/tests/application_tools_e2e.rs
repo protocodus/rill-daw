@@ -239,7 +239,11 @@ fn privileged_documents_import_save_export_and_open_without_weakening_song_tools
         json!({"action":"recover","discard_unsaved":true}),
     );
     assert_ok(&recovery);
-    assert_eq!(recovery["project"]["name"], "Unsaved tool edit");
+    assert_eq!(
+        recovery["project"]["name"], "Unsaved tool edit",
+        "status: {} error: {}",
+        recovery["status"], recovery["error"]
+    );
     assert_eq!(recovery["modified"], true);
     let status = application(&mut app, "document_status", json!({}));
     assert_ok(&status);

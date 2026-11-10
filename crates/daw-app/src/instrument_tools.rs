@@ -149,6 +149,7 @@ impl DawApp {
         result["track_id"] = json!(track_id);
         result["clip_id"] = json!(clip_id);
         result["plugin_id"] = json!(args.plugin_id);
+        result["format"] = json!(used_plugin.format.label());
         result["instrument_name"] = json!(instrument_name);
         if unverified {
             result["warning"] = json!("Instrument support will be verified when the plug-in loads");

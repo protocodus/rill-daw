@@ -222,7 +222,7 @@ The renderer uses 256-frame processing blocks. WAV files are decoded before proc
 
 Audio samples and plugin buffers use `f32`; overlapping sources, bus inputs and Master mix points accumulate in `f64`. Sources at or above 32 MiB of decoded PCM, or with a large derived footprint, use seekable disk-backed audio. Small resident sources retain the 1 GiB session PCM-cache ceiling. Each streaming track reserves two reusable windows plus reader state, at most 256 KiB; a process-wide 64 MiB reservation budget covers current, pending and offline graphs together. `daw-core::AudioFile` uses a 32-file-descriptor LRU. Canonical source identities and processing variants share immutable assets without sharing a mutable playback cursor. These audio-cache budgets do not bound total application or native plug-in memory.
 
-High quality uses filtered rate conversion with latency trimming; Fast uses linear conversion. Same-rate unprocessed sources bypass conversion. Large rate-converted, Signalsmith-stretched and Bungee-stretched variants are prepared into full-quality, exact-length private PCM disk caches in cancellable chunks. Preparation can take time and additional disk space; it does not promise an instant uncached stretch. Playback and export use the same quality choices. File reads, conversion and cache writes run on graph/preparation workers, never the CPAL callback; cold or slow storage can still underrun the output queue. Changed, truncated or nonfinite source reads fail offline rendering before destination replacement; live failures latch/report the affected path for Retry while retaining the project. Mono clips duplicate to stereo, while legacy multichannel sources retain the first-two-channel mapping. The current RIFF/float-WAV pipeline remains bounded near 4 GiB per source; it is not RF64 or unlimited-length media. Automatic tempo-following warp markers remain absent. Audio offsets use beats at the current project tempo.
+High quality uses filtered rate conversion with latency trimming; Fast uses linear conversion. Same-rate unprocessed sources bypass conversion. Large rate-converted, Signalsmith-stretched and Bungee-stretched variants are prepared into full-quality, exact-length private PCM disk caches in cancellable chunks. Preparation can take time and additional disk space; it does not promise an instant uncached stretch. Playback and export use the same quality choices. File reads, conversion and cache writes run on graph/preparation workers, never the CPAL callback; cold or slow storage can still underrun the output queue. Changed, truncated or nonfinite source reads fail offline rendering before destination replacement; live failures latch/report the affected path for Retry while retaining the project. Mono clips duplicate to stereo, while legacy multichannel sources retain the first-two-channel mapping. The current RIFF/float-WAV pipeline remains bounded near 4 GiB per source; it is not RF64 or unlimited-length media. Audio clips may carry a warp-marker map: the engine converts it to source/output frame knots and drives one continuous Signalsmith or Bungee stretcher through it, so markers add no seams and pitch stays independent; the knots are part of the prepared-variant key, normalized to the source start so split pieces share one preparation. Automatic tempo-following warp remains absent. Audio offsets use beats at the current project tempo.
 
 Normalization, transient detection, Strip silence and scoped AI audio analysis
 reuse bounded seekable source reads rather than decoding a whole parent file.
@@ -247,6 +247,8 @@ When only one node is ready, no worker task is in flight, and that node has no V
 The render coordinator runs ahead of the device callback, and graph/helper threads can perform blocking IPC, file reads and control work. They retain ordinary OS scheduling. A future dedicated real-time DSP lane needs explicit ownership, bounded operations and a measured deadline before adopting platform scheduling APIs. In particular, Apple's [asynchronous audio workgroups](https://developer.apple.com/documentation/audiotoolbox/adding-asynchronous-real-time-threads-to-audio-workgroups) require a custom interval with the queue-refill deadline; the device workgroup is for threads synchronized to the device callback. Cross-process workgroups additionally require Mach-port transfer. Windows [MMCSS](https://learn.microsoft.com/en-us/windows/win32/procthread/multimedia-class-scheduler-service) and Linux [backend thread scheduling](https://docs.pipewire.org/page_module_rt.html) likewise belong to suitable dedicated threads. Increasing priorities or pinning mixed workers to cores cannot remove blocking dependencies.
 
 A preallocated single-producer/single-consumer queue transfers stereo frames and their musical positions from the coordinator to the CPAL callback. Its capacity is two requested device buffers, with a minimum of 512 frames. The producer publishes each complete 256-frame block with one release store, rather than publishing every sample separately. Full-queue polling backs off by a quarter render block, bounded to 0.125–1 ms, reducing worker wakeups at ordinary sample rates while preserving refill headroom. Generation tags discard queued audio after a seek.
+
+Output, input and device enumeration share one CPAL host chosen by `DeviceSettings::host` (None is the platform default; `audio_host.rs` resolves it through `cpal::available_hosts`/`host_from_id`). JACK is compiled in on Linux with CPAL's `jack` feature, which loads `libjack` at run time; the JACK server dictates sample rate and buffer size, so those are reported as a single rate and an equal min/max buffer range. The `asio` feature, enabled by Windows packaging, adds ASIO on Windows, whose single-device model makes capture follow the output device.
 
 The default remains 256 device frames at 48 kHz. Audio Setup's explicit **Recommended** action chooses a power-of-two buffer with at least the same scheduling budget (256 at 44.1/48 kHz, 512 at 88.2/96 kHz, 1024 at 176.4/192 kHz). This is a balanced starting point for Apple Silicon MacBooks and other modern computers, not a hardware benchmark or a guarantee for every plug-in graph. Manual choices remain saved and are never silently changed. The latency hint uses the engine's actual queue sizing, including the 512-frame floor for 64/128-frame device buffers. Physical device and third-party plug-in latency remain additional.
 
@@ -324,11 +326,11 @@ Projects persist each instrument's optional VST3 class ID, opaque state (at most
 
 `PluginCatalog` stores validated PNG captures and metadata under the platform's Rill cache directory (`RILL_CACHE_DIR` overrides it). SHA-256 fingerprints cover the canonical bundle path, selected class, metadata, and bundle file sizes/modification times. Capture writes a temporary image, validates dimensions and pixels, then atomically publishes the image and record. Failed captures are recorded and do not retry on every frame. `plugin-index-v1.json` in the same directory persists the last scanned catalog, first-indexed times and preview status; thumbnails are referenced by fingerprint, never by a stored path. `daw_plugins::sync::CatalogSync` owns one background worker: it publishes the index first, rescans the configured folders, writes the index, and then captures missing previews of verified instruments/effects one at a time, with explicit captures ahead of the queue. The UI only reads its snapshots, status and errors; it starts a sync at launch, on **Refresh** and after plug-in folder changes. macOS captures the editor view; Windows captures the helper-owned window; Linux uses XRes ownership and XComposite offscreen pixels. No synthetic image stands in for an unavailable native editor.
 
-VST3 remains the only hosted plug-in format. Stored UMP/per-note performance data does not imply raw UMP transport through VST3 or support for every expression/controller in every plug-in. Unsupported target mappings require a visible advisory while original data remains saved. Live latency renegotiation and a standalone preset browser remain unimplemented.
+Plug-in formats: VST3 and CLAP on every platform, LV2 on Linux, Audio Units on macOS; see "Plug-in formats" below. Stored UMP/per-note performance data does not imply raw UMP transport through any plug-in format or support for every expression/controller in every plug-in. Unsupported target mappings require a visible advisory while original data remains saved. Live latency renegotiation and a standalone preset browser remain unimplemented.
 
 ## Scope and verification
 
-This implementation supplies audio recording/takes, expressive MIDI project data, editing/playback, note-only Standard MIDI delivery with an explicit downgrade decision, device selection, dry monitoring, multi-bus VST3 routing, Master processing, reversible Freeze, disk-backed large-audio playback and stereo WAV delivery. Tempo maps, surround/immersive routing and hosting VST2/AU/CLAP/LV2/AAX remain unimplemented. ARA requires a separate document/random-access integration.
+This implementation supplies audio recording/takes, expressive MIDI project data, editing/playback, note-only Standard MIDI delivery with an explicit downgrade decision, device selection, dry monitoring, multi-bus VST3 routing, Master processing, reversible Freeze, disk-backed large-audio playback and stereo WAV delivery. Tempo maps, surround/immersive routing and hosting VST2/AAX remain unimplemented; Audio Unit hosting (macOS) is implemented but validated only by the macOS CI suites. ARA requires a separate document/random-access integration.
 
 Audio import supports PCM/32-bit float WAV, MP3, FLAC and OGG/Vorbis. A one-shot `--decode-audio-worker` process decodes outside the UI/audio-device process, using Hound for WAV and pinned Symphonia for compressed sources. Successful decoding produces a finalized 32-bit float WAV at the source sample rate; originals are never replaced. Imports support mono/stereo at 8–384 kHz, with a per-source canonical decoded limit of `u32::MAX - 4096` bytes and an 8 GiB batch budget. This remains a bounded RIFF pipeline, not RF64 support. Batch supervision discards failed, canceled or stale assets before a project edit. Codec errors, nonfinite samples, inconsistent durations, corrupt OGG pages/checksums and partial MPEG frames fail admission. Metadata/packet allocations are bounded; artwork, chained/multiple OGG streams and free-format MP3 are unsupported. These checks contain tested failures rather than establishing a general security sandbox. No external FFmpeg executable is needed at runtime.
 
@@ -386,3 +388,74 @@ cargo test --release -p daw-engine --lib native_prepared_graph_uses_automatic_wo
 ```
 
 A separate 250 ms playback smoke check on the available 48 kHz CPAL device reported zero underruns and zero render errors. That short check verifies device integration; it is not a sustained driver stability test or a plugin throughput benchmark.
+
+## Plug-in formats
+
+A plug-in reference stays a bundle path plus an optional class identifier; the
+format follows the bundle extension (`.vst3`, `.clap`, `.lv2`, or the Audio
+Unit locator below), so persisted
+projects, settings and catalog records without a format remain VST3. The model's
+`Instrument::Vst3`/`Effect::Vst3` variants keep their historic name and hold any
+format; `daw_plugins::PluginFormat` names it, validates its identifier (a 32-hex
+VST3 class ID, a CLAP plug-in ID, an LV2 URI, an Audio Unit's four-character
+codes) and lists its standard folders (`VST3_PATH`, `CLAP_PATH`, `LV2_PATH`).
+
+Everything engine-facing is format-neutral: `VstInstrument`/`VstEffect` drive the
+`daw-plugin-host` helper through the existing `vst3_host::process_isolation`
+protocol, shared-memory PCM and block batching. Inside the helper,
+`native::NativeProcessor` is the seam; `native::load` picks the adapter by
+extension:
+
+- **VST3** forwards to `vst3_host::Plugin`.
+- **CLAP** (`clap.rs`, `clack-host`) runs every call on the helper's main thread,
+  reports the audio thread to `thread-check` during processing, maps normalized
+  wire values to plain parameter ranges, sends notes as CLAP note events (MIDI when
+  the port only speaks MIDI), translates VST3 note-expression IDs, and services
+  timers, POSIX fds, flush and restart requests between commands.
+- **LV2** (`lv2.rs`, Linux) opens `liblilv-0.so.0` at run time with `libloading`,
+  maps control ports to parameters (port index = parameter ID), atom MIDI input,
+  main/`isSideChain` audio buses, URID map/unmap, options and a synchronous
+  worker (requests from `run` are served after it, responses delivered before the
+  next block). State is lilv's Turtle serialization of port values and the state
+  extension. Control changes split the block at their offsets.
+- **AU** (`au.rs`, macOS) uses the AUv2 C API in AudioToolbox
+  (`objc2-audio-toolbox`), which also opens AUv3 extensions through Apple's
+  component bridge. It instantiates asynchronously while pumping the main run
+  loop (15 s deadline), configures every input/output element as non-interleaved
+  float32 at the host rate, feeds inputs through render callbacks, and reports
+  beat/tempo/transport through the host callbacks. Parameters are the global-scope
+  `AudioUnitParameterID`s with their plain ranges; changes and MIDI
+  (`MusicDeviceMIDIEvent`) split the block at their offsets, parameter before note
+  at the same offset. Latency/tail come from their properties and change
+  notifications. State is `kAudioUnitProperty_ClassInfo` serialized as a binary
+  property list (`bplist00`) in the opaque state field. MIDI-controlled effects
+  (`aumf`) are listed and hosted as effects; inserts send them no MIDI.
+
+CLAP and LV2 bundles are scanned by `daw-plugin-host --scan <bundle>` (one
+disposable process per bundle, 15 s deadline); the parent overwrites any path or
+format a plug-in echoes. CLAP editors run in the editor helper's CLAP loop
+(`editor_clap.rs`) inside the same `vst3_host::HostWindow` as VST3 editors, so
+capture, close and resize behave identically; LV2 editors are refused with "This
+plug-in has no native editor" and the app's generic parameter browser is used.
+A further format adds one adapter module, one `PluginFormat` variant and one arm
+in `native::load`.
+
+Audio Units have no file per plug-in: the system component registry is their
+bundle. Every AU reference therefore uses one locator,
+`/System/Library/Frameworks/AudioToolbox.framework`, and the class ID
+`type:subtype:manufacturer` (`aufx:dely:appl`; a code that is not printable ASCII
+or contains `:` is written `0x` plus eight hex digits). The locator is a real
+path on every Mac, so existing path checks hold without a fake extension, no
+plug-in folder contains it, and the format is detected by exact path equality.
+`daw-core` repeats the constant to validate IDs without depending on
+`daw-plugins`. The class ID is the component's stable identity across
+reinstalls and AUv2/AUv3 versions; a display name or bundle path is not. Scanning
+the locator runs one disposable helper that enumerates instrument (`aumu`),
+effect (`aufx`) and MIDI-controlled effect (`aumf`) components (at most 4,096,
+skipping any whose description cannot be read). Catalog fingerprints of AUs hash
+the identity, name, vendor, category and version instead of bundle files. The
+editor is the unit's `kAudioUnitProperty_CocoaUI` view, or CoreAudioKit's
+`AUGenericView`, embedded in the `HostWindow` view; parameter gestures and edits
+arrive through an `AUEventListener`. On other platforms the locator lists nothing
+and loading reports that Audio Units are macOS-only.
+

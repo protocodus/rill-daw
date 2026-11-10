@@ -266,7 +266,7 @@ fn wav_export_warns_for_visible_unassigned_notes_and_allows_cancel_or_explicit_e
                 .any(|text| text
                     .as_str()
                     .unwrap_or_default()
-                    .contains("These notes will be silent in the WAV"))
+                    .contains("These notes will be silent in the exported audio"))
         );
         let cancelled = app.click("Cancel");
         assert_eq!(cancelled["file_dialog_pending"], true);

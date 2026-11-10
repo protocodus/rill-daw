@@ -67,7 +67,7 @@ fn decode(encoded: &str) -> Vec<f32> {
     }
     bytes
         .as_chunks::<4>().0.iter()
-        .map(|v| f32::from_le_bytes(v.try_into().unwrap()))
+        .map(|v| f32::from_le_bytes(*v))
         .collect()
 }
 #[derive(Clone, Copy)]

@@ -63,12 +63,12 @@ pub struct CurveResponse {
     pub segment_handles: Vec<CurveSegmentHandle>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct CurveTimeline {
     pub snap: f64,
     pub height: f32,
     pub tempo: f64,
-    pub beats_per_bar: u8,
+    pub meter: crate::MeterMap,
     pub fit: bool,
     /// Route view shortcuts here when this is the foreground editor.
     pub keyboard_active: bool,
@@ -360,7 +360,7 @@ fn curve_editor_inner(
         });
     let grid_meter = timeline
         .as_ref()
-        .map(|(_, timeline)| timeline.beats_per_bar);
+        .map(|(_, timeline)| timeline.meter.clone());
     let top_inset = crate::tokens::SPACE_MD
         + if musical {
             crate::tokens::TIMELINE_RULER_HEIGHT
@@ -455,7 +455,7 @@ fn curve_editor_inner(
         // A new lane has only its initial point. Leave a full bar to draw into
         // instead of magnifying a fraction of a beat around that point.
         let last = if points.len() == 1 {
-            first + f64::from(timeline.beats_per_bar.max(1))
+            first + f64::from(timeline.meter.meter_at(first))
         } else {
             last
         };
@@ -502,7 +502,7 @@ fn curve_editor_inner(
             ),
             *viewport,
             timeline.tempo,
-            timeline.beats_per_bar,
+            &timeline.meter,
         );
         *viewport
     });
@@ -531,9 +531,9 @@ fn curve_editor_inner(
             theme::palette(ui.ctx()).muted,
         );
     }
-    if let (Some(viewport), Some(beats_per_bar)) = (viewport, grid_meter) {
+    if let (Some(viewport), Some(meter)) = (viewport, grid_meter) {
         // Bars, beats and snap steps use the same grid as the clip editors.
-        crate::paint_beat_grid(&painter, plot, viewport, view.snap, beats_per_bar);
+        crate::paint_beat_grid(&painter, plot, viewport, view.snap, &meter);
     }
     let tick = ((end - start) / 12.0).ceil().max(1.0);
     let mut x = (start / tick).ceil() * tick;

@@ -51,7 +51,13 @@ execution must derive from the canonical registry rather than separate lists.
 | `daw-ui::assistant` | Shared provider-independent transcript/composer, reused by the app's assistant view |
 
 The registry provides current-song tools and an application-profile extension,
-with typed `SongEdit` variants available through `apply_edits`.
+with typed `SongEdit` variants available through `apply_edits`, including
+`set_meter_change`, `move_meter_change`, `remove_meter_change`, `add_marker`
+(with an optional `key` for later edits in the same batch), `rename_marker`,
+`move_marker`, `remove_marker` and `set_warp_markers` (replaces an audio clip's
+whole warp-marker list atomically; an empty list clears it, and an invalid map is
+rejected without changing the song). `get_clip` reports an audio clip's
+`warp_markers` and warp-aware `source_end`.
 Its high-level operations avoid one call per
 note, control, or input assignment. This is substantial current-song coverage,
 not complete migration of every GUI action in the inventory below. Source tool
@@ -59,13 +65,13 @@ discovery remains authoritative as the catalog expands.
 
 | Tool family | Registered tools and behavior |
 | --- | --- |
-| Song reads | `get_song_context`, `list_tracks`, `get_track`, `get_clip`, `get_note_expressions`: session/revision, paginated structural and exact expression data, note data, and nondestructive clip settings |
+| Song reads | `get_song_context`, `list_tracks`, `get_track`, `get_clip`, `get_note_expressions`: session/revision, meter changes with their start beats, markers, paginated structural and exact expression data, note data, and nondestructive clip settings |
 | Scope and history | `get_selection`, `set_selection`, `history`: choose objects by stable IDs without changing view; read/undo/redo normal song history |
 | Composition theory | `composer_catalog`, `composer_scale`, `composer_chord`, `composer_progression`, `composer_euclidean`: native, bounded theory queries adapted from midi-composer-mcp; no song edits |
 | Multi-part composition | `compose_progression`: create chord, arpeggio, and bass clips together in one fenced, undoable commit; reuse existing MIDI tracks or create new ones |
 | Musical edits | `apply_edits`, `create_midi_part`, `generate_part`, `transform_phrase`, `set_mix`, `join_clips`: atomic typed batches, complete patterns, seeded generation, phrase transforms, multi-channel settings, and MIDI/audio consolidation |
-| Instruments | `list_plugins`, `organize_plugin`, `assign_plugin`, `create_instrument_part`, `plugin_describe_parameters`: discover catalog IDs with favorites and categories (optionally rescanning plug-in folders), organize the library, assign instruments/inserts, create notes plus instrument in one commit, and inspect actual parameter metadata |
-| Audio | `audio_analyze`, `audio_analyze_clip`, `audio_process_clip`: measure a rendered excerpt; analyze source regions and propose edits; normalize, split at transients, or strip silence with one checked background operation |
+| Instruments | `list_plugins`, `organize_plugin`, `assign_plugin`, `create_instrument_part`, `plugin_describe_parameters`: discover catalog IDs with favorites, categories and plug-in format (`VST3`, `CLAP`, `LV2`, `AU`; optional `format` filter, optionally rescanning plug-in folders), organize the library, assign instruments/inserts (an optional `format` must match the catalog entry), create notes plus instrument in one commit, and inspect actual parameter metadata |
+| Audio | `audio_analyze`, `audio_analyze_clip`, `audio_process_clip`: measure a rendered excerpt; analyze source regions and propose edits; normalize, split at transients, strip silence, place warp markers at transients (`warp_transients`) or quantize audio toward a grid (`quantize`, with `grid_beats`, `strength` and `max_move_beats`; the result reports `warp.moved`, `largest_move_beats` and `largest_move_ms`) with one checked background operation |
 | Transport | `transport`: inspect, play, pause, stop, or seek the active song |
 | Recording | `get_recording`, `configure_recording`, `start_recording`, `stop_recording`, `retry_recording_input`: inspect phase, bulk-configure inputs/arming/monitoring/placement/timing, capture, finalize, and recover inputs through the existing recording lifecycle |
 | Application profile only | `document_status`, `document_action`, `get_setup`, `configure_setup`: explicit project/media I/O and global configuration, with redacted credential reads and guarded document replacement |
@@ -114,8 +120,8 @@ project editor.
 Launch `rill --mcp-application` only when intentionally giving an external MCP
 client the additional project I/O and configuration tools. This broader profile
 is separate from the embedded assistant, which receives the current-song
-catalog or a narrower editor-specific subset. `document_action` supports New, Open, Save/Save as, media Import, WAV
-Export, and recovery with explicit paths instead of file-picker interaction.
+catalog or a narrower editor-specific subset. `document_action` supports New, Open, Save/Save as, media Import, audio
+Export (WAV, FLAC, Ogg Vorbis or MP3, or `stems:true` with `channels`, `include_mix`, `through_master`, `replace_existing`; the result lists the written files), and recovery with explicit paths instead of file-picker interaction.
 Replacing unsaved work requires `discard_unsaved:true`; native-editor snapshots
 are still acknowledged, and newly revealed changes cause rejection rather than
 a confirmation dialog. Operations may report acceptance before background work
@@ -145,7 +151,7 @@ missing target fails closed instead of falling back to global authority.
 | Context | Permitted local work |
 | --- | --- |
 | Piano roll / MIDI clip / clip composition | Read the pinned clip, query music theory, transform notes and edit in-place clip properties. |
-| Audio clip | Read and analyze the pinned region; edit its in-place properties, gain and fades; normalize it using local analysis. |
+| Audio clip | Read and analyze the pinned region; edit its in-place properties, gain, fades and warp markers; normalize or quantize it, or place warp markers at its transients, using local analysis. |
 | Instrument | Discover and edit parameters of the opened instrument instance and its matching automation. |
 | Effect | Discover and edit the pinned insert's parameters, bypass and matching automation. |
 | Effect chain | Add, remove, reorder and adjust inserts on the pinned channel and their matching automation. |
@@ -241,6 +247,9 @@ storage, VST-directory, and AI settings through the normal settings apply path.
 clients can select actual IDs/names without opening Setup or a device stream.
 Audio inventory includes channel counts, supported sample rates, and default
 flags; MIDI ports expose their stable selectable IDs and names.
+`get_setup` lists the audio drivers (`available_devices.hosts`) and each device's buffer range;
+`configure_setup` `audio.audio_host` selects one (null is the platform default), resets the device
+names and adopts a server-dictated driver's sample rate and buffer unless given.
 An omitted device selector preserves it; explicit null clears it. API key input
 is encrypted and its temporary parsed string is cleared. `get_setup` reports
 only whether a key is configured, never plaintext or encrypted secret data.
@@ -278,7 +287,7 @@ functionality must add its tool mapping in the same change.
 | Tracks, buses, folders | Create/remove/reorder; rename/color; folder membership; mute/solo; gain/pan | `model.rs`, `routing.rs`, `app.rs`, `arrangement.rs` |
 | Arrangement clips | Create/move/trim/stretch/split/duplicate/delete; ghost copy/unlink; join/consolidate | `model.rs`, `clip_links.rs`, `join.rs`, `arrangement.rs`, `join_ui.rs` |
 | MIDI composition/editing | Bulk note insertion/replacement/deletion; move/resize/transpose/velocity; fixed/additive lengths; exact velocity, pitch and expression edits; cut/copy/paste; split/glue; humanize; quantize; both legato modes; generation | `midi_edit.rs`, `midi_batch.rs`, `midi2.rs`, `midi_generate.rs`, `chords.rs`, `midi_editor.rs`, `midi_expression.rs`, `midi_generate_ui.rs` |
-| Audio regions | Range copy/cut/paste/duplicate/delete; gap/ripple delete; slip/nudge; clip gain/fades/crossfade; reverse; stretch/pitch; silence removal | `audio_edit.rs`, `audio_processing.rs`, `audio_silence.rs`, `audio_editor.rs`, `crossfade_ui.rs` |
+| Audio regions | Range copy/cut/paste/duplicate/delete; gap/ripple delete; slip/nudge; clip gain/fades/crossfade; reverse; stretch/pitch; warp markers and audio quantize; silence removal | `audio_edit.rs`, `audio_processing.rs`, `audio_silence.rs`, `audio_editor.rs`, `crossfade_ui.rs` |
 | Takes and comping | Inspect alternatives; choose whole/range takes; comp boundaries; overdub layer; retain/discard alternatives | `audio_takes.rs`, `audio_takes_ui.rs` |
 | Instruments and effects | Discover/select instance; inspect/set parameters; preset/state edits; insert/remove/reorder/bypass | `daw-plugins`, `plugin_ui.rs`, `library.rs` |
 | Routing and mixing | Main outputs; sends and levels; insert chains; bus structure; channel gain/pan/mute/solo | `routing.rs`, `daw-app/src/routing.rs`, `editor.rs` |

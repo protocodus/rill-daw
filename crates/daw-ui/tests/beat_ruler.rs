@@ -30,7 +30,7 @@ fn render(ctx: &Context, rect: Rect, start: f64, scale: f32, meter: u8) -> Ruler
                     ..Default::default()
                 },
                 100.0,
-                meter,
+                &daw_ui::MeterMap::uniform(meter),
             );
         },
     );

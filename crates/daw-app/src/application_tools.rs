@@ -43,6 +43,27 @@ struct DocumentArgs {
     track_id: Option<u64>,
     #[serde(default = "include_tails")]
     include_tails: bool,
+    /// Export: "wav" (default), "flac", "ogg" or "mp3".
+    format: Option<String>,
+    /// Export: 16 or 24 for WAV and FLAC, 32 (float) for WAV only.
+    bit_depth: Option<u16>,
+    /// Export: Ogg Vorbis quality, 0 to 10.
+    quality: Option<u8>,
+    /// Export: MP3 bitrate in kbit/s.
+    bitrate_kbps: Option<u16>,
+    sample_rate: Option<u32>,
+    /// Export: write one file per channel into the folder given as path.
+    #[serde(default)]
+    stems: bool,
+    /// Export stems: channel ids; default every audio/instrument track.
+    channels: Option<Vec<u64>>,
+    #[serde(default)]
+    include_mix: bool,
+    #[serde(default)]
+    through_master: bool,
+    /// Export stems: replace files that already exist.
+    #[serde(default)]
+    replace_existing: bool,
 }
 fn include_tails() -> bool {
     true
@@ -51,6 +72,7 @@ fn include_tails() -> bool {
 #[derive(Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]
 struct AudioPatch {
+    audio_host: Patch<Option<String>>,
     device_name: Patch<Option<String>>,
     input_device_name: Patch<Option<String>>,
     midi_input_device: Patch<Option<String>>,
@@ -89,7 +111,7 @@ fn required_path(value: Option<&str>) -> Result<PathBuf, ToolError> {
 }
 fn redacted_setup(settings: &Settings) -> Value {
     json!({
-        "audio":{"device_name":settings.device_name,"input_device_name":settings.input_device_name,
+        "audio":{"audio_host":settings.audio_host,"device_name":settings.device_name,"input_device_name":settings.input_device_name,
             "midi_input_device":settings.midi_input_device,"sample_rate":settings.sample_rate,
             "buffer_frames":settings.buffer_frames,"resample_quality":settings.resample_quality},
         "scratch_dir":settings.scratch_dir,"vst_dirs":settings.vst_dirs,
@@ -125,13 +147,21 @@ impl DawApp {
                 // The shared helper also refreshes audio inputs and MIDI ports.
                 self.refresh_devices();
                 let mut result = redacted_setup(&self.settings);
+                let chosen = crate::audio_driver::driver_name(
+                    &self.audio_hosts,
+                    self.settings.audio_host.as_deref(),
+                );
                 let audio_device = |device: &daw_engine::DeviceInfo| {
                     json!({
                         "name":device.name,"is_default":device.is_default,
-                        "channels":device.channels,"supported_sample_rates":device.supported_sample_rates
+                        "channels":device.channels,"supported_sample_rates":device.supported_sample_rates,
+                        "buffer_frames":device.buffer_frames.map(|(min,max)| json!({"min":min,"max":max}))
                     })
                 };
                 result["available_devices"] = json!({
+                    "hosts":self.audio_hosts.iter().map(|host| json!({
+                        "name":host.name,"is_default":host.is_default,"selected":host.name==chosen
+                    })).collect::<Vec<_>>(),
                     "outputs":self.devices.iter().map(audio_device).collect::<Vec<_>>(),
                     "inputs":self.input_devices.iter().map(audio_device).collect::<Vec<_>>(),
                     "midi":self.recording.midi_ports.iter().map(|port| json!({
@@ -165,7 +195,8 @@ impl DawApp {
             "pending":self.project_io_pending() || self.state_sync_pending()
                 || self.export_job.is_some() || self.loading.is_some() || self.document_guard.is_some()
                 || self.audio_import_busy() || self.freeze_busy(),
-            "recording":self.recording_busy(),"status":self.status,"error":self.error
+            "recording":self.recording_busy(),"status":self.status,"error":self.error,
+            "exported_files":self.exported_files
         })
     }
 
@@ -184,6 +215,7 @@ impl DawApp {
         }
         self.flush_pending_edit();
         self.error = false;
+        let mut files = None;
         match args.action.as_str() {
             "new" => self
                 .request_tool_document_transition(DocumentTransition::New, args.discard_unsaved)?,
@@ -212,9 +244,7 @@ impl DawApp {
                 };
                 self.save_to(path);
             }
-            "export" => {
-                self.export_to_with_tails(required_path(args.path.as_deref())?, args.include_tails)
-            }
+            "export" => files = Some(self.application_export(&args)?),
             "import" => self.application_import(
                 &required_path(args.path.as_deref())?,
                 args.track_id,
@@ -225,7 +255,114 @@ impl DawApp {
         if self.error {
             return Err(ToolError::new("application_failed", self.status.clone()));
         }
-        Ok(json!({"accepted":true,"document":self.application_document_status()}))
+        let mut result = json!({"accepted":true,"document":self.application_document_status()});
+        if let Some(files) = files {
+            // The render continues in the background; document_status reports
+            // it pending, then lists the files once they are complete.
+            result["files"] = json!(files);
+        }
+        Ok(result)
+    }
+
+    /// Start a mix or stem export; returns the files it will write.
+    fn application_export(&mut self, args: &DocumentArgs) -> Result<Vec<PathBuf>, ToolError> {
+        use daw_engine::{ExportFormat, WavEncoding};
+        let path = required_path(args.path.as_deref())?;
+        let mut specification = self.legacy_export_specification(args.include_tails);
+        if let Some(rate) = args.sample_rate {
+            specification.sample_rate = rate;
+        }
+        let options = &mut specification.options;
+        options.format = match args.format.as_deref().unwrap_or("wav") {
+            "wav" => ExportFormat::Wav,
+            "flac" => ExportFormat::Flac,
+            "ogg" => args
+                .quality
+                .map_or(ExportFormat::VORBIS_DEFAULT, |quality| {
+                    ExportFormat::Vorbis { quality }
+                }),
+            "mp3" => args
+                .bitrate_kbps
+                .map_or(ExportFormat::MP3_DEFAULT, |kbps| ExportFormat::Mp3 { kbps }),
+            _ => return Err(invalid("format must be wav, flac, ogg or mp3")),
+        };
+        options.encoding = match (args.bit_depth, options.format) {
+            (Some(16), _) => WavEncoding::Pcm16,
+            (Some(24), _) => WavEncoding::Pcm24,
+            (Some(32), ExportFormat::Wav) => WavEncoding::Float32,
+            (Some(_), _) => return Err(invalid("bit_depth must be 16 or 24 (32 for wav)")),
+            (None, ExportFormat::Flac) => WavEncoding::Pcm24,
+            (None, _) => WavEncoding::Float32,
+        };
+        if (args.quality.is_some() && !matches!(options.format, ExportFormat::Vorbis { .. }))
+            || (args.bitrate_kbps.is_some() && !matches!(options.format, ExportFormat::Mp3 { .. }))
+        {
+            return Err(invalid(
+                "quality applies to ogg and bitrate_kbps to mp3 only",
+            ));
+        }
+        options
+            .format
+            .validate(options.encoding, specification.sample_rate)
+            .map_err(|error| invalid(error.to_string()))?;
+        if !args.stems {
+            if args.channels.is_some()
+                || args.include_mix
+                || args.through_master
+                || args.replace_existing
+            {
+                return Err(invalid(
+                    "channels, include_mix, through_master and replace_existing need stems=true",
+                ));
+            }
+            self.export_to_with_specification(path.clone(), specification);
+            return Ok(vec![path]);
+        }
+        let channels: Vec<u64> = match &args.channels {
+            Some(channels) => channels.clone(),
+            None => crate::export_ui::default_stem_channels(&self.project),
+        };
+        let plans = daw_engine::plan_stems(
+            &self.project,
+            &self.document_file_stem(),
+            &channels,
+            args.include_mix,
+            options.format,
+        )
+        .map_err(|error| invalid(error.to_string()))?;
+        let files: Vec<PathBuf> = plans
+            .iter()
+            .map(|plan| path.join(&plan.file_name))
+            .collect();
+        if !path.is_dir() {
+            return Err(invalid("path must be an existing folder when stems=true"));
+        }
+        let existing: Vec<_> = files
+            .iter()
+            .filter(|file| std::fs::symlink_metadata(file).is_ok())
+            .filter_map(|file| file.file_name()?.to_str())
+            .collect();
+        if !existing.is_empty() && !args.replace_existing {
+            return Err(invalid(format!(
+                "Files already exist: {}; set replace_existing to replace them",
+                existing.join(", ")
+            )));
+        }
+        specification.stems = Some(crate::export_ui::StemSelection {
+            channels: self
+                .project
+                .tracks
+                .iter()
+                .filter(|track| channels.contains(&track.id))
+                .map(|track| track.id)
+                .collect(),
+            include_mix: args.include_mix,
+            through_master: args.through_master,
+            song: self.document_file_stem(),
+            replace_existing: args.replace_existing,
+        });
+        self.export_to_with_specification(path, specification);
+        Ok(files)
     }
 
     fn application_import(
@@ -293,7 +430,38 @@ impl DawApp {
             ));
         }
         let mut settings = self.settings.clone();
+        let (mut explicit_rate, mut explicit_buffer) = (None, None);
         if let Some(audio) = args.audio {
+            (explicit_rate, explicit_buffer) = (audio.sample_rate, audio.buffer_frames);
+            if let Patch::Set(value) = audio.audio_host {
+                self.refresh_hosts();
+                if let Some(name) = &value {
+                    // The platform default is stored as None, like the Setup control.
+                    let host = self
+                        .audio_hosts
+                        .iter()
+                        .find(|host| host.name.eq_ignore_ascii_case(name));
+                    let Some(host) = host else {
+                        let available: Vec<_> = self
+                            .audio_hosts
+                            .iter()
+                            .map(|host| host.name.as_str())
+                            .collect();
+                        return Err(invalid(format!(
+                            "Unknown audio driver '{name}'. Available: {}",
+                            available.join(", ")
+                        )));
+                    };
+                    settings.audio_host = (!host.is_default).then(|| host.name.clone());
+                } else {
+                    settings.audio_host = None;
+                }
+                // Device names belong to one driver; a new one starts from its defaults.
+                if settings.audio_host != self.settings.audio_host {
+                    settings.device_name = None;
+                    settings.input_device_name = None;
+                }
+            }
             if let Patch::Set(value) = audio.device_name {
                 settings.device_name = value;
             }
@@ -359,6 +527,19 @@ impl DawApp {
         }
         if settings.ai.model.trim().is_empty() || settings.ai.model.len() > 200 {
             return Err(invalid("Choose a model of at most 200 bytes"));
+        }
+        if settings.audio_host != self.settings.audio_host {
+            // Like Setup, adopt what the new driver dictates unless the caller chose.
+            let chosen_host = settings.audio_host.clone();
+            self.refresh_devices_for(chosen_host);
+            let mut adopted = settings.clone();
+            crate::audio_driver::follow_driver_limits(&self.devices, &mut adopted);
+            if explicit_rate.is_none() {
+                settings.sample_rate = adopted.sample_rate;
+            }
+            if explicit_buffer.is_none() {
+                settings.buffer_frames = adopted.buffer_frames;
+            }
         }
         settings
             .validate()

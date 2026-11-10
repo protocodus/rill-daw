@@ -39,11 +39,22 @@ their times; automation points do not determine the song's duration.
 
 Version 2 adds the per-instance `source_rate` field (source beats per arrangement beat, default `1.0`, range `0.25`–`4.0`). The source window is `[offset, offset + length * source_rate)`. Stretch changes the visible duration and rate while preserving that window; source notes/audio and ghost membership stay unchanged. Version-1 files load with unity rate.
 
+Audio clips may carry an optional `warp_markers` array, for example `[{"source":0.0,"beat":0.0},{"source":2.1,"beat":2.0},{"source":6.0,"beat":6.0}]`. `source` is a source position in beats at the song tempo (the unit of `offset`); `beat` is the forward clip-relative beat where it plays. Markers are strictly increasing in both values, every segment between neighbours plays at 0.25×–4× speed, and at most 2,048 are stored. Outside the markers the clip's `source_rate` applies, and `offset` equals the source position at clip beat 0. Reversed clips play the same map mirrored. An absent or empty array means ordinary whole-clip stretch; the field is omitted when empty, so older files load unchanged and the format version is not bumped. Warp markers are local to each ghost occurrence, like `source_rate`.
+
 Version 3 adds audio `processing`: `algorithm` (`Signalsmith` or `Bungee`) and `transpose_semitones` (−24 to +24, fractional values supported). Missing processing defaults to Signalsmith and zero transposition. Pitch and algorithm are shared source edits for ghosts; stretch rate remains local.
 
 Version 4 adds optional audio clip `audio_take` membership. A retained candidate uses `{"group":42,"role":"Source"}`; an audible comp region uses `{"group":42,"role":{"Comp":{"source":17}}}`, where `17` is the retained source clip's ID. Clips without this field are ordinary independent or ghost clips. Group IDs share the document's object-ID namespace, are reserved when loading, and cannot span tracks. Each comp source reference must identify a retained candidate in the same group and audio track. A group supports up to 64 candidates.
 
 Retained candidates remain in `track.clips` with their original source windows and edits. They are silent: playback, overlap scheduling, and export duration exclude them. Their media remains bundled even when no comp region currently uses it. Comp regions are ordinary editable audio clips with local bounds, source offsets, rates, fades, and optional crossfades. Selecting a passage preserves other regions and adds smooth complementary crossfades limited to available source handles; choosing a whole take replaces the group's audible comp. Independent copies and overdubs clear take membership, while splits preserve it. Detaching a group removes retained candidates from the document and leaves the current comp as ordinary clips without deleting any source files.
+
+The optional project fields `meter_changes` and `markers` add song timing
+context without a version change; both are omitted when empty, so older songs
+save unchanged. `meter_changes` is a list of `{"bar":5,"beats_per_bar":3}` sorted
+by bar: each change starts at a bar line after bar 1 (whose meter remains
+`beats_per_bar`) and holds 1–32 beats per bar, up to 256 changes. Clip and note
+positions stay in beats. `markers` holds up to 1024 `{"id":7,"beat":16.0,
+"name":"Chorus","color":[220,120,40]}` entries; IDs share the object-ID
+namespace, names are 1–256 characters and not blank, and `color` is optional.
 
 Versions 1–6 remain readable. New saves use version 6 so older applications
 reject unsupported routing, Master, Freeze or MIDI performance semantics instead
@@ -182,6 +193,12 @@ preserved without re-encoding to MP3/Vorbis; normalized samples use 32-bit float
 precision. Bundles contain this decoded audio, so opening a project does not
 require the original compressed files or invoke their decoders. Original tags
 and cover art are not stored in the WAV.
+
+Instrument and insert references (`"Vst3": {"path", "class_id"}`) hold any hosted
+format; the format follows the path's extension (`.vst3`, `.clap`, `.lv2`, otherwise
+VST3). `class_id` is a 32-hex VST3 class ID, a CLAP plug-in ID or an LV2 plug-in URI.
+CLAP state is the plug-in's own stream; LV2 state is lilv's Turtle text. No
+project-version change was needed.
 
 Plug-in binaries and external sample libraries managed by a plug-in are not
 included. Plug-in paths are made absolute when saving a bundle and retained when

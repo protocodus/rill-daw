@@ -1,3 +1,4 @@
+use crate::audio_host::{no_default_device, open_host};
 use crate::meter::{ChannelMeter, ChannelMeters, release_factor};
 use crate::render::{BLOCK, Renderer};
 #[path = "input.rs"]
@@ -57,6 +58,8 @@ thread_local! {
 
 #[derive(Clone, Debug)]
 pub struct DeviceSettings {
+    /// Audio driver (CPAL host) for output and input; None is the platform default.
+    pub host: Option<String>,
     pub device_name: Option<String>,
     pub sample_rate: u32,
     pub buffer_frames: u32,
@@ -65,6 +68,7 @@ pub struct DeviceSettings {
 impl Default for DeviceSettings {
     fn default() -> Self {
         Self {
+            host: None,
             device_name: None,
             sample_rate: 48_000,
             buffer_frames: 256,
@@ -110,6 +114,9 @@ pub struct DeviceInfo {
     pub is_default: bool,
     pub supported_sample_rates: Vec<u32>,
     pub channels: u16,
+    /// Smallest and largest buffer the device accepts. Equal for drivers whose
+    /// server dictates the size, such as JACK. None when the driver does not say.
+    pub buffer_frames: Option<(u32, u32)>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -144,8 +151,8 @@ pub struct EngineSnapshot {
     pub render_performance: crate::RenderPerformanceSnapshot,
 }
 
-pub fn list_output_devices() -> Result<Vec<DeviceInfo>> {
-    let host = cpal::default_host();
+pub fn list_output_devices(host: Option<&str>) -> Result<Vec<DeviceInfo>> {
+    let host = open_host(host)?;
     let default_name = host
         .default_output_device()
         .and_then(|device| device.description().ok())
@@ -155,9 +162,14 @@ pub fn list_output_devices() -> Result<Vec<DeviceInfo>> {
         let name = device.description()?.name().to_owned();
         let mut rates = Vec::new();
         let mut channels = 0;
+        let mut buffers: Option<(u32, u32)> = None;
         if let Ok(configs) = device.supported_output_configs() {
             for config in configs {
                 channels = channels.max(config.channels());
+                buffers = merge_buffer_range(buffers, config.buffer_size());
+                if config.min_sample_rate() == config.max_sample_rate() {
+                    rates.push(config.min_sample_rate());
+                }
                 for rate in [
                     22_050, 32_000, 44_100, 48_000, 88_200, 96_000, 176_400, 192_000,
                 ] {
@@ -174,9 +186,22 @@ pub fn list_output_devices() -> Result<Vec<DeviceInfo>> {
             name,
             supported_sample_rates: rates,
             channels,
+            buffer_frames: buffers,
         });
     }
     Ok(output)
+}
+
+fn merge_buffer_range(
+    current: Option<(u32, u32)>,
+    supported: &cpal::SupportedBufferSize,
+) -> Option<(u32, u32)> {
+    match supported {
+        cpal::SupportedBufferSize::Range { min, max } => {
+            Some(current.map_or((*min, *max), |(low, high)| (low.min(*min), high.max(*max))))
+        }
+        cpal::SupportedBufferSize::Unknown => current,
+    }
 }
 
 static NEXT_ENGINE_ID: AtomicU64 = AtomicU64::new(1);
@@ -533,7 +558,7 @@ impl AudioEngine {
         let output = if virtual_output {
             None
         } else {
-            let host = cpal::default_host();
+            let host = open_host(settings.host.as_deref())?;
             let device = if let Some(name) = &settings.device_name {
                 host.output_devices()?
                     .find(|device| {
@@ -544,7 +569,7 @@ impl AudioEngine {
                     .with_context(|| format!("Output device '{name}' is unavailable"))?
             } else {
                 host.default_output_device()
-                    .context("No default audio output device is available")?
+                    .ok_or_else(|| no_default_device(&host, "output"))?
             };
             let mut supported: Vec<_> = device
                 .supported_output_configs()?
@@ -596,7 +621,8 @@ impl AudioEngine {
             settings.sample_rate,
             settings.buffer_frames,
             virtual_output,
-        );
+        )
+        .with_host(settings.host.clone());
         input.sync_mix(project)?;
         controls.timing.configure(
             project,

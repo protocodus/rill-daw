@@ -1209,7 +1209,9 @@ later stored pattern for ties. Ends are exclusive. Clearing arranger points
 retains patterns and restores the manual value outside them, including VST
 parameters. Patterns, shapes and source links persist in project archives and Undo.
 
-File → **Export WAV…** shows the arrangement duration and **Include effect
+`daw_ui::checklist` (see [checklist.rs](../crates/daw-ui/src/checklist.rs)) is a bounded, scrollable list of checkboxes over `(id, label)` choices with **Select all** and **Select none** and an "N of M" count; the stem export dialog uses it for channels.
+
+File → **Export WAV…** (titled Export audio; What, Type, per-format settings, Stems channel list) shows the arrangement duration and **Include effect
 tails**, initially enabled. Turn it off for a WAV that ends exactly at the last
 clip, rounded to the nearest sample. **Export…** then opens the destination
 picker; **Cancel**, Escape, and the close button return to the previous view.

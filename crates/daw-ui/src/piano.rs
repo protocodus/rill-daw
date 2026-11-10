@@ -172,9 +172,9 @@ pub enum GridLevel {
     Subdivision,
 }
 
-pub fn beat_grid_level(beat: f64, beats_per_bar: u8) -> GridLevel {
+pub fn beat_grid_level(beat: f64, meter: &crate::MeterMap) -> GridLevel {
     let near = |value: f64| (value - value.round()).abs() < 1e-6;
-    if near(beat / f64::from(beats_per_bar.max(1))) {
+    if beat > -1e-6 && meter.is_downbeat(beat) {
         GridLevel::Bar
     } else if near(beat) {
         GridLevel::Beat
@@ -191,7 +191,7 @@ pub fn paint_beat_grid(
     rect: Rect,
     view: TimelineViewport,
     snap: f64,
-    beats_per_bar: u8,
+    meter: &crate::MeterMap,
 ) {
     if !rect.is_positive() || view.pixels_per_beat <= 0.0 {
         return;
@@ -210,7 +210,7 @@ pub fn paint_beat_grid(
         ((view.start_beat + f64::from(rect.width() / view.pixels_per_beat)) / step).ceil() as i64;
     for index in first..=last.min(first + 4000) {
         let beat = index as f64 * step;
-        let level = beat_grid_level(beat, beats_per_bar);
+        let level = beat_grid_level(beat, meter);
         // Beats stay visible even when finer subdivisions are too dense.
         let color = match level {
             GridLevel::Bar => colors.grid_bar,
@@ -230,11 +230,11 @@ pub fn paint_velocity_lane(
     painter: &Painter,
     rect: Rect,
     view: TimelineViewport,
-    beats_per_bar: u8,
+    meter: &crate::MeterMap,
 ) {
     let colors = theme::palette(painter.ctx());
     painter.rect_filled(rect, 0.0, colors.bg.lerp_to_gamma(colors.panel, 0.5));
-    paint_beat_grid(painter, rect, view, 0.0, beats_per_bar);
+    paint_beat_grid(painter, rect, view, 0.0, meter);
     let ppp = painter.pixels_per_point();
     for fraction in [0.25_f32, 0.5, 0.75, 1.0] {
         let y = (rect.bottom() - fraction * rect.height()).round_to_pixel_center(ppp);
@@ -361,12 +361,25 @@ mod tests {
 
     #[test]
     fn grid_levels_distinguish_bars_beats_and_subdivisions() {
-        assert_eq!(beat_grid_level(0.0, 4), GridLevel::Bar);
-        assert_eq!(beat_grid_level(8.0, 4), GridLevel::Bar);
-        assert_eq!(beat_grid_level(3.0, 4), GridLevel::Beat);
-        assert_eq!(beat_grid_level(3.0, 3), GridLevel::Bar);
-        assert_eq!(beat_grid_level(2.25, 4), GridLevel::Subdivision);
-        assert_eq!(beat_grid_level(-1.5, 4), GridLevel::Subdivision);
+        let four = crate::MeterMap::uniform(4);
+        assert_eq!(beat_grid_level(0.0, &four), GridLevel::Bar);
+        assert_eq!(beat_grid_level(8.0, &four), GridLevel::Bar);
+        assert_eq!(beat_grid_level(3.0, &four), GridLevel::Beat);
+        assert_eq!(
+            beat_grid_level(3.0, &crate::MeterMap::uniform(3)),
+            GridLevel::Bar
+        );
+        assert_eq!(beat_grid_level(2.25, &four), GridLevel::Subdivision);
+        assert_eq!(beat_grid_level(-1.5, &four), GridLevel::Subdivision);
+        let changing = crate::MeterMap::new(
+            4,
+            &[daw_timeline::MeterChange {
+                bar: 2,
+                beats_per_bar: 3,
+            }],
+        );
+        assert_eq!(beat_grid_level(7.0, &changing), GridLevel::Bar);
+        assert_eq!(beat_grid_level(8.0, &changing), GridLevel::Beat);
     }
 
     #[test]

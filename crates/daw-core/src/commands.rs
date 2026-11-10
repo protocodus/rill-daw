@@ -128,6 +128,37 @@ pub enum SongEdit {
     SetMeter {
         beats_per_bar: u8,
     },
+    /// Add a meter change at a bar line (bar 2 or later) or replace its meter.
+    SetMeterChange {
+        bar: u32,
+        beats_per_bar: u8,
+    },
+    MoveMeterChange {
+        from_bar: u32,
+        to_bar: u32,
+    },
+    RemoveMeterChange {
+        bar: u32,
+    },
+    AddMarker {
+        beat: f64,
+        name: String,
+        #[serde(default)]
+        color: Option<[u8; 3]>,
+        #[serde(default)]
+        key: Option<String>,
+    },
+    RenameMarker {
+        marker: EntityRef,
+        name: String,
+    },
+    MoveMarker {
+        marker: EntityRef,
+        beat: f64,
+    },
+    RemoveMarker {
+        marker: EntityRef,
+    },
     SetLoop {
         enabled: bool,
         start: f64,
@@ -482,6 +513,12 @@ pub enum SongEdit {
         clip: EntityRef,
         beats: Vec<f64>,
     },
+    /// Replace the clip's warp markers; an empty list clears the warp map.
+    SetWarpMarkers {
+        track: EntityRef,
+        clip: EntityRef,
+        markers: Vec<crate::WarpMarker>,
+    },
     StripAudioSilence {
         track: EntityRef,
         clip: EntityRef,
@@ -739,6 +776,25 @@ fn apply_one(
         }
         SongEdit::SetTempo { bpm } => p.tempo = *bpm,
         SongEdit::SetMeter { beats_per_bar } => p.beats_per_bar = *beats_per_bar,
+        SongEdit::SetMeterChange { bar, beats_per_bar } => {
+            p.set_meter_change(*bar, *beats_per_bar)?
+        }
+        SongEdit::MoveMeterChange { from_bar, to_bar } => {
+            p.move_meter_change(*from_bar, *to_bar)?
+        }
+        SongEdit::RemoveMeterChange { bar } => p.remove_meter_change(*bar)?,
+        SongEdit::AddMarker {
+            beat,
+            name,
+            color,
+            key,
+        } => {
+            let id = p.add_marker(*beat, name, *color)?;
+            record(result, refs, "marker", id, key)?;
+        }
+        SongEdit::RenameMarker { marker, name } => p.rename_marker(r(marker)?, name)?,
+        SongEdit::MoveMarker { marker, beat } => p.move_marker(r(marker)?, *beat)?,
+        SongEdit::RemoveMarker { marker } => p.remove_marker(r(marker)?)?,
         SongEdit::SetLoop {
             enabled,
             start,
@@ -1392,6 +1448,11 @@ fn apply_one(
                 record(result, refs, "clip", id, &None)?;
             }
         }
+        SongEdit::SetWarpMarkers {
+            track,
+            clip,
+            markers,
+        } => p.set_warp_markers(r(track)?, r(clip)?, markers.clone())?,
         SongEdit::StripAudioSilence {
             track,
             clip,

@@ -59,7 +59,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         row_height: 31.0,
         ..Default::default()
     };
-    ui::paint_timeline_ruler(ui.painter(), ruler, view, 120.0, 4);
+    ui::paint_timeline_ruler(ui.painter(), ruler, view, 120.0, &ui::MeterMap::uniform(4));
     let lane = Rect::from_min_max(pos2(ruler.left(), ruler.bottom()), ruler_bounds.max);
     let mut range = ui::TimelineLoop {
         start: state.loop_start,
@@ -76,7 +76,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         8.0,
         Some(ui::TimelineLoopLabel {
             tempo: 120.0,
-            beats_per_bar: 4,
+            meter: &ui::MeterMap::uniform(4),
             playhead: 0.0,
         }),
     );

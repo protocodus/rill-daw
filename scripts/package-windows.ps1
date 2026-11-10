@@ -16,7 +16,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Cargo metadata failed' }
     $metadata = $metadataText | ConvertFrom-Json
     $version = ($metadata.packages | Where-Object name -eq 'daw-app').version
-    & cargo build --locked --release --workspace
+    # asio-sys runs bindgen on the ASIO SDK headers; hosted Windows runners ship LLVM here.
+    if (-not $env:LIBCLANG_PATH -and (Test-Path 'C:\Program Files\LLVM\bin')) { $env:LIBCLANG_PATH = 'C:\Program Files\LLVM\bin' }
+    & cargo build --locked --release --workspace --features daw-app/asio
     if ($LASTEXITCODE -ne 0) { throw 'Release build failed' }
     $binDir = Join-Path $metadata.target_directory 'release'
     if ($env:CARGO_BUILD_TARGET) { $binDir = Join-Path $metadata.target_directory "$target/release" }
@@ -30,6 +32,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Embedded Windows icon verification failed' }
     & python scripts/collect-licenses.py $packageDir
     if ($LASTEXITCODE -ne 0) { throw 'License inventory failed' }
+    $asioNotice = Join-Path $packageDir 'licenses/asio-sdk'
+    New-Item -ItemType Directory -Path $asioNotice -Force | Out-Null
+    Copy-Item 'vendor/asio-notice/*' -Destination $asioNotice
     @'
 Rill for Windows x64
 
@@ -39,6 +44,11 @@ separately installed VST3 plug-ins may require their own vendor runtimes.
 Windows 10/11 x64 and an OpenGL-capable graphics driver are required.
 This build is not Authenticode signed, so Windows may ask for first-run approval.
 No installer, registry changes, or administrator privileges are needed.
+
+This build includes ASIO driver support through the Steinberg ASIO SDK under
+its GPL version 3 option. The combined executable is distributed under the
+GPL version 3; see licenses/asio-sdk. Rill's own source code remains MIT.
+ASIO is a trademark and software of Steinberg Media Technologies GmbH.
 '@ | Set-Content (Join-Path $packageDir 'INSTALL.txt') -Encoding utf8
     $env:RILL_CONFIG_DIR = Join-Path $stage 'smoke-config'
     & (Join-Path $packageDir 'rill.exe') --render-demo (Join-Path $stage 'smoke.wav')

@@ -42,6 +42,7 @@ fn prepare(
     let mut isolated = Project::new();
     isolated.tempo = project.tempo;
     isolated.beats_per_bar = project.beats_per_bar;
+    isolated.meter_changes.clone_from(&project.meter_changes);
     let mut source = Track::new("Join sources", TrackKind::Audio);
     source.gain = 1.0;
     source.clips = selection.clips;

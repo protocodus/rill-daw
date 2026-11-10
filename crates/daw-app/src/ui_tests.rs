@@ -761,6 +761,7 @@ fn setup_with_two_rate_device() -> Harness {
         is_default: true,
         supported_sample_rates: vec![44_100, 48_000],
         channels: 2,
+        buffer_frames: None,
     }];
     harness
 }

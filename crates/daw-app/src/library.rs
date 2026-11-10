@@ -225,7 +225,12 @@ fn kind_label(plugin: &PluginInfo) -> &'static str {
     match (plugin.is_instrument(), plugin.is_effect()) {
         (Some(true), _) => "Instrument",
         (_, Some(true)) => "Effect",
-        (None, _) => "Unverified VST3",
+        (None, _) => match plugin.format {
+            daw_plugins::PluginFormat::Vst3 => "Unverified VST3",
+            daw_plugins::PluginFormat::Clap => "Unverified CLAP",
+            daw_plugins::PluginFormat::Lv2 => "Unverified LV2",
+            daw_plugins::PluginFormat::Au => "Unverified AU",
+        },
         _ => "Other",
     }
 }
@@ -339,7 +344,7 @@ impl DawApp {
             if !self.error {
                 self.status = format!(
                     "Found {}",
-                    daw_ui::text::count(self.vst_catalog.len(), "VST3 plug-in", "VST3 plug-ins")
+                    daw_ui::text::count(self.vst_catalog.len(), "plug-in", "plug-ins")
                 );
             }
         }
@@ -596,7 +601,7 @@ impl DawApp {
                                     DeviceKind::Unknown => "Search unverified devices",
                                 },
                                 (ui.available_width() - 2.0 * daw_ui::tokens::BUTTON_PADDING_X).max(0.0),
-                            ).on_hover_text("Search by name, category or producer; combine words in any order"),
+                            ).on_hover_text(format!("Search by name, category, producer or format ({}); combine words in any order", daw_plugins::PluginFormat::available().map(|format| format.label()).collect::<Vec<_>>().join(", "))),
                         ).inner.1,
                     ).inner;
                     if clear_search {
@@ -731,11 +736,12 @@ impl DawApp {
                                 || item.categories.contains(&state.category))
                             && (terms.is_empty() || {
                                 let searchable = format!(
-                                "{} {} {} {}",
+                                "{} {} {} {} {}",
                                 item.entry.plugin.name,
                                 item.entry.plugin.vendor,
                                 item.entry.plugin.category,
-                                item.categories.join(" ")
+                                item.categories.join(" "),
+                                item.entry.plugin.format.label()
                             )
                                 .to_lowercase();
                                 terms.iter().all(|term| searchable.contains(term))
@@ -886,6 +892,7 @@ impl DawApp {
                                 selected,
                                 favorite: item.favorite,
                                 icon,
+                                format: entry.plugin.format.label(),
                             };
                             let card = if state.list {
                                 let detail = if item.categories.is_empty() { kind_label(&entry.plugin).to_owned() } else { item.categories.join(" · ") };
@@ -918,7 +925,7 @@ impl DawApp {
                                 "rect": {"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]},
                                 "preview_rect": {"min": [preview.min.x, preview.min.y], "max": [preview.max.x, preview.max.y]},
                                 "preview": texture.is_some(), "texture_id": texture.as_ref().map(|texture| format!("{:?}", texture.id())),
-                                "favorite": item.favorite,
+                                "favorite": item.favorite, "format": entry.plugin.format.label(),
                             })
                         };
                         let height = ui.available_height();
@@ -1073,7 +1080,7 @@ impl DawApp {
                                     daw_ui::text::body(ui, value);
                                     ui.end_row();
                                 };
-                                row("Format", "VST3".into());
+                                row("Format", entry.plugin.format.label().into());
                                 row("Version", if entry.plugin.version.is_empty() { "Unknown".into() } else { entry.plugin.version.clone() });
                                 row("Architecture", if entry.plugin.architectures.is_empty() { "Unknown".into() } else { entry.plugin.architectures.join(", ") });
                                 row("Preview image", match &entry.status {
@@ -1163,7 +1170,7 @@ impl DawApp {
                             if details == 0.0 {
                                 // Without room for the detail pane, keep its facts reachable.
                                 ui.separator();
-                                daw_ui::text::note(ui, if entry.plugin.category.is_empty() { "Unverified VST3".to_owned() } else { format!("VST3 · {}", entry.plugin.category.replace('|', " · ")) });
+                                daw_ui::text::note(ui, if entry.plugin.category.is_empty() { kind_label(&entry.plugin).to_owned() } else { format!("{} · {}", entry.plugin.format.label(), entry.plugin.category.replace('|', " · ")) });
                                 daw_ui::text::note(ui, entry.plugin.path.display().to_string()).on_hover_text(entry.plugin.class_id.as_deref().unwrap_or("Unverified class"));
                             }
                         });
@@ -1411,7 +1418,8 @@ pub(crate) fn plugin_model(
         })
         .unwrap_or_else(|| {
             format!(
-                "VST3 · {}",
+                "{} · {}",
+                daw_plugins::PluginFormat::from_path(std::path::Path::new(path)).label(),
                 std::path::Path::new(path)
                     .file_stem()
                     .unwrap_or_default()

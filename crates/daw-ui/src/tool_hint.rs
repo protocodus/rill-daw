@@ -44,6 +44,7 @@ impl ToolHintContext {
             (_, Ghost) => "Click a clip to create a linked copy",
             (_, Stretch) => "Drag to change duration",
             (_, Slip) => "Drag audio inside clip edges",
+            (_, Warp) => "Click to add a warp marker · Drag a flag to move",
         }
     }
 

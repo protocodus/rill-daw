@@ -1,5 +1,8 @@
 //! Native editor lifetime and IPC. This module runs only in the isolated helper.
 
+#[path = "editor_clap.rs"]
+mod clap;
+
 use crate::{
     ParameterInfo,
     editor::{EditorCommand, EditorEvent},
@@ -192,7 +195,40 @@ fn run_inner(output: &mut impl Write) -> Result<()> {
         state.len() <= 64 * 1024 * 1024,
         "Plugin state exceeds 64 MiB"
     );
+    // LV2 parameters are edited in Rill's generic parameter browser instead.
+    ensure!(
+        crate::PluginFormat::from_path(&path) != crate::PluginFormat::Lv2,
+        "This plug-in has no native editor"
+    );
     let platform = Platform::new()?;
+    match crate::PluginFormat::from_path(&path) {
+        crate::PluginFormat::Clap => {
+            return clap::run::<crate::clap::ClapProcessor>(
+                output,
+                &commands,
+                &platform,
+                &path,
+                class_id.as_deref(),
+                &state,
+                parameters,
+                visible,
+            );
+        }
+        #[cfg(target_os = "macos")]
+        crate::PluginFormat::Au => {
+            return clap::run::<crate::au::AuProcessor>(
+                output,
+                &commands,
+                &platform,
+                &path,
+                class_id.as_deref(),
+                &state,
+                parameters,
+                visible,
+            );
+        }
+        _ => {}
+    }
     let mut host = Vst3Host::builder()
         .with_process_isolation(false)
         .sample_rate(48_000.0)

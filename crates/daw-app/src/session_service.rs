@@ -382,10 +382,12 @@ impl ToolHost for DawApp {
                 struct Args {
                     #[serde(default)]
                     query: String,
+                    format: Option<String>,
                     #[serde(default)]
                     refresh: bool,
                 }
                 let args: Args = parse_arguments(arguments)?;
+                let format = args.format.as_deref().map(plugin_format).transpose()?;
                 if args.query.len() > 256 {
                     return Err(ToolError::new("invalid_arguments", "Search is too long"));
                 }
@@ -397,14 +399,16 @@ impl ToolHost for DawApp {
                     .vst_catalog
                     .iter()
                     .filter(|entry| {
-                        format!("{} {}", entry.plugin.name, entry.plugin.vendor)
-                            .to_lowercase()
-                            .contains(&query)
+                        format.is_none_or(|format| entry.plugin.format == format)
+                            && format!("{} {}", entry.plugin.name, entry.plugin.vendor)
+                                .to_lowercase()
+                                .contains(&query)
                     })
                     .take(256)
                     .map(|entry| {
                         json!({"id":catalog_id(entry),"name":entry.plugin.name,
                     "vendor":entry.plugin.vendor,"category":entry.plugin.category,
+                    "format":entry.plugin.format.label(),
                     "is_instrument":entry.plugin.is_instrument(),
                     "favorite":self.plugin_favorite(&entry.plugin),
                     "categories":self.plugin_categories(&entry.plugin)})
@@ -474,10 +478,12 @@ impl ToolHost for DawApp {
                     expected_revision: u64,
                     track_id: u64,
                     plugin_id: String,
+                    format: Option<String>,
                     #[serde(default)]
                     insert: bool,
                 }
                 let args: Args = parse_arguments(arguments)?;
+                let format = args.format.as_deref().map(plugin_format).transpose()?;
                 self.check_tool_revision(args.session_id, args.expected_revision)?;
                 let entry = self
                     .vst_catalog
@@ -486,6 +492,12 @@ impl ToolHost for DawApp {
                     .ok_or_else(|| {
                         ToolError::new("not_found", "Choose a plug-in ID returned by list_plugins")
                     })?;
+                if format.is_some_and(|format| format != entry.plugin.format) {
+                    return Err(ToolError::new(
+                        "invalid_arguments",
+                        format!("This catalog plug-in is {}", entry.plugin.format.label()),
+                    ));
+                }
                 let classification = entry.plugin.is_instrument();
                 let used_plugin = entry.plugin.clone();
                 if (!args.insert && classification == Some(false))
@@ -517,7 +529,7 @@ impl ToolHost for DawApp {
                 self.commit_song_candidate(candidate, "Assign plug-in")?;
                 self.record_plugin_use(&used_plugin);
                 Ok(
-                    json!({"session_id":self.song_session.id,"revision":self.song_session.revision,"track_id":args.track_id,"insert_id":effect_id}),
+                    json!({"session_id":self.song_session.id,"revision":self.song_session.revision,"track_id":args.track_id,"insert_id":effect_id,"format":used_plugin.format.label()}),
                 )
             }
             _ if crate::tool_jobs::handles(name) => Err(ToolError::new(
@@ -575,10 +587,31 @@ impl DawApp {
     }
 }
 
+fn plugin_format(label: &str) -> Result<daw_plugins::PluginFormat, ToolError> {
+    daw_plugins::PluginFormat::from_label(label)
+        .ok_or_else(|| ToolError::new("invalid_arguments", "Format must be VST3, CLAP, LV2 or AU"))
+}
+
 pub(crate) fn catalog_id(entry: &daw_plugins::catalog::CatalogEntry) -> String {
     format!(
         "{}:{}",
         entry.fingerprint,
         entry.plugin.class_id.as_deref().unwrap_or("default")
     )
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn tool_formats_accept_every_label_including_au_on_every_platform() {
+        for format in daw_plugins::PluginFormat::ALL {
+            assert_eq!(
+                super::plugin_format(&format.label().to_lowercase()).unwrap(),
+                format
+            );
+        }
+        let error = super::plugin_format("AAX").unwrap_err();
+        assert_eq!(error.code, "invalid_arguments");
+        assert!(error.message.contains("AU"), "{}", error.message);
+    }
 }

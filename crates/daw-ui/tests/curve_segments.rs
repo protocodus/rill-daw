@@ -58,7 +58,7 @@ impl Editor {
                             snap: 0.25,
                             height: 400.0,
                             tempo: 120.0,
-                            beats_per_bar: 4,
+                            meter: daw_ui::MeterMap::uniform(4),
                             fit,
                             keyboard_active: false,
                             value_label: daw_ui::percent_value_label,

@@ -15,11 +15,9 @@ pub fn format_seconds(seconds: f64) -> String {
 /// Two-decimal one-based position. Round the complete display position before
 /// splitting it so the last fractional beat carries into the following bar.
 /// This is a readout only; editors retain the original beat value separately.
-pub fn musical_position(beat: f64, beats_per_bar: u8) -> String {
-    let units = (beat.max(0.0) * 100.0).round() as u64;
-    let units_per_bar = u64::from(beats_per_bar.max(1)) * 100;
-    let bar = units / units_per_bar + 1;
-    let within_bar = units % units_per_bar + 100;
+pub fn musical_position(beat: f64, meter: &crate::MeterMap) -> String {
+    let (bar, offset) = meter.position((beat.max(0.0) * 100.0).round() / 100.0);
+    let within_bar = (offset * 100.0).round() as u64 + 100;
     format!(
         "Bar {bar} · Beat {}.{:02}",
         within_bar / 100,
@@ -29,11 +27,9 @@ pub fn musical_position(beat: f64, beats_per_bar: u8) -> String {
 
 /// Compact one-based bar:beat position. Round the whole position before
 /// decomposing it so a displayed fractional beat carries into the next bar.
-pub fn compact_musical_position(beat: f64, beats_per_bar: u8) -> String {
-    let units = (beat.max(0.0) * 1_000.0).round() as u64;
-    let units_per_bar = u64::from(beats_per_bar.max(1)) * 1_000;
-    let bar = units / units_per_bar + 1;
-    let within_bar = units % units_per_bar + 1_000;
+pub fn compact_musical_position(beat: f64, meter: &crate::MeterMap) -> String {
+    let (bar, offset) = meter.position((beat.max(0.0) * 1_000.0).round() / 1_000.0);
+    let within_bar = (offset * 1_000.0).round() as u64 + 1_000;
     let fractional = within_bar % 1_000;
     if fractional == 0 {
         format!("{bar}:{}", within_bar / 1_000)
@@ -46,7 +42,7 @@ pub fn compact_musical_position(beat: f64, beats_per_bar: u8) -> String {
 
 /// Read-only conversions in a property grid. Timing is still edited by the
 /// caller, so inspecting either unit cannot round the project or add history.
-pub fn timing_summary(ui: &mut Ui, start: f64, length: f64, tempo: f64, beats_per_bar: u8) {
+pub fn timing_summary(ui: &mut Ui, start: f64, length: f64, tempo: f64, meter: &crate::MeterMap) {
     let seconds_per_beat = 60.0 / tempo;
     crate::text::label(ui, "Time");
     ui.vertical(|ui| {
@@ -62,7 +58,7 @@ pub fn timing_summary(ui: &mut Ui, start: f64, length: f64, tempo: f64, beats_pe
                     format!(
                         "{} · {}",
                         format_seconds(beat * seconds_per_beat),
-                        musical_position(beat, beats_per_bar),
+                        musical_position(beat, meter),
                     ),
                 );
             });
@@ -74,7 +70,7 @@ pub fn timing_summary(ui: &mut Ui, start: f64, length: f64, tempo: f64, beats_pe
                 format!(
                     "{} · {:.3} bars",
                     format_seconds(length * seconds_per_beat),
-                    length / f64::from(beats_per_bar.max(1)),
+                    meter.bars(start + length) - meter.bars(start),
                 ),
             );
         });

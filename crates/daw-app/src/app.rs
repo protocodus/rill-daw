@@ -170,6 +170,11 @@ pub struct DawApp {
     pub export_job:
         Option<std::sync::mpsc::Receiver<anyhow::Result<crate::export_ui::ExportCompletion>>>,
     pub(crate) export_run: Option<crate::export_ui::ExportRun>,
+    pub(crate) export_cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    pub(crate) export_stem_selection: std::collections::HashSet<u64>,
+    /// Stem files in the last completed export; zero for a single file.
+    pub(crate) exported_stems: usize,
+    pub(crate) exported_files: Vec<PathBuf>,
     pub(crate) finishing: crate::finishing_actions::FinishingActions,
     pub(crate) exported_file: Option<PathBuf>,
     pub(crate) export_open: bool,
@@ -216,6 +221,9 @@ pub struct DawApp {
     midi_advisory_ack: Option<(u64, u64, u64)>,
     live_edit_error: Option<(u64, String)>,
     pub devices: Vec<DeviceInfo>,
+    pub(crate) audio_hosts: Vec<daw_engine::HostInfo>,
+    /// Headless stand-ins for drivers; set from `RILL_E2E_AUDIO_HOSTS`.
+    pub(crate) virtual_hosts: Vec<crate::audio_driver::VirtualHost>,
     pub status: String,
     pub error: bool,
     pub(crate) last_error_report: Option<crate::error_ui::ErrorReport>,
@@ -325,6 +333,10 @@ impl DawApp {
             next_document_dialog: None,
             export_job: None,
             export_run: None,
+            export_cancel: None,
+            export_stem_selection: Default::default(),
+            exported_stems: 0,
+            exported_files: Vec::new(),
             finishing: Default::default(),
             exported_file: None,
             export_open: false,
@@ -371,6 +383,11 @@ impl DawApp {
             midi_advisory_ack: None,
             live_edit_error: None,
             devices: Vec::new(),
+            audio_hosts: Vec::new(),
+            virtual_hosts: vec![crate::audio_driver::VirtualHost {
+                name: "Rill virtual".into(),
+                fixed: None,
+            }],
             status: "Ready · Space to play · Drop audio anywhere in the arrangement".into(),
             error: false,
             last_error_report: None,
@@ -694,7 +711,7 @@ impl DawApp {
                     PopupKind::Join => "Join clips",
                     PopupKind::AudioTakes => "Audio takes",
                     PopupKind::Recording => "Recording",
-                    PopupKind::Export => "Export WAV",
+                    PopupKind::Export => "Export audio",
                     PopupKind::ExportMidi => "Export MIDI 1.0 copy",
                     PopupKind::MidiExpression => "Note expression",
                 };
@@ -896,24 +913,26 @@ impl DawApp {
     }
 
     pub(crate) fn refresh_devices(&mut self) {
-        self.refresh_input_devices();
+        self.refresh_devices_for(self.settings.audio_host.clone());
+    }
+
+    /// Devices come from the chosen driver; Setup lists the draft's driver
+    /// before it is applied.
+    pub(crate) fn refresh_devices_for(&mut self, host: Option<String>) {
+        self.refresh_hosts();
+        self.refresh_input_devices_for(host.as_deref());
         self.refresh_midi_devices();
         if !self.audio_device_enabled || self.virtual_audio {
             // Offline/headless work uses the portable render rates, independent
             // of whatever audio hardware happens to be attached to this host.
             self.devices = if self.virtual_audio {
-                vec![DeviceInfo {
-                    name: "Rill virtual output".into(),
-                    is_default: true,
-                    supported_sample_rates: vec![44100, 48000, 88200, 96000],
-                    channels: 2,
-                }]
+                vec![self.virtual_device(host.as_deref(), false)]
             } else {
                 Vec::new()
             };
             return;
         }
-        match daw_engine::list_output_devices() {
+        match daw_engine::list_output_devices(host.as_deref()) {
             Ok(devices) => self.devices = devices,
             Err(error) => self.message(Err(error), ""),
         }
@@ -981,11 +1000,15 @@ impl DawApp {
             .filter(|clip| !clip.is_take_source())
     }
     pub fn snapped(&self, beat: f64) -> f64 {
-        if self.snap > 0.0 {
-            (beat / self.snap).round() * self.snap
-        } else {
-            beat
+        if self.snap <= 0.0 {
+            return beat;
         }
+        // "1 bar" follows real bar lines once the meter changes along the song.
+        let meter = self.project.meter_map();
+        if !meter.is_uniform() && self.snap == f64::from(meter.initial()) {
+            return meter.nearest_bar_line(beat);
+        }
+        (beat / self.snap).round() * self.snap
     }
     pub fn playing(&self) -> bool {
         self.engine.as_ref().is_some_and(|e| e.snapshot().playing)
@@ -1592,6 +1615,9 @@ impl DawApp {
                     Ok(completion) => {
                         let path = completion.path;
                         self.export_run = None;
+                        self.export_cancel = None;
+                        self.exported_stems = completion.stems;
+                        self.exported_files = completion.files;
                         self.finishing.export_finished(&path, completion.report);
                         // A finished render must not erase an unrelated error.
                         if !self.error
@@ -1603,7 +1629,19 @@ impl DawApp {
                         }
                         self.exported_file = Some(path);
                     }
+                    Err(_)
+                        if self.export_cancel.take().is_some_and(|cancel| {
+                            cancel.load(std::sync::atomic::Ordering::Acquire)
+                        }) =>
+                    {
+                        // The person asked to stop: nothing failed, nothing was written.
+                        self.export_run = None;
+                        self.finishing.export_failed();
+                        self.error = false;
+                        self.status = "Export canceled · No files written".into();
+                    }
                     Err(e) => {
+                        self.export_cancel = None;
                         self.finishing.export_failed();
                         self.export_failed_notice(e);
                     }
@@ -1611,6 +1649,7 @@ impl DawApp {
             }
             Some(Err(std::sync::mpsc::TryRecvError::Disconnected)) => {
                 self.export_job = None;
+                self.export_cancel = None;
                 self.finishing.export_failed();
                 self.export_failed_notice(anyhow::anyhow!("Export worker stopped unexpectedly"));
             }
@@ -1700,10 +1739,7 @@ impl DawApp {
         } else if busy {
             (NoticeKind::Busy, busy_message.clone())
         } else if let Some(path) = &self.exported_file {
-            let name = path
-                .file_name()
-                .unwrap_or(path.as_os_str())
-                .to_string_lossy();
+            let name = self.exported_name(path);
             if clipped_samples > 0 {
                 (
                     NoticeKind::Warning,
@@ -1754,6 +1790,7 @@ impl DawApp {
         let mut edit_export = false;
         let mut cancel_import = false;
         let mut cancel_freeze = false;
+        let mut cancel_export = false;
         let has_audio_recovery = showing_output_dropout
             || kind == NoticeKind::Error
                 && self
@@ -1775,6 +1812,11 @@ impl DawApp {
                     }
                     if self.freeze_busy() {
                         cancel_freeze = daw_ui::button(ui, "Cancel Freeze").clicked();
+                    }
+                    if self.export_job.is_some() {
+                        cancel_export = daw_ui::button(ui, "Cancel export")
+                            .on_hover_text("Stop rendering. No file is written or replaced.")
+                            .clicked();
                     }
                     if show_export_failure {
                         retry_export = ui.add_enabled(
@@ -1831,7 +1873,7 @@ impl DawApp {
                     response.response.on_hover_text("The original MIDI data remains in the project. Use separate tracks for different UMP groups, or choose an instrument that advertises support for these controls.");
                 }
                 if let Some(path) = &secondary_completion {
-                    let name = path.file_name().unwrap_or(path.as_os_str()).to_string_lossy();
+                    let name = self.exported_name(path);
                     let result_kind = if clipped_samples > 0 || export_midi_advisories != (0, 0) { NoticeKind::Warning } else { NoticeKind::Success };
                     let result_message = if clipped_samples > 0 {
                         format!("Exported · {name} · {clipped_samples} clipped samples")
@@ -1855,6 +1897,9 @@ impl DawApp {
         }
         if cancel_freeze {
             self.cancel_freeze();
+        }
+        if cancel_export {
+            self.cancel_export();
         }
         if edit_export {
             self.export();
@@ -2072,6 +2117,7 @@ impl DawApp {
             || crate::plugin_details::is_open(ctx)
             || crate::audio_silence::is_open(ctx)
             || crate::audio_batch::is_open(ctx)
+            || crate::timeline_marks::meter_dialog_open(ctx)
         {
             return;
         }
@@ -2208,6 +2254,7 @@ impl DawApp {
         if self.rename_shortcuts(ctx)
             || self.arranger_edit_shortcuts(ctx)
             || self.clip_navigation_shortcuts(ctx)
+            || (self.view == WorkspaceView::Arrangement && self.marker_shortcuts(ctx))
         {
             return;
         }
@@ -2343,7 +2390,7 @@ impl DawApp {
                         daw_ui::transport_position(
                             ui,
                             self.cursor,
-                            self.project.beats_per_bar,
+                            &self.project.meter_map(),
                             self.cursor * 60.0 / self.project.tempo,
                         );
                     });
@@ -2488,7 +2535,7 @@ impl DawApp {
                                 daw_ui::duration::timing_summary(
                                     ui, self.project.loop_start,
                                     self.project.loop_end - self.project.loop_start,
-                                    self.project.tempo, self.project.beats_per_bar,
+                                    self.project.tempo, &self.project.meter_map(),
                                 );
                             });
                         });
@@ -2751,6 +2798,7 @@ impl DawApp {
                             ui.close();
                         }
                         self.repeat_to_loop_end_item(ui);
+                        self.marker_menu(ui);
                         ui.separator();
                         let audio_clip = self
                             .selected()
@@ -3243,6 +3291,27 @@ impl DawApp {
                 }
                 SetupPage::Audio => {
                     daw_ui::form_grid(ui, "audio_settings", |ui| {
+                        let previous_host = self.setup_draft.audio_host.clone();
+                        if self.audio_hosts.len() > 1 {
+                            let driver_label = daw_ui::form_label(ui, "Driver");
+                            let current = crate::audio_driver::driver_name(&self.audio_hosts, self.setup_draft.audio_host.as_deref());
+                            daw_ui::select("audio_driver", current).width(daw_ui::tokens::FORM_FIELD_WIDTH).show_ui(ui, |ui| {
+                                for host in &self.audio_hosts {
+                                    let value = (!host.is_default).then(|| host.name.clone());
+                                    daw_ui::selectable_value(ui, &mut self.setup_draft.audio_host, value, &host.name);
+                                }
+                            }).response.labelled_by(driver_label.id).on_hover_text("The audio system Rill talks to. Devices, sample rates and buffer sizes come from the chosen driver; JACK and ASIO set their own.");
+                            ui.end_row();
+                        }
+                        let host_changed = self.setup_draft.audio_host != previous_host;
+                        if host_changed {
+                            // Device names belong to one driver.
+                            self.setup_draft.device_name = None;
+                            self.setup_draft.input_device_name = None;
+                            self.refresh_devices_for(self.setup_draft.audio_host.clone());
+                        }
+                        let single_device = crate::audio_driver::driver_name(&self.audio_hosts, self.setup_draft.audio_host.as_deref());
+                        let single_device = daw_engine::is_single_device_host(&single_device);
                         let previous_device = self.setup_draft.device_name.clone();
                         let output_label = daw_ui::form_label(ui, "Output");
                         ui.horizontal(|ui| {
@@ -3250,14 +3319,15 @@ impl DawApp {
                             daw_ui::selectable_value(ui, &mut self.setup_draft.device_name, None, "System default");
                             for device in &self.devices { daw_ui::selectable_value(ui, &mut self.setup_draft.device_name, Some(device.name.clone()), &device.name); }
                         }).response.labelled_by(output_label.id).on_hover_text(self.setup_draft.device_name.as_deref().unwrap_or("System default"));
-                        if daw_ui::quiet_button(ui, "Refresh devices").clicked() { self.refresh_devices(); }
+                        if daw_ui::quiet_button(ui, "Refresh devices").clicked() { self.refresh_devices_for(self.setup_draft.audio_host.clone()); }
                         });
                         ui.end_row();
                         let input_label = daw_ui::form_label(ui, "Input device");
-                        let picker = daw_ui::select("input_device", self.setup_draft.input_device_name.as_deref().unwrap_or("System default input")).width(daw_ui::tokens::FORM_FIELD_WIDTH).truncate().show_ui(ui, |ui| {
+                        if single_device { self.setup_draft.input_device_name = self.setup_draft.device_name.clone(); }
+                        let picker = ui.add_enabled_ui(!single_device, |ui| daw_ui::select("input_device", self.setup_draft.input_device_name.as_deref().unwrap_or("System default input")).width(daw_ui::tokens::FORM_FIELD_WIDTH).truncate().show_ui(ui, |ui| {
                             daw_ui::selectable_value(ui, &mut self.setup_draft.input_device_name, None, "System default input");
                             for device in &self.input_devices { daw_ui::selectable_value(ui, &mut self.setup_draft.input_device_name, Some(device.name.clone()), &device.name); }
-                        }).response.labelled_by(input_label.id);
+                        }).response.labelled_by(input_label.id).on_disabled_hover_text("ASIO drives one device for both input and output; the input follows the output.")).inner;
                         ctx.data_mut(|data| data.insert_temp(egui::Id::new("input_device_picker_rect"), picker.rect));
                         ui.end_row();
                         let midi_label = daw_ui::form_label(ui, "MIDI input");
@@ -3268,21 +3338,26 @@ impl DawApp {
                         }).response.labelled_by(midi_label.id);
                         ui.end_row();
                         let rates = self.devices.iter().find(|d| self.setup_draft.device_name.as_ref().map_or(d.is_default, |name| name == &d.name)).map(|d| d.supported_sample_rates.clone()).unwrap_or_else(|| vec![44_100, 48_000, 88_200, 96_000]);
-                        if self.setup_draft.device_name != previous_device && !rates.is_empty() && !rates.contains(&self.setup_draft.sample_rate) {
+                        if (host_changed || self.setup_draft.device_name != previous_device) && !rates.is_empty() && !rates.contains(&self.setup_draft.sample_rate) {
                             self.setup_draft.sample_rate = if rates.contains(&48_000) { 48_000 } else { rates[0] };
                         }
+                        crate::audio_driver::follow_driver_limits(&self.devices, &mut self.setup_draft);
+                        let output_device = self.devices.iter().find(|d| self.setup_draft.device_name.as_ref().map_or(d.is_default, |name| name == &d.name)).cloned();
+                        let driver_sets_rate = self.setup_draft.audio_host.is_some() && rates.len() == 1;
                         let sample_rate_label = daw_ui::form_label(ui, "Sample rate");
-                        daw_ui::select("sample_rate", format!("{} Hz", self.setup_draft.sample_rate)).width(daw_ui::tokens::FORM_FIELD_WIDTH).show_ui(ui, |ui| {
+                        ui.add_enabled_ui(!driver_sets_rate, |ui| daw_ui::select("sample_rate", format!("{} Hz", self.setup_draft.sample_rate)).width(daw_ui::tokens::FORM_FIELD_WIDTH).show_ui(ui, |ui| {
                             for rate in rates { daw_ui::selectable_value(ui, &mut self.setup_draft.sample_rate, rate, format!("{rate} Hz")); }
-                        }).response.labelled_by(sample_rate_label.id);
+                        }).response.labelled_by(sample_rate_label.id).on_disabled_hover_text("Set by the audio driver. Change it in the driver's own settings."));
                         ui.end_row();
                         let buffer_label = daw_ui::form_label(ui, "Buffer");
+                        let buffer_fixed = crate::audio_driver::buffer_is_fixed(output_device.as_ref());
                         ui.horizontal(|ui| {
-                        daw_ui::select("buffer", format!("{} samples", self.setup_draft.buffer_frames)).width(daw_ui::tokens::FORM_FIELD_WIDTH).show_ui(ui, |ui| {
-                            for size in [64, 128, 256, 512, 1024, 2048] { daw_ui::selectable_value(ui, &mut self.setup_draft.buffer_frames, size, format!("{size} samples")); }
-                        }).response.labelled_by(buffer_label.id);
-                        if daw_ui::quiet_button(ui, "Recommended").on_hover_text("Balanced starting point for Apple Silicon MacBooks and other modern computers: 256 samples at 44.1/48 kHz, 512 at 88.2/96 kHz. Use a larger buffer if a demanding mix drops out.").clicked() {
+                        ui.add_enabled_ui(!buffer_fixed, |ui| daw_ui::select("buffer", format!("{} samples", self.setup_draft.buffer_frames)).width(daw_ui::tokens::FORM_FIELD_WIDTH).show_ui(ui, |ui| {
+                            for size in crate::audio_driver::buffer_choices(output_device.as_ref()) { daw_ui::selectable_value(ui, &mut self.setup_draft.buffer_frames, size, format!("{size} samples")); }
+                        }).response.labelled_by(buffer_label.id).on_disabled_hover_text("Set by the audio driver. Change it in the driver's own settings."));
+                        if ui.add_enabled_ui(!buffer_fixed, |ui| daw_ui::quiet_button(ui, "Recommended").on_hover_text("Balanced starting point for Apple Silicon MacBooks and other modern computers: 256 samples at 44.1/48 kHz, 512 at 88.2/96 kHz. Use a larger buffer if a demanding mix drops out.")).inner.clicked() {
                             self.setup_draft.buffer_frames = daw_engine::DeviceSettings::recommended_buffer_frames(self.setup_draft.sample_rate);
+                            crate::audio_driver::follow_driver_limits(&self.devices, &mut self.setup_draft);
                         }
                         });
                         ui.end_row();
@@ -3294,6 +3369,7 @@ impl DawApp {
                         ui.end_row();
                     });
                     let rate = self.setup_draft.sample_rate.max(1) as f64;
+                    if let Some(note) = self.driver_note() { daw_ui::text::note(ui, note); }
                     daw_ui::text::note(ui, format!("{:.1} ms device buffer", self.setup_draft.buffer_frames as f64 * 1000.0 / rate))
                         .on_hover_text(format!("The render queue adds up to {:.1} ms, with a 512-frame minimum. Device and plug-in latency may add more. Smaller buffers reduce device latency and increase callback overhead; larger buffers give demanding mixes more scheduling headroom.", self.setup_draft.audio().render_queue_frames() as f64 * 1000.0 / rate));
                 }
@@ -3327,8 +3403,8 @@ impl DawApp {
                     daw_ui::text::note(ui, "Recover from File → Recover last session…");
                 }
                 SetupPage::Plugins => {
-                    daw_ui::text::section_heading(ui, "VST3 folders");
-                    daw_ui::text::note(ui, "System folders included").on_hover_text(daw_plugins::default_locations().iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"));
+                    daw_ui::text::section_heading(ui, "Plug-in folders");
+                    daw_ui::text::note(ui, plugin_sources_note()).on_hover_text(daw_plugins::default_locations().iter().filter(|p| daw_plugins::PluginFormat::of_bundle(p) != Some(daw_plugins::PluginFormat::Au)).map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"));
                     let mut remove = None;
                     // Keep the wrapped folder field/actions and Apply/Cancel
                     // outside the scrolling list even in a small viewport.
@@ -3581,7 +3657,7 @@ impl DawApp {
                         let position = |beat: f64| {
                             daw_ui::duration::compact_musical_position(
                                 beat,
-                                self.project.beats_per_bar,
+                                &self.project.meter_map(),
                             )
                         };
                         Some(format!(
@@ -3709,8 +3785,8 @@ impl DawApp {
                     context.on_hover_text(format!(
                         "{}\nSong position: {} to {} (bar:beat)\n{}–{}\n{ruler_context}",
                         clip_context.as_deref().unwrap_or_default(),
-                        daw_ui::duration::compact_musical_position(clip.start, self.project.beats_per_bar),
-                        daw_ui::duration::compact_musical_position(clip.start + clip.length, self.project.beats_per_bar),
+                        daw_ui::duration::compact_musical_position(clip.start, &self.project.meter_map()),
+                        daw_ui::duration::compact_musical_position(clip.start + clip.length, &self.project.meter_map()),
                         daw_ui::duration::format_seconds(clip.start * 60.0 / self.project.tempo),
                         daw_ui::duration::format_seconds((clip.start + clip.length) * 60.0 / self.project.tempo),
                     ));
@@ -3745,6 +3821,7 @@ impl DawApp {
         self.audio_silence_dialog(ctx);
         self.audio_batch_fades_dialog(ctx);
         self.rename_overlay(ctx);
+        self.meter_change_dialog(ctx);
         self.last_scene = if utility_open {
             daw_ui::ViewBackdrop::capture_overlay(ctx, scene_bounds, &self.popup_backdrop)
         } else {
@@ -3762,6 +3839,7 @@ impl DawApp {
         let files = if self.error_details.is_none()
             && !crate::audio_silence::is_open(ctx)
             && !crate::audio_batch::is_open(ctx)
+            && !crate::timeline_marks::meter_dialog_open(ctx)
             && !self.rename_active(ctx)
         {
             ctx.input(|i| i.raw.dropped_files.clone())
@@ -3940,6 +4018,21 @@ impl DawApp {
     }
 }
 
+/// Setup → Plug-ins summary of what a scan includes besides the listed folders.
+/// Audio Units come from the system registry, not a folder.
+pub(crate) fn plugin_sources_note() -> String {
+    let folders: Vec<_> = daw_plugins::PluginFormat::available()
+        .filter(|format| *format != daw_plugins::PluginFormat::Au)
+        .map(|format| format.label())
+        .collect();
+    let mut note = format!("{} system folders included", folders.join(", "));
+    if daw_plugins::PluginFormat::available().any(|format| format == daw_plugins::PluginFormat::Au)
+    {
+        note.push_str(", plus installed Audio Units");
+    }
+    note
+}
+
 /// Cosmetic edits never rebuild the audio graph or restart plug-in processes.
 pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
     // Track order belongs to the workspace. Compare stable channel identities
@@ -3948,6 +4041,7 @@ pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
         b.channels().map(|track| (track.id, track)).collect();
     a.tempo == b.tempo
         && a.beats_per_bar == b.beats_per_bar
+        && a.meter_changes == b.meter_changes
         && a.loop_enabled == b.loop_enabled
         && a.loop_start == b.loop_start
         && a.loop_end == b.loop_end
@@ -4031,6 +4125,15 @@ mod export_feedback_tests {
     use super::*;
 
     #[test]
+    fn plugin_sources_name_audio_units_only_on_macos() {
+        let note = plugin_sources_note();
+        assert!(note.starts_with("VST3, CLAP"), "{note}");
+        assert_eq!(note.contains("Audio Units"), cfg!(target_os = "macos"));
+        assert_eq!(note.contains("LV2"), cfg!(target_os = "linux"));
+        assert!(!note.contains("AU,"), "{note}");
+    }
+
+    #[test]
     fn completed_export_preserves_an_unrelated_error_and_pending_feedback() {
         let ctx = egui::Context::default();
         let mut app = DawApp::with_context(&ctx, Project::new(), None);
@@ -4047,10 +4150,13 @@ mod export_feedback_tests {
                 frames: 0,
                 sample_rate: 48_000,
                 encoding: daw_engine::WavEncoding::Float32,
+                format: daw_engine::ExportFormat::Wav,
                 dither: false,
                 unsupported_midi_events: 0,
                 unsupported_midi_groups: 0,
             },
+            stems: 0,
+            files: Vec::new(),
         }))
         .unwrap();
         app.poll_export();

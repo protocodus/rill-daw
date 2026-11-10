@@ -538,3 +538,57 @@ fn expressive_clip_duplication_is_bounded_without_rejecting_large_existing_state
         MAX_BATCH_GROWTH_BYTES + 1
     );
 }
+
+#[test]
+fn meter_and_marker_edits_are_atomic_and_undoable() {
+    let mut p = Project::new();
+    let before = p.clone();
+    let mut history = History::new();
+    let result = batch(json!([
+        {"op":"set_meter_change","bar":3,"beats_per_bar":3},
+        {"op":"set_meter_change","bar":6,"beats_per_bar":5},
+        {"op":"move_meter_change","from_bar":6,"to_bar":5},
+        {"op":"add_marker","beat":8.0,"name":"Chorus","color":[200,80,40],"key":"chorus"},
+        {"op":"rename_marker","marker":"chorus","name":"Hook"},
+        {"op":"move_marker","marker":"chorus","beat":11.0}
+    ]))
+    .apply(&mut p)
+    .unwrap();
+    assert_eq!(result.created[0].kind, "marker");
+    assert_eq!(
+        p.meter_changes,
+        [
+            MeterChange {
+                bar: 3,
+                beats_per_bar: 3
+            },
+            MeterChange {
+                bar: 5,
+                beats_per_bar: 5
+            }
+        ]
+    );
+    let marker = &p.markers[0];
+    assert_eq!(
+        (marker.id, marker.beat, marker.name.as_str()),
+        (result.created[0].id, 11.0, "Hook")
+    );
+    assert_eq!(p.meter_map().position(11.0), (4, 0.0));
+    history.commit_named(&before, "Timeline");
+    let edited = p.clone();
+    let id = marker.id;
+    let err = batch(json!([
+        {"op":"remove_marker","marker":id},
+        {"op":"remove_meter_change","bar":4}
+    ]))
+    .apply(&mut p);
+    assert!(err.is_err());
+    assert_eq!(p, edited);
+    batch(json!([{"op":"remove_marker","marker":id},{"op":"remove_meter_change","bar":3}]))
+        .apply(&mut p)
+        .unwrap();
+    assert!(p.markers.is_empty() && p.meter_changes.len() == 1);
+    p = edited;
+    assert!(history.undo(&mut p));
+    assert_eq!(p, before);
+}

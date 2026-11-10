@@ -155,6 +155,35 @@ pub fn detect_transients_file(
     Ok(result)
 }
 
+/// Transients refined to their attack frame, for placing warp markers.
+pub fn detect_transient_onsets_file(
+    clip: &Clip,
+    file: &AudioFile,
+    tempo: f64,
+    settings: TransientSettings,
+    cancel: &AtomicBool,
+) -> Result<Vec<f64>> {
+    validate_clip(clip, tempo)?;
+    check_cancelled(cancel)?;
+    file.check_unchanged()?;
+    let info = file.info();
+    let mut reader = file.reader()?;
+    let mut samples = Samples::new(info.channels, info.frames, cancel, |start, output| {
+        reader.read_frames(start, output)
+    })?;
+    let result = AudioAnalysis::new(
+        clip,
+        tempo,
+        info.sample_rate,
+        info.channels,
+        |frame, channel| samples.sample(frame, channel),
+    )?
+    .onsets(settings, || check_cancelled(cancel))?;
+    check_cancelled(cancel)?;
+    file.check_unchanged()?;
+    Ok(result)
+}
+
 /// Silence decisions retain playback-time thresholds, reverse/stretch lookup,
 /// arrangement coordinates and the resident implementation's bounded results.
 pub fn detect_audio_silence_file(

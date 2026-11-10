@@ -1,5 +1,6 @@
 use crate::{
     AudioBoundaryFades, AudioCrossfade, AudioEnvelope, AudioProcessing, AutomationLane, FadeCurve,
+    MeterChange, MeterMap,
 };
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -40,11 +41,41 @@ fn default_source_rate() -> f64 {
 pub const MAX_PLUGIN_STATE_BYTES: usize = 64 * 1024 * 1024;
 pub const MAX_INSTRUMENT_STATE_BYTES: usize = MAX_PLUGIN_STATE_BYTES;
 
-pub(crate) fn validate_vst_class_id(class_id: Option<&str>) -> Result<()> {
-    ensure!(
-        class_id.is_none_or(|id| id.len() == 32 && id.bytes().all(|byte| byte.is_ascii_hexdigit())),
-        "VST3 processor class ID must contain exactly 32 hexadecimal characters"
-    );
+/// Shared reference path of every Audio Unit, matching `daw_plugins::audio_unit`.
+const AUDIO_UNIT_LOCATOR: &str = "/System/Library/Frameworks/AudioToolbox.framework";
+
+/// The plug-in format follows the bundle extension: `.clap` and `.lv2` carry
+/// textual IDs (CLAP plug-in ID, LV2 URI); the Audio Unit locator carries
+/// `type:subtype:manufacturer` four-character codes (each code may instead be
+/// `0x` and eight hex digits); anything else keeps the VST3 rule.
+pub(crate) fn validate_plugin_class_id(path: &str, class_id: Option<&str>) -> Result<()> {
+    let Some(id) = class_id else { return Ok(()) };
+    if path == AUDIO_UNIT_LOCATOR {
+        let code = |code: &str| match code.strip_prefix("0x") {
+            Some(hex) => hex.len() == 8 && hex.bytes().all(|byte| byte.is_ascii_hexdigit()),
+            None => code.len() == 4 && code.bytes().all(|byte| (0x20..=0x7E).contains(&byte)),
+        };
+        let codes: Vec<_> = id.split(':').collect();
+        ensure!(
+            codes.len() == 3 && codes.iter().all(|c| code(c)),
+            "Audio Unit ID must be type:subtype:manufacturer four-character codes"
+        );
+        return Ok(());
+    }
+    let textual = std::path::Path::new(path)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("clap") || ext.eq_ignore_ascii_case("lv2"));
+    if textual {
+        ensure!(
+            !id.is_empty() && id.len() <= 1024 && !id.chars().any(char::is_control),
+            "Plug-in ID must be 1-1,024 printable characters"
+        );
+    } else {
+        ensure!(
+            id.len() == 32 && id.bytes().all(|byte| byte.is_ascii_hexdigit()),
+            "VST3 processor class ID must contain exactly 32 hexadecimal characters"
+        );
+    }
     Ok(())
 }
 
@@ -71,6 +102,35 @@ pub struct Project {
     pub metronome_gain: f32,
     #[serde(default)]
     pub precount_bars: u8,
+    /// Meter changes after bar 1; `beats_per_bar` remains the meter of bar 1.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub meter_changes: Vec<MeterChange>,
+    /// Named song positions, kept in beat order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub markers: Vec<Marker>,
+}
+
+pub const MAX_MARKERS: usize = 1024;
+pub const MAX_MARKER_NAME_CHARS: usize = 256;
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Marker {
+    pub id: u64,
+    pub beat: f64,
+    pub name: String,
+    /// Optional identity color, using the same RGB form as track colors.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<[u8; 3]>,
+}
+
+pub fn validate_marker_name(name: &str) -> Result<()> {
+    ensure!(
+        !name.trim().is_empty()
+            && name.chars().count() <= MAX_MARKER_NAME_CHARS
+            && !name.chars().any(char::is_control),
+        "Marker names need 1–256 printable characters"
+    );
+    Ok(())
 }
 
 fn default_metronome_gain() -> f32 {
@@ -188,6 +248,8 @@ impl EffectSlot {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Effect {
+    /// Any hosted plug-in (VST3, CLAP, LV2 or AU, chosen by the path);
+    /// the variant keeps its historic name so existing projects load unchanged.
     Vst3 {
         path: String,
         #[serde(default)]
@@ -206,6 +268,7 @@ pub struct Send {
 pub enum Instrument {
     #[default]
     None,
+    /// Any hosted plug-in; see [`Effect::Vst3`].
     Vst3 {
         path: String,
         #[serde(default)]
@@ -264,6 +327,10 @@ pub struct Clip {
     /// including when its content belongs to a shared ghost group.
     #[serde(default = "default_source_rate")]
     pub source_rate: f64,
+    /// Optional audio warp map; empty plays the whole clip at `source_rate`.
+    /// Local to this occurrence like `source_rate`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warp_markers: Vec<crate::WarpMarker>,
     pub content: ClipContent,
 }
 
@@ -359,6 +426,7 @@ impl Clip {
             length,
             offset: 0.0,
             source_rate: 1.0,
+            warp_markers: Vec::new(),
             content: ClipContent::Midi { notes },
         }
     }
@@ -381,6 +449,7 @@ impl Clip {
             length,
             offset: 0.0,
             source_rate: 1.0,
+            warp_markers: Vec::new(),
             content: ClipContent::Audio {
                 path: path.into(),
                 processing: AudioProcessing::default(),
@@ -401,17 +470,10 @@ impl Clip {
         self.start + self.length
     }
 
+    /// Clip length in rate-scaled source beats. Fades and envelopes use this
+    /// unit; with warp markers the played source window is `offset..source_end()`.
     pub fn source_length(&self) -> f64 {
         self.length * self.source_rate
-    }
-    pub fn source_end(&self) -> f64 {
-        self.offset + self.source_length()
-    }
-    pub fn source_to_local(&self, source_beat: f64) -> f64 {
-        (source_beat - self.offset) / self.source_rate
-    }
-    pub fn local_to_source(&self, local_beat: f64) -> f64 {
-        self.offset + local_beat * self.source_rate
     }
 
     fn refresh_ids(&mut self) {
@@ -514,7 +576,18 @@ impl Project {
             metronome_enabled: false,
             metronome_gain: default_metronome_gain(),
             precount_bars: 0,
+            meter_changes: Vec::new(),
+            markers: Vec::new(),
         }
+    }
+
+    /// The song's bar/beat layout; every bar-derived position uses this map.
+    pub fn meter_map(&self) -> MeterMap {
+        MeterMap::new(self.beats_per_bar, &self.meter_changes)
+    }
+
+    pub fn marker(&self, id: u64) -> Option<&Marker> {
+        self.markers.iter().find(|marker| marker.id == id)
     }
 
     pub fn add_audio_track(&mut self, name: impl Into<String>) -> u64 {
@@ -826,9 +899,9 @@ impl Project {
             *crossfade = None;
         }
         if matches!(clip.content, ClipContent::Audio { reverse: true, .. }) {
-            clip.offset += (clip.length - delta) * clip.source_rate;
+            clip.shift_source_origin(clip.length - delta);
         } else {
-            right.offset += delta * clip.source_rate;
+            right.shift_source_origin(delta);
         }
         let envelope = match &mut clip.content {
             ClipContent::Audio { envelope, .. } => {
@@ -930,11 +1003,12 @@ impl Project {
         let clip = self.clip_mut(track_id, clip_id).context("Clip not found")?;
         ensure!(!clip.is_take_source(), "Choose a take before trimming it");
         let delta = new_start - clip.start;
-        let new_offset = if matches!(clip.content, ClipContent::Audio { reverse: true, .. }) {
-            clip.offset + (clip.length - delta - new_length) * clip.source_rate
+        let origin = if matches!(clip.content, ClipContent::Audio { reverse: true, .. }) {
+            clip.length - delta - new_length
         } else {
-            clip.offset + delta * clip.source_rate
+            delta
         };
+        let new_offset = clip.local_to_source(origin);
         ensure!(
             valid_range(new_offset, new_length * clip.source_rate),
             "Trim extends before the source or overflows its range"
@@ -971,7 +1045,7 @@ impl Project {
                 boundary.offset += delta * clip.source_rate;
             }
         }
-        clip.offset = new_offset;
+        clip.shift_source_origin(origin);
         clip.start = new_start;
         clip.length = new_length;
         clip.constrain_fades();
@@ -1010,6 +1084,10 @@ impl Project {
                 length: source_length,
             });
         }
+        let mut warped = clip.clone();
+        warped.scale_warp(new_length / clip.length);
+        crate::validate_warp_markers(&warped.warp_markers)?;
+        clip.warp_markers = warped.warp_markers;
         clip.length = new_length;
         clip.source_rate = rate;
         Ok(())
@@ -1024,6 +1102,18 @@ impl Project {
             (1..=32).contains(&self.beats_per_bar),
             "Invalid time signature numerator"
         );
+        self.validate_timeline()?;
+        ensure!(
+            self.markers.len() <= MAX_MARKERS,
+            "Too many markers (at most 1024)"
+        );
+        for marker in &self.markers {
+            ensure!(
+                marker.beat.is_finite() && (0.0..=MAX_BEAT).contains(&marker.beat),
+                "Marker position is outside the timeline"
+            );
+            validate_marker_name(&marker.name)?;
+        }
         ensure!(
             nonnegative(self.loop_start)
                 && nonnegative(self.loop_end)
@@ -1071,6 +1161,9 @@ impl Project {
             );
             Ok(())
         };
+        for marker in &self.markers {
+            check_id(marker.id)?;
+        }
         for (is_master, track) in self
             .tracks
             .iter()
@@ -1138,8 +1231,8 @@ impl Project {
                 "Invalid track pan"
             );
             if let Instrument::Vst3 { path, class_id } = &track.instrument {
-                ensure!(!path.is_empty(), "Missing VST3 path");
-                validate_vst_class_id(class_id.as_deref())?;
+                ensure!(!path.is_empty(), "Missing plug-in path");
+                validate_plugin_class_id(path, class_id.as_deref())?;
             }
             validate_plugin_state(&track.instrument_state, &track.instrument_parameters)
                 .context("Invalid instrument state")?;
@@ -1235,6 +1328,18 @@ impl Project {
                         && (MIN_SOURCE_RATE..=MAX_SOURCE_RATE).contains(&clip.source_rate),
                     "Invalid clip source rate"
                 );
+                if clip.is_warped() {
+                    ensure!(
+                        matches!(clip.content, ClipContent::Audio { .. }),
+                        "Warp markers apply to audio clips"
+                    );
+                    crate::validate_warp_markers(&clip.warp_markers)?;
+                    let start = clip.local_to_source(0.0);
+                    ensure!(
+                        (clip.offset - start).abs() <= 1e-6 * start.abs().max(1.0),
+                        "Warp markers disagree with the clip source offset"
+                    );
+                }
                 match &clip.content {
                     ClipContent::Midi { notes } => {
                         ensure!(
@@ -1488,7 +1593,12 @@ impl Project {
         resolve_plugin_paths: bool,
     ) -> Result<Self> {
         self.validate()?;
-        let mut max_id = 0;
+        let mut max_id = self
+            .markers
+            .iter()
+            .map(|marker| marker.id)
+            .max()
+            .unwrap_or(0);
         for track in self.channels_mut() {
             max_id = max_id.max(track.id);
             if let Some(lane) = &track.automation {
