@@ -107,6 +107,24 @@ fn menu(app: &mut Harness, item: &str) -> Value {
     app.click(item)
 }
 
+/// Automate lands in Arrangement; return to the instrument's parameter list.
+fn reopen_parameters(app: &mut Harness, phrase: &str, effect: Option<usize>) -> Value {
+    app.click(phrase);
+    match effect {
+        Some(index) => {
+            menu(app, "Effects");
+            app.command(json!({"command":"click","label":"Parameters…","occurrence":index}));
+        }
+        None => {
+            // The instrument keeps its list open while it stays the owner.
+            if visible(&menu(app, "Instrument"), "Parameters…") {
+                app.click("Parameters…");
+            }
+        }
+    }
+    ready(app)
+}
+
 fn ready(app: &mut Harness) -> Value {
     let deadline = Instant::now() + Duration::from_secs(15);
     loop {
@@ -171,43 +189,6 @@ fn double_click(app: &mut Harness, label: &str) -> Value {
     app.command(json!({"command":"pointer", "phase":"double_click", "x":x, "y":y}))
 }
 
-fn select_automation_parameter(app: &mut Harness, parameter: &str) {
-    app.click("Volume");
-    for _ in 0..8 {
-        let state = app.inspect();
-        if visible(&state, parameter) {
-            app.click(parameter);
-            return;
-        }
-        // The parameter picker is scrollable. Aim the wheel at a visible
-        // option, rather than at the selected-value button behind its popup.
-        let option = state["label_rects"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .rev()
-            .find(|row| {
-                row["text"].as_str().is_some_and(|text| {
-                    matches!(
-                        text,
-                        "Input gain" | "Volume" | "Pan" | "VST instrument parameter"
-                    ) || text.ends_with(" · Parameter")
-                })
-            })
-            .expect("Open automation parameter options");
-        let x = (option["min"][0].as_f64().unwrap() + option["max"][0].as_f64().unwrap()) * 0.5;
-        let y = (option["min"][1].as_f64().unwrap() + option["max"][1].as_f64().unwrap()) * 0.5;
-        app.command(json!({"command":"scroll","x":x,"y":y,"delta":-120.0}));
-        for _ in 0..8 {
-            app.inspect();
-        }
-    }
-    panic!(
-        "Missing automation parameter {parameter:?} after scrolling: {}",
-        app.inspect()["visible_labels"]
-    );
-}
-
 fn drag_parameter_knob(app: &mut Harness, state: &Value, delta_y: f64) -> Value {
     let center = &state["native_editor"]["parameter_control"]["center"];
     let x = center[0].as_f64().expect("parameter knob center");
@@ -225,7 +206,7 @@ fn instrument_search_handles_empty_results_keyboard_activation_reuse_and_recall(
         );
         app.command(json!({"command":"system_theme","dark":dark}));
         menu(&mut app, "Instrument");
-        app.click("Automate…");
+        app.click("Parameters…");
         // The chooser requests focus itself; typing requires no extra search click.
         app.command(json!({"command":"text","text":"FILTER cut"}));
         let selected = ready(&mut app);
@@ -262,9 +243,9 @@ fn instrument_search_handles_empty_results_keyboard_activation_reuse_and_recall(
         assert_eq!(lanes(&created).len(), 1);
         assert_lane(lanes(&created)[0], track, None, 9000, 0.5);
         let lane_id = lanes(&created)[0]["id"].clone();
-        assert_eq!(created["popups"]["automation"], true);
+        assert_eq!(created["view"], "Arrangement");
 
-        app.key("Escape");
+        reopen_parameters(&mut app, "Neon phrase", None);
         query(&mut app, "");
         app.click("Automated");
         let automated = app.inspect();
@@ -292,7 +273,7 @@ fn modified_result_navigation_does_not_change_selection_or_create_automation() {
     let fixture = Fixture::new();
     let (mut app, track, _) = fixture.app();
     menu(&mut app, "Instrument");
-    app.click("Automate…");
+    app.click("Parameters…");
     ready(&mut app);
     let original = query(&mut app, "Filter");
     assert_eq!(original["native_editor"]["selected"], 7);
@@ -322,7 +303,7 @@ fn insert_search_uses_exact_instance_and_supports_arrows_double_click_and_last_t
     let fixture = Fixture::new();
     let (mut app, track, effects) = fixture.app();
     menu(&mut app, "Effects");
-    app.command(json!({"command":"click","label":"Automate…","occurrence":0}));
+    app.command(json!({"command":"click","label":"Parameters…","occurrence":0}));
     ready(&mut app);
     let selected = query(&mut app, "Filter");
     assert_eq!(selected["native_editor"]["selected"], 7);
@@ -331,7 +312,7 @@ fn insert_search_uses_exact_instance_and_supports_arrows_double_click_and_last_t
     let created = app.key("Enter");
     assert_lane(lanes(&created)[0], track, Some(effects[0]), 8, 0.25);
 
-    app.key("Escape");
+    reopen_parameters(&mut app, "Neon phrase", Some(0));
     let selected = query(&mut app, "Filter Cutoff");
     assert!(
         (selected["native_editor"]["selected_value"]
@@ -356,7 +337,7 @@ fn insert_search_uses_exact_instance_and_supports_arrows_double_click_and_last_t
     menu(&mut app, "Arranger");
     app.click("Neon phrase");
     menu(&mut app, "Effects");
-    app.command(json!({"command":"click","label":"Automate…","occurrence":1}));
+    app.command(json!({"command":"click","label":"Parameters…","occurrence":1}));
     ready(&mut app);
     let second = query(&mut app, "Filter Cutoff");
     assert_eq!(second["native_editor"]["effect"], effects[1]);
@@ -369,47 +350,35 @@ fn insert_search_uses_exact_instance_and_supports_arrows_double_click_and_last_t
 }
 
 #[test]
-fn add_automation_parameter_search_uses_saved_instance_values_and_reuses_existing_lane() {
+fn parameter_lists_use_saved_instance_values_and_reuse_existing_lane() {
     let fixture = Fixture::new();
     let (mut app, track, effects) = fixture.app();
-    menu(&mut app, "Automation");
-    select_automation_parameter(&mut app, "VST instrument parameter");
-    common::wait_visible(&mut app, "Filter Cutoff");
+    menu(&mut app, "Instrument");
+    app.click("Parameters…");
+    ready(&mut app);
     query(&mut app, "No such parameter");
     let empty = app.key("Enter");
     assert!(
         lanes(&empty).is_empty(),
-        "empty plugin search must not create a volume lane"
+        "empty plugin search must not create a lane"
     );
     query(&mut app, "Filter Cutoff");
     let created = app.key("Enter");
     assert_lane(lanes(&created)[0], track, None, 7, 0.73);
 
-    menu(&mut app, "Arranger");
-    app.click("Neon phrase");
-    menu(&mut app, "Automation");
-    select_automation_parameter(&mut app, "01 · Echo A · Parameter");
-    common::wait_visible(&mut app, "Filter Cutoff");
+    reopen_parameters(&mut app, "Neon phrase", Some(0));
     query(&mut app, "Filter Cutoff");
     let created = app.key("Enter");
     assert_eq!(lanes(&created).len(), 2);
     assert_lane(lanes(&created)[1], track, Some(effects[0]), 7, 0.21);
 
-    menu(&mut app, "Arranger");
-    app.click("Neon phrase");
-    menu(&mut app, "Automation");
-    select_automation_parameter(&mut app, "02 · Echo B · Parameter");
-    common::wait_visible(&mut app, "Filter Cutoff");
+    reopen_parameters(&mut app, "Neon phrase", Some(1));
     query(&mut app, "Filter Cutoff");
     let created = app.key("Enter");
     assert_eq!(lanes(&created).len(), 3);
     assert_lane(lanes(&created)[2], track, Some(effects[1]), 7, 0.82);
     let id = lanes(&created)[2]["id"].clone();
-    menu(&mut app, "Arranger");
-    app.click("Neon phrase");
-    menu(&mut app, "Automation");
-    select_automation_parameter(&mut app, "02 · Echo B · Parameter");
-    common::wait_visible(&mut app, "Filter Cutoff");
+    reopen_parameters(&mut app, "Neon phrase", Some(1));
     query(&mut app, "Filter Cutoff");
     let reused = app.key("Enter");
     assert_eq!(reused["selected_track"], id);
@@ -432,7 +401,7 @@ fn parameter_metadata_error_stays_in_the_browser_without_creating_a_lane() {
     app.command(json!({"command":"open","path":path}));
     app.click("Neon phrase");
     menu(&mut app, "Instrument");
-    app.click("Automate…");
+    app.click("Parameters…");
     let deadline = Instant::now() + Duration::from_secs(15);
     loop {
         let state = app.inspect();
@@ -490,10 +459,10 @@ fn parameter_controls_show_automation_and_manual_override_with_resume_undo_and_r
         app.click("Neon phrase");
         if let Some(index) = effect_index {
             menu(&mut app, "Effects");
-            app.command(json!({"command":"click", "label":"Automate…", "occurrence":index}));
+            app.command(json!({"command":"click", "label":"Parameters…", "occurrence":index}));
         } else {
             menu(&mut app, "Instrument");
-            app.click("Automate…");
+            app.click("Parameters…");
         }
         ready(&mut app);
         let initial = query(&mut app, "Filter Cutoff");
@@ -563,7 +532,7 @@ fn knob_numeric_entry_is_precise_automatable_and_recalled_without_keyboard_short
     let (mut app, track, _) = fixture.app();
     app.command(json!({"command":"viewport","width":1100,"height":850}));
     menu(&mut app, "Instrument");
-    app.click("Automate…");
+    app.click("Parameters…");
     ready(&mut app);
     let initial = query(&mut app, "Filter Cutoff");
     assert!(visible(&initial, "Value"));
@@ -662,8 +631,8 @@ fn knob_numeric_entry_is_precise_automatable_and_recalled_without_keyboard_short
     let created = app.click("Automate");
     assert_lane(lanes(&created)[0], track, None, 7, value);
     let points = lanes(&created)[0]["automation"]["points"].clone();
-    app.key("Escape");
-    let automated = app.inspect();
+    reopen_parameters(&mut app, "Neon phrase", None);
+    let automated = query(&mut app, "Filter Cutoff");
     assert_eq!(automated["native_editor"]["automation_state"], "Automated");
     let overridden = common::edit_plugin_parameter_value(&mut app, &automated, "23.4567");
     assert_eq!(
@@ -695,7 +664,7 @@ fn knob_numeric_entry_is_precise_automatable_and_recalled_without_keyboard_short
     );
     app.click("Neon phrase");
     menu(&mut app, "Instrument");
-    app.click("Automate…");
+    app.click("Parameters…");
     ready(&mut app);
     let recalled = query(&mut app, "Filter Cutoff");
     assert_eq!(recalled["native_editor"]["automation_state"], "Overridden");
@@ -725,7 +694,7 @@ fn stepped_knob_quantizes_edits_only_and_read_only_parameters_cannot_be_edited()
     let fixture = Fixture::new();
     let (mut app, _, _) = fixture.app();
     menu(&mut app, "Instrument");
-    app.click("Automate…");
+    app.click("Parameters…");
     ready(&mut app);
     let initial = query(&mut app, "Oscillator Mode");
     assert_eq!(initial["native_editor"]["selected_steps"], 4);

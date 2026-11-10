@@ -45,11 +45,6 @@ pub(crate) fn catalog() -> &'static [CatalogEntry] {
     })
 }
 
-/// The parameter browser's `(path, class_id)` for a built-in device.
-pub(crate) fn locator(device: &str) -> (String, Option<String>) {
-    (format!("{LOCATOR}{device}"), Some(device.into()))
-}
-
 pub(crate) fn device_of_locator(path: &str) -> Option<&str> {
     path.strip_prefix(LOCATOR)
 }

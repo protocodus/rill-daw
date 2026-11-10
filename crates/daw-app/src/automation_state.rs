@@ -169,6 +169,27 @@ impl DawApp {
             .is_ok()
     }
 
+    /// Right-click **Automate** lands on the new lane in Arrangement with a
+    /// one-bar clip at the cursor's bar, ready to draw, instead of opening a
+    /// separate editor. Call inside the edit that created the lane, so Undo
+    /// removes the lane and its clip together.
+    pub(crate) fn show_new_automation(&mut self, lane: u64) {
+        let meter = self.project.meter_map();
+        let (bar, _) = meter.position(self.cursor.max(0.0));
+        let start = meter.bar_start(bar);
+        let clip =
+            self.project
+                .create_automation_clip(lane, start, meter.bar_start(bar + 1) - start);
+        self.open_workspace(crate::app::WorkspaceView::Arrangement);
+        self.selected_track = Some(lane);
+        self.selected_clip = clip.as_ref().ok().copied();
+        self.queue_arranger_channel_reveal(lane);
+        self.sync_arranger_selection();
+        if let Err(error) = clip {
+            self.message(Err(error), "");
+        }
+    }
+
     pub(crate) fn resume_automation(&mut self, lane: u64) {
         if self
             .project

@@ -2175,11 +2175,6 @@ impl DawApp {
                     ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
                     return;
                 }
-                if self.automation_open && crate::automation_editor::cancel_automation_creation(ctx)
-                {
-                    ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
-                    return;
-                }
                 if self.instrument_open && self.close_instrument_parameters() {
                     ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
                     return;
@@ -2890,7 +2885,7 @@ impl DawApp {
                             (
                                 "Automation",
                                 PopupKind::Automation,
-                                track.is_some_and(|track| track.kind != TrackKind::Folder),
+                                track.is_some_and(|track| track.kind == TrackKind::Automation),
                             ),
                             (
                                 "Properties",
@@ -2937,10 +2932,9 @@ impl DawApp {
                             if self.assistant.busy() && daw_ui::small_button(ui, "Stop AI").clicked() {
                                 self.assistant.stop();
                             }
-                            if self.automation_override_count() > 0
-                                && daw_ui::small_button(ui, "Cancel automation override")
-                                    .on_hover_text("Clear all manual automation overrides. Enabled curves resume at the current playhead; bypass stays unchanged. Undo restores the overrides.")
-                                    .clicked() {
+                            let overrides = self.automation_override_count();
+                            if overrides > 0
+                                && daw_ui::automation_override_warning(ui, overrides).clicked() {
                                 self.cancel_automation_overrides();
                             }
                             ui.add_space(daw_ui::tokens::SPACE_LG);
@@ -3198,11 +3192,6 @@ impl DawApp {
                     }
                     ui.close();
                 }
-            }
-            if daw_ui::button(ui, "Add automation track…").clicked() {
-                self.start_automation_creation(ui.ctx());
-                self.open_popup(PopupKind::Automation);
-                ui.close();
             }
             ui.separator();
             let track = self.selected_track.and_then(|id| self.project.track(id));

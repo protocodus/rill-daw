@@ -86,14 +86,6 @@ fn close_buttons_and_menus_work_after_typing_and_restore_the_editor() {
             assert_eq!(restored["project"], edited["project"]);
             assert_eq!(restored["history"], edited["history"]);
 
-            let automation = window(&mut app, "Automation");
-            assert_eq!(automation["popups"]["automation"], true);
-            let restored = close(&mut app, "Add automation");
-            assert_eq!(restored["popups"]["automation"], false);
-            assert_eq!(restored["view"], "Clip");
-            assert_eq!(restored["project"], edited["project"]);
-            assert_eq!(restored["history"], edited["history"]);
-
             let library = window(&mut app, "Device browser");
             assert_eq!(library["popups"]["library"], true);
             let restored = close(&mut app, "Device browser");

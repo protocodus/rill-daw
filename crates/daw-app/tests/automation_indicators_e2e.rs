@@ -199,3 +199,41 @@ fn native_pan_send_and_arranger_indicate_override_and_resume_from_visible_contro
         app.quit();
     }
 }
+
+#[test]
+fn every_automatable_control_shows_an_indicator_before_and_after_automate() {
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    let source = project.add_audio_track("Source");
+    let path = app.directory.path().join("indicators.rill");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open","path":path}));
+    app.command(json!({"command":"viewport","width":1200,"height":900}));
+    let states = |state: &Value| -> Vec<Value> {
+        state["automation_indicators"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|indicator| indicator["state"].clone())
+            .collect()
+    };
+    let mixer = app.click("Mixer");
+    let before = states(&mixer);
+    assert!(
+        before.len() >= 3 && before.iter().all(Value::is_null),
+        "Unautomated controls still show an indicator: {before:?}"
+    );
+    let gain = &mixer["mixer"]["channels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|channel| channel["track"] == source)
+        .unwrap()["gain"];
+    let (x, y) = center(gain);
+    app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
+    app.click("Automate");
+    let after = states(&app.click("Mixer"));
+    assert_eq!(after.len(), before.len(), "{after:?}");
+    assert!(after.iter().any(|state| state == "Automated"), "{after:?}");
+    app.quit();
+}

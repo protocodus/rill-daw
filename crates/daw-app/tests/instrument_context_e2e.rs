@@ -82,13 +82,13 @@ fn plugin_overview_hides_parameters_until_requested_and_retains_channel_context(
         let overview = menu(&mut app, "Instrument");
         assert!(visible(&overview, "Instrument of Evening lead 🎹"));
         assert!(visible(&overview, "Open editor"));
-        assert!(visible(&overview, "Automate…"));
+        assert!(visible(&overview, "Parameters…"));
         assert!(!visible(&overview, "Search parameters"));
         assert!(!visible(&overview, "Read parameters"));
         assert!(!visible(&overview, "Automate parameter"));
         assert_eq!(overview["native_editor"]["open"], false);
 
-        let chooser = latest(&mut app, "Automate…");
+        let chooser = latest(&mut app, "Parameters…");
         assert_eq!(chooser["native_editor"]["parameters_open"], true);
         assert!(visible(&chooser, "Search parameters"));
         assert!(visible(&chooser, "Back"));
@@ -107,9 +107,9 @@ fn plugin_overview_hides_parameters_until_requested_and_retains_channel_context(
         }
         let overview = latest(&mut app, "Back");
         assert_eq!(overview["native_editor"]["parameters_open"], false);
-        assert!(visible(&overview, "Automate…"));
+        assert!(visible(&overview, "Parameters…"));
         assert!(!visible(&overview, "Search parameters"));
-        latest(&mut app, "Automate…");
+        latest(&mut app, "Parameters…");
         let overview = app.key("Escape");
         assert_eq!(overview["popups"]["instrument"], true);
         assert_eq!(overview["native_editor"]["parameters_open"], false);

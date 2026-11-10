@@ -393,8 +393,21 @@ fn automation_and_override_colors_follow_state_across_workspaces_and_themes() {
         }
         // Existing mouse commands change only override state; all later view
         // and appearance checks compare against this exact history checkpoint.
-        for name in ["Volume envelope", "Send envelope"] {
-            open_editor(&mut app, name);
+        // Override belongs to each control: use the mixer fader and send.
+        let mixer = app.click("Mixer");
+        let channel = mixer["mixer"]["channels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|channel| channel["track"] == source)
+            .unwrap()
+            .clone();
+        for rect in [&channel["gain"], &channel["send_automation"][0]["rect"]] {
+            app.command(
+                json!({"command":"pointer","phase":"click","button":"secondary",
+                "x":(rect["min"][0].as_f64().unwrap()+rect["max"][0].as_f64().unwrap())*0.5,
+                "y":(rect["min"][1].as_f64().unwrap()+rect["max"][1].as_f64().unwrap())*0.5}),
+            );
             baseline = app.click(if overridden {
                 "Resume automation"
             } else {

@@ -2679,14 +2679,15 @@ impl DawApp {
                     self.project.add_automation_track(name, target)
                 };
                 match result {
-                    Ok(lane) => {
+                    Ok(lane) if existing.is_some() => {
                         self.open_popup(PopupKind::Automation);
                         self.selected_track = Some(lane);
                         self.selected_clip = None;
-                        if existing.is_none() {
-                            self.edit_label = Some("Create automation".into());
-                            self.changed();
-                        }
+                    }
+                    Ok(lane) => {
+                        self.show_new_automation(lane);
+                        self.edit_label = Some("Create automation".into());
+                        self.changed();
                     }
                     Err(error) => self.message(Err(error), ""),
                 }
