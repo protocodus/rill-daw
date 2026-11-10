@@ -709,7 +709,7 @@ impl DawApp {
                     PopupKind::Instrument => "Instrument",
                     PopupKind::Effects => "Effects",
                     PopupKind::Routing => "Routing",
-                    PopupKind::Library => "Library",
+                    PopupKind::Library => "Device browser",
                     PopupKind::Setup => "Setup",
                     PopupKind::Automation => "Automation",
                     PopupKind::History => "History",
@@ -2907,7 +2907,7 @@ impl DawApp {
                             }
                         }
                         ui.separator();
-                        if daw_ui::button(ui, "Library").clicked() {
+                        if daw_ui::button(ui, "Device browser").clicked() {
                             self.open_popup(PopupKind::Library);
                             ui.close();
                         }
@@ -4005,6 +4005,16 @@ impl DawApp {
             }
             "instrument" => self.open_popup(PopupKind::Instrument),
             "rack" | "effects" => self.open_popup(PopupKind::Effects),
+            "effect-editor" => {
+                let target =
+                    self.project.tracks.iter().find_map(|track| {
+                        track.inserts.first().map(|insert| (track.id, insert.id))
+                    });
+                if let Some((track, effect)) = target {
+                    self.selected_track = Some(track);
+                    self.open_effect_editor(track, effect);
+                }
+            }
             _ => {}
         }
     }

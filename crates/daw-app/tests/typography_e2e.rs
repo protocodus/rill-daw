@@ -88,7 +88,7 @@ fn long_device_name_wraps_on_card_and_actions_stay_accessible_in_small_window() 
     std::fs::write(&path, serde_json::to_vec(&metadata).unwrap()).unwrap();
     let mut app = Harness::with_vst_path(fixture.path());
     app.command(json!({"command":"viewport","width":1100,"height":760}));
-    menu(&mut app, "Window", "Library");
+    menu(&mut app, "Window", "Device browser");
     app.click("Search instruments");
     app.command(json!({"command":"text","text":"Žluťoučký"}));
     common::wait_library_device(&mut app, name);

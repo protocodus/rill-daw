@@ -144,14 +144,14 @@ fn edit_track_and_window_menus_follow_workflow_with_a_shortcut_column() {
             "Recording",
             "Automation",
             "Properties",
-            "Library",
+            "Device browser",
             "Assistant",
             "Setup",
         ],
     );
-    let library = app.click("Library");
+    let library = app.click("Device browser");
     assert_eq!(library["popups"]["library"], true);
-    label(&library, "Library");
+    label(&library, "Device browser");
     app.key("Escape");
 
     // Menu bar: project name and duration centered, AI at the far right.

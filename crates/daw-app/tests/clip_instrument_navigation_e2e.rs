@@ -123,7 +123,7 @@ fn clip_instrument_action_survives_assignment_and_restores_notes_and_view_on_ret
 
         let chooser = app.click("Choose instrument…");
         assert_eq!(chooser["popups"]["library"], true);
-        let cancelled = close_popup(&mut app, &chooser, "Library");
+        let cancelled = close_popup(&mut app, &chooser, "Device browser");
         unchanged(&cancelled, &before);
 
         app.click("Choose instrument…");

@@ -482,7 +482,7 @@ pub fn plugin_fixture() -> TempDir {
 
 pub fn fixture_library(app: &mut Harness) {
     app.click("Window");
-    app.click("Library");
+    app.click("Device browser");
     app.click("Instruments");
     let state = app.inspect();
     if state["visible_labels"]
@@ -620,7 +620,7 @@ pub fn wait_until(app: &mut Harness, condition: impl Fn(&Value) -> bool) -> Valu
 pub fn refresh_library(app: &mut Harness) -> Value {
     wait_until(app, |state| state["plugin_scanning"] == false);
     app.click("Window");
-    app.click("Library");
+    app.click("Device browser");
     app.click("Refresh");
     wait_until(app, |state| state["plugin_scanning"] == false)
 }

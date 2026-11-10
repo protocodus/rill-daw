@@ -124,7 +124,7 @@ fn cards(state: &Value) -> &[Value] {
 
 fn open(app: &mut Harness) -> Value {
     app.click("Window");
-    app.click("Library");
+    app.click("Device browser");
     app.click("Instruments");
     app.click("Search instruments");
     app.command(json!({"command":"text", "text":"Card Synth"}));

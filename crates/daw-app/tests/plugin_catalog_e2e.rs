@@ -178,7 +178,7 @@ fn catalog_syncs_on_open_captures_previews_in_background_and_refreshes_on_reques
     assert!(index.is_file(), "the catalog index is written to the cache");
 
     app.click("Window");
-    let library = app.click("Library");
+    let library = app.click("Device browser");
     assert!(card(&library, "Acme Keys")["preview"].is_boolean());
     wait_until(&mut app, |state| {
         card(state, "Acme Keys")["preview"] == true
@@ -304,6 +304,11 @@ fn favorites_categories_filters_and_list_view_work_by_mouse_and_persist() {
     let filtered = app.click("Vintage");
     assert_eq!(filtered["library"]["category"], "Vintage");
     assert_eq!(filtered["library"]["total"], 1);
+    // Developers follow the collections; scroll the sidebar to reach them.
+    let sidebar = &filtered["library"]["sidebar"];
+    let x = (sidebar["min"][0].as_f64().unwrap() + sidebar["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (sidebar["min"][1].as_f64().unwrap() + sidebar["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"scroll","x":x,"y":y,"delta":-400.0}));
     app.click("Rill tests");
     let both = app.inspect();
     assert_eq!(both["library"]["developer"], "Rill tests");

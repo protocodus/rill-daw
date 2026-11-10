@@ -67,7 +67,7 @@ fn device_details_read_native_ports_search_parameters_and_preserve_project() {
         app.command(json!({"command":"viewport", "width":800, "height":600}));
         app.command(json!({"command":"system_theme", "dark":dark}));
         app.click("Window");
-        app.click("Library");
+        app.click("Device browser");
         common::wait_library_device(&mut app, "No Editor Probe");
         let before = app.inspect();
         app.click("Device details");

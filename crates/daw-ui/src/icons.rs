@@ -122,7 +122,7 @@ impl Icon {
             "Apply" | "Apply quantize" | "Assign to selected track" => Self::Check,
             "Setup" | "Properties" | "Manage" => Self::Settings,
             "Add folder" | "Browse…" => Self::Folder,
-            "Library" | "Browse effects" => Self::Library,
+            "Device browser" | "Browse effects" => Self::Library,
             "Instrument" | "Notes" | "Add instrument…" | "Create instrument track" => {
                 Self::Instrument
             }

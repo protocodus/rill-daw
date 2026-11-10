@@ -37,7 +37,7 @@ Get a development build for your platform. These links serve the latest successf
 
 **Installing:** extract the download ZIP, then the platform archive inside it. Keep the application and `daw-plugin-host` helper together; keep the macOS app bundle intact. Each package includes a SHA-256 checksum and installation notes. Builds are unsigned and macOS builds are not notarized. macOS requires version 11 or newer; Linux requires glibc 2.35 or newer. See [platform requirements and installation](docs/RELEASING.md).
 
-**Bring your own instruments:** VST3, CLAP, LV2 and AU instruments and effects are installed separately. Rill includes an original audio drum loop to try immediately.
+**Sound out of the box:** Rill includes its own [R1 synth and filter](#built-in-devices) and an original audio drum loop to try immediately. Add VST3, CLAP, LV2 and AU instruments and effects whenever you like.
 
 Build artifacts expire after 14 days. If a link is unavailable, visit the [successful main builds](https://github.com/protocodus/rill-daw/actions/workflows/ci.yml?query=branch%3Amain+is%3Asuccess) and open a run's **Artifacts** section; GitHub sign-in is required for that route. A newer build can be in progress while the links serve an earlier successful version.
 
@@ -90,10 +90,21 @@ Draw volume changes, bend individual curve segments, and enter precise point val
 
 ![Rill Automation editor showing the Atmosphere track's volume curve, editable points and segment controls](artifacts/readme-automation.png)
 
+## Built-in devices
+
+Rill ships its own instruments and effects, so a new song makes sound before any plug-in is installed. Find them in **Window → Device browser** under **Built-in (R1)**. Each has factory presets, automation on every control, and tools the AI assistant can use in plain units.
+
+| Device | What it does |
+| --- | --- |
+| ![R1 Mini panel](artifacts/readme-r1-mini.png) **R1 Mini** · instrument | A two-oscillator subtractive synth and the default instrument of new MIDI tracks. Circuit-modelled VCO and DCO oscillators, a sub and noise source, a choice of five analog filter circuits, two envelopes, an LFO, and poly, mono and legato voicing. Play it from the panel keyboard with pitch and mod wheels. |
+| ![R1 Filter panel](artifacts/readme-r1-filter.png) **R1 Filter** · effect | A filter for inserts and sends. Pick the transparent Clean model or one of eight characters (transistor ladder, Sallen-Key, two OTA designs, diode pair, state variable, comb and vowel), then move it with the built-in LFO and envelope follower. |
+
+The full design, including the devices still to come, is in [R1 built-in devices](docs/R1_DEVICES.md).
+
 ## Start making music
 
 1. Launch Rill and click **Play** to hear the included drum loop, or choose **File → New** for an empty song.
-2. Drop WAV, MP3, FLAC or OGG files onto an audio track or empty arranger space, or choose **File → Import audio…** to create a track at the cursor. For MIDI, choose **Track → Add MIDI track** and assign a VST3, CLAP, LV2 or AU instrument.
+2. Drop WAV, MP3, FLAC or OGG files onto an audio track or empty arranger space, or choose **File → Import audio…** to create a track at the cursor. For MIDI, choose **Track → Add MIDI track**: it plays R1 Mini at once, or pick a VST3, CLAP, LV2 or AU instrument instead.
 3. Double-click a clip to edit its audio or notes. Open **Window → Mixer** to balance the tracks.
 4. Save a portable `.rill` project, then use **File → Export WAV…** to share a mix.
 
@@ -103,7 +114,7 @@ Use the menus and on-screen tools, or speed up familiar actions with keyboard sh
 
 Audio runs through the platform driver (ALSA, WASAPI or CoreAudio) or, from Setup → Audio → Driver, JACK on Linux. Windows builds also offer ASIO, built with Steinberg's ASIO SDK under its GPLv3 option, so the Windows executable is distributed under the GPLv3 while Rill's source stays MIT (see [releasing](docs/RELEASING.md)). ASIO has not been tested on hardware.
 
-Rill is in active development and focuses on audio/MIDI music production. It hosts **VST3** and **CLAP** on every platform, **LV2** on Linux (through the system lilv library) and **Audio Units** (AUv2, and AUv3 through Apple's bridge) on macOS; instruments and effects are installed separately. LV2 plug-ins use Rill's generic parameter browser instead of their own editor windows. Songs can change meter at bar lines and carry named markers; audio clips can be warped with markers and quantized to the grid. Tempo maps, surround mixing, VST2/AAX/ARA, and video/scoring-to-picture workflows are not supported. See the [current capabilities and limits](docs/PRODUCT_DIRECTION.md).
+Rill is in active development and focuses on audio/MIDI music production. It hosts **VST3** and **CLAP** on every platform, **LV2** on Linux (through the system lilv library) and **Audio Units** (AUv2, and AUv3 through Apple's bridge) on macOS, alongside its own [built-in devices](#built-in-devices). LV2 plug-ins use Rill's generic parameter browser instead of their own editor windows. Songs can change meter at bar lines and carry named markers; audio clips can be warped with markers and quantized to the grid. Tempo maps, surround mixing, VST2/AAX/ARA, and video/scoring-to-picture workflows are not supported. See the [current capabilities and limits](docs/PRODUCT_DIRECTION.md).
 
 `.rill` projects preserve high-resolution MIDI note/controller data. Native UMP input targets macOS 11 and newer; Linux and Windows use MIDI 1.0 input. Audible expression depends on the instrument's supported mappings (VST3 note expressions, CLAP note expressions, MIDI for LV2); per-note pitch-bend packets are retained but not currently played. Exporting richer performances as `.mid` requires an explicit MIDI 1.0 copy. This is not universal MIDI 2.0 device or plug-in compatibility; see [MIDI recording and expression](docs/USER_GUIDE.md#midi-recording-and-pre-count).
 
