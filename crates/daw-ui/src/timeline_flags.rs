@@ -26,6 +26,8 @@ pub enum TimelineFlagAction {
     DoubleClicked(TimelineFlagKind, u64),
     /// A marker drag finished at a different beat.
     Moved(u64, f64),
+    /// A marker drag is in progress at this beat, for live previews.
+    Dragging(u64, f64),
 }
 
 pub struct TimelineFlagsResponse {
@@ -154,6 +156,11 @@ pub fn timeline_flags(
         }
         if moved {
             action = Some(TimelineFlagAction::Moved(flag.key, beat));
+        } else if response.dragged()
+            && flag.kind == TimelineFlagKind::Marker
+            && drag.is_some_and(|drag| drag.key == flag.key)
+        {
+            action = Some(TimelineFlagAction::Dragging(flag.key, beat));
         } else if response.clicked()
             && let Some(position) = response.interact_pointer_pos()
         {

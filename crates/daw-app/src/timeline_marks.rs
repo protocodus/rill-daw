@@ -436,7 +436,7 @@ impl DawApp {
                 );
                 None
             }
-            None => None,
+            Some(daw_ui::TimelineFlagAction::Dragging(..)) | None => None,
         });
         match command {
             Some(FlagCommand::GoTo(id)) => {
