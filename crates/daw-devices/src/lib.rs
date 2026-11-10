@@ -7,12 +7,12 @@
 
 mod device;
 pub mod devices;
-pub mod dsp;
 mod param;
 mod preset;
 mod registry;
 mod telemetry;
 
+pub use daw_dsp as dsp;
 pub use device::*;
 pub use param::*;
 pub use preset::*;

@@ -23,9 +23,8 @@ fn settings(values: &[(u32, f32)]) -> Settings {
 /// Small enough that the saturating models stay close to linear.
 const AMPLITUDE: f32 = 0.05;
 
-/// Runs a sine through the device and returns its gain in dB, measured by
-/// projecting the settled output onto the input frequency.
-fn measured_gain_db(values: &[(u32, f32)], frequency: f32, rate: f32) -> f32 {
+/// Runs a sine through the device and returns the settled output.
+fn render_sine(values: &[(u32, f32)], frequency: f32, amplitude: f32, rate: f32) -> Vec<f32> {
     let mut device = (descriptor("r1-filter").unwrap().create)();
     device.prepare(rate, 512);
     set(&mut *device, values);
@@ -33,7 +32,7 @@ fn measured_gain_db(values: &[(u32, f32)], frequency: f32, rate: f32) -> f32 {
     let mut left: Vec<f32> = (0..total)
         .map(|n| {
             (std::f64::consts::TAU * f64::from(frequency) * n as f64 / f64::from(rate)).sin() as f32
-                * AMPLITUDE
+                * amplitude
         })
         .collect();
     let mut right = left.clone();
@@ -48,14 +47,25 @@ fn measured_gain_db(values: &[(u32, f32)], frequency: f32, rate: f32) -> f32 {
             },
         );
     }
-    let start = total / 2;
+    left.split_off(total / 2)
+}
+
+/// Amplitude of `output` at `frequency`, by projection.
+fn amplitude_at(output: &[f32], frequency: f32, rate: f32) -> f64 {
     let (mut i, mut q) = (0.0_f64, 0.0_f64);
-    for (n, y) in left.iter().enumerate().skip(start) {
+    // Phase from the projection start; only the magnitude matters.
+    for (n, y) in output.iter().enumerate() {
         let phase = std::f64::consts::TAU * f64::from(frequency) * n as f64 / f64::from(rate);
         i += f64::from(*y) * phase.sin();
         q += f64::from(*y) * phase.cos();
     }
-    let amplitude = 2.0 * (i * i + q * q).sqrt() / (total - start) as f64 / f64::from(AMPLITUDE);
+    2.0 * (i * i + q * q).sqrt() / output.len() as f64
+}
+
+/// The device's gain at `frequency` in dB, for a small sine.
+fn measured_gain_db(values: &[(u32, f32)], frequency: f32, rate: f32) -> f32 {
+    let output = render_sine(values, frequency, AMPLITUDE, rate);
+    let amplitude = amplitude_at(&output, frequency, rate) / f64::from(AMPLITUDE);
     (20.0 * amplitude.log10()) as f32
 }
 
@@ -69,18 +79,6 @@ fn clean_models_match_their_drawn_response_within_a_tenth_of_a_db() {
         &[(TYPE, 2.0), (CUTOFF, 2000.0), (RESONANCE, 60.0)],
         &[(SLOPE, 1.0), (CUTOFF, 3000.0), (RESONANCE, 40.0)],
         &[(MODEL, 6.0), (CUTOFF, 1500.0), (MORPH, 70.0)],
-        &[
-            (MODEL, 4.0),
-            (SLOPE, 1.0),
-            (CUTOFF, 2000.0),
-            (RESONANCE, 20.0),
-        ],
-        &[
-            (MODEL, 4.0),
-            (TYPE, 2.0),
-            (CUTOFF, 800.0),
-            (RESONANCE, 30.0),
-        ],
         &[
             (CUTOFF, 12_000.0),
             (RESONANCE, 20.0),
@@ -138,6 +136,20 @@ fn nonlinear_models_follow_their_drawn_shape() {
             (CUTOFF, 800.0),
             (RESONANCE, 20.0),
         ][..],
+        &[(MODEL, 4.0), (CUTOFF, 800.0), (RESONANCE, 30.0)][..],
+        &[
+            (MODEL, 4.0),
+            (SLOPE, 1.0),
+            (CUTOFF, 800.0),
+            (RESONANCE, 20.0),
+        ][..],
+        &[
+            (MODEL, 4.0),
+            (TYPE, 2.0),
+            (CUTOFF, 800.0),
+            (RESONANCE, 60.0),
+        ][..],
+        &[(MODEL, 4.0), (TYPE, 1.0), (SLOPE, 1.0), (CUTOFF, 800.0)][..],
         &[(MODEL, 5.0), (CUTOFF, 800.0), (RESONANCE, 30.0)][..],
         &[
             (MODEL, 5.0),
@@ -216,8 +228,8 @@ fn every_model_low_passes_high_frequencies() {
 
 #[test]
 fn resonant_models_self_oscillate_and_stay_bounded() {
-    // Ladder, Sallen-Key, OTA Cascade and Diode Pair.
-    for model in [1.0, 2.0, 3.0, 5.0] {
+    // Every circuit model.
+    for model in [1.0, 2.0, 3.0, 4.0, 5.0] {
         let peak = ring_out(&[
             (filter::MODEL, model),
             (filter::RESONANCE, 100.0),
@@ -250,4 +262,26 @@ fn ring_out(values: &[(u32, f32)]) -> f32 {
         }
     }
     peak
+}
+
+#[test]
+fn circuit_models_add_color_at_default_drive_and_clean_stays_clean() {
+    // A −6 dBFS 1 kHz sine well below an 8 kHz cutoff, Drive at 0 dB: the
+    // circuit models saturate it audibly, Clean leaves it alone.
+    for model in [0.0, 1.0, 2.0, 3.0, 4.0, 5.0] {
+        let output = render_sine(
+            &[(filter::MODEL, model), (filter::CUTOFF, 8000.0)],
+            1000.0,
+            0.5,
+            48_000.0,
+        );
+        let fundamental = amplitude_at(&output, 1000.0, 48_000.0);
+        let third = amplitude_at(&output, 3000.0, 48_000.0);
+        let level = 20.0 * (third / fundamental).log10();
+        if model == 0.0 {
+            assert!(level < -90.0, "Clean: third harmonic at {level} dB");
+        } else {
+            assert!(level > -50.0, "model {model}: third harmonic at {level} dB");
+        }
+    }
 }
