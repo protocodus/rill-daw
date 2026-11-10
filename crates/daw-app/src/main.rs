@@ -49,6 +49,7 @@ mod session_service;
 mod settings;
 mod spectrogram;
 mod theme;
+mod timeline_marks;
 mod tool_jobs;
 mod track_order;
 #[cfg(test)]

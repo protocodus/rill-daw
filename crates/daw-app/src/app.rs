@@ -981,11 +981,15 @@ impl DawApp {
             .filter(|clip| !clip.is_take_source())
     }
     pub fn snapped(&self, beat: f64) -> f64 {
-        if self.snap > 0.0 {
-            (beat / self.snap).round() * self.snap
-        } else {
-            beat
+        if self.snap <= 0.0 {
+            return beat;
         }
+        // "1 bar" follows real bar lines once the meter changes along the song.
+        let meter = self.project.meter_map();
+        if !meter.is_uniform() && self.snap == f64::from(meter.initial()) {
+            return meter.nearest_bar_line(beat);
+        }
+        (beat / self.snap).round() * self.snap
     }
     pub fn playing(&self) -> bool {
         self.engine.as_ref().is_some_and(|e| e.snapshot().playing)
@@ -2072,6 +2076,7 @@ impl DawApp {
             || crate::plugin_details::is_open(ctx)
             || crate::audio_silence::is_open(ctx)
             || crate::audio_batch::is_open(ctx)
+            || crate::timeline_marks::meter_dialog_open(ctx)
         {
             return;
         }
@@ -2208,6 +2213,7 @@ impl DawApp {
         if self.rename_shortcuts(ctx)
             || self.arranger_edit_shortcuts(ctx)
             || self.clip_navigation_shortcuts(ctx)
+            || (self.view == WorkspaceView::Arrangement && self.marker_shortcuts(ctx))
         {
             return;
         }
@@ -2343,7 +2349,7 @@ impl DawApp {
                         daw_ui::transport_position(
                             ui,
                             self.cursor,
-                            self.project.beats_per_bar,
+                            &self.project.meter_map(),
                             self.cursor * 60.0 / self.project.tempo,
                         );
                     });
@@ -2488,7 +2494,7 @@ impl DawApp {
                                 daw_ui::duration::timing_summary(
                                     ui, self.project.loop_start,
                                     self.project.loop_end - self.project.loop_start,
-                                    self.project.tempo, self.project.beats_per_bar,
+                                    self.project.tempo, &self.project.meter_map(),
                                 );
                             });
                         });
@@ -2751,6 +2757,7 @@ impl DawApp {
                             ui.close();
                         }
                         self.repeat_to_loop_end_item(ui);
+                        self.marker_menu(ui);
                         ui.separator();
                         let audio_clip = self
                             .selected()
@@ -3581,7 +3588,7 @@ impl DawApp {
                         let position = |beat: f64| {
                             daw_ui::duration::compact_musical_position(
                                 beat,
-                                self.project.beats_per_bar,
+                                &self.project.meter_map(),
                             )
                         };
                         Some(format!(
@@ -3709,8 +3716,8 @@ impl DawApp {
                     context.on_hover_text(format!(
                         "{}\nSong position: {} to {} (bar:beat)\n{}–{}\n{ruler_context}",
                         clip_context.as_deref().unwrap_or_default(),
-                        daw_ui::duration::compact_musical_position(clip.start, self.project.beats_per_bar),
-                        daw_ui::duration::compact_musical_position(clip.start + clip.length, self.project.beats_per_bar),
+                        daw_ui::duration::compact_musical_position(clip.start, &self.project.meter_map()),
+                        daw_ui::duration::compact_musical_position(clip.start + clip.length, &self.project.meter_map()),
                         daw_ui::duration::format_seconds(clip.start * 60.0 / self.project.tempo),
                         daw_ui::duration::format_seconds((clip.start + clip.length) * 60.0 / self.project.tempo),
                     ));
@@ -3745,6 +3752,7 @@ impl DawApp {
         self.audio_silence_dialog(ctx);
         self.audio_batch_fades_dialog(ctx);
         self.rename_overlay(ctx);
+        self.meter_change_dialog(ctx);
         self.last_scene = if utility_open {
             daw_ui::ViewBackdrop::capture_overlay(ctx, scene_bounds, &self.popup_backdrop)
         } else {
@@ -3762,6 +3770,7 @@ impl DawApp {
         let files = if self.error_details.is_none()
             && !crate::audio_silence::is_open(ctx)
             && !crate::audio_batch::is_open(ctx)
+            && !crate::timeline_marks::meter_dialog_open(ctx)
             && !self.rename_active(ctx)
         {
             ctx.input(|i| i.raw.dropped_files.clone())
@@ -3948,6 +3957,7 @@ pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
         b.channels().map(|track| (track.id, track)).collect();
     a.tempo == b.tempo
         && a.beats_per_bar == b.beats_per_bar
+        && a.meter_changes == b.meter_changes
         && a.loop_enabled == b.loop_enabled
         && a.loop_start == b.loop_start
         && a.loop_end == b.loop_end

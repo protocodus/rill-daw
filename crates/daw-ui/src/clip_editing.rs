@@ -71,7 +71,7 @@ pub fn clip_timing_fields(
     maximum_beat: f64,
     maximum_offset: f64,
     stretch_duration_range: std::ops::RangeInclusive<f64>,
-    beats_per_bar: u8,
+    meter: &crate::MeterMap,
 ) -> ClipTimingEdit {
     let mut edit = ClipTimingEdit::default();
     let label = crate::text::label(ui, "Start");
@@ -105,7 +105,7 @@ pub fn clip_timing_fields(
                 } else {
                     values.start
                 },
-                beats_per_bar,
+                meter,
                 0.0..=(*start_range.end() - 1.0),
             );
             (stepper, position)
@@ -233,7 +233,7 @@ enum PositionField {
 #[derive(Clone)]
 struct PositionDraft {
     original: f64,
-    meter: u8,
+    meter: crate::MeterMap,
     bar: f64,
     beat: f64,
     initial_bar: f64,
@@ -243,14 +243,18 @@ struct PositionDraft {
 }
 
 impl PositionDraft {
-    fn new(position: f64, beats_per_bar: u8, frame: u64) -> Self {
-        let meter = beats_per_bar.max(1);
-        let bar_start = (position / f64::from(meter)).floor() * f64::from(meter);
-        let bar = (position / f64::from(meter)).floor() + 1.0;
-        let beat = position - bar_start + 1.0;
+    fn new(position: f64, meter: &crate::MeterMap, frame: u64) -> Self {
+        // Exact floor: a position just below a bar line stays in its bar,
+        // unlike the map's display tolerance.
+        let (mut bar, _) = meter.position(position);
+        if bar > 1 && position < meter.bar_start(bar) {
+            bar -= 1;
+        }
+        let beat = position - meter.bar_start(bar) + 1.0;
+        let bar = f64::from(bar);
         Self {
             original: position,
-            meter,
+            meter: meter.clone(),
             bar,
             beat,
             initial_bar: bar,
@@ -260,26 +264,38 @@ impl PositionDraft {
         }
     }
 
+    /// Beats in the staged bar.
+    fn bar_meter(&self) -> u8 {
+        self.meter.meter_at(self.meter.bar_start(self.bar.clamp(1.0, f64::from(u32::MAX)) as u32))
+    }
+
     fn position(&self, range: &std::ops::RangeInclusive<f64>) -> Option<f64> {
-        if !self.bar.is_finite() || self.bar < 1.0 || self.bar.fract() != 0.0 {
-            return None;
-        }
-        let beat_unchanged = self.beat.to_bits() == self.initial_beat.to_bits();
-        if !beat_unchanged
-            && (!self.beat.is_finite()
-                || self.beat < 1.0
-                || self.beat >= f64::from(self.meter) + 1.0)
+        if !self.bar.is_finite()
+            || self.bar < 1.0
+            || self.bar.fract() != 0.0
+            || self.bar > f64::from(u32::MAX)
         {
             return None;
         }
+        let beat_unchanged = self.beat.to_bits() == self.initial_beat.to_bits();
+        let limit = f64::from(self.bar_meter()) + 1.0;
+        if !beat_unchanged && (!self.beat.is_finite() || self.beat < 1.0 || self.beat >= limit) {
+            return None;
+        }
+        // A kept beat must also exist in a bar of another meter.
+        let initial_limit = f64::from(self.meter.meter_at(self.original)) + 1.0;
+        if beat_unchanged && limit < initial_limit && self.beat >= limit {
+            return None;
+        }
+        let bar_start = |bar: f64| self.meter.bar_start(bar as u32);
         let position = if self.bar.to_bits() == self.initial_bar.to_bits() && beat_unchanged {
             self.original
         } else if beat_unchanged {
             // Moving only the bar preserves a sub-beat remainder that may be
             // too small to survive displaying it as a one-based beat.
-            self.original + (self.bar - self.initial_bar) * f64::from(self.meter)
+            self.original + (bar_start(self.bar) - bar_start(self.initial_bar))
         } else {
-            (self.bar - 1.0) * f64::from(self.meter) + (self.beat - 1.0)
+            bar_start(self.bar) + (self.beat - 1.0)
         };
         (position.is_finite() && range.contains(&position)).then_some(position)
     }
@@ -312,11 +328,10 @@ pub fn musical_position_entry(
     ui: &mut Ui,
     id_salt: impl std::hash::Hash,
     current: f64,
-    beats_per_bar: u8,
+    meter: &crate::MeterMap,
     range: std::ops::RangeInclusive<f64>,
 ) -> (Response, Option<f64>) {
     let id = ui.make_persistent_id(("musical_position_entry", id_salt));
-    let meter = beats_per_bar.max(1);
     let caption = crate::duration::musical_position(current, meter);
     let mut applied = None;
     let response = ui.push_id(id, |ui| {
@@ -326,13 +341,14 @@ pub fn musical_position_entry(
                 .filter(|draft| {
                     frame <= draft.last_frame.saturating_add(1)
                         && draft.original.to_bits() == current.to_bits()
-                        && draft.meter == meter
+                        && draft.meter == *meter
                 })
                 .unwrap_or_else(|| PositionDraft::new(current, meter, frame));
             draft.last_frame = frame;
-            let maximum_bar = (*range.end() / f64::from(meter)).floor() + 1.0;
+            let maximum_bar = f64::from(meter.position(*range.end()).0);
+            let bar_meter = draft.bar_meter();
             // The final beat may contain any fraction below the next bar.
-            let beat_limit = f64::from_bits((f64::from(meter) + 1.0).to_bits() - 1);
+            let beat_limit = f64::from_bits((f64::from(bar_meter) + 1.0).to_bits() - 1);
             if let Some(field) = draft.keypad {
                 let (value, field_range, name, whole_numbers) = match field {
                     PositionField::Bar => (
@@ -401,7 +417,7 @@ pub fn musical_position_entry(
                                 if context.memory(|memory| memory.has_focus(number_id)) {
                                     crate::exact_value_text(value)
                                 } else {
-                                    position_beat_display(value, meter)
+                                    position_beat_display(value, bar_meter)
                                 }
                             }))
                     });
@@ -413,7 +429,7 @@ pub fn musical_position_entry(
             let candidate = draft.position(&range);
             if candidate.is_none() {
                 crate::text::note(ui, format!(
-                    "Use a whole bar and a beat from 1 to below {} within the clip's range.", u16::from(meter) + 1
+                    "Use a whole bar and a beat from 1 to below {} within the clip's range.", u16::from(bar_meter) + 1
                 ));
             }
             let (apply, cancel) = crate::dialog_actions(ui, |ui| {
@@ -440,6 +456,7 @@ pub fn musical_position_entry(
 #[cfg(test)]
 mod position_entry_tests {
     use super::PositionDraft;
+    use crate::MeterMap;
 
     #[test]
     fn untouched_positions_keep_every_bit_in_all_supported_meters() {
@@ -454,7 +471,7 @@ mod position_entry_tests {
                 21.125_123_456_789,
                 999_990.123_456_789,
             ] {
-                let draft = PositionDraft::new(start, meter, 0);
+                let draft = PositionDraft::new(start, &MeterMap::uniform(meter), 0);
                 assert_eq!(
                     draft.position(&(0.0..=1_000_000.0)).unwrap().to_bits(),
                     start.to_bits()
@@ -467,7 +484,7 @@ mod position_entry_tests {
     fn bar_moves_preserve_the_fraction_and_beat_entry_uses_the_current_meter() {
         for meter in [3, 4, 7, 11] {
             let start = 1.123_456_789_123;
-            let mut draft = PositionDraft::new(start, meter, 0);
+            let mut draft = PositionDraft::new(start, &MeterMap::uniform(meter), 0);
             draft.bar = 5.0;
             assert_eq!(
                 draft.position(&(0.0..=1_000.0)),
@@ -493,16 +510,40 @@ mod position_entry_tests {
             (2.0, f64::NAN),
             (2.0, f64::INFINITY),
         ] {
-            let mut draft = PositionDraft::new(0.0, 3, 0);
+            let mut draft = PositionDraft::new(0.0, &MeterMap::uniform(3), 0);
             draft.bar = bar;
             draft.beat = beat;
             assert!(draft.position(&(0.0..=100.0)).is_none(), "{bar}:{beat}");
         }
-        let mut draft = PositionDraft::new(0.0, 3, 0);
+        let mut draft = PositionDraft::new(0.0, &MeterMap::uniform(3), 0);
         draft.bar = 4.0;
         draft.beat = 3.5;
         assert_eq!(draft.position(&(0.0..=11.5)), Some(11.5));
         assert!(draft.position(&(0.0..=11.25)).is_none());
+    }
+
+    #[test]
+    fn bar_and_beat_entry_follow_meter_changes() {
+        // 4/4 for bar 1, then 3/4: bar 3 starts at beat 7.
+        let meter = MeterMap::new(
+            4,
+            &[daw_timeline::MeterChange {
+                bar: 2,
+                beats_per_bar: 3,
+            }],
+        );
+        let mut draft = PositionDraft::new(0.5, &meter, 0);
+        draft.bar = 3.0;
+        assert_eq!(draft.position(&(0.0..=100.0)), Some(7.5));
+        draft.beat = 3.75;
+        assert_eq!(draft.position(&(0.0..=100.0)), Some(9.75));
+        draft.beat = 4.0;
+        assert!(draft.position(&(0.0..=100.0)).is_none());
+        // Beat 4 of bar 1 has no counterpart in a 3/4 bar.
+        let mut draft = PositionDraft::new(3.5, &meter, 0);
+        draft.bar = 2.0;
+        assert!(draft.position(&(0.0..=100.0)).is_none());
+        assert_eq!(super::parse_musical_position("3.2.3", &meter), Some(8.5));
     }
 }
 
@@ -891,17 +932,17 @@ pub fn clip_nudge_section(ui: &mut Ui, enabled: bool) -> i32 {
 /// the caller sets the range.
 pub fn musical_position_field<'a>(
     beat: &'a mut f64,
-    beats_per_bar: u8,
+    meter: &'a crate::MeterMap,
     prefix: &str,
 ) -> crate::Number<'a> {
     crate::number(beat)
         .prefix(prefix)
-        .custom_formatter(move |beat, _| crate::time::musical_position_label(beat, beats_per_bar))
-        .custom_parser(move |text| parse_musical_position(text, beats_per_bar))
+        .custom_formatter(move |beat, _| crate::time::musical_position_label(beat, meter))
+        .custom_parser(move |text| parse_musical_position(text, meter))
 }
 
 /// Parse "bar.beat.sixteenth" (or "bar.beat", or "bar") into a zero-based beat.
-pub fn parse_musical_position(text: &str, beats_per_bar: u8) -> Option<f64> {
+pub fn parse_musical_position(text: &str, meter: &crate::MeterMap) -> Option<f64> {
     let mut parts = text
         .trim()
         .split('.')
@@ -912,5 +953,12 @@ pub fn parse_musical_position(text: &str, beats_per_bar: u8) -> Option<f64> {
     if parts.next().is_some() || bar < 1.0 || beat < 1.0 || sixteenth < 1.0 {
         return None;
     }
-    Some((bar - 1.0) * f64::from(beats_per_bar.max(1)) + (beat - 1.0) + (sixteenth - 1.0) / 4.0)
+    if bar > f64::from(u32::MAX) {
+        return None;
+    }
+    // A fractional bar is a fraction of that bar's own length.
+    let whole = bar.floor() as u32;
+    let bar_start = meter.bar_start(whole);
+    let length = meter.bar_start(whole.saturating_add(1)) - bar_start;
+    Some(bar_start + bar.fract() * length + (beat - 1.0) + (sixteenth - 1.0) / 4.0)
 }

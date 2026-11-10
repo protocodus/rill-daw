@@ -388,7 +388,7 @@ impl DawApp {
                 }
             }
         }
-        let beats_per_bar = self.project.beats_per_bar;
+        let meter = self.project.meter_map();
         let mut open = true;
         daw_ui::popup(format!("Audio takes · {track_name}"), ctx).id(egui::Id::new("audio_takes_popup")).open(&mut open).default_width(720.0).default_height(620.0).vscroll(false).show(ctx, |ui| {
             // Commands lead in workflow order; View trails, as in the editors.
@@ -491,8 +491,8 @@ impl DawApp {
                 if let Some((a, b)) = &mut self.audio_takes_ui.range {
                     // Bar.beat positions, as on the rulers.
                     let (mut start, mut end) = (*a, *b);
-                    ui.add(daw_ui::musical_position_field(&mut start, beats_per_bar, "From ").range(0.0..=(end - 0.001)).speed(0.25));
-                    ui.add(daw_ui::musical_position_field(&mut end, beats_per_bar, "To ").range((start + 0.001)..=daw_core::MAX_BEAT).speed(0.25));
+                    ui.add(daw_ui::musical_position_field(&mut start, &meter, "From ").range(0.0..=(end - 0.001)).speed(0.25));
+                    ui.add(daw_ui::musical_position_field(&mut end, &meter, "To ").range((start + 0.001)..=daw_core::MAX_BEAT).speed(0.25));
                     (*a, *b) = (start, end);
                 }
             });
@@ -515,7 +515,7 @@ impl DawApp {
                             self.audio_takes_ui.range = Some(if overlap.1 > overlap.0 { overlap } else { (take.start, take.end()) });
                         }
                     }, |ui| {
-                        daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, format!("Selection outside this take · Available {} – {}", daw_ui::time::musical_position_label(take.start, beats_per_bar), daw_ui::time::musical_position_label(take.end(), beats_per_bar)), 2);
+                        daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, format!("Selection outside this take · Available {} – {}", daw_ui::time::musical_position_label(take.start, &meter), daw_ui::time::musical_position_label(take.end(), &meter)), 2);
                     });
                     }
             });

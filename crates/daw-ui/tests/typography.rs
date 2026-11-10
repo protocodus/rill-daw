@@ -19,7 +19,7 @@ fn timeline_bar_and_clock_labels_have_separate_readable_rows() {
                 rect,
                 daw_ui::TimelineViewport::default(),
                 120.0,
-                4,
+                &daw_ui::MeterMap::uniform(4),
             );
         });
     });
@@ -91,7 +91,7 @@ fn timeline_ruler_omits_partial_edge_labels_after_panning_and_in_narrow_views() 
             };
             let output = context.run(input(), |ctx| {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    daw_ui::paint_timeline_ruler(ui.painter(), rect, view, 120.0, 4);
+                    daw_ui::paint_timeline_ruler(ui.painter(), rect, view, 120.0, &daw_ui::MeterMap::uniform(4));
                 });
             });
             let labels: Vec<_> = output

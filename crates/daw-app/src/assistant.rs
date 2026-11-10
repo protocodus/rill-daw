@@ -845,15 +845,16 @@ impl DawApp {
         let name = |value: &str| value.chars().take(80).collect::<String>();
         if !self.assistant.scope.is_global() {
             return format!(
-                "{} BPM · {}/4 · Context stays fixed when selection changes",
-                self.project.tempo, self.project.beats_per_bar,
+                "{} BPM · {} · Context stays fixed when selection changes",
+                self.project.tempo,
+                self.meter_summary(),
             );
         }
         let mut parts = vec![format!(
-            "{} · {} BPM · {}/4",
+            "{} · {} BPM · {}",
             name(&self.project.name),
             self.project.tempo,
-            self.project.beats_per_bar
+            self.meter_summary()
         )];
         if let Some(track) = self.selected_track.and_then(|id| self.project.track(id)) {
             parts.push(format!("Track: {}", name(&track.name)));

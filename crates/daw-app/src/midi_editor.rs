@@ -708,6 +708,7 @@ impl DawApp {
             clip.source_rate,
         );
         let clip_name = clip.name.clone();
+        let clip_meter = self.project.meter_map().local(clip_start);
         let clip_actions = crate::clip_actions::midi_clip_action_availability(clip);
         let mut whole_clip_action = None;
         let mut loop_this_clip = false;
@@ -806,7 +807,7 @@ impl DawApp {
                     daw_ui::ToolHintContext::Midi,
                 );
                 ui.add_space(daw_ui::tokens::SPACE_SM);
-                daw_ui::snap_choice(ui, &mut self.snap, self.project.beats_per_bar, None);
+                daw_ui::snap_choice(ui, &mut self.snap, &clip_meter, None);
                 daw_ui::drawing_note_length(ui, &mut state.draw_length);
                 daw_ui::quiet_picker_button(
                     ui,
@@ -959,7 +960,7 @@ impl DawApp {
                             ui.close();
                         }
                         let grid_step = self.snap.max(0.0625);
-                        let bar_step = f64::from(self.project.beats_per_bar);
+                        let bar_step = f64::from(clip_meter.initial());
                         daw_ui::menu_button(ui, "Nudge", |ui| {
                         for (label, hint, beats) in [
                             ("Nudge left", "Ctrl/Cmd+Left", -grid_step),
@@ -1587,7 +1588,7 @@ impl DawApp {
                         let shift = modifiers.shift;
                         let beats = time
                             * if shift {
-                                self.project.beats_per_bar as f64
+                                f64::from(clip_meter.initial())
                             } else {
                                 self.snap.max(0.0625)
                             };
@@ -1838,19 +1839,19 @@ impl DawApp {
                 state.viewport,
                 state.viewport.start_beat
                     + f64::from(plot.width()) / f64::from(state.viewport.pixels_per_beat),
-                self.project.beats_per_bar,
+                &clip_meter,
                 (clip_start, clip_offset, clip_length, source_rate),
                 state.chord,
                 self.scale,
             );
             if let Some(memory) = state.generation_memory.get(&clip_id) {
-                draft.restore(memory, self.project.beats_per_bar);
+                draft.restore(memory, &clip_meter);
             }
             draft.original_view = view_before_generate;
             state.generate = Some(draft);
         }
         if let Some(draft) = &mut state.generate {
-            let action = draft.show(ui.ctx(), &clip_name, self.project.beats_per_bar);
+            let action = draft.show(ui.ctx(), &clip_name, &clip_meter);
             open_ai = action.ai;
             if action.fit && !draft.notes.is_empty() {
                 state.viewport.fit_bounds(
@@ -1982,7 +1983,7 @@ impl DawApp {
         let beat_at = |pos: Pos2| snap_beat(view.beat_at(plot, pos.x)).max(0.0);
         let drawing_length = state
             .draw_length
-            .beats(self.project.beats_per_bar)
+            .beats(clip_meter.initial())
             .unwrap_or(state.last_length)
             .max(MIN_NOTE);
         let mut key_diagnostics = Vec::new();
@@ -2055,7 +2056,7 @@ impl DawApp {
             }
             key_diagnostics.push(serde_json::json!({"pitch":pitch,"row":row_index,"rect":rect_json(key),"scale":scale,"chord":chord,"black":black,"selected":state.keyboard_focus && state.keyboard_pitch == Some(pitch),"row_color":row_color.to_array(),"outside_color":row_color.blend(palette(ui.ctx()).inactive_clip_tint()).to_array()}));
         }
-        daw_ui::paint_beat_grid(&row_painter, plot, view, snap, self.project.beats_per_bar);
+        daw_ui::paint_beat_grid(&row_painter, plot, view, snap, &clip_meter);
         key_painter.vline(
             keys.right().round_to_pixel_center(ui.pixels_per_point()),
             keys.y_range(),
@@ -2066,7 +2067,7 @@ impl DawApp {
             ruler,
             view,
             self.project.tempo,
-            self.project.beats_per_bar,
+            &clip_meter,
         );
         let time_origin = Rect::from_min_max(canvas.min, Pos2::new(plot.left(), ruler.bottom()));
         // On the clock baseline, the same anchor as the ruler's lower labels.
@@ -2109,7 +2110,7 @@ impl DawApp {
             ],
             Stroke::new(1.0_f32, palette(ui.ctx()).line),
         );
-        daw_ui::paint_velocity_lane(&painter, velocity_rect, view, self.project.beats_per_bar);
+        daw_ui::paint_velocity_lane(&painter, velocity_rect, view, &clip_meter);
         painter.text(
             Pos2::new(
                 velocity_rect.left() - daw_ui::tokens::SPACE_XS,

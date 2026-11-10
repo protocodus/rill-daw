@@ -827,7 +827,7 @@ impl DawApp {
             daw_ui::snap_choice(
                 ui,
                 &mut self.snap,
-                self.project.beats_per_bar,
+                &self.project.meter_map(),
                 Some(&mut |ui: &mut egui::Ui| {
                     daw_ui::checkbox(ui, &mut state.snap_edges, "Clip edges");
                     daw_ui::checkbox(ui, &mut state.snap_transients, "Transient markers");
@@ -1063,9 +1063,9 @@ impl DawApp {
             } else if !state.error.is_empty() {
                 state.error.clone()
             } else if let Some((start, end)) = state.range {
-                let bpb = self.project.beats_per_bar;
+                let bpb = self.project.meter_map();
                 let position = |beat| {
-                    let label = daw_ui::time::musical_position_label(beat, bpb);
+                    let label = daw_ui::time::musical_position_label(beat, &bpb);
                     label
                         .strip_suffix(".1")
                         .map_or(label.clone(), str::to_owned)
@@ -1492,7 +1492,7 @@ impl DawApp {
             ruler,
             state.view,
             self.project.tempo,
-            self.project.beats_per_bar,
+            &self.project.meter_map(),
         );
         let colors = palette(ui.ctx());
         daw_ui::paint_beat_grid(
@@ -1500,7 +1500,7 @@ impl DawApp {
             canvas,
             state.view,
             self.snap,
-            self.project.beats_per_bar,
+            &self.project.meter_map(),
         );
         let ppp = ui.pixels_per_point();
         let hairline = 1.0 / ppp;

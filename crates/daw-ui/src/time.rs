@@ -29,12 +29,11 @@ pub fn format_clock_time(seconds: f64, precision: usize) -> String {
 /// Compact one-based "bar.beat.sixteenth" position, the same form the rulers
 /// use. Rounded to the nearest sixteenth so a readout never flickers between
 /// two neighbouring values at a sixteenth boundary.
-pub fn musical_position_label(beat: f64, beats_per_bar: u8) -> String {
-    let beats_per_bar = u64::from(beats_per_bar.max(1));
-    let sixteenths = (beat.max(0.0) * 4.0).round() as u64;
-    let bar = sixteenths / (beats_per_bar * 4) + 1;
-    let beat = sixteenths / 4 % beats_per_bar + 1;
-    format!("{bar}.{beat}.{}", sixteenths % 4 + 1)
+pub fn musical_position_label(beat: f64, meter: &crate::MeterMap) -> String {
+    let sixteenths = (beat.max(0.0) * 4.0).round();
+    let (bar, offset) = meter.position(sixteenths / 4.0);
+    let sixteenth = (offset * 4.0).round() as u64;
+    format!("{bar}.{}.{}", sixteenth / 4 + 1, sixteenth % 4 + 1)
 }
 
 #[cfg(test)]
@@ -43,12 +42,22 @@ mod position_tests {
 
     #[test]
     fn positions_count_from_one_and_carry_into_bars() {
-        assert_eq!(musical_position_label(0.0, 4), "1.1.1");
-        assert_eq!(musical_position_label(0.25, 4), "1.1.2");
-        assert_eq!(musical_position_label(3.75, 4), "1.4.4");
-        assert_eq!(musical_position_label(4.0, 4), "2.1.1");
-        assert_eq!(musical_position_label(6.5, 3), "3.1.3");
-        assert_eq!(musical_position_label(-2.0, 4), "1.1.1");
-        assert_eq!(musical_position_label(3.999, 4), "2.1.1");
+        let four = crate::MeterMap::uniform(4);
+        assert_eq!(musical_position_label(0.0, &four), "1.1.1");
+        assert_eq!(musical_position_label(0.25, &four), "1.1.2");
+        assert_eq!(musical_position_label(3.75, &four), "1.4.4");
+        assert_eq!(musical_position_label(4.0, &four), "2.1.1");
+        assert_eq!(musical_position_label(6.5, &crate::MeterMap::uniform(3)), "3.1.3");
+        assert_eq!(musical_position_label(-2.0, &four), "1.1.1");
+        assert_eq!(musical_position_label(3.999, &four), "2.1.1");
+        let changing = crate::MeterMap::new(
+            4,
+            &[daw_timeline::MeterChange {
+                bar: 2,
+                beats_per_bar: 3,
+            }],
+        );
+        assert_eq!(musical_position_label(6.75, &changing), "2.3.4");
+        assert_eq!(musical_position_label(7.0, &changing), "3.1.1");
     }
 }

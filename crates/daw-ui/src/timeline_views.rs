@@ -163,7 +163,7 @@ pub fn measured_command_group<R>(
 pub fn transport_position(
     ui: &mut Ui,
     beat: f64,
-    beats_per_bar: u8,
+    meter: &crate::MeterMap,
     seconds: f64,
 ) -> egui::Response {
     let colors = crate::theme::palette(ui.ctx());
@@ -197,7 +197,7 @@ pub fn transport_position(
         let bar_beat = slot(
             ui,
             position_width,
-            crate::musical_position_label(beat, beats_per_bar),
+            crate::musical_position_label(beat, meter),
             position,
             colors.text,
         );

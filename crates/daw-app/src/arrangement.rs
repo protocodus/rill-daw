@@ -312,7 +312,7 @@ impl DawApp {
                 "arrangement_precision",
                 daw_ui::tokens::SPACE_XS,
                 |ui| {
-                    daw_ui::snap_choice(ui, &mut self.snap, self.project.beats_per_bar, None);
+                    daw_ui::snap_choice(ui, &mut self.snap, &self.project.meter_map(), None);
                     daw_ui::nudge_menu(ui, self.selected().is_some())
                 },
             );
@@ -405,8 +405,9 @@ impl DawApp {
             start_row: 0.0,
             end_row: (row_units + folder_footers / viewport.row_height).max(1.0),
         };
-        let ruler_height =
-            daw_ui::tokens::TIMELINE_RULER_HEIGHT + daw_ui::tokens::TIMELINE_LOOP_HEIGHT;
+        let ruler_height = daw_ui::tokens::TIMELINE_RULER_HEIGHT
+            + daw_ui::tokens::TIMELINE_LOOP_HEIGHT
+            + daw_ui::tokens::TIMELINE_FLAG_HEIGHT;
         let canvas = Rect::from_min_max(
             ui.available_rect_before_wrap().min
                 // A leading gutter keeps beat 0, the playhead and the first
@@ -686,7 +687,7 @@ impl DawApp {
                 egui::pos2(tracks_left, header_cell.bottom()),
                 egui::pos2(
                     header_cell.right() - daw_ui::tokens::SPACE_SM,
-                    ruler.bottom(),
+                    ruler.bottom() - daw_ui::tokens::TIMELINE_FLAG_HEIGHT,
                 ),
             ),
             self.tool,
@@ -780,14 +781,22 @@ impl DawApp {
         );
         let loop_lane = Rect::from_min_max(
             Pos2::new(grid_left, label_ruler.bottom()),
+            Pos2::new(
+                canvas.right(),
+                label_ruler.bottom() + daw_ui::tokens::TIMELINE_LOOP_HEIGHT,
+            ),
+        );
+        let flag_lane = Rect::from_min_max(
+            Pos2::new(grid_left, loop_lane.bottom()),
             Pos2::new(canvas.right(), ruler.bottom()),
         );
+        let meter = self.project.meter_map();
         daw_ui::paint_timeline_ruler(
             &p,
             label_ruler,
             view,
             self.project.tempo,
-            self.project.beats_per_bar,
+            &meter,
         );
         let loop_response = self.timeline_loop_ui(
             ui,
@@ -801,9 +810,14 @@ impl DawApp {
             && pos.x >= grid_left
             && pos.x <= canvas.right()
             && !loop_lane.contains(pos)
+            && !flag_lane.contains(pos)
         {
             new_cursor = Some(self.snapped(((pos.x - origin) / self.zoom) as f64).max(0.0));
         }
+        let flag_diagnostics =
+            self.timeline_flag_lane(ui, flag_lane, view, !navigation.navigating);
+        let zoom = self.zoom;
+        self.timeline_context_menu(&ruler_response, |x| f64::from((x - origin) / zoom));
         // Folder "After" means after its complete subtree, even when the
         // pointer stays over the folder header. Keep that boundary independent
         // of clipping and of whether its descendants have been painted yet.
@@ -1104,11 +1118,17 @@ impl DawApp {
                     for beat in ((first_beat / grid_step) * grid_step..last_beat).step_by(grid_step) {
                         let x = origin + beat as f32 * self.zoom;
                         if x < grid_left || x > canvas.right() { continue; }
-                        let bar = beat % self.project.beats_per_bar as usize == 0;
+                        let bar = meter.is_downbeat(beat as f64);
                         p.line_segment(
                             [Pos2::new(x, row.top()), Pos2::new(x, row.bottom())],
                             Stroke::new(1.0_f32, if bar { palette(ui.ctx()).line } else { palette(ui.ctx()).grid_minor }),
                         );
+                    }
+                    for marker in &self.project.markers {
+                        let x = origin + marker.beat as f32 * self.zoom;
+                        if x >= grid_left && x <= canvas.right() {
+                            p.vline(x, row.y_range(), Stroke::new(1.0_f32, palette(ui.ctx()).guide.gamma_multiply(0.35)));
+                        }
                     }
                     let background_double = row_response.clicked() && !navigation.navigating
                         && row_response.interact_pointer_pos().is_some_and(|position| {
@@ -1345,7 +1365,7 @@ impl DawApp {
                             ui.interact(rect.intersect(Rect::from_min_max(Pos2::new(grid_left, row.top()), Pos2::new(canvas.right(), row.bottom()))),
                                 ui.id().with(clip.id), if navigation.navigating { Sense::hover() } else { Sense::click_and_drag() }),
                             &clip.name, &track.name, clip.start..clip.end(),
-                            self.project.tempo, self.project.beats_per_bar, clip.link_group.is_some(),
+                            self.project.tempo, &meter, clip.link_group.is_some(),
                         );
                         let response=if disk_streamed {daw_ui::hover_text(response,daw_ui::DISK_STREAMED_AUDIO)}else{response};
                         let edge_handles = [true, false].map(|start| {
@@ -1906,8 +1926,7 @@ impl DawApp {
                     empty_action_rects.extend(response.actions.iter().map(|(_, response)| response.interact_rect));
                 } else {
                     // Bars continue below the last track so the timeline reads as one surface.
-                    let bars = usize::from(self.project.beats_per_bar.max(1));
-                    for beat in (first_beat.div_ceil(bars) * bars..last_beat).step_by(bars) {
+                    for (_, beat) in meter.bar_lines(first_beat as f64, last_beat as f64).take(4096) {
                         let x = origin + beat as f32 * self.zoom;
                         if x >= grid_left && x <= canvas.right() {
                             p.vline(x, empty.y_range(), Stroke::new(1.0_f32, palette(ui.ctx()).grid_minor));
@@ -2174,6 +2193,7 @@ impl DawApp {
             diagnostics["ruler"] = rect_json(label_ruler);
             diagnostics["automation"] = serde_json::json!(automation_diagnostics);
             diagnostics["loop_lane"] = rect_json(loop_response.lane);
+            diagnostics["timeline_flags"] = flag_diagnostics;
             diagnostics["loop_handles"] = serde_json::json!(loop_response.handles.map(|handle| handle.map(rect_json)));
             diagnostics["loop_indicator"] = serde_json::json!(loop_response.band.filter(|_| self.project.loop_enabled).map(rect_json));
             diagnostics["loop_start_handle"] = serde_json::json!(loop_response.handles[0].filter(|_| self.project.loop_enabled).map(rect_json));
@@ -2815,7 +2835,7 @@ impl DawApp {
                         });
                         let mut make_independent = false;
                         let timing_tempo = self.project.tempo;
-                        let timing_meter = self.project.beats_per_bar;
+                        let timing_meter = self.project.meter_map();
                         if self.selected().is_some_and(|clip|self.clip_is_disk_streamed(id,clip)){daw_ui::audio_streaming_status(ui);}
                         if let Some(clip) = self.selected_mut() {
                             if let Some(count) = count {
@@ -2854,7 +2874,7 @@ impl DawApp {
                                     start: clip.start, duration: clip.length, source_offset: clip.offset,
                                 }, &mut duration_mode, MAX_BEAT, maximum_source_offset,
                                 clip.source_length() / MAX_SOURCE_RATE..=clip.source_length() / MIN_SOURCE_RATE,
-                                timing_meter);
+                                &timing_meter);
                                 ctx.data_mut(|data| data.insert_temp(duration_mode_id, duration_mode));
                                 daw_ui::form_label(ui, "Stretch");
                                 daw_ui::text::body(ui, format!("{:.1}%", 100.0 / clip.source_rate))
@@ -2928,7 +2948,7 @@ impl DawApp {
                                     }
                                 }
                                 daw_ui::duration::timing_summary(
-                                    ui, clip.start, clip.length, timing_tempo, timing_meter,
+                                    ui, clip.start, clip.length, timing_tempo, &timing_meter,
                                 );
                             });
                         }
@@ -3305,7 +3325,7 @@ impl DawApp {
             MAX_BEAT,
             Some(daw_ui::TimelineLoopLabel {
                 tempo: self.project.tempo,
-                beats_per_bar: self.project.beats_per_bar,
+                meter: &self.project.meter_map(),
                 playhead: self.cursor,
             }),
         );

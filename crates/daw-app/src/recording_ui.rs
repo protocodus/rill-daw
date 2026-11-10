@@ -73,7 +73,7 @@ pub(crate) struct RecordingUi {
     finishing: Option<mpsc::Receiver<FinalizedRecording>>,
     signature: Option<(u64, InputSettings)>,
     midi_signature: Option<(u64, MidiSettings)>,
-    timing_signature: Option<(u64, RecordingTiming, f64, u8)>,
+    timing_signature: Option<(u64, RecordingTiming, f64, daw_core::MeterMap)>,
     audio_complete: Option<FinalizedRecording>,
     midi_complete: Option<MidiRecordingResult>,
     pub(crate) midi_ports: Vec<MidiPortInfo>,
@@ -238,9 +238,9 @@ impl DawApp {
                 engine.snapshot().engine_id,
                 options,
                 self.project.tempo,
-                self.project.beats_per_bar,
+                self.project.meter_map(),
             );
-            if self.recording.timing_signature != Some(signature) {
+            if self.recording.timing_signature.as_ref() != Some(&signature) {
                 engine.configure_recording_timing(&self.project, options)?;
                 self.recording.timing_signature = Some(signature);
             }

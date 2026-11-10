@@ -7,6 +7,7 @@ enum RenameTarget {
     Project,
     Clip(u64, u64),
     Track(u64),
+    Marker(u64),
 }
 
 #[derive(Clone)]
@@ -151,8 +152,16 @@ impl DawApp {
                 .project
                 .track(track)
                 .is_none_or(|track| track.name == draft.text),
+            RenameTarget::Marker(id) => self
+                .project
+                .marker(id)
+                .is_none_or(|marker| marker.name == draft.text),
         };
         if unchanged {
+            return;
+        }
+        if let RenameTarget::Marker(id) = draft.target {
+            self.rename_marker(id, draft.text);
             return;
         }
         let mut candidate = self.project.clone();
@@ -172,6 +181,7 @@ impl DawApp {
                 candidate.track_mut(track).unwrap().name = draft.text;
                 (Ok(()), "Rename track")
             }
+            RenameTarget::Marker(_) => unreachable!("Markers rename through a song edit"),
         };
         match result.and_then(|()| candidate.validate()) {
             Ok(()) => {
@@ -255,6 +265,12 @@ impl DawApp {
         });
     }
 
+    pub(crate) fn start_marker_rename(&mut self, ctx: &egui::Context, id: u64) {
+        if let Some(name) = self.project.marker(id).map(|marker| marker.name.clone()) {
+            self.start_name_draft(ctx, RenameTarget::Marker(id), name, false);
+        }
+    }
+
     pub(crate) fn start_project_rename(&mut self, ctx: &egui::Context) {
         self.start_name_draft(ctx, RenameTarget::Project, self.project.name.clone(), false);
     }
@@ -317,6 +333,7 @@ impl DawApp {
                 self.project.clip(track, clip).map(|clip| &clip.name)
             }
             RenameTarget::Track(track) => self.project.track(track).map(|track| &track.name),
+            RenameTarget::Marker(id) => self.project.marker(id).map(|marker| &marker.name),
         };
         if name.is_none() {
             return;
@@ -346,6 +363,11 @@ impl DawApp {
                         .iter()
                         .find(|track| track["track"] == id)
                         .and_then(|track| rect(&track["name"])),
+                    RenameTarget::Marker(id) => timeline["timeline_flags"]["flags"]
+                        .as_array()?
+                        .iter()
+                        .find(|flag| flag["kind"] == "marker" && flag["key"] == id)
+                        .and_then(|flag| rect(&flag["rect"])),
                 }
             }),
             (WorkspaceView::Mixer, RenameTarget::Track(id)) => ctx.data(|data| {
@@ -398,6 +420,7 @@ impl DawApp {
                         RenameTarget::Project => "Project name",
                         RenameTarget::Clip(..) => "Clip name",
                         RenameTarget::Track(..) => "Track name",
+                        RenameTarget::Marker(..) => "Marker name",
                     },
                     width,
                     draft.initial_focus,

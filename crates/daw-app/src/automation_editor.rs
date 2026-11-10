@@ -655,7 +655,7 @@ impl DawApp {
                             + daw_ui::tokens::PARAMETER_ROW_HEIGHT,
                     ),
                 tempo: self.project.tempo,
-                beats_per_bar: self.project.beats_per_bar,
+                meter: self.project.meter_map(),
                 fit,
                 keyboard_active: true,
                 value_label: value_axis_label(lane.target.parameter),
@@ -665,7 +665,7 @@ impl DawApp {
                 end_beat: self
                     .project
                     .end_beat()
-                    .max(f64::from(self.project.beats_per_bar.max(1))),
+                    .max(self.project.meter_map().bar_start(2)),
                 start_row: 0.0,
                 end_row: 1.0,
             }),
@@ -687,7 +687,7 @@ impl DawApp {
         let mut displayed_beat = None;
         let mut segment_edit = response.segment_edit;
         let mut slope_rect = None;
-        let beats_per_bar = self.project.beats_per_bar;
+        let meter = self.project.meter_map();
         daw_ui::parameter_toolbar(ui, |ui| {
             if let Some(value) = lane.override_value {
                 let mut manual = lane.target.parameter.denormalize(value);
@@ -730,7 +730,7 @@ impl DawApp {
             let mut value = lane.target.parameter.denormalize(point.value);
             let beat_response = ui
                 .add(
-                    daw_ui::musical_position_field(&mut beat, beats_per_bar, "Position ")
+                    daw_ui::musical_position_field(&mut beat, &meter, "Position ")
                         .range(0.0..=daw_core::MAX_BEAT)
                         .speed(self.snap.max(0.01)),
                 )

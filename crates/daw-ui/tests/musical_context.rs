@@ -13,7 +13,7 @@ fn two_decimal_positions_carry_before_decomposing_bars_and_beats() {
         (32.5, 4, "Bar 9 · Beat 1.50"),
         (1.999, 0, "Bar 3 · Beat 1.00"),
     ] {
-        assert_eq!(musical_position(beat, meter), expected);
+        assert_eq!(musical_position(beat, &daw_ui::MeterMap::uniform(meter)), expected);
     }
 }
 
@@ -30,6 +30,6 @@ fn compact_song_positions_carry_rounded_beats_across_bar_boundaries() {
         (32.5, 4, "9:1.5"),
         (1.9999, 0, "3:1"),
     ] {
-        assert_eq!(compact_musical_position(beat, meter), expected);
+        assert_eq!(compact_musical_position(beat, &daw_ui::MeterMap::uniform(meter)), expected);
     }
 }
