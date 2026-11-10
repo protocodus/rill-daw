@@ -128,19 +128,14 @@ fn setup_recording_export_warning_history_and_about_keep_their_actions_in_view()
                 app.key("Escape");
 
                 let export = menu(&mut app, "File", "Export WAV…");
-                popup_fits(&export, "Export WAV", width, height);
-                visible(
-                    &export,
-                    &["Include effect tails", "Export…", "Cancel"],
-                    width,
-                    height,
-                );
+                popup_fits(&export, "Export audio", width, height);
+                visible(&export, &["Export…", "Cancel"], width, height);
                 // The bounded summary scrolls when format choices and a long
                 // missing-instrument warning exceed a compact viewport. Its
                 // footer must stay reachable while inspecting that warning.
                 let export_action = label(&export, "Export…").clone();
                 let cancel_action = label(&export, "Cancel").clone();
-                let title = label(&export, "Export WAV");
+                let title = label(&export, "Export audio");
                 let x =
                     (title["min"][0].as_f64().unwrap() + title["max"][0].as_f64().unwrap()) * 0.5;
                 let y = (title["max"][1].as_f64().unwrap()

@@ -19,7 +19,7 @@ Rill is a free, open-source desktop music workstation for **macOS, Linux, and Wi
 - **Work with AI in context.** Ask for a new part, a phrase variation, an audio edit or a mix adjustment. Keep a conversation scoped to the open clip, channel or processor, with changes available in normal Undo/Redo history.
 - **Shape the mix.** Host VST3 instruments and effects in isolated processes. Connect buses, pre/post-fader sends, sidechains and grouped instrument outputs. Draw automation for plug-in parameters, sends, and channel/Master gain, volume and pan; inspect spectrum, loudness and stereo levels.
 - **Freeze and return.** Print clips or tracks to new audio, including configured instrument outputs together. Originals remain retained and muted; **Return to originals** brings them back while keeping your prints and edits.
-- **Take the song with you.** Save portable `.rill` projects with referenced audio, retained takes and Freeze originals embedded. Export songs or loops as 16/24-bit PCM or 32-bit float WAV, or make a MIDI file.
+- **Take the song with you.** Save portable `.rill` projects with referenced audio, retained takes and Freeze originals embedded. Export songs or loops as 16/24-bit PCM or 32-bit float WAV, FLAC, Ogg Vorbis or MP3, write aligned stems of tracks, buses and folders in one step, or make a MIDI file.
 
 Independent instrument and effect chains can run across multiple CPU cores. Shared-memory audio reduces plug-in communication overhead without reducing sample precision, and lightweight graphs retain a serial path. Performance depends on the song, plug-ins and hardware; see the [architecture and measured results](docs/ARCHITECTURE.md#scope-and-verification).
 

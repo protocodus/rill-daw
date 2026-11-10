@@ -114,8 +114,8 @@ project editor.
 Launch `rill --mcp-application` only when intentionally giving an external MCP
 client the additional project I/O and configuration tools. This broader profile
 is separate from the embedded assistant, which receives the current-song
-catalog or a narrower editor-specific subset. `document_action` supports New, Open, Save/Save as, media Import, WAV
-Export, and recovery with explicit paths instead of file-picker interaction.
+catalog or a narrower editor-specific subset. `document_action` supports New, Open, Save/Save as, media Import, audio
+Export (WAV, FLAC, Ogg Vorbis or MP3, or `stems:true` with `channels`, `include_mix`, `through_master`, `replace_existing`; the result lists the written files), and recovery with explicit paths instead of file-picker interaction.
 Replacing unsaved work requires `discard_unsaved:true`; native-editor snapshots
 are still acknowledged, and newly revealed changes cause rejection rather than
 a confirmation dialog. Operations may report acceptance before background work

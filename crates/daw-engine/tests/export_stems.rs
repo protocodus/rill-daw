@@ -19,7 +19,8 @@ fn tone(path: &Path, frequency: f32, seconds: f32) {
         channels: 2,
         samples: (0..frames)
             .flat_map(|i| {
-                let value = 0.3 * (i as f32 / RATE as f32 * frequency * 6.283).sin();
+                let value =
+                    0.3 * (i as f32 / RATE as f32 * frequency * std::f32::consts::TAU).sin();
                 [value, value * 0.5]
             })
             .collect(),

@@ -133,8 +133,10 @@ WAV delivery offers 16/24-bit PCM or 32-bit float, independent sample rate,
 optional TPDF dither and exact loop bounds. Temporary output is replaced only
 after successful rendering. PCM overload reporting and preserved float headroom
 are useful. The reported peak is a rendered sample peak, not true peak or a
-compliance certificate. Stem/batch export, compressed delivery and professional
-session interchange remain separate gaps. See the [user guide](USER_GUIDE.md).
+compliance certificate. FLAC, Ogg Vorbis and MP3 delivery and all-or-nothing
+stem export (tracks, buses and folders, optionally pre-Master) are available.
+Batch export of several ranges and professional session interchange remain
+separate gaps. See the [user guide](USER_GUIDE.md).
 
 Rill's AI architecture is a strength: scoped typed operations, revision checks,
 candidate validation and shared manual/tool/AI Undo provide a reviewable editing

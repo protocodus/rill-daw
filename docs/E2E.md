@@ -823,6 +823,13 @@ includes `exported_file`, `clipboard_text`, and `automation_editor` geometry for
 observing these interactions. Clipboard diagnostics observe output emitted by
 the headless app; they do not read the operating system clipboard.
 
+`export_formats_e2e` exports the mix as FLAC, Ogg Vorbis and MP3 through the
+dialog and decodes each with the importer, selects stem channels by mouse and
+checks that the stems line up with the mix, cancels a running stem export
+(`RILL_E2E_EXPORT_DELAY_MS`, honoured only with `RILL_AUTOMATION_DIR`) and
+verifies no files remain, and drives `document_action` export with `format`,
+`stems`, `channels`, `include_mix` and `replace_existing`.
+
 `export_options_e2e` opens File → Export WAV, checks the displayed duration,
 toggles Include effect tails, and validates an exact 60-second WAV versus the
 default release tail. Popup and destination-picker cancellation preserve the

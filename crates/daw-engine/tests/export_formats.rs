@@ -20,9 +20,11 @@ fn fixture(amplitude: f32) -> (tempfile::TempDir, Project) {
             seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
             let noise = ((seed >> 8) as f32 / 8_388_608.0 - 1.0) * 0.01;
             [
-                amplitude * (0.5 * (t * 440.0 * 6.283).sin() + 0.2 * (t * 2_500.0 * 6.283).sin())
+                amplitude
+                    * (0.5 * (t * 440.0 * std::f32::consts::TAU).sin()
+                        + 0.2 * (t * 2_500.0 * std::f32::consts::TAU).sin())
                     + noise,
-                amplitude * (0.4 * (t * 660.0 * 6.283).sin()) + noise,
+                amplitude * (0.4 * (t * 660.0 * std::f32::consts::TAU).sin()) + noise,
             ]
         })
         .collect();
