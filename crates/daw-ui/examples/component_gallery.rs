@@ -14,8 +14,14 @@ use std::{
 mod actions;
 #[path = "component_gallery/curves.rs"]
 mod curves;
+#[path = "component_gallery/device_controls.rs"]
+mod device_controls;
 #[path = "component_gallery/device_details.rs"]
 mod device_details;
+#[path = "component_gallery/device_panels.rs"]
+mod device_panels;
+#[path = "component_gallery/device_plots.rs"]
+mod device_plots;
 #[path = "component_gallery/devices.rs"]
 mod devices;
 #[path = "component_gallery/feedback.rs"]
@@ -35,7 +41,7 @@ mod timeline;
 #[path = "component_gallery/tracks.rs"]
 mod tracks;
 
-const PAGES: [(&str, &str, &str); 12] = [
+const PAGES: [(&str, &str, &str); 15] = [
     (
         "actions",
         "Actions, tools, and views",
@@ -96,6 +102,21 @@ const PAGES: [(&str, &str, &str); 12] = [
         "Signal analysis",
         "Switchable spectrum, loudness, stereo correlation, and phase displays for mixer channels.",
     ),
+    (
+        "device-controls",
+        "Device controls",
+        "Knobs, selectors, pads, envelope, XY pad, keyboard, wheels and the modulation matrix shared by every device.",
+    ),
+    (
+        "device-plots",
+        "Device visualizations",
+        "Response, transfer, envelope, sample and echo displays drawn from plain data.",
+    ),
+    (
+        "device-panels",
+        "Device panels",
+        "The shared device frame and a panel generated from parameter rows.",
+    ),
 ];
 
 #[derive(Default)]
@@ -124,6 +145,9 @@ struct Gallery {
     feedback: feedback::State,
     tracks: tracks::State,
     signal_analysis: signal_analysis::State,
+    device_controls: device_controls::State,
+    device_plots: device_plots::State,
+    device_panels: device_panels::State,
 }
 
 impl Gallery {
@@ -154,6 +178,9 @@ impl Gallery {
             feedback: Default::default(),
             tracks: Default::default(),
             signal_analysis: Default::default(),
+            device_controls: Default::default(),
+            device_plots: Default::default(),
+            device_panels: Default::default(),
         }
     }
 
@@ -301,6 +328,9 @@ impl eframe::App for Gallery {
                     9 => device_details::show(ui, &mut self.device_details),
                     10 => routing_choices::show(ui),
                     11 => signal_analysis::show(ui, &mut self.signal_analysis),
+                    12 => device_controls::show(ui, &mut self.device_controls),
+                    13 => device_plots::show(ui, &mut self.device_plots),
+                    14 => device_panels::show(ui, &mut self.device_panels),
                     _ => unreachable!(),
                 });
             });
@@ -324,7 +354,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )),
         Some("--help" | "-h") => {
             println!(
-                "component_gallery [--capture DIRECTORY]\nInteractive shared UI catalogue; --capture writes twelve light/dark PNG pairs and exits."
+                "component_gallery [--capture DIRECTORY]\nInteractive shared UI catalogue; --capture writes fifteen light/dark PNG pairs and exits."
             );
             return Ok(());
         }
