@@ -24,6 +24,7 @@ the arranger remain available; the starting actions disappear once a track exist
 - Non-destructive audio gain, normalization, reverse, curve fades, range clipboard editing, and transient split preview.
 - Exclusive audio overlaps, optional spline crossfades, and audio/MIDI clip joining.
 - Transport loop toggle and on-demand start/end beat controls, saved with the project.
+- Meter changes at bar lines and named, colored song markers on the arranger ruler, exported to MIDI.
 - Piano roll with scale/chord highlighting, chord database, octave-stack drawing, both note edges, velocity painting, and held-note plugin audition; randomize and quantize previews, voice-aware legato, transpose, and note clipboard.
 - Generate sustained chords, seven arpeggio patterns, and seeded melodies with optional counterpoint or tintinnabuli voices; preview notes in an editable whole-bar range before adding them in one undoable step.
 - Large searchable instrument/effect browser with developer filters and cached native previews; drag-reorder insert chains and create send returns.
@@ -291,6 +292,27 @@ clips' **Delete** context action.
 Choose **Snap → 1 bar** to align edits to the current meter: three beats in 3/4,
 four in 4/4. Changing the meter later keeps the existing beat increment and shows
 it explicitly, such as **Snap 3 beats**; choose **1 bar** again to use the new meter.
+
+### Meter changes and markers
+
+The transport meter chooser sets the meter of bar 1. To change the meter later in
+the song, right-click the arranger ruler and choose **Insert meter change…**, or use
+**Edit → Markers → Insert meter change at playhead…**. Pick the starting bar and
+the meter, then **Apply meter change**. Clips keep their beat positions; only the
+bar lines around them move. A flag on the ruler marks each change: click it to
+edit or move it, or right-click it to **Remove meter change**. In the arranger,
+**Snap → 1 bar** follows the real bar lines; the clip editors use the bar length
+at the clip's start.
+
+Markers name song positions. Choose **Edit → Markers → Add marker at playhead**
+(**M**), or right-click the ruler and choose **Add marker here**. Click a marker
+flag to move the playhead to it, drag it to move it with snap (Shift bypasses
+snap), and double-click it or choose **Rename marker…** from its context menu to
+rename it. **Delete marker** removes it. **Previous marker** (**,**) and **Next
+marker** (**.**) step the playhead between markers. Every change is one Undo step.
+MIDI export writes meter changes as time signatures and markers as marker events;
+MIDI import reads time signatures that fall on bar lines when importing into an
+empty song.
 
 Clip Properties always shows **Stretch**, starting at **100.0%**, so its timing
 controls stay in place when a duration edit changes between Trim and Stretch.

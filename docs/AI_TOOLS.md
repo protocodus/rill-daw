@@ -51,7 +51,10 @@ execution must derive from the canonical registry rather than separate lists.
 | `daw-ui::assistant` | Shared provider-independent transcript/composer, reused by the app's assistant view |
 
 The registry provides current-song tools and an application-profile extension,
-with typed `SongEdit` variants available through `apply_edits`.
+with typed `SongEdit` variants available through `apply_edits`, including
+`set_meter_change`, `move_meter_change`, `remove_meter_change`, `add_marker`
+(with an optional `key` for later edits in the same batch), `rename_marker`,
+`move_marker` and `remove_marker`.
 Its high-level operations avoid one call per
 note, control, or input assignment. This is substantial current-song coverage,
 not complete migration of every GUI action in the inventory below. Source tool
@@ -59,7 +62,7 @@ discovery remains authoritative as the catalog expands.
 
 | Tool family | Registered tools and behavior |
 | --- | --- |
-| Song reads | `get_song_context`, `list_tracks`, `get_track`, `get_clip`, `get_note_expressions`: session/revision, paginated structural and exact expression data, note data, and nondestructive clip settings |
+| Song reads | `get_song_context`, `list_tracks`, `get_track`, `get_clip`, `get_note_expressions`: session/revision, meter changes with their start beats, markers, paginated structural and exact expression data, note data, and nondestructive clip settings |
 | Scope and history | `get_selection`, `set_selection`, `history`: choose objects by stable IDs without changing view; read/undo/redo normal song history |
 | Composition theory | `composer_catalog`, `composer_scale`, `composer_chord`, `composer_progression`, `composer_euclidean`: native, bounded theory queries adapted from midi-composer-mcp; no song edits |
 | Multi-part composition | `compose_progression`: create chord, arpeggio, and bass clips together in one fenced, undoable commit; reuse existing MIDI tracks or create new ones |

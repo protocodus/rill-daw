@@ -101,7 +101,7 @@ Use the menus and on-screen tools, or speed up familiar actions with keyboard sh
 
 ## Current scope
 
-Rill is in active development and focuses on audio/MIDI music production. It hosts **VST3**; instruments and effects are installed separately. Tempo maps, surround mixing, other plug-in formats, and video/scoring-to-picture workflows are not supported. See the [current capabilities and limits](docs/PRODUCT_DIRECTION.md).
+Rill is in active development and focuses on audio/MIDI music production. It hosts **VST3**; instruments and effects are installed separately. Songs can change meter at bar lines and carry named markers. Tempo maps, surround mixing, other plug-in formats, and video/scoring-to-picture workflows are not supported. See the [current capabilities and limits](docs/PRODUCT_DIRECTION.md).
 
 `.rill` projects preserve high-resolution MIDI note/controller data. Native UMP input targets macOS 11 and newer; Linux and Windows use MIDI 1.0 input. Audible expression depends on the VST3 instrument's supported mappings; per-note pitch-bend packets are retained but not currently played. Exporting richer performances as `.mid` requires an explicit MIDI 1.0 copy. This is not universal MIDI 2.0 device or plug-in compatibility; see [MIDI recording and expression](docs/USER_GUIDE.md#midi-recording-and-pre-count).
 

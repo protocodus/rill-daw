@@ -45,6 +45,15 @@ Version 4 adds optional audio clip `audio_take` membership. A retained candidate
 
 Retained candidates remain in `track.clips` with their original source windows and edits. They are silent: playback, overlap scheduling, and export duration exclude them. Their media remains bundled even when no comp region currently uses it. Comp regions are ordinary editable audio clips with local bounds, source offsets, rates, fades, and optional crossfades. Selecting a passage preserves other regions and adds smooth complementary crossfades limited to available source handles; choosing a whole take replaces the group's audible comp. Independent copies and overdubs clear take membership, while splits preserve it. Detaching a group removes retained candidates from the document and leaves the current comp as ordinary clips without deleting any source files.
 
+The optional project fields `meter_changes` and `markers` add song timing
+context without a version change; both are omitted when empty, so older songs
+save unchanged. `meter_changes` is a list of `{"bar":5,"beats_per_bar":3}` sorted
+by bar: each change starts at a bar line after bar 1 (whose meter remains
+`beats_per_bar`) and holds 1–32 beats per bar, up to 256 changes. Clip and note
+positions stay in beats. `markers` holds up to 1024 `{"id":7,"beat":16.0,
+"name":"Chorus","color":[220,120,40]}` entries; IDs share the object-ID
+namespace, names are 1–256 characters and not blank, and `color` is optional.
+
 Versions 1–6 remain readable. New saves use version 6 so older applications
 reject unsupported routing, Master, Freeze or MIDI performance semantics instead
 of silently dropping them. These version rules apply to ZIP manifests and legacy

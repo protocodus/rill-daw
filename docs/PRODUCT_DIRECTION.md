@@ -161,8 +161,8 @@ gaps. Live latency changes still require graph rebuilding; broad plug-in/driver
 compatibility needs real testing.
 
 The channel graph is stereo and acyclic. Wide plug-in buses are exposed as
-independent stereo/mono pairs, not a surround/immersive mixing model. Tempo and
-meter remain constant. Gesture-recording modes such as Read/Touch/Write remain
+independent stereo/mono pairs, not a surround/immersive mixing model. Tempo
+remains constant; meter changes at bar lines and song markers are supported. Gesture-recording modes such as Read/Touch/Write remain
 separate from drawing curves and overriding/resuming them.
 
 Expressive project storage and target translation do not equal a complete MIDI
@@ -295,7 +295,7 @@ Official screenshot references, **not firsthand pixel comparisons**:
 3. **Record automation performances predictably.** Add deliberate Read/Touch
    behavior before expanding modes, preserving override/resume and one-gesture
    Undo. Test capture, playback, editing and recovery together.
-4. **Deepen timing and expressive interoperability.** Evaluate tempo/meter maps
+4. **Deepen timing and expressive interoperability.** Evaluate tempo maps
    and controller/MIDI 2.0 device interoperability against producer sessions.
    Preserve rich source data and make every delivery downgrade explicit.
 5. **Continue measured interface refinement.** Reduce secondary toolbar height,
