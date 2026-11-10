@@ -72,7 +72,7 @@ fn device_details_read_native_ports_search_parameters_and_preserve_project() {
         let before = app.inspect();
         app.click("Device details");
         let ready = wait_until(&mut app, |state| {
-            state["plugin_details"]["status"] == "ready"
+            state["plugin_details"]["status"] == "ready" && visible(state, "0 audio · MIDI")
         });
         let metadata = &ready["plugin_details"]["metadata"];
         assert_eq!(metadata["inputs"], json!([]));
@@ -82,7 +82,6 @@ fn device_details_read_native_ports_search_parameters_and_preserve_project() {
         assert_eq!(metadata["parameters"].as_array().unwrap().len(), 1);
         assert_eq!(metadata["parameters"][0]["name"], "Level");
         assert_eq!(metadata["parameters"][0]["can_automate"], true);
-        assert!(visible(&ready, "0 audio · MIDI"));
         assert!(visible(&ready, "2 audio"));
         assert!(visible(&ready, "Level"));
         visible_buttons(&ready);
@@ -151,9 +150,8 @@ fn unavailable_device_details_remain_unknown_and_can_retry_or_close() {
     let before = app.inspect();
     app.click("Device details");
     let failed = wait_until(&mut app, |state| {
-        state["plugin_details"]["status"] == "failed"
+        state["plugin_details"]["status"] == "failed" && visible(state, "Details unavailable")
     });
-    assert!(visible(&failed, "Details unavailable"));
     assert!(failed["plugin_details"]["metadata"].is_null());
     assert_eq!(failed["project"], before["project"]);
     visible_buttons(&failed);
