@@ -170,6 +170,11 @@ pub struct DawApp {
     pub export_job:
         Option<std::sync::mpsc::Receiver<anyhow::Result<crate::export_ui::ExportCompletion>>>,
     pub(crate) export_run: Option<crate::export_ui::ExportRun>,
+    pub(crate) export_cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    pub(crate) export_stem_selection: std::collections::HashSet<u64>,
+    /// Stem files in the last completed export; zero for a single file.
+    pub(crate) exported_stems: usize,
+    pub(crate) exported_files: Vec<PathBuf>,
     pub(crate) finishing: crate::finishing_actions::FinishingActions,
     pub(crate) exported_file: Option<PathBuf>,
     pub(crate) export_open: bool,
@@ -325,6 +330,10 @@ impl DawApp {
             next_document_dialog: None,
             export_job: None,
             export_run: None,
+            export_cancel: None,
+            export_stem_selection: Default::default(),
+            exported_stems: 0,
+            exported_files: Vec::new(),
             finishing: Default::default(),
             exported_file: None,
             export_open: false,
@@ -694,7 +703,7 @@ impl DawApp {
                     PopupKind::Join => "Join clips",
                     PopupKind::AudioTakes => "Audio takes",
                     PopupKind::Recording => "Recording",
-                    PopupKind::Export => "Export WAV",
+                    PopupKind::Export => "Export audio",
                     PopupKind::ExportMidi => "Export MIDI 1.0 copy",
                     PopupKind::MidiExpression => "Note expression",
                 };
@@ -1596,6 +1605,9 @@ impl DawApp {
                     Ok(completion) => {
                         let path = completion.path;
                         self.export_run = None;
+                        self.export_cancel = None;
+                        self.exported_stems = completion.stems;
+                        self.exported_files = completion.files;
                         self.finishing.export_finished(&path, completion.report);
                         // A finished render must not erase an unrelated error.
                         if !self.error
@@ -1607,7 +1619,19 @@ impl DawApp {
                         }
                         self.exported_file = Some(path);
                     }
+                    Err(_)
+                        if self.export_cancel.take().is_some_and(|cancel| {
+                            cancel.load(std::sync::atomic::Ordering::Acquire)
+                        }) =>
+                    {
+                        // The person asked to stop: nothing failed, nothing was written.
+                        self.export_run = None;
+                        self.finishing.export_failed();
+                        self.error = false;
+                        self.status = "Export canceled · No files written".into();
+                    }
                     Err(e) => {
+                        self.export_cancel = None;
                         self.finishing.export_failed();
                         self.export_failed_notice(e);
                     }
@@ -1615,6 +1639,7 @@ impl DawApp {
             }
             Some(Err(std::sync::mpsc::TryRecvError::Disconnected)) => {
                 self.export_job = None;
+                self.export_cancel = None;
                 self.finishing.export_failed();
                 self.export_failed_notice(anyhow::anyhow!("Export worker stopped unexpectedly"));
             }
@@ -1704,10 +1729,7 @@ impl DawApp {
         } else if busy {
             (NoticeKind::Busy, busy_message.clone())
         } else if let Some(path) = &self.exported_file {
-            let name = path
-                .file_name()
-                .unwrap_or(path.as_os_str())
-                .to_string_lossy();
+            let name = self.exported_name(path);
             if clipped_samples > 0 {
                 (
                     NoticeKind::Warning,
@@ -1758,6 +1780,7 @@ impl DawApp {
         let mut edit_export = false;
         let mut cancel_import = false;
         let mut cancel_freeze = false;
+        let mut cancel_export = false;
         let has_audio_recovery = showing_output_dropout
             || kind == NoticeKind::Error
                 && self
@@ -1779,6 +1802,11 @@ impl DawApp {
                     }
                     if self.freeze_busy() {
                         cancel_freeze = daw_ui::button(ui, "Cancel Freeze").clicked();
+                    }
+                    if self.export_job.is_some() {
+                        cancel_export = daw_ui::button(ui, "Cancel export")
+                            .on_hover_text("Stop rendering. No file is written or replaced.")
+                            .clicked();
                     }
                     if show_export_failure {
                         retry_export = ui.add_enabled(
@@ -1835,7 +1863,7 @@ impl DawApp {
                     response.response.on_hover_text("The original MIDI data remains in the project. Use separate tracks for different UMP groups, or choose an instrument that advertises support for these controls.");
                 }
                 if let Some(path) = &secondary_completion {
-                    let name = path.file_name().unwrap_or(path.as_os_str()).to_string_lossy();
+                    let name = self.exported_name(path);
                     let result_kind = if clipped_samples > 0 || export_midi_advisories != (0, 0) { NoticeKind::Warning } else { NoticeKind::Success };
                     let result_message = if clipped_samples > 0 {
                         format!("Exported · {name} · {clipped_samples} clipped samples")
@@ -1859,6 +1887,9 @@ impl DawApp {
         }
         if cancel_freeze {
             self.cancel_freeze();
+        }
+        if cancel_export {
+            self.cancel_export();
         }
         if edit_export {
             self.export();
@@ -4057,10 +4088,13 @@ mod export_feedback_tests {
                 frames: 0,
                 sample_rate: 48_000,
                 encoding: daw_engine::WavEncoding::Float32,
+                format: daw_engine::ExportFormat::Wav,
                 dither: false,
                 unsupported_midi_events: 0,
                 unsupported_midi_groups: 0,
             },
+            stems: 0,
+            files: Vec::new(),
         }))
         .unwrap();
         app.poll_export();

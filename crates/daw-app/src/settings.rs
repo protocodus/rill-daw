@@ -39,15 +39,30 @@ pub enum ExportRangeMode {
     Loop,
 }
 
+/// One mix file, or one file per selected channel.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExportWhat {
+    #[default]
+    Mix,
+    Stems,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ExportSettings {
     /// None follows playback; a chosen rate never reconfigures the audio device.
     pub sample_rate: Option<u32>,
+    /// Sample depth for WAV and FLAC.
     pub encoding: daw_engine::WavEncoding,
+    pub format: daw_engine::ExportFormat,
     pub dither: bool,
     pub include_effect_tails: bool,
     pub range_mode: ExportRangeMode,
+    pub what: ExportWhat,
+    /// Stems are taken before Master unless this is on.
+    pub stems_through_master: bool,
+    pub stems_include_mix: bool,
 }
 
 impl Default for ExportSettings {
@@ -55,9 +70,13 @@ impl Default for ExportSettings {
         Self {
             sample_rate: None,
             encoding: daw_engine::WavEncoding::Float32,
+            format: daw_engine::ExportFormat::Wav,
             dither: true,
             include_effect_tails: true,
             range_mode: ExportRangeMode::Arrangement,
+            what: ExportWhat::Mix,
+            stems_through_master: false,
+            stems_include_mix: false,
         }
     }
 }
@@ -155,6 +174,10 @@ impl Settings {
                 .is_none_or(|rate| (8_000..=192_000).contains(&rate)),
             "Invalid export sample rate"
         );
+        self.export
+            .format
+            .validate(daw_engine::WavEncoding::Pcm16, 44_100)
+            .map_err(|_| anyhow::anyhow!("Invalid export format"))?;
         anyhow::ensure!(
             (32..=4096).contains(&self.buffer_frames),
             "Invalid buffer size"
@@ -356,6 +379,10 @@ mod tests {
                 dither: true,
                 include_effect_tails: false,
                 range_mode: ExportRangeMode::Loop,
+                format: daw_engine::ExportFormat::Mp3 { kbps: 256 },
+                what: ExportWhat::Stems,
+                stems_through_master: true,
+                stems_include_mix: true,
             },
             ..directory.settings()
         };
