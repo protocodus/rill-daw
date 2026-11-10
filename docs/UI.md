@@ -1355,6 +1355,49 @@ the top of its detail pane. The browser consumes this flag once; it preserves
 the parameter list, search, and ordinary detail scrolling.
 
 
+## Device controls, visualizations and panels
+
+Built-in devices (see [R1_DEVICES.md](R1_DEVICES.md)) and the application use
+these shared components. Gallery pages: `device-controls`, `device-plots`,
+`device-panels` (`cargo run -p daw-ui --example component_gallery`; the
+`--capture` PNGs for these pages are regenerated with the rest of the gallery).
+The palette gains a **modulation** accent (`Palette::modulation`, violet),
+used only for modulation sources, depth arcs and matrix rows.
+
+Every draggable element has a non-drag path (typed value, context menu or
+arrow keys), and canvas handles use the 21-point `HIT_TARGET`.
+
+### Controls ([`device_controls.rs`](../crates/daw-ui/src/device_controls.rs))
+
+| Component | Use |
+| --- | --- |
+| `Knob` additions | `.bipolar()`, `.taper(Taper::Log)`, `.default_value(v)` (double-click and context-menu **Reset**), `.modulation(range)`, `.format(fn)` and `.parse(fn)`. Diameters down to 34. |
+| `labeled_knob` | Caption, dial and value in a fixed cell (`KnobSize::Dense` 34, `Standard` 48, `Hero` 64). Clicking the value types a number. The context menu offers **Reset**, **Type value…**, **Automate** (or **Show automation lane**) and, with `.mod_sources`, **Modulate with …**. `show` returns `automate` and `modulate_with`; the host creates the lane or routing. |
+| `segmented`, `stepped_selector`, `toggle_led` | Two to five options (falls back to a drop-down), longer lists, and section enables. |
+| `xy_pad` | Two normalized parameters; a press jumps, further motion is relative, Shift is fine, arrow keys nudge. |
+| `envelope_editor` | ADSR with hold and per-segment curves from plain `EnvelopeShape`; returns `EnvelopeEdit`s. |
+| `pad_grid`, `keyboard_strip` | 4×4 audition pads (click height sets velocity; `SampleDrop` payloads can be dropped on them) and a keyboard. |
+| `wheel` | Pitch (`bipolar`, springs back to center) and mod wheels. Every instrument panel carries both. |
+| `mod_source_chip`, `mod_slot_row` | Draggable modulation source and one row of the matrix. |
+
+### Visualizations ([`device_plots.rs`](../crates/daw-ui/src/device_plots.rs))
+
+`frequency_plot` (curves on the shared log grid `log_grid_frequency`, optional spectrum backdrop and draggable nodes), `spectrum`, `transfer_plot`, `gain_reduction_history`, `reduction_meter`, `scope`, `wavetable_view`, `lfo_view`, `sample_view` (draggable start, end and loop markers), `delay_view` and `harmonics_view`. They take plain data and own no audio state.
+
+### Panels ([`device_panel.rs`](../crates/daw-ui/src/device_panel.rs))
+
+`device_panel` is the one frame: name, `preset_bar`, bypass, meters and the
+dense Mix/Output (effects) or Volume (instruments) knobs; width is
+`DevicePanelWidth::Medium` (610) or `Large` (987), and a panel never scrolls.
+`device_section` titles a group with a word and spacing instead of an outline.
+`preset_browser` provides search, category and tag filters, Factory/User,
+favorites, **Save as…** and **Reset to default**. `generic_device_panel`
+builds a whole panel from `ParamRow`s (normalized values, `format`/`parse`
+closures) and edits through `ParameterEdits` (`begin_edit`, `set_value`,
+`end_edit`, `automation`, `automate`), so `daw-ui` does not depend on the
+device crates. Panel grammar: picture first, sections in signal order, one
+value-arc color, orange only for automation, violet only for modulation.
+
 ## Typography and international names
 
 The shared `daw_ui::text` module defines Title, Subtitle, Body, Label and Note

@@ -83,6 +83,15 @@ struct DragState {
     position: Option<Pos2>,
 }
 
+/// How a knob maps its range onto the dial. `Log` suits frequency and time
+/// ranges; it needs a strictly positive minimum and is ignored otherwise.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Taper {
+    #[default]
+    Linear,
+    Log,
+}
+
 #[must_use = "Add the knob to a Ui"]
 pub struct Knob<'a> {
     value: Box<dyn FnMut(Option<f64>) -> f64 + 'a>,
@@ -102,6 +111,12 @@ pub struct Knob<'a> {
     perceptual_gain: bool,
     pointer: bool,
     display_round_trip: Option<Box<dyn Fn(f64) -> f64 + 'a>>,
+    bipolar: bool,
+    log: bool,
+    default: Option<f64>,
+    modulation: Option<RangeInclusive<f64>>,
+    formatter: Option<Box<dyn Fn(f64) -> String + 'a>>,
+    parser: Option<crate::ParseFn<'a>>,
 }
 
 pub fn knob<T: egui::emath::Numeric>(value: &mut T, range: RangeInclusive<T>) -> Knob<'_> {
@@ -133,7 +148,43 @@ impl<'a> Knob<'a> {
             perceptual_gain: false,
             pointer: false,
             display_round_trip: None,
+            bipolar: false,
+            log: false,
+            default: None,
+            modulation: None,
+            formatter: None,
+            parser: None,
         }
+    }
+
+    /// The value arc grows from the center (zero when the range contains it).
+    pub fn bipolar(mut self) -> Self {
+        self.bipolar = true;
+        self
+    }
+    pub fn taper(mut self, taper: Taper) -> Self {
+        self.log = taper == Taper::Log && *self.range.start() > 0.0 && !self.perceptual_gain;
+        self
+    }
+    /// Double-click and the context menu's **Reset** restore this value.
+    pub fn default_value(mut self, value: f64) -> Self {
+        self.default = Some(value);
+        self
+    }
+    /// A thin outer arc for the depth modulation reaches, in the knob's units.
+    pub fn modulation(mut self, range: RangeInclusive<f64>) -> Self {
+        self.modulation = Some(range);
+        self
+    }
+    /// Text for a value, such as "1.2 kHz". Replaces the plain number and suffix.
+    pub fn format(mut self, format: impl Fn(f64) -> String + 'a) -> Self {
+        self.formatter = Some(Box::new(format));
+        self
+    }
+    /// Reads typed text back to a value; pair it with [`Knob::format`].
+    pub fn parse(mut self, parse: impl Fn(&str) -> Option<f64> + 'a) -> Self {
+        self.parser = Some(Box::new(parse));
+        self
     }
 
     pub fn text(mut self, text: impl Into<String>) -> Self {
@@ -162,7 +213,7 @@ impl<'a> Knob<'a> {
     }
     pub fn diameter(mut self, diameter: f32) -> Self {
         if diameter.is_finite() {
-            self.diameter = diameter.clamp(48.0, 180.0);
+            self.diameter = diameter.clamp(34.0, 180.0);
         }
         self
     }
@@ -177,7 +228,7 @@ impl<'a> Knob<'a> {
     /// Hosts can reserve this before centering adjacent controls in the row.
     pub fn compact_height(diameter: f32) -> f32 {
         if diameter.is_finite() {
-            diameter.clamp(48.0, 180.0)
+            diameter.clamp(34.0, 180.0)
         } else {
             84.0
         }
@@ -240,9 +291,22 @@ impl<'a> Knob<'a> {
         }
     }
 
+    /// Where the value arc starts: the minimum, or the center of a bipolar dial.
+    fn origin(&self) -> f32 {
+        if !self.bipolar {
+            0.0
+        } else if self.range.contains(&0.0) {
+            self.normalized(0.0)
+        } else {
+            0.5
+        }
+    }
+
     fn scale_value(&self, value: f64) -> f64 {
         if self.perceptual_gain {
             f64::from(crate::gain_taper(value as f32))
+        } else if self.log {
+            value.max(f64::MIN_POSITIVE).ln()
         } else {
             value
         }
@@ -251,6 +315,8 @@ impl<'a> Knob<'a> {
     fn unscale_value(&self, value: f64) -> f64 {
         if self.perceptual_gain {
             f64::from(crate::gain_untaper(value as f32))
+        } else if self.log {
+            value.exp()
         } else {
             value
         }
@@ -399,7 +465,7 @@ impl<'a> Knob<'a> {
                     let current = (self.value)(None);
                     let next = self.step.map_or_else(
                         || {
-                            if self.perceptual_gain {
+                            if self.perceptual_gain || self.log {
                                 self.adjusted_value(current, f64::from(direction) / 200.0)
                             } else {
                                 current
@@ -416,6 +482,23 @@ impl<'a> Knob<'a> {
                         response.mark_changed();
                     }
                 }
+            }
+        }
+        if let Some(default) = self.default
+            && ui.is_enabled()
+            && valid_range
+        {
+            let mut reset = response.double_clicked();
+            response.context_menu(|ui| {
+                if crate::menu_item(ui, "Reset", None).clicked() {
+                    reset = true;
+                    ui.close();
+                }
+            });
+            let value = self.edited_value(default);
+            if reset && value.is_finite() && value != (self.value)(None) {
+                (self.value)(Some(value));
+                response.mark_changed();
             }
         }
         if response.drag_stopped() {
@@ -475,6 +558,8 @@ impl<'a> Knob<'a> {
             let minimum_decimals = self.min_decimals;
             let maximum_decimals = self.max_decimals;
             let integral = self.integral;
+            let formatter = self.formatter.as_deref();
+            let parser = self.parser.as_deref();
             let mut number = crate::number(&mut current)
                 .speed(
                     self.step
@@ -483,9 +568,19 @@ impl<'a> Knob<'a> {
                 .min_decimals(minimum_decimals)
                 .max_decimals_opt(maximum_decimals.or(integral.then_some(0)))
                 .custom_formatter(move |value, _| {
-                    number_text(value, minimum_decimals, maximum_decimals, integral)
+                    formatter.map_or_else(
+                        || number_text(value, minimum_decimals, maximum_decimals, integral),
+                        |format| format(value),
+                    )
                 })
-                .suffix(&self.suffix);
+                .suffix(if formatter.is_some() {
+                    ""
+                } else {
+                    &self.suffix
+                });
+            if let Some(parse) = parser {
+                number = number.custom_parser(parse);
+            }
             if self.clamping != SliderClamping::Never && valid_range {
                 number = number
                     .range(self.range.clone())
@@ -607,14 +702,36 @@ impl<'a> Knob<'a> {
                     },
                 ),
             ));
-            let end = (fraction * ARC_STEPS as f32).floor() as usize;
-            let mut fill: Vec<Pos2> = samples[..=end]
-                .iter()
-                .map(|unit| center + *unit * radius)
-                .collect();
-            fill.push(geometry.index);
+            let origin = self.origin();
+            let (from, to) = (origin.min(fraction), origin.max(fraction));
+            let first = (from * ARC_STEPS as f32).floor() as usize;
+            let last = (to * ARC_STEPS as f32).floor() as usize;
+            let mut fill = vec![center + Vec2::angled(START_ANGLE + ARC_ANGLE * from) * radius];
+            fill.extend(
+                samples[first + 1..=last]
+                    .iter()
+                    .map(|unit| center + *unit * radius),
+            );
+            fill.push(center + Vec2::angled(START_ANGLE + ARC_ANGLE * to) * radius);
             ui.painter()
                 .add(egui::Shape::line(fill, Stroke::new(2.5_f32, active)));
+            if let Some(depth) = &self.modulation {
+                let (a, b) = (
+                    self.normalized(*depth.start()),
+                    self.normalized(*depth.end()),
+                );
+                let outer = radius + if ring_only { 3.5 } else { 10.0 };
+                let steps = ((b - a).abs() * ARC_STEPS as f32).ceil().max(1.0) as usize;
+                ui.painter().add(egui::Shape::line(
+                    (0..=steps)
+                        .map(|step| {
+                            let at = a + (b - a) * step as f32 / steps as f32;
+                            center + Vec2::angled(START_ANGLE + ARC_ANGLE * at) * outer
+                        })
+                        .collect(),
+                    Stroke::new(1.5_f32, colors.modulation),
+                ));
+            }
             for fraction in &tick_fractions {
                 let unit = samples[(*fraction * ARC_STEPS as f32).round() as usize];
                 let major = *fraction == 0.0 || *fraction == 0.5 || *fraction == 1.0;
@@ -670,11 +787,15 @@ impl<'a> Knob<'a> {
             // Avoid stacking a normalized readout or promising a hidden field.
             return response;
         }
+        let shown = self.formatter.as_ref().map_or_else(
+            || format!("{}{}", current, self.suffix),
+            |format| format(current),
+        );
         crate::hover_text(
             response,
             format!(
-                "{}{} · {} to {}\nDrag up/right to increase; down/left to decrease. Shift for fine adjustment. Click the number to type.",
-                current, self.suffix, labels[0], labels[1]
+                "{} · {} to {}\nDrag up/right to increase; down/left to decrease. Shift for fine adjustment. Click the number to type.",
+                shown, labels[0], labels[1]
             ),
         )
     }
@@ -686,10 +807,15 @@ impl Widget for Knob<'_> {
             self.diameter
         } else {
             let current = (self.value)(None);
-            let number = format!(
-                "{}{}",
-                number_text(current, self.min_decimals, self.max_decimals, self.integral),
-                self.suffix
+            let number = self.formatter.as_ref().map_or_else(
+                || {
+                    format!(
+                        "{}{}",
+                        number_text(current, self.min_decimals, self.max_decimals, self.integral),
+                        self.suffix
+                    )
+                },
+                |format| format(current),
             );
             let number_width = ui
                 .painter()
