@@ -2,6 +2,7 @@
 //! locking, file access, or plugin processing. A bounded atomic queue connects it to a
 //! render worker, so plugin work cannot block the hardware callback.
 mod audio_asset;
+mod audio_host;
 mod audio_stream;
 mod automation;
 mod device;
@@ -14,6 +15,7 @@ mod render;
 mod signal_monitor;
 mod stretch;
 
+pub use audio_host::{HostInfo, is_single_device_host, list_hosts};
 pub use audio_stream::AudioStreamingSnapshot;
 pub use offline::OfflineRenderer;
 pub use performance::{RenderPerformanceSnapshot, TrackRenderPerformance};

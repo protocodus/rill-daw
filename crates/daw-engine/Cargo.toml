@@ -19,8 +19,18 @@ rubato = "=5.0.1"
 midir = "=0.11.0"
 rustfft = "=6.4.1"
 
+[features]
+# Steinberg ASIO host on Windows. Needs the ASIO SDK and LLVM at build time;
+# see docs/RELEASING.md. Has no effect on other platforms.
+asio = ["cpal/asio"]
+
 [dev-dependencies]
 tempfile = "3"
+
+# CPAL's JACK host loads libjack at run time (the jack crate's default
+# `dynamic_loading`), so the binary still starts where JACK is not installed.
+[target.'cfg(target_os = "linux")'.dependencies]
+cpal = { version = "0.18.2", features = ["jack"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 coremidi = "=0.9.2"

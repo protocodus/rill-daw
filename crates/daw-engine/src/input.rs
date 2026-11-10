@@ -2,6 +2,7 @@
 //! Both device callbacks use bounded atomic queues; WAV I/O and finalization
 //! belong to one writer thread. Monitoring is deliberately dry, before export.
 use super::{AudioEngine, Controls, DeviceInfo};
+use crate::audio_host::{no_default_device, open_host};
 use anyhow::{Context, Result, ensure};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use daw_core::{AudioInputChannels, Project, TrackKind};
@@ -91,8 +92,8 @@ pub struct RecordingSnapshot {
     pub input_channels: u16,
 }
 
-pub fn list_input_devices() -> Result<Vec<DeviceInfo>> {
-    let host = cpal::default_host();
+pub fn list_input_devices(host: Option<&str>) -> Result<Vec<DeviceInfo>> {
+    let host = open_host(host)?;
     let default = host
         .default_input_device()
         .and_then(|device| device.description().ok())
@@ -102,9 +103,14 @@ pub fn list_input_devices() -> Result<Vec<DeviceInfo>> {
         let name = device.description()?.name().to_owned();
         let mut rates = Vec::new();
         let mut channels = 0;
+        let mut buffers: Option<(u32, u32)> = None;
         if let Ok(configs) = device.supported_input_configs() {
             for config in configs {
                 channels = channels.max(config.channels());
+                buffers = super::merge_buffer_range(buffers, config.buffer_size());
+                if config.min_sample_rate() == config.max_sample_rate() {
+                    rates.push(config.min_sample_rate());
+                }
                 for rate in [
                     8000, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000,
                 ] {
@@ -121,6 +127,7 @@ pub fn list_input_devices() -> Result<Vec<DeviceInfo>> {
             name,
             supported_sample_rates: rates,
             channels,
+            buffer_frames: buffers,
         });
     }
     Ok(devices)
@@ -722,6 +729,7 @@ pub(super) struct InputController {
     sample_rate: u32,
     buffer_frames: u32,
     virtual_input: bool,
+    host: Option<String>,
     settings: InputSettings,
     stream: Option<cpal::Stream>,
     opening: Option<OpeningInput>,
@@ -749,6 +757,7 @@ impl InputController {
             sample_rate,
             buffer_frames,
             virtual_input,
+            host: None,
             settings: InputSettings::default(),
             stream: None,
             opening: None,
@@ -756,6 +765,11 @@ impl InputController {
             recording: None,
             error: None,
         }
+    }
+    /// Capture uses the same audio driver as output.
+    pub(super) fn with_host(mut self, host: Option<String>) -> Self {
+        self.host = host;
+        self
     }
     fn shared(&self) -> &Arc<InputShared> {
         &self.controls.input
@@ -932,6 +946,7 @@ impl InputController {
         let shared = Arc::clone(self.shared());
         let rate = self.sample_rate;
         let buffer = self.buffer_frames;
+        let host = self.host.clone();
         let cancel = Arc::new(AtomicBool::new(false));
         let worker_cancel = Arc::clone(&cancel);
         let (tx, receiver) = mpsc::channel();
@@ -939,6 +954,7 @@ impl InputController {
         thread::spawn(move || {
             drop(previous);
             let result = open_input(
+                host.as_deref(),
                 settings,
                 rate,
                 buffer,
@@ -1006,6 +1022,7 @@ impl InputController {
 }
 
 fn open_input(
+    host: Option<&str>,
     settings: InputSettings,
     sample_rate: u32,
     buffer_frames: u32,
@@ -1017,7 +1034,7 @@ fn open_input(
         !cancel.load(Ordering::Acquire),
         "Input preparation cancelled"
     );
-    let host = cpal::default_host();
+    let host = open_host(host)?;
     let device = if let Some(name) = settings.device_name {
         host.input_devices()?
             .find(|device| {
@@ -1028,7 +1045,7 @@ fn open_input(
             .with_context(|| format!("Input device '{name}' is unavailable"))?
     } else {
         host.default_input_device()
-            .context("No default audio input device is available")?
+            .ok_or_else(|| no_default_device(&host, "input"))?
     };
     let required = settings
         .routes
