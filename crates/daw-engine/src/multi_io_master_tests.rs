@@ -679,7 +679,9 @@ fn primary_insert_crash_keeps_healthy_instrument_output_children_playing() {
             panic!("missing instrument")
         };
         let instrument_pid = plugin.isolation_pid().unwrap();
-        let Insert::Vst { effect, .. } = &source.inserts[0];
+        let InsertProcessor::Vst(effect) = &&source.inserts[0].effect else {
+            panic!("native insert missing")
+        };
         let effect_pid = effect.isolation_pid().unwrap();
         assert_ne!(instrument_pid, effect_pid);
         let mut output = [[0.0; 2]; BLOCK];

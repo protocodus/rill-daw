@@ -1520,10 +1520,7 @@ fn apply_one(
                     .context("Insert not found")?
                     .parameters
             } else {
-                ensure!(
-                    track.instrument.is_processor(),
-                    "Track has no instrument"
-                );
+                ensure!(track.instrument.is_processor(), "Track has no instrument");
                 &mut track.instrument_parameters
             };
             for parameter in parameters {

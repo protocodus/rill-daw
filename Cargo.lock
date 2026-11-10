@@ -1085,6 +1085,7 @@ dependencies = [
  "coremidi",
  "cpal",
  "daw-core",
+ "daw-devices",
  "daw-plugins",
  "flacenc",
  "hound",

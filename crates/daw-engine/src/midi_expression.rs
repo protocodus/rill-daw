@@ -339,6 +339,18 @@ impl Support {
             .collect();
         Ok(support)
     }
+    /// Built-in instruments take pitch bend, mod wheel and sustain on every
+    /// channel.
+    pub fn builtin() -> Self {
+        let mut support = Self::default();
+        for channel in 0..16 {
+            for (controller, value) in crate::builtin::INSTRUMENT_CONTROLLERS {
+                support.defaults.push((channel, controller, value));
+                support.controllers.insert((channel, controller));
+            }
+        }
+        support
+    }
     pub fn controller_default(&self, channel: u8, address: Controller) -> Option<f64> {
         self.defaults.iter().find_map(|(ch, controller, value)| {
             if *ch == channel && *controller == address {

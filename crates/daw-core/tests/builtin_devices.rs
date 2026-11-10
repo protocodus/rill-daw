@@ -51,12 +51,16 @@ fn builtin_devices_round_trip_and_take_automation() {
 fn builtin_device_ids_are_bounded_and_carry_no_opaque_state() {
     let mut project = Project::new();
     let track = project.add_audio_track("Audio");
-    project.track_mut(track).unwrap().inserts.push(EffectSlot::new(
-        "Bad",
-        Effect::Builtin {
-            device: "R1 Filter".into(),
-        },
-    ));
+    project
+        .track_mut(track)
+        .unwrap()
+        .inserts
+        .push(EffectSlot::new(
+            "Bad",
+            Effect::Builtin {
+                device: "R1 Filter".into(),
+            },
+        ));
     assert!(project.validate().is_err());
 
     let mut project = Project::new();
