@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quick-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Linux build, lint and tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-ci
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Linux launcher installation tests
+        run: python3 scripts/test-desktop-install.py
+      - name: Build application and isolated plug-in host
+        run: cargo build --locked --workspace
+      - name: Workspace unit tests
+        run: cargo test --locked --workspace --lib --bins
+      - name: Headless smoke tests
+        run: cargo test --locked -p daw-app --test e2e --test master_meter_e2e -- --test-threads=1
+      - name: Strict Clippy
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings

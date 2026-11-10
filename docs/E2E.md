@@ -698,7 +698,7 @@ keyboard behavior still requires macOS verification.
 
 Headless `open` and `save` continue to wait for native state acknowledgements and file completion by default. Add `"wait":false` to return after dispatch; `{"command":"wait_project","timeout_ms":120000}` waits for queued document actions and native barriers. `project_pending`, `recovery_pending` (a recovery checkpoint is being written or queued; Save waits for it), `modified`, `project_path`, `waveform_count`, and `waveform_warning` expose completion and recovery state. Failed operations cancel queued destructive transitions and leave the current document open. The driver accepts a bounded project wait of at most 120 seconds; a timed-out wait does not cancel filesystem work.
 
-The `history_e2e` target checks named multi-step History jumps, saved checkpoints, redo branching, new-project reset, one-step multi-frame note drags, and actual clicks on labelled vector-icon tools in both arranger and piano roll. CI runs every application test target automatically, including tests added in future changes.
+The `history_e2e` target checks named multi-step History jumps, saved checkpoints, redo branching, new-project reset, one-step multi-frame note drags, and actual clicks on labelled vector-icon tools in both arranger and piano roll. The nightly and release workflows run every application test target automatically, including tests added in future changes. Pull requests run the `e2e` and `master_meter_e2e` smoke targets.
 
 
 `typography_e2e` edits a Unicode/emoji track name, checks readable visible text
