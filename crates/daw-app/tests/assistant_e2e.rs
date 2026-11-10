@@ -239,11 +239,12 @@ fn mcp_and_manual_edits_share_state_and_reject_failed_stale_or_file_operations()
 
     app.click("File");
     app.click("New");
-    let replacement = app.click("Don't save");
-    assert_ne!(
-        replacement["song_session"]["id"],
-        manual["song_session"]["id"]
-    );
+    app.click("Don't save");
+    // The guard replaces the document once background work has settled, which
+    // can be a few frames after the click on a loaded runner.
+    let replacement = common::wait_until(&mut app, |state| {
+        state["song_session"]["id"] != manual["song_session"]["id"]
+    });
     let revoked = mcp(
         &mut app,
         json!({
