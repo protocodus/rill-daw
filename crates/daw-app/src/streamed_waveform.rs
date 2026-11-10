@@ -381,6 +381,8 @@ pub(crate) struct ClipKey {
     envelope: Option<daw_core::AudioEnvelope>,
     boundary: Option<daw_core::AudioBoundaryFades>,
     crossfade: Option<daw_core::AudioCrossfade>,
+    /// Hash of the warp markers; the drawn geometry follows them.
+    warp: u64,
 }
 impl ClipKey {
     pub(crate) fn new(clip: &Clip) -> Self {
@@ -410,8 +412,19 @@ impl ClipKey {
             envelope: *envelope,
             boundary: *boundary_fades,
             crossfade: *crossfade,
+            warp: warp_hash(&clip.warp_markers),
         }
     }
+}
+
+fn warp_hash(markers: &[daw_core::WarpMarker]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for marker in markers {
+        marker.source.to_bits().hash(&mut hasher);
+        marker.beat.to_bits().hash(&mut hasher);
+    }
+    hasher.finish()
 }
 #[derive(Clone)]
 struct SourceKey(AudioFile);
@@ -824,6 +837,12 @@ mod cache_regressions {
             ClipKey::new(&clip) != key,
             "Signal edits still invalidate geometry"
         );
+        let key = ClipKey::new(&clip);
+        clip.warp_markers = vec![daw_core::WarpMarker {
+            source: clip.offset,
+            beat: 0.0,
+        }];
+        assert!(ClipKey::new(&clip) != key, "Warp edits redraw the waveform");
     }
     #[test]
     fn multichannel_detail_retains_only_displayed_legs_and_one_window_fits_the_cache() {

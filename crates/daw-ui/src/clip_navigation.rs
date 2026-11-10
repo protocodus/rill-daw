@@ -96,6 +96,81 @@ pub fn audio_grid_slice_controls(ui: &mut Ui, grid: &mut f64, cuts: usize) -> bo
         .clicked()
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AudioQuantizeAction {
+    /// Place warp markers on the moved hits.
+    Quantize,
+    /// Place warp markers on the hits without moving them.
+    MarkersOnly,
+    Cancel,
+}
+
+/// Audio quantize settings with Apply/Markers-only/Cancel. Strength and the
+/// maximum move are fractions and beats; `summary` describes the preview.
+pub fn audio_quantize_controls(
+    ui: &mut Ui,
+    grid: &mut f64,
+    beats_per_bar: u8,
+    strength: &mut f64,
+    max_move: &mut f64,
+    summary: &str,
+    ready: bool,
+) -> Option<AudioQuantizeAction> {
+    let bar = f64::from(beats_per_bar);
+    crate::select(
+        "audio_quantize_grid",
+        format!("Grid {}", crate::snap_label(*grid, beats_per_bar)),
+    )
+    .width(tokens::SELECT_WIDTH)
+    .show_ui(ui, |ui| {
+        for (name, value) in [
+            ("1 bar", bar),
+            ("1/4", 1.0),
+            ("1/8", 0.5),
+            ("1/16", 0.25),
+            ("1/32", 0.125),
+        ] {
+            crate::selectable_value(ui, grid, value, name);
+        }
+    });
+    let mut percent = *strength * 100.0;
+    if ui
+        .add(crate::slider(&mut percent, 0.0..=100.0).text("Strength %"))
+        .changed()
+    {
+        *strength = (percent / 100.0).clamp(0.0, 1.0);
+    }
+    ui.add(
+        crate::number(max_move)
+            .range(0.0..=64.0)
+            .speed(0.01)
+            .max_decimals(3)
+            .prefix("Max move ")
+            .suffix(" beats"),
+    )
+    .on_hover_text("Hits further than this from their grid line stay where they are");
+    ui.label(summary);
+    let mut action = None;
+    if ui
+        .add_enabled(ready, crate::button_widget("Apply quantize"))
+        .on_hover_text("Place warp markers on the hits and move them toward the grid as one edit")
+        .clicked()
+    {
+        action = Some(AudioQuantizeAction::Quantize);
+    }
+    if ui
+        .add_enabled(ready, crate::button_widget("Markers only"))
+        .on_hover_text("Place warp markers on the hits without moving them")
+        .clicked()
+    {
+        action = Some(AudioQuantizeAction::MarkersOnly);
+    }
+    if crate::button(ui, "Cancel").clicked() {
+        action = Some(AudioQuantizeAction::Cancel);
+    }
+    action
+}
+
 /// Which part of [`clip_workspace_header`] its contents closure is drawing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HeaderSlot {

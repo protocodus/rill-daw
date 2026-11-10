@@ -18,6 +18,7 @@ pub enum EditorTool {
     Ghost,
     Stretch,
     Slip,
+    Warp,
 }
 
 impl EditorTool {
@@ -26,7 +27,7 @@ impl EditorTool {
     #[allow(non_upper_case_globals)]
     pub const Split: Self = Self::Cut;
 
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Select,
         Self::Pencil,
         Self::Cut,
@@ -40,6 +41,7 @@ impl EditorTool {
         Self::Ghost,
         Self::Stretch,
         Self::Slip,
+        Self::Warp,
     ];
 
     pub fn label(self) -> &'static str {
@@ -57,6 +59,7 @@ impl EditorTool {
             Self::Ghost => "Ghost copy",
             Self::Stretch => "Stretch",
             Self::Slip => "Slip",
+            Self::Warp => "Warp",
         }
     }
 
@@ -75,6 +78,7 @@ impl EditorTool {
             Self::Ghost => Key::G,
             Self::Stretch => Key::S,
             Self::Slip => Key::L,
+            Self::Warp => Key::K,
         }
     }
 
@@ -105,6 +109,9 @@ impl EditorTool {
             Self::Slip => {
                 "Drag the audio inside fixed clip edges. Source bounds are preserved; Shift bypasses grid snap."
             }
+            Self::Warp => {
+                "Click the waveform to add a warp marker; it snaps to a nearby transient unless Shift is held. Drag a marker flag to move that audio in time while its neighbours stay fixed; right-click a flag to delete it."
+            }
         }
     }
 
@@ -112,7 +119,7 @@ impl EditorTool {
         match self {
             Self::Select => egui::CursorIcon::Default,
             Self::Slip => egui::CursorIcon::Grab,
-            Self::Stretch => egui::CursorIcon::ResizeHorizontal,
+            Self::Stretch | Self::Warp => egui::CursorIcon::ResizeHorizontal,
             Self::Duplicate => egui::CursorIcon::Copy,
             Self::Ghost => egui::CursorIcon::Alias,
             Self::Glue => egui::CursorIcon::PointingHand,
@@ -200,6 +207,7 @@ fn editor_tool_families(
         &[
             EditorTool::Stretch,
             EditorTool::Slip,
+            EditorTool::Warp,
             EditorTool::FadeIn,
             EditorTool::FadeOut,
         ],

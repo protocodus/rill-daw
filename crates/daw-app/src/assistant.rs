@@ -538,7 +538,15 @@ impl DawApp {
                 )));
                 return;
             };
-            if !["normalize", "split_transients", "strip_silence"].contains(&op.as_str()) {
+            if ![
+                "normalize",
+                "split_transients",
+                "strip_silence",
+                "quantize",
+                "warp_transients",
+            ]
+            .contains(&op.as_str())
+            {
                 let _ = reply.send(Err(ToolError::new(
                     "invalid_arguments",
                     "Unknown audio processing operation",
@@ -719,7 +727,13 @@ impl DawApp {
                             guarded_tool(|| {
                                 serde_json::from_value::<daw_core::SongEdit>(edit).map_err(|_|ToolError::new("tool_failed","Invalid prepared audio edit"))
                                 .and_then(|edit|self.apply_edits(daw_core::EditBatch{label:format!("Audio: {}",operation.replace('_'," ")),edits:vec![edit]}))
-                                .map(|commit|json!({"changed":commit.changed,"created":commit.created,"operation":operation,"session_id":self.song_session.id,"revision":self.song_session.revision}))
+                                .map(|commit|{
+                                    let mut result = json!({"changed":commit.changed,"created":commit.created,"operation":operation,"session_id":self.song_session.id,"revision":self.song_session.revision});
+                                    if matches!(operation.as_str(), "quantize" | "warp_transients") {
+                                        result["warp"] = value["warp"].clone();
+                                    }
+                                    result
+                                })
                             })
                         };
                         self.assistant.executing_scope = None;

@@ -324,6 +324,28 @@ unchanged. Generate's Start bar and Length pads accept whole bars only.
 
 Stretch changes duration without replacing the source. Audio keeps its pitch; MIDI note positions and lengths scale in playback and the editor. Stretching one ghost changes only that occurrence's timing. Source-rate factors range from 0.25× to 4×, and each drag remains one Undo step. In Properties, selecting **Stretch** makes the Duration field and **123** keypad show the supported range for that occurrence. For an unstretched four-beat clip it is 1–16 beats; trimmed or already-stretched clips use their current source window. Values outside the range stay as a draft until corrected. Preparing stretched audio happens in the background; the current sound continues until its replacement is ready. Extreme stretches can introduce artifacts, especially in transients and complex material.
 
+### Warp markers and audio quantize
+
+The audio Clip Editor's **Warp** tool (**K**) moves individual attacks without
+cutting the clip. Detected attacks show as faint ticks. Click the waveform to add
+a warp marker; near an attack it snaps onto it, and Shift places it exactly where
+you click. The first marker also pins the clip's start and end. While Warp is
+active the loop lane shows numbered marker flags: drag a flag to move that
+moment of the audio (the grid applies; Shift bypasses it), click it to seek, or
+right-click and choose **Delete warp marker**. The audio between markers
+stretches smoothly with its pitch unchanged. **Process → Clear warp markers**
+returns to ordinary whole-clip stretch. Each add, drag or delete is one Undo step,
+and markers are saved with the project.
+
+**Process → Quantize audio…** (also in the waveform's context menu) moves attacks
+toward the grid. Choose the grid, **Strength** (100% lands exactly on the grid)
+and **Max move**; attacks further from the grid stay put, and the clip's start and
+end never move. Arrows preview each move and the drawer reports how many attacks
+move and the largest move in milliseconds. **Apply quantize** is one Undo step.
+**Markers only** places markers on the attacks without moving anything, ready for
+manual adjustment. Sensitivity and minimum gap are the same transient settings
+used by Process → Transients.
+
 In the audio Clip Editor or Properties, open **Pitch** to transpose by up to two octaves in either direction, including fine tuning to cents, without changing duration. Choose **Signalsmith** or **Bungee** for both pitch and time processing. Combined edits render once from the original audio, never from an earlier processed result. Reset pitch restores the original pitch while retaining stretch. Ghost copies share pitch and algorithm; independent duplicates can differ. Both algorithms are included; no external processing utility is required.
 
 Choose **Edit → Ghost copy** (or the clip context menu) to place another instance after the selected clip. A ghost is a linked copy: a chain icon marks every member of the group. Notes, audio edits, fades, clip gain, and the name are shared: edit any member to update the group. Position, trimming, stretching, and overlap crossfades remain independent. **Properties** shows the shared name and instance count before track controls.
@@ -682,7 +704,7 @@ cargo run --release -p daw-engine --example render_bench
 
 Real native plug-in tests are opt-in; commands and environment variables are in the test sources. Local validation exercised Surge XT and CHOWTapeModel, including forcibly terminated plug-in children, recovery, sample-offset MIDI, effect input, state roundtrips, and a routed chain with compensated bus latency.
 
-See [architecture and limitations](ARCHITECTURE.md) for the graph, real-time boundaries, file formats and delay compensation. Current media scope includes PCM/float WAV, MP3, FLAC and OGG/Vorbis import, disk-backed large-audio playback, recording and constant-tempo MIDI with rich project performance data. Tempo maps, automatic tempo-following warp markers and surround remain absent. Input gain, volume, pan, note and clip edits update the existing graph; failed audio preparation keeps the last valid audio playing. Structural, plug-in-state and device changes still rebuild playback and may briefly interrupt it. Cosmetic changes do not rebuild the graph, including Undo/Redo.
+See [architecture and limitations](ARCHITECTURE.md) for the graph, real-time boundaries, file formats and delay compensation. Current media scope includes PCM/float WAV, MP3, FLAC and OGG/Vorbis import, disk-backed large-audio playback, recording and constant-tempo MIDI with rich project performance data. Tempo maps, automatic tempo-following warp and surround remain absent; manual warp markers and audio quantize are available in the audio Clip Editor. Input gain, volume, pan, note and clip edits update the existing graph; failed audio preparation keeps the last valid audio playing. Structural, plug-in-state and device changes still rebuild playback and may briefly interrupt it. Cosmetic changes do not rebuild the graph, including Undo/Redo.
 
 ## Build from source
 

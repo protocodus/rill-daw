@@ -41,7 +41,7 @@ GUI mutation paths remain migration work until they use the shared boundary;
 do not claim complete parity merely because the first registry exists.
 
 The implemented foundation currently exposes 33 current-song tools, four
-additional application-profile tools, and 73 typed core edits.
+additional application-profile tools, and 74 typed core edits.
 It includes bulk composition/mixing, an atomic notes-plus-instrument workflow,
 selection, parameter discovery, analysis-backed clip processing, transport,
 MIDI/audio joining, and five recording tools. Enter through the menu bar’s **AI** button or

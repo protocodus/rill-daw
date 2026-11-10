@@ -9,11 +9,69 @@
 #include <vector>
 #include "bungee/Bungee.h"
 
+namespace {
+// Output-time to source-position map shared with Rust's TimeMap: [source,
+// output] knots, the clip rate outside them. Without knots the original
+// constant-speed request sequence is used unchanged.
+struct WarpMap {
+    const double *knots;
+    size_t count;
+    double rate;
+    double source(size_t i) const { return knots[2 * i]; }
+    double output(size_t i) const { return knots[2 * i + 1]; }
+    size_t segment(double t) const {
+        size_t low = 0, high = count;
+        while (low < high) {
+            const size_t middle = (low + high) / 2;
+            if (output(middle) <= t) low = middle + 1; else high = middle;
+        }
+        return low;
+    }
+    double position(double t) const {
+        const size_t index = segment(t);
+        if (index == 0) return source(0) + (t - output(0)) * rate;
+        if (index == count) return source(count - 1) + (t - output(count - 1)) * rate;
+        return source(index - 1) + (t - output(index - 1)) * speed(t);
+    }
+    double speed(double t) const {
+        const size_t index = segment(t);
+        if (index == 0 || index == count) return rate;
+        return (source(index) - source(index - 1)) / (output(index) - output(index - 1));
+    }
+    bool valid() const {
+        if (!count) return true;
+        if (!knots || count > 4096) return false;
+        for (size_t i = 0; i < count; ++i)
+            if (!std::isfinite(source(i)) || !std::isfinite(output(i))) return false;
+        for (size_t i = 1; i < count; ++i) {
+            const double span = output(i) - output(i - 1);
+            const double speed = (source(i) - source(i - 1)) / span;
+            if (!(span > 0) || !(speed >= .25 * .999999) || !(speed <= 4 * 1.000001)) return false;
+        }
+        return true;
+    }
+};
+
+// Advance one grain. With a warp map the synthesis hop is measured from the
+// stretcher's own step, then the next grain is placed exactly on the map.
+void advance(Bungee::Stretcher<Bungee::Basic> &dsp, Bungee::Request &request,
+             const WarpMap &map, double &time) {
+    const double before = request.position;
+    dsp.next(request);
+    if (!map.count) return;
+    time += (request.position - before) / request.speed;
+    request.position = map.position(time);
+    request.speed = map.speed(time);
+}
+}
+
 extern "C" int rill_bungee_process(
     const float *input, size_t input_frames, float *output, size_t output_frames,
-    unsigned channels, unsigned sample_rate, double rate, double semitones,
+    unsigned channels, unsigned sample_rate, double rate,
+    const double *knots, size_t knot_count, double semitones,
     void *cancel_context, int (*cancelled)(void *)) noexcept {
-    if (!input || !output || !cancelled || channels < 1 || channels > 2 ||
+    const WarpMap map{knots, knot_count, rate};
+    if (!map.valid() || !input || !output || !cancelled || channels < 1 || channels > 2 ||
         sample_rate < 8000 || sample_rate > 384000 ||
         !std::isfinite(rate) || rate < .25 || rate > 4 ||
         !std::isfinite(semitones) || semitones < -24 || semitones > 24 ||
@@ -28,7 +86,11 @@ extern "C" int rill_bungee_process(
         request.position = 0;
         request.speed = rate;
         request.pitch = std::exp2(semitones / 12.0);
+        if (map.count) request.speed = map.speed(0);
         dsp.preroll(request);
+        // Preroll places the first grain before source zero at constant speed.
+        double time = request.position / request.speed;
+        if (map.count) request.position = map.position(time);
         size_t produced = 0;
         // Even one-sample hops must eventually finish. The additional allowance
         // covers latency at the highest accepted sample rate and pitch shift.
@@ -54,7 +116,7 @@ extern "C" int rill_bungee_process(
             dsp.analyseGrain(grain.data(), capacity, mute_head, mute_tail);
             Bungee::OutputChunk rendered{};
             dsp.synthesiseGrain(rendered);
-            dsp.next(request);
+            advance(dsp, request, map, time);
             if (!(request.position > position)) return 0;
             if (!rendered.request[0] || !rendered.request[1] || rendered.frameCount < 0)
                 return 0;
@@ -84,11 +146,13 @@ extern "C" int rill_bungee_process(
 // No whole-file input/output allocation or temporary planar source is required.
 extern "C" int rill_bungee_process_stream(
     size_t input_frames, size_t output_frames, unsigned channels,
-    unsigned sample_rate, double rate, double semitones, void *context,
+    unsigned sample_rate, double rate, const double *knots, size_t knot_count,
+    double semitones, void *context,
     int (*read)(void *, size_t, size_t, float *),
     int (*write)(void *, const float *, size_t),
     int (*cancelled)(void *)) noexcept {
-    if (!context || !read || !write || !cancelled || channels < 1 || channels > 2 ||
+    const WarpMap map{knots, knot_count, rate};
+    if (!map.valid() || !context || !read || !write || !cancelled || channels < 1 || channels > 2 ||
         sample_rate < 8000 || sample_rate > 384000 ||
         !std::isfinite(rate) || rate < .25 || rate > 4 ||
         !std::isfinite(semitones) || semitones < -24 || semitones > 24 ||
@@ -106,7 +170,11 @@ extern "C" int rill_bungee_process_stream(
         request.position = 0;
         request.speed = rate;
         request.pitch = std::exp2(semitones / 12.0);
+        if (map.count) request.speed = map.speed(0);
         dsp.preroll(request);
+        // Preroll places the first grain before source zero at constant speed.
+        double time = request.position / request.speed;
+        if (map.count) request.position = map.position(time);
         size_t produced = 0;
         const size_t maximum_grains = output_frames + 1048576;
         for (size_t iteration = 0; produced < output_frames && iteration < maximum_grains; ++iteration) {
@@ -138,7 +206,7 @@ extern "C" int rill_bungee_process_stream(
             dsp.analyseGrain(grain.data(), capacity, mute_head, mute_tail);
             Bungee::OutputChunk rendered{};
             dsp.synthesiseGrain(rendered);
-            dsp.next(request);
+            advance(dsp, request, map, time);
             if (!(request.position > position)) return 0;
             if (!rendered.request[0] || !rendered.request[1] || rendered.frameCount < 0 ||
                 rendered.frameCount > 1048576) return 0;

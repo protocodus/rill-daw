@@ -239,7 +239,7 @@ pub(crate) fn dispatch<H: SongToolHost + ?Sized>(
                     crossfade,
                     ..
                 } => {
-                    v["audio"] = json!({"gain":gain,"fade_in":fade_in,"fade_out":fade_out,"fade_in_curve":fade_in_curve,"fade_out_curve":fade_out_curve,"reverse":reverse,"processing":processing,"envelope":envelope,"boundary_fades":boundary_fades,"crossfade":crossfade});
+                    v["audio"] = json!({"gain":gain,"fade_in":fade_in,"fade_out":fade_out,"fade_in_curve":fade_in_curve,"fade_out_curve":fade_out_curve,"reverse":reverse,"processing":processing,"envelope":envelope,"boundary_fades":boundary_fades,"crossfade":crossfade,"warp_markers":clip.warp_markers,"source_end":clip.source_end()});
                 }
             }
             Ok(v)

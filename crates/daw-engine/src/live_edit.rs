@@ -1,12 +1,13 @@
 //! Prepare editable timeline data away from rendering; retain the live DSP graph.
 use super::*;
-use daw_core::{AudioProcessing, AudioProcessingAlgorithm, PluginParameterValue, Track};
+use daw_core::{AudioProcessing, AudioProcessingAlgorithm, Clip, PluginParameterValue, Track};
 use std::{
     path::PathBuf,
     sync::{Mutex, Weak},
 };
 
-pub(super) type AudioAssetKey = (PathBuf, u64, u64, AudioProcessingAlgorithm, bool);
+/// Path, rate bits, pitch bits, algorithm, interactive preview, warp map key.
+pub(super) type AudioAssetKey = (PathBuf, u64, u64, AudioProcessingAlgorithm, bool, u64);
 
 fn original_key(path: &Path) -> AudioAssetKey {
     (
@@ -15,11 +16,18 @@ fn original_key(path: &Path) -> AudioAssetKey {
         0,
         AudioProcessingAlgorithm::Signalsmith,
         false,
+        0,
     )
 }
 
-fn asset_key(path: &Path, rate: f64, processing: AudioProcessing, preview: bool) -> AudioAssetKey {
-    if rate == 1.0 && processing.transpose_semitones == 0.0 {
+fn asset_key(
+    path: &Path,
+    rate: f64,
+    processing: AudioProcessing,
+    preview: bool,
+    warp: u64,
+) -> AudioAssetKey {
+    if rate == 1.0 && processing.transpose_semitones == 0.0 && warp == 0 {
         return original_key(path);
     }
     let pitch = if processing.transpose_semitones == 0.0 {
@@ -33,6 +41,34 @@ fn asset_key(path: &Path, rate: f64, processing: AudioProcessing, preview: bool)
         pitch,
         processing.algorithm,
         preview,
+        warp,
+    )
+}
+
+/// The prepared variant's time map and the prepared frame at clip-local zero.
+/// Warped variants cover the whole source like constant-rate ones, so splits
+/// and trims of one warped clip share the same prepared audio.
+fn clip_time_map(clip: &Clip, samples_per_beat: f64) -> (crate::stretch::TimeMap, f64) {
+    if !clip.is_warped() {
+        return (
+            crate::stretch::TimeMap::constant(clip.source_rate),
+            clip.offset / clip.source_rate * samples_per_beat,
+        );
+    }
+    let origin = clip.source_to_local(0.0);
+    let knots = clip
+        .warp_markers
+        .iter()
+        .map(|marker| {
+            [
+                marker.source * samples_per_beat,
+                (marker.beat - origin) * samples_per_beat,
+            ]
+        })
+        .collect();
+    (
+        crate::stretch::TimeMap::warped(clip.source_rate, knots),
+        -origin * samples_per_beat,
     )
 }
 
@@ -343,6 +379,7 @@ impl LiveEditPreparer {
                         audio.source_rate,
                         audio.processing,
                         audio.is_preview,
+                        audio.warp,
                     ),
                     Arc::clone(&audio.data),
                 );
@@ -489,7 +526,13 @@ impl Renderer {
             for audio in track.audio.iter() {
                 for path in [&audio.source_path, &audio.source_alias] {
                     assets.insert(
-                        asset_key(path, audio.source_rate, audio.processing, audio.is_preview),
+                        asset_key(
+                            path,
+                            audio.source_rate,
+                            audio.processing,
+                            audio.is_preview,
+                            audio.warp,
+                        ),
                         Arc::downgrade(&audio.data),
                     );
                     assets.insert(original_key(path), Arc::downgrade(&audio.original));
@@ -1125,32 +1168,30 @@ pub(super) fn compile_content(
                     audio_cache.insert(original_key(&source_path), Arc::clone(&data));
                     data
                 };
-                let full_key = asset_key(&source_path, clip.source_rate, *processing, false);
-                let prepared_bytes = (original.frames() as f64 / clip.source_rate).ceil() as u128
-                    * original.channels() as u128
-                    * 4;
+                let (map, source_offset) = clip_time_map(clip, samples_per_beat);
+                let warp = map.key();
+                let identity = map.is_identity() && processing.transpose_semitones == 0.0;
+                let full_key = asset_key(&source_path, clip.source_rate, *processing, false, warp);
+                let prepared_bytes =
+                    map.output_frames(original.frames()) as u128 * original.channels() as u128 * 4;
                 let is_preview = preview
                     && prepared_bytes < u128::from(daw_core::AUDIO_STREAM_THRESHOLD_BYTES)
                     && original
                         .resident()
                         .is_some_and(crate::stretch::preview_worthwhile)
-                    && !(clip.source_rate == 1.0 && processing.transpose_semitones == 0.0)
+                    && !identity
                     && !audio_cache.contains_key(&full_key);
                 let key = if is_preview {
-                    asset_key(&source_path, clip.source_rate, *processing, true)
+                    asset_key(&source_path, clip.source_rate, *processing, true, warp)
                 } else {
                     full_key
                 };
-                let data = if clip.source_rate == 1.0 && processing.transpose_semitones == 0.0 {
+                let data = if identity {
                     Arc::clone(&original)
                 } else if let Some(data) = audio_cache.get(&key) {
                     Arc::clone(data)
                 } else {
                     check_cancelled()?;
-                    let prepared_bytes = (original.frames() as f64 / clip.source_rate).ceil()
-                        as u128
-                        * original.channels() as u128
-                        * 4;
                     let disk = original.is_streamed()
                         || prepared_bytes >= u128::from(daw_core::AUDIO_STREAM_THRESHOLD_BYTES);
                     if !disk {
@@ -1162,9 +1203,9 @@ pub(super) fn compile_content(
                     }
                     let data = if disk {
                         let input = original.ensure_file(cancel)?;
-                        crate::stretch::prepare_file(
+                        crate::stretch::prepare_file_mapped(
                             input.file().expect("prepared file"),
-                            clip.source_rate,
+                            &map,
                             processing.transpose_semitones,
                             processing.algorithm,
                             cancel,
@@ -1173,11 +1214,11 @@ pub(super) fn compile_content(
                         let prepare = if is_preview {
                             crate::stretch::prepare_preview
                         } else {
-                            crate::stretch::prepare_processed
+                            crate::stretch::prepare_mapped
                         };
                         crate::audio_asset::AudioAsset::from_resident(prepare(
                             original.resident().expect("resident source"),
-                            clip.source_rate,
+                            &map,
                             processing.transpose_semitones,
                             processing.algorithm,
                             cancel,
@@ -1198,10 +1239,14 @@ pub(super) fn compile_content(
                     source_rate: clip.source_rate,
                     processing: *processing,
                     is_preview,
+                    warp,
                     original,
                     start: to_sample(clip.start),
-                    source_offset: clip.offset / clip.source_rate * 60.0 / tempo
-                        * data.sample_rate() as f64,
+                    source_offset: if clip.is_warped() {
+                        source_offset
+                    } else {
+                        clip.offset / clip.source_rate * 60.0 / tempo * data.sample_rate() as f64
+                    },
                     gain: *gain,
                     fade_in: fade_in.max(0.0) * samples_per_beat / clip.source_rate,
                     fade_out: fade_out.max(0.0) * samples_per_beat / clip.source_rate,

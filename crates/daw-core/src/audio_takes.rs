@@ -249,7 +249,11 @@ impl Project {
             }
             let previous = &mut regions[index - 1];
             if matches!(previous.content, ClipContent::Audio { reverse: true, .. }) {
-                previous.offset = (previous.offset - duration * previous.source_rate).max(0.0);
+                if previous.is_warped() {
+                    previous.shift_source_origin(-duration);
+                } else {
+                    previous.offset = (previous.offset - duration * previous.source_rate).max(0.0);
+                }
             }
             previous.length += duration;
             // Store the actual handle-clamped duration so the UI agrees with playback.
@@ -363,11 +367,13 @@ fn slice_audio(source: &Clip, start: f64, end: f64) -> Clip {
     let mut clip = source.clone();
     let delta = start - source.start;
     let length = end - start;
-    clip.offset += if matches!(source.content, ClipContent::Audio { reverse: true, .. }) {
-        (source.length - delta - length) * source.source_rate
-    } else {
-        delta * source.source_rate
-    };
+    clip.shift_source_origin(
+        if matches!(source.content, ClipContent::Audio { reverse: true, .. }) {
+            source.length - delta - length
+        } else {
+            delta
+        },
+    );
     if let ClipContent::Audio {
         envelope,
         boundary_fades,

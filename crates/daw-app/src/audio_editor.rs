@@ -14,6 +14,7 @@ const TOOLS: &[EditorTool] = &[
     EditorTool::Cut,
     EditorTool::Stretch,
     EditorTool::Slip,
+    EditorTool::Warp,
     EditorTool::FadeIn,
     EditorTool::FadeOut,
 ];
@@ -25,6 +26,14 @@ type AnalysisResult = Arc<Mutex<Option<Result<(Analysis, AudioFile), String>>>>;
 enum Analysis {
     Gain(f32),
     Transients(Vec<f64>),
+    /// Attack-refined transients as source beats, for warp markers.
+    Onsets(Vec<f64>),
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AnalyzeKind {
+    Gain,
+    Transients,
+    Onsets,
 }
 #[derive(Clone)]
 struct Pending {
@@ -32,6 +41,7 @@ struct Pending {
     session: u64,
     revision: u64,
     transients: bool,
+    onsets: bool,
     clip: Clip,
     tempo: f64,
     settings: TransientSettings,
@@ -79,6 +89,12 @@ struct AudioView {
     grid_slice_open: bool,
     slice_grid: f64,
     reveal_owner: bool,
+    /// Detected attacks as source beats, valid for `warp_hits_key`; source
+    /// positions stay meaningful while the warp map changes.
+    warp_hits: Vec<f64>,
+    warp_hits_key: Option<(u64, String, f64, TransientSettings)>,
+    quantize_open: bool,
+    quantize: AudioQuantizeSettings,
 }
 impl Default for AudioView {
     fn default() -> Self {
@@ -106,6 +122,14 @@ impl Default for AudioView {
             grid_slice_open: false,
             slice_grid: 0.25,
             reveal_owner: false,
+            warp_hits: Vec::new(),
+            warp_hits_key: None,
+            quantize_open: false,
+            quantize: AudioQuantizeSettings {
+                grid: 1.0,
+                strength: 1.0,
+                max_move: 0.5,
+            },
         }
     }
 }
@@ -127,6 +151,7 @@ enum Edit {
     Move(f64, bool),
     SplitRange(f64, f64),
     RippleRange(f64, f64),
+    Warp(Vec<WarpMarker>, &'static str),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -328,6 +353,59 @@ fn grid_slice_points(clip: &Clip, range: Option<(f64, f64)>, grid: f64) -> Vec<f
         index += 1.0;
     }
     points
+}
+
+fn warp_hits_key(
+    clip: &Clip,
+    tempo: f64,
+    settings: TransientSettings,
+) -> (u64, String, f64, TransientSettings) {
+    let path = match &clip.content {
+        ClipContent::Audio { path, .. } => path.clone(),
+        ClipContent::Midi { .. } => String::new(),
+    };
+    (clip.id, path, tempo, settings)
+}
+
+/// Arrangement beat where a forward local beat plays.
+fn warp_beat(clip: &Clip, forward: f64) -> f64 {
+    clip.start + clip.forward_local(forward)
+}
+
+/// Pin the audio heard at `beat` without changing playback. The first marker
+/// also pins the clip edges, so dragging it moves only the audio around it.
+fn add_warp_marker(clip: &Clip, beat: f64) -> anyhow::Result<Vec<WarpMarker>> {
+    let forward = clip.forward_local(beat - clip.start);
+    let pin = |beat: f64| WarpMarker {
+        source: clip.local_to_source(beat),
+        beat,
+    };
+    let marker = pin(forward);
+    let mut markers = clip.warp_markers.clone();
+    if markers.is_empty() {
+        markers = vec![pin(0.0), pin(clip.length)];
+    }
+    let index = markers.partition_point(|existing| existing.beat < forward);
+    anyhow::ensure!(
+        markers
+            .get(index)
+            .is_none_or(|next| next.beat - forward > 1e-4)
+            && index
+                .checked_sub(1)
+                .is_none_or(|previous| forward - markers[previous].beat > 1e-4),
+        "A warp marker is already there"
+    );
+    markers.insert(index, marker);
+    validate_warp_markers(&markers)?;
+    Ok(markers)
+}
+
+fn moved_warp_markers(clip: &Clip, index: usize, beat: f64) -> Option<Vec<WarpMarker>> {
+    let (low, high) = warp_marker_bounds(clip, index);
+    let mut markers = clip.warp_markers.clone();
+    markers.get_mut(index)?.beat = clip.forward_local(beat - clip.start).clamp(low, high);
+    validate_warp_markers(&markers).ok()?;
+    Some(markers)
 }
 
 fn selected_transients<'a>(state: &'a AudioView, clip: &Clip) -> impl Iterator<Item = f64> + 'a {
@@ -703,6 +781,14 @@ impl DawApp {
                             state.preview_source = Some((pending.clip, pending.tempo));
                             state.preview_file = Some(file);
                         }
+                        Ok((Analysis::Onsets(points), _)) => {
+                            state.warp_hits = points;
+                            state.warp_hits_key = Some(warp_hits_key(
+                                &pending.clip,
+                                pending.tempo,
+                                pending.settings,
+                            ));
+                        }
                         Ok((Analysis::Gain(gain), _)) => {
                             let result = (|| -> anyhow::Result<()> {
                                 let mut candidate = self.project.clone();
@@ -783,6 +869,7 @@ impl DawApp {
             state.preview_source = None;
         }
         let mut edit = None;
+        let mut open_quantize = false;
         let mut open_crossfade = false;
         let mut clipboard_action = None;
         let mut nudge = 0;
@@ -945,6 +1032,7 @@ impl DawApp {
                     {
                         state.grid_slice_open = true;
                         state.transients_open = false;
+                        state.quantize_open = false;
                         state.slice_grid = if self.snap > 0.0 { self.snap } else { 0.25 };
                         ui.close();
                     }
@@ -1011,12 +1099,13 @@ impl DawApp {
                     .on_hover_text("Set the source peak to -1 dBFS before fades")
                     .clicked()
                 {
-                    analyze = Some(false);
+                    analyze = Some(AnalyzeKind::Gain);
                     ui.close();
                 }
                 if daw_ui::button(ui, "Transients").clicked() {
                     state.transients_open = true;
                     state.grid_slice_open = false;
+                    state.quantize_open = false;
                     ui.close();
                 }
                 if ui
@@ -1027,6 +1116,25 @@ impl DawApp {
                     .clicked()
                 {
                     self.open_audio_silence(ui.ctx(), track, clip.id, state.range);
+                    ui.close();
+                }
+                ui.separator();
+                if daw_ui::button(ui, "Quantize audio…")
+                    .on_hover_text("Preview detected hits moved toward the grid, then apply them as warp markers")
+                    .clicked()
+                {
+                    open_quantize = true;
+                    ui.close();
+                }
+                if ui
+                    .add_enabled(
+                        clip.is_warped(),
+                        daw_ui::button_widget("Clear warp markers"),
+                    )
+                    .on_hover_text("Return the whole clip to one stretch rate, keeping its start")
+                    .clicked()
+                {
+                    edit = Some(Edit::Warp(Vec::new(), "Clear warp markers"));
                     ui.close();
                 }
             });
@@ -1058,7 +1166,9 @@ impl DawApp {
             }
             // Progress, errors and the selection readout share the caption
             // slot, so completion never moves a pressed button or the canvas.
-            let status = if state.pending.is_some() {
+            let status = if state.pending.as_ref().is_some_and(|pending| pending.onsets) {
+                "Finding transients…".to_owned()
+            } else if state.pending.is_some() {
                 "Analyzing…".to_owned()
             } else if !state.error.is_empty() {
                 state.error.clone()
@@ -1227,7 +1337,7 @@ impl DawApp {
                     .add_enabled(state.pending.is_none(), daw_ui::button_widget("Analyze"))
                     .clicked()
                 {
-                    analyze = Some(true);
+                    analyze = Some(AnalyzeKind::Transients);
                 }
                 if ui
                     .add_enabled(
@@ -1288,7 +1398,112 @@ impl DawApp {
                 }
             });
         }
-        if let Some(transients) = analyze.filter(|_| state.pending.is_none()) {
+        if open_quantize {
+            state.quantize_open = true;
+            state.transients_open = false;
+            state.grid_slice_open = false;
+            state.quantize.grid = if self.snap > 0.0 { self.snap } else { 1.0 };
+            state.quantize.max_move = state.quantize.grid * 0.5;
+        }
+        let meter = self.project.meter_map();
+        let hits_key = warp_hits_key(&clip, self.project.tempo, state.settings);
+        let hits_ready = state.warp_hits_key.as_ref() == Some(&hits_key);
+        if (state.tool == EditorTool::Warp || state.quantize_open)
+            && !hits_ready
+            && state.pending.is_none()
+            && analyze.is_none()
+            && !self.edit_dirty
+        {
+            // Wait quietly for another editor's worker instead of reporting busy.
+            if ANALYSIS_RUNNING.load(Ordering::Acquire) {
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_millis(25));
+            } else {
+                analyze = Some(AnalyzeKind::Onsets);
+            }
+        }
+        // Hits are source positions; show them where they currently play.
+        let warp_hits: Vec<f64> = if hits_ready {
+            state
+                .warp_hits
+                .iter()
+                .map(|source| clip.playback_local(*source))
+                .filter(|beat| *beat > 0.0 && *beat < clip.length)
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let mut quantize_plan = None;
+        if state.quantize_open {
+            let plan = hits_ready
+                .then(|| plan_warp_markers(&clip, &warp_hits, &meter, Some(state.quantize)));
+            let summary = match &plan {
+                None => "Finding transients…".to_owned(),
+                Some(Ok(plan)) => format!(
+                    "{} hits · {} move · largest {:.1} ms",
+                    plan.hits.len(),
+                    plan.moved,
+                    plan.largest_move * 60_000.0 / self.project.tempo
+                ),
+                Some(Err(error)) => error.to_string(),
+            };
+            let ready = plan
+                .as_ref()
+                .is_some_and(|plan| plan.as_ref().is_ok_and(|plan| !plan.hits.is_empty()));
+            let mut action = None;
+            drawer_height = daw_ui::editor_bottom_drawer(ui, drawer_id, |ui| {
+                let previous = state.settings;
+                let response = ui.add(
+                    daw_ui::slider(&mut state.settings.sensitivity, 0.0..=1.0).text("Sensitivity"),
+                );
+                sensitivity_rect = Rect::from_min_size(
+                    response.rect.min,
+                    Vec2::new(ui.spacing().slider_width, response.rect.height()),
+                );
+                ui.add(
+                    daw_ui::number(&mut state.settings.minimum_gap_ms)
+                        .range(20.0..=2000.0)
+                        .suffix(" ms gap"),
+                );
+                if previous != state.settings
+                    && let Some(pending) = &state.pending
+                    && pending.transients
+                {
+                    pending.cancel.store(true, Ordering::Release);
+                }
+                action = daw_ui::audio_quantize_controls(
+                    ui,
+                    &mut state.quantize.grid,
+                    meter.initial(),
+                    &mut state.quantize.strength,
+                    &mut state.quantize.max_move,
+                    &summary,
+                    ready,
+                );
+            });
+            match action {
+                Some(daw_ui::AudioQuantizeAction::Quantize) => {
+                    if let Some(Ok(plan)) = &plan {
+                        edit = Some(Edit::Warp(plan.markers.clone(), "Quantize audio"));
+                        state.quantize_open = false;
+                    }
+                }
+                Some(daw_ui::AudioQuantizeAction::MarkersOnly) => {
+                    match plan_warp_markers(&clip, &warp_hits, &meter, None) {
+                        Ok(plan) => {
+                            edit = Some(Edit::Warp(plan.markers, "Warp markers at transients"));
+                            state.quantize_open = false;
+                        }
+                        Err(error) => state.error = error.to_string(),
+                    }
+                }
+                Some(daw_ui::AudioQuantizeAction::Cancel) => state.quantize_open = false,
+                None => {}
+            }
+            quantize_plan = plan.and_then(Result::ok);
+        }
+        if let Some(kind) = analyze.filter(|_| state.pending.is_none()) {
+            let transients = kind != AnalyzeKind::Gain;
             if ANALYSIS_RUNNING
                 .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
                 .is_err()
@@ -1321,7 +1536,26 @@ impl DawApp {
                             || -> anyhow::Result<(Analysis, AudioFile)> {
                                 analysis_test_delay(&worker_cancel)?;
                                 let file = admitted.map_or_else(|| AudioFile::open(path), Ok)?;
-                                let analysis = if transients {
+                                let analysis = if kind == AnalyzeKind::Onsets {
+                                    detect_transient_onsets_file(
+                                        &source,
+                                        &file,
+                                        tempo,
+                                        settings,
+                                        &worker_cancel,
+                                    )
+                                    .map(|beats| {
+                                        Analysis::Onsets(
+                                            beats
+                                                .into_iter()
+                                                .map(|beat| {
+                                                    source
+                                                        .local_to_source(source.forward_local(beat))
+                                                })
+                                                .collect(),
+                                        )
+                                    })
+                                } else if transients {
                                     detect_transients_file(
                                         &source,
                                         &file,
@@ -1364,6 +1598,7 @@ impl DawApp {
                         session: self.song_session.id,
                         revision: self.song_session.revision,
                         transients,
+                        onsets: kind == AnalyzeKind::Onsets,
                         clip: clip.clone(),
                         tempo,
                         settings,
@@ -1624,6 +1859,44 @@ impl DawApp {
             );
         }
         crate::audio_silence::paint_preview(&painter, canvas, state.view, &clip);
+        let warp_painter = painter.with_clip_rect(canvas);
+        let warp_visible = state.tool == EditorTool::Warp || state.quantize_open;
+        if warp_visible {
+            for beat in &warp_hits {
+                let x = state.view.x_at(canvas, clip.start + beat);
+                warp_painter.line_segment(
+                    [Pos2::new(x, canvas.top()), Pos2::new(x, canvas.bottom())],
+                    Stroke::new(1.0_f32, palette(ui.ctx()).guide.gamma_multiply(0.5)),
+                );
+            }
+            for marker in &clip.warp_markers {
+                let x = state.view.x_at(canvas, warp_beat(&clip, marker.beat));
+                warp_painter.line_segment(
+                    [Pos2::new(x, canvas.top()), Pos2::new(x, canvas.bottom())],
+                    Stroke::new(1.5_f32, palette(ui.ctx()).text.gamma_multiply(0.7)),
+                );
+            }
+        }
+        if let Some(plan) = &quantize_plan {
+            // Each moved hit: where it plays now, an arrow to its grid target.
+            let accent = palette(ui.ctx()).accent;
+            let y = canvas.top() + daw_ui::tokens::SPACE_MD;
+            for (from, to) in &plan.hits {
+                let a = state.view.x_at(canvas, clip.start + from);
+                let b = state.view.x_at(canvas, clip.start + to);
+                warp_painter.line_segment(
+                    [Pos2::new(b, canvas.top()), Pos2::new(b, canvas.bottom())],
+                    Stroke::new(1.5_f32, accent),
+                );
+                if (b - a).abs() > 1.0 {
+                    warp_painter.arrow(
+                        Pos2::new(a, y),
+                        Vec2::new(b - a, 0.0),
+                        Stroke::new(1.5_f32, accent),
+                    );
+                }
+            }
+        }
         let strip_open = crate::audio_silence::is_open(ui.ctx());
         for beat in state
             .preview
@@ -1861,6 +2134,34 @@ impl DawApp {
                     edit = Some(Edit::Reverse);
                     ui.close();
                 }
+                ui.separator();
+                if ui
+                    .add_enabled(
+                        menu_beat > clip.start && menu_beat < clip.end(),
+                        daw_ui::button_widget("Add warp marker here"),
+                    )
+                    .clicked()
+                {
+                    match add_warp_marker(&clip, menu_beat) {
+                        Ok(markers) => edit = Some(Edit::Warp(markers, "Add warp marker")),
+                        Err(error) => state.error = error.to_string(),
+                    }
+                    ui.close();
+                }
+                if ui
+                    .add_enabled(
+                        clip.is_warped(),
+                        daw_ui::button_widget("Clear warp markers"),
+                    )
+                    .clicked()
+                {
+                    edit = Some(Edit::Warp(Vec::new(), "Clear warp markers"));
+                    ui.close();
+                }
+                if daw_ui::button(ui, "Quantize audio…").clicked() {
+                    open_quantize = true;
+                    ui.close();
+                }
             });
         }
         if !navigation.navigating
@@ -1970,6 +2271,21 @@ impl DawApp {
                 }
                 EditorTool::Cut if response.clicked() && beat > clip.start && beat < clip.end() => {
                     edit = Some(Edit::Split(beat))
+                }
+                EditorTool::Warp if response.clicked() && raw > clip.start && raw < clip.end() => {
+                    // Snap to a nearby detected attack; Shift places it exactly.
+                    let at = warp_hits
+                        .iter()
+                        .map(|hit| clip.start + hit)
+                        .filter(|_| !shift)
+                        .filter(|hit| ((hit - raw) * f64::from(pixels_per_beat)).abs() <= 8.0)
+                        .min_by(|a, b| (a - raw).abs().total_cmp(&(b - raw).abs()))
+                        .unwrap_or(raw);
+                    snap_target = (at != raw).then_some(at);
+                    match add_warp_marker(&clip, at) {
+                        Ok(markers) => edit = Some(Edit::Warp(markers, "Add warp marker")),
+                        Err(error) => state.error = error.to_string(),
+                    }
                 }
                 EditorTool::FadeIn => {
                     if let Some((fi, fo, fic, foc)) = fade_parameters_at(&clip, beat, true) {
@@ -2096,6 +2412,7 @@ impl DawApp {
                         && clip.source_rate != original.source_rate * original.length / length)
             }
             Edit::Move(start, copy) => *copy || clip.start != *start,
+            Edit::Warp(markers, _) => *markers != clip.warp_markers,
             Edit::Slip(original, movement, source_beats)
                 if *source_beats >= original.source_length() =>
             {
@@ -2244,6 +2561,10 @@ impl DawApp {
                         }
                     })
                 }
+                Edit::Warp(markers, label) => {
+                    self.edit_label = Some(label.into());
+                    self.project.set_warp_markers(track, clip.id, markers)
+                }
                 Edit::RippleRange(start, end) => {
                     self.edit_label = Some("Ripple delete audio selection".into());
                     self.project
@@ -2280,15 +2601,122 @@ impl DawApp {
             }
         }
         let nudge_unit = format!("{:?}", daw_ui::NudgeUnit::load(ui.ctx()));
-        let loop_response = self.timeline_loop_ui(
-            ui,
-            "audio_editor_loop",
-            loop_lane,
-            state.view,
-            !navigation.navigating && !strip_open,
-        );
+        let mut warp_flags = Vec::new();
+        let loop_response = if state.tool == EditorTool::Warp {
+            // The Warp tool shows marker flags in the loop lane's place, so the
+            // canvas never moves when choosing a tool.
+            let flags: Vec<_> = clip
+                .warp_markers
+                .iter()
+                .enumerate()
+                .map(|(index, marker)| (index, warp_beat(&clip, marker.beat), marker))
+                .filter(|(_, beat, _)| *beat >= clip.start - 1e-9 && *beat <= clip.end() + 1e-9)
+                .map(|(index, beat, marker)| daw_ui::TimelineFlag {
+                    key: index as u64,
+                    kind: daw_ui::TimelineFlagKind::Marker,
+                    beat,
+                    label: (index + 1).to_string(),
+                    hover: format!(
+                        "Warp marker {} · {:.3}x\nDrag to move this audio · Right-click to delete",
+                        index + 1,
+                        clip.local_rate(marker.beat - 1e-9)
+                    ),
+                    color: None,
+                })
+                .collect();
+            let grid = self.snap;
+            let snap = |beat: f64, bypass: bool| {
+                if bypass {
+                    beat
+                } else {
+                    snap_to_grid(&meter, grid, beat)
+                }
+            };
+            let mut delete = None;
+            let mut controls = ui.new_child(egui::UiBuilder::new().max_rect(loop_lane));
+            let response = daw_ui::timeline_flags(
+                &mut controls,
+                egui::Id::new(("audio_warp_flags", clip.id)),
+                loop_lane,
+                state.view,
+                &flags,
+                !navigation.navigating && !strip_open,
+                &snap,
+                |ui, flag| {
+                    if daw_ui::button(ui, "Delete warp marker").clicked() {
+                        delete = Some(flag.key as usize);
+                        ui.close();
+                    }
+                },
+            );
+            match response.action {
+                Some(
+                    daw_ui::TimelineFlagAction::Dragging(index, beat)
+                    | daw_ui::TimelineFlagAction::Moved(index, beat),
+                ) => {
+                    if let Some(markers) = moved_warp_markers(&clip, index as usize, beat) {
+                        self.begin_edit();
+                        self.edit_label = Some("Move warp marker".into());
+                        if self
+                            .project
+                            .set_warp_markers(track, clip.id, markers)
+                            .is_ok()
+                        {
+                            self.changed();
+                        }
+                    }
+                }
+                Some(daw_ui::TimelineFlagAction::Clicked(_, index)) => {
+                    if let Some(marker) = clip.warp_markers.get(index as usize) {
+                        self.seek(warp_beat(&clip, marker.beat));
+                    }
+                }
+                _ => {}
+            }
+            if let Some(index) = delete {
+                let mut markers = clip.warp_markers.clone();
+                markers.remove(index);
+                self.begin_edit();
+                self.edit_label = Some("Delete warp marker".into());
+                match self.project.set_warp_markers(track, clip.id, markers) {
+                    Ok(()) => self.changed(),
+                    Err(error) => state.error = error.to_string(),
+                }
+            }
+            if response.lane.clicked()
+                && let Some(position) = response.lane.interact_pointer_pos()
+            {
+                self.seek(
+                    self.snapped(state.view.beat_at(loop_lane, position.x))
+                        .max(0.0),
+                );
+            }
+            warp_flags = response
+                .flags
+                .iter()
+                .map(|(_, key, rect)| serde_json::json!({"index":key,"rect":[rect.left(),rect.top(),rect.right(),rect.bottom()]}))
+                .collect();
+            daw_ui::TimelineLoopResponse {
+                changed: false,
+                started: false,
+                lane: loop_lane,
+                band: None,
+                handles: [None, None],
+            }
+        } else {
+            self.timeline_loop_ui(
+                ui,
+                "audio_editor_loop",
+                loop_lane,
+                state.view,
+                !navigation.navigating && !strip_open,
+            )
+        };
         ui.ctx().data_mut(|d| {
-            d.insert_temp(egui::Id::new("audio_editor_diagnostics"), serde_json::json!({"rect":[canvas.left(),canvas.top(),canvas.right(),canvas.bottom()],"start_beat":state.view.start_beat,"pixels_per_beat":state.view.pixels_per_beat,"row_offset":state.view.row_offset,"row_height":state.view.row_height,"rows":bounds.end_row,"clip_start":clip.start,"clip_end":clip.end(),"cursor":self.cursor,"preview":state.preview,"pending":state.pending.is_some(),"analysis_running":ANALYSIS_RUNNING.load(Ordering::Acquire),"cancel_requested":state.pending.as_ref().is_some_and(|pending|pending.cancel.load(Ordering::Acquire)),"tool":state.tool.label(),"error":state.error,"gain_rect":[gain_rect.left(),gain_rect.top(),gain_rect.right(),gain_rect.bottom()],"sensitivity_rect":[sensitivity_rect.left(),sensitivity_rect.top(),sensitivity_rect.right(),sensitivity_rect.bottom()],"sensitivity":state.settings.sensitivity,"amplitude_reference":state.amplitude_reference,
+            let warp_diagnostics = serde_json::json!({"warp_markers":clip.warp_markers.iter().map(|marker|serde_json::json!({"beat":warp_beat(&clip, marker.beat),"source":marker.source})).collect::<Vec<_>>(),
+                "warp_flags":warp_flags,"warp_hits":warp_hits.iter().map(|beat|clip.start+beat).collect::<Vec<_>>(),
+                "quantize":{"open":state.quantize_open,"grid":state.quantize.grid,"strength":state.quantize.strength,"max_move":state.quantize.max_move,"moved":quantize_plan.as_ref().map(|plan|plan.moved),"largest_move":quantize_plan.as_ref().map(|plan|plan.largest_move),"hits":quantize_plan.as_ref().map(|plan|plan.hits.iter().map(|(from,to)|[clip.start+from,clip.start+to]).collect::<Vec<_>>())}});
+            d.insert_temp(egui::Id::new("audio_editor_diagnostics"), serde_json::json!({"warp":warp_diagnostics,"rect":[canvas.left(),canvas.top(),canvas.right(),canvas.bottom()],"start_beat":state.view.start_beat,"pixels_per_beat":state.view.pixels_per_beat,"row_offset":state.view.row_offset,"row_height":state.view.row_height,"rows":bounds.end_row,"clip_start":clip.start,"clip_end":clip.end(),"cursor":self.cursor,"preview":state.preview,"pending":state.pending.is_some(),"analysis_running":ANALYSIS_RUNNING.load(Ordering::Acquire),"cancel_requested":state.pending.as_ref().is_some_and(|pending|pending.cancel.load(Ordering::Acquire)),"tool":state.tool.label(),"error":state.error,"gain_rect":[gain_rect.left(),gain_rect.top(),gain_rect.right(),gain_rect.bottom()],"sensitivity_rect":[sensitivity_rect.left(),sensitivity_rect.top(),sensitivity_rect.right(),sensitivity_rect.bottom()],"sensitivity":state.settings.sensitivity,"amplitude_reference":state.amplitude_reference,
                 "ruler":{"min":[ruler.min.x,ruler.min.y],"max":[ruler.max.x,ruler.max.y]},
                 "fade_handles":fades.handles.map(|handle|handle.map(|r|serde_json::json!({"min":[r.min.x,r.min.y],"max":[r.max.x,r.max.y]}))),
                 "fade_handles_visible":fades.visible,

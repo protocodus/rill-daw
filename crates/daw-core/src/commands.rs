@@ -513,6 +513,12 @@ pub enum SongEdit {
         clip: EntityRef,
         beats: Vec<f64>,
     },
+    /// Replace the clip's warp markers; an empty list clears the warp map.
+    SetWarpMarkers {
+        track: EntityRef,
+        clip: EntityRef,
+        markers: Vec<crate::WarpMarker>,
+    },
     StripAudioSilence {
         track: EntityRef,
         clip: EntityRef,
@@ -1442,6 +1448,11 @@ fn apply_one(
                 record(result, refs, "clip", id, &None)?;
             }
         }
+        SongEdit::SetWarpMarkers {
+            track,
+            clip,
+            markers,
+        } => p.set_warp_markers(r(track)?, r(clip)?, markers.clone())?,
         SongEdit::StripAudioSilence {
             track,
             clip,

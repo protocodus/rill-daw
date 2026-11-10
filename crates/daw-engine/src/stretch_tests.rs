@@ -6,7 +6,8 @@ fn compare_bandlimited_preview_preparation_cost() {
     let source = tone(48000 * 10);
     for algorithm in AudioProcessingAlgorithm::ALL {
         let start = std::time::Instant::now();
-        let preview = prepare_preview(&source, 0.8, 7.0, algorithm, None).unwrap();
+        let preview =
+            prepare_preview(&source, &TimeMap::constant(0.8), 7.0, algorithm, None).unwrap();
         let quick = start.elapsed();
         let start = std::time::Instant::now();
         let full = prepare_processed(&source, 0.8, 7.0, algorithm, None).unwrap();
@@ -24,7 +25,14 @@ fn bandlimited_preview_keeps_selected_pitch_duration_and_stereo_without_aliases(
     assert!(!preview_worthwhile(&source));
     for algorithm in AudioProcessingAlgorithm::ALL {
         for (rate, semitones) in [(0.5, -7.0), (1.0, 7.0), (2.0, 7.0)] {
-            let preview = prepare_preview(&source, rate, semitones, algorithm, None).unwrap();
+            let preview = prepare_preview(
+                &source,
+                &TimeMap::constant(rate),
+                semitones,
+                algorithm,
+                None,
+            )
+            .unwrap();
             assert_eq!(
                 preview.frames(),
                 (source.frames() as f64 / rate).ceil() as usize
@@ -55,7 +63,8 @@ fn bandlimited_preview_keeps_selected_pitch_duration_and_stereo_without_aliases(
             let sample = (std::f64::consts::TAU * 16000.0 * i as f64 / 48000.0).sin() as f32 * 0.25;
             *frame = [sample, sample];
         }
-        let preview = prepare_preview(&ultrasonic, 0.8, -5.0, algorithm, None).unwrap();
+        let preview =
+            prepare_preview(&ultrasonic, &TimeMap::constant(0.8), -5.0, algorithm, None).unwrap();
         let full = prepare_processed(&ultrasonic, 0.8, -5.0, algorithm, None).unwrap();
         let energy = |audio: &AudioData| {
             let middle = &audio.samples[audio.samples.len() / 4..audio.samples.len() * 3 / 4];
@@ -70,7 +79,14 @@ fn bandlimited_preview_keeps_selected_pitch_duration_and_stereo_without_aliases(
             "full-rate preparation must preserve original high-frequency content"
         );
         assert!(
-            prepare_preview(&source, 0.5, 7.0, algorithm, Some(&AtomicBool::new(true))).is_err()
+            prepare_preview(
+                &source,
+                &TimeMap::constant(0.5),
+                7.0,
+                algorithm,
+                Some(&AtomicBool::new(true))
+            )
+            .is_err()
         );
     }
 }
