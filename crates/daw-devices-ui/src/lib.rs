@@ -349,7 +349,11 @@ fn preset_bar(
             let from = current.map_or(if offset > 0 { -1 } else { 0 }, |index| index as isize);
             (from + offset).rem_euclid(count) as usize
         };
-        if daw_ui::small_button(ui, "◂")
+        if ui
+            .add(daw_ui::IconButton::icon_only(
+                daw_ui::Icon::Back,
+                "Previous preset",
+            ))
             .on_hover_text("Previous preset")
             .clicked()
             && !presets.is_empty()
@@ -376,7 +380,11 @@ fn preset_bar(
                     }
                 }
             });
-        if daw_ui::small_button(ui, "▸")
+        if ui
+            .add(daw_ui::IconButton::icon_only(
+                daw_ui::Icon::ChevronRight,
+                "Next preset",
+            ))
             .on_hover_text("Next preset")
             .clicked()
             && !presets.is_empty()
