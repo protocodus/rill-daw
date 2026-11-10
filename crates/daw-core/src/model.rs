@@ -41,11 +41,24 @@ fn default_source_rate() -> f64 {
 pub const MAX_PLUGIN_STATE_BYTES: usize = 64 * 1024 * 1024;
 pub const MAX_INSTRUMENT_STATE_BYTES: usize = MAX_PLUGIN_STATE_BYTES;
 
-pub(crate) fn validate_vst_class_id(class_id: Option<&str>) -> Result<()> {
-    ensure!(
-        class_id.is_none_or(|id| id.len() == 32 && id.bytes().all(|byte| byte.is_ascii_hexdigit())),
-        "VST3 processor class ID must contain exactly 32 hexadecimal characters"
-    );
+/// The plug-in format follows the bundle extension: `.clap` and `.lv2` carry
+/// textual IDs (CLAP plug-in ID, LV2 URI); anything else keeps the VST3 rule.
+pub(crate) fn validate_plugin_class_id(path: &str, class_id: Option<&str>) -> Result<()> {
+    let Some(id) = class_id else { return Ok(()) };
+    let textual = std::path::Path::new(path)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("clap") || ext.eq_ignore_ascii_case("lv2"));
+    if textual {
+        ensure!(
+            !id.is_empty() && id.len() <= 1024 && !id.chars().any(char::is_control),
+            "Plug-in ID must be 1-1,024 printable characters"
+        );
+    } else {
+        ensure!(
+            id.len() == 32 && id.bytes().all(|byte| byte.is_ascii_hexdigit()),
+            "VST3 processor class ID must contain exactly 32 hexadecimal characters"
+        );
+    }
     Ok(())
 }
 
@@ -218,6 +231,8 @@ impl EffectSlot {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Effect {
+    /// Any hosted plug-in (VST3, CLAP or LV2, chosen by the path's extension);
+    /// the variant keeps its historic name so existing projects load unchanged.
     Vst3 {
         path: String,
         #[serde(default)]
@@ -236,6 +251,7 @@ pub struct Send {
 pub enum Instrument {
     #[default]
     None,
+    /// Any hosted plug-in; see [`Effect::Vst3`].
     Vst3 {
         path: String,
         #[serde(default)]
@@ -1194,8 +1210,8 @@ impl Project {
                 "Invalid track pan"
             );
             if let Instrument::Vst3 { path, class_id } = &track.instrument {
-                ensure!(!path.is_empty(), "Missing VST3 path");
-                validate_vst_class_id(class_id.as_deref())?;
+                ensure!(!path.is_empty(), "Missing plug-in path");
+                validate_plugin_class_id(path, class_id.as_deref())?;
             }
             validate_plugin_state(&track.instrument_state, &track.instrument_parameters)
                 .context("Invalid instrument state")?;

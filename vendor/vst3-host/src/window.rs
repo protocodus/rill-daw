@@ -118,77 +118,29 @@ struct XcbWindowState {
     window: xcb::x::Window,
 }
 
-/// A plugin window that manages the native window and plugin editor lifecycle
-pub struct PluginWindow {
-    plugin: Arc<Mutex<Plugin>>,
+/// A host-owned top-level window that a plug-in editor embeds into.
+///
+/// Format-neutral: [`PluginWindow`] attaches a VST3 `IPlugView`, and other hosts can
+/// embed any editor that accepts the same native parent (`NSView`, `HWND`, X11 window).
+/// The window is destroyed on drop; detach the editor first.
+pub struct HostWindow {
     #[cfg(target_os = "macos")]
-    native_window: Option<Retained<NSWindow>>,
-    /// The view the plugin attached its editor into. Kept so a plugin-initiated resize can
-    /// grow the container along with the window.
+    window: Retained<NSWindow>,
+    /// The view the editor attaches into, resized along with the window.
     #[cfg(target_os = "macos")]
-    container_view: Option<Retained<NSView>>,
+    container_view: Retained<NSView>,
     #[cfg(target_os = "windows")]
-    native_window: Option<HWND>,
+    hwnd: HWND,
     #[cfg(target_os = "linux")]
-    native_window: Option<XcbWindowState>,
-    #[cfg(target_os = "android")]
-    native_window: Option<()>,
+    xcb: XcbWindowState,
 }
 
-impl PluginWindow {
-    /// Create a new plugin window for the given plugin
-    pub fn new(plugin: Arc<Mutex<Plugin>>) -> Self {
-        Self {
-            plugin,
-            #[cfg(any(
-                target_os = "macos",
-                target_os = "windows",
-                target_os = "linux",
-                target_os = "android"
-            ))]
-            native_window: None,
-            #[cfg(target_os = "macos")]
-            container_view: None,
-        }
-    }
-
-    /// Open the plugin window
-    pub fn open(&mut self) -> Result<()> {
-        // Check if plugin has editor
-        let has_editor = self
-            .plugin
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .has_editor();
-        if !has_editor {
-            return Err(Error::Other(
-                "Plugin does not have a GUI editor".to_string(),
-            ));
-        }
-
-        // Close existing window if any. Keyed on the handle rather than `is_open()`, which also
-        // reports `false` for a window the user already dismissed — that one still needs closing.
-        if self.native_window.is_some() {
-            self.close();
-        }
-
-        // Get plugin info for window title
-        let plugin_info = self
-            .plugin
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .info()
-            .clone();
-
-        // Try to get editor size
-        let (width, height) = self
-            .plugin
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .get_editor_size()
-            .unwrap_or((800, 600));
-
-        // Create native window
+impl HostWindow {
+    /// Create a window whose content area is `width` x `height` pixels.
+    ///
+    /// On X11 the window is mapped immediately; elsewhere call [`Self::show`] once the
+    /// editor is attached.
+    pub fn create(title: &str, width: i32, height: i32) -> Result<Self> {
         #[cfg(target_os = "macos")]
         {
             // AppKit objects must be created on the main thread.
@@ -220,9 +172,7 @@ impl PluginWindow {
             // double-free that crashes on close. We own the lifetime, so opt out.
             // SAFETY: standard AppKit setter on the main thread.
             unsafe { window.setReleasedWhenClosed(false) };
-
-            let title = NSString::from_str(&format!("{} - VST3", plugin_info.name));
-            window.setTitle(&title);
+            window.setTitle(&NSString::from_str(title));
 
             // A container view, sized to the editor, that the plugin attaches its view into.
             let container_frame = NSRect::new(
@@ -233,126 +183,72 @@ impl PluginWindow {
             if let Some(content_view) = window.contentView() {
                 content_view.addSubview(&container_view);
             }
-
-            // Hand the plugin the container NSView to embed its editor in.
-            // SAFETY: `container_view` is a live NSView this `PluginWindow` keeps alive (via
-            // the retained window it was added to) for as long as the editor is attached —
-            // `close()` detaches the editor before dropping the window.
-            let window_handle = unsafe {
-                crate::plugin::WindowHandle::from_nsview(
-                    Retained::as_ptr(&container_view) as *mut std::ffi::c_void
-                )
-            };
-            self.plugin
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .open_editor(window_handle)?;
-
-            // Match the window to the editor size, then show and center it.
             window.setContentSize(container_frame.size);
-            window.makeKeyAndOrderFront(None);
-            window.center();
-
-            self.native_window = Some(window);
-            self.container_view = Some(container_view);
+            Ok(Self {
+                window,
+                container_view,
+            })
         }
 
         #[cfg(target_os = "windows")]
-        {
-            unsafe {
-                use std::mem;
-                use std::ptr;
+        unsafe {
+            use std::mem;
+            use std::ptr;
 
-                // Register window class if not already registered
-                let class_name = "VST3PluginWindow\0".encode_utf16().collect::<Vec<u16>>();
-                let mut wc: WNDCLASSEXW = mem::zeroed();
-                wc.cbSize = mem::size_of::<WNDCLASSEXW>() as UINT;
-                wc.style = CS_HREDRAW | CS_VREDRAW;
-                wc.lpfnWndProc = Some(plugin_window_proc);
-                wc.hInstance = GetModuleHandleW(ptr::null());
-                wc.hCursor = LoadCursorW(ptr::null_mut(), IDC_ARROW);
-                wc.lpszClassName = class_name.as_ptr();
+            // Register window class if not already registered
+            let class_name = "VST3PluginWindow\0".encode_utf16().collect::<Vec<u16>>();
+            let mut wc: WNDCLASSEXW = mem::zeroed();
+            wc.cbSize = mem::size_of::<WNDCLASSEXW>() as UINT;
+            wc.style = CS_HREDRAW | CS_VREDRAW;
+            wc.lpfnWndProc = Some(plugin_window_proc);
+            wc.hInstance = GetModuleHandleW(ptr::null());
+            wc.hCursor = LoadCursorW(ptr::null_mut(), IDC_ARROW);
+            wc.lpszClassName = class_name.as_ptr();
 
-                // Try to register, ignore if already registered
-                RegisterClassExW(&wc);
+            // Try to register, ignore if already registered
+            RegisterClassExW(&wc);
 
-                // Create window
-                let window_title = format!("{} - VST3\0", plugin_info.name);
-                let window_name = window_title.encode_utf16().collect::<Vec<u16>>();
+            let window_name = format!("{title}\0").encode_utf16().collect::<Vec<u16>>();
 
-                // Calculate window size including borders
-                let mut rect = RECT {
-                    left: 0,
-                    top: 0,
-                    right: width,
-                    bottom: height,
-                };
+            // Calculate window size including borders
+            let mut rect = RECT {
+                left: 0,
+                top: 0,
+                right: width,
+                bottom: height,
+            };
 
-                winapi::um::winuser::AdjustWindowRectEx(
-                    &mut rect,
-                    WS_OVERLAPPEDWINDOW,
-                    0, // No menu
-                    0, // No extended style
-                );
+            winapi::um::winuser::AdjustWindowRectEx(
+                &mut rect,
+                WS_OVERLAPPEDWINDOW,
+                0, // No menu
+                0, // No extended style
+            );
 
-                let window_width = rect.right - rect.left;
-                let window_height = rect.bottom - rect.top;
+            let hwnd = CreateWindowExW(
+                0,
+                class_name.as_ptr(),
+                window_name.as_ptr(),
+                WS_OVERLAPPEDWINDOW,
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                rect.right - rect.left,
+                rect.bottom - rect.top,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                GetModuleHandleW(ptr::null()),
+                ptr::null_mut(),
+            );
 
-                let hwnd = CreateWindowExW(
-                    0,
-                    class_name.as_ptr(),
-                    window_name.as_ptr(),
-                    WS_OVERLAPPEDWINDOW,
-                    CW_USEDEFAULT,
-                    CW_USEDEFAULT,
-                    window_width,
-                    window_height,
-                    ptr::null_mut(),
-                    ptr::null_mut(),
-                    GetModuleHandleW(ptr::null()),
-                    ptr::null_mut(),
-                );
-
-                if hwnd.is_null() {
-                    return Err(Error::Other("Failed to create native window".to_string()));
-                }
-
-                // Try to open plugin editor.
-                // SAFETY: `hwnd` was just created above and null-checked; it is destroyed only
-                // after the editor is detached (in `close()`, or the error arm below).
-                let window_handle =
-                    crate::plugin::WindowHandle::from_hwnd(hwnd as *mut std::ffi::c_void);
-                let mut plugin = self.plugin.lock().unwrap_or_else(|p| p.into_inner());
-                let dpi = winapi::um::winuser::GetDpiForWindow(hwnd);
-                if let Some(scale_factor) = dpi_scale_factor(dpi) {
-                    if let Err(error) = plugin.set_editor_scale_factor(scale_factor) {
-                        drop(plugin);
-                        DestroyWindow(hwnd);
-                        return Err(error);
-                    }
-                }
-                match plugin.open_editor(window_handle) {
-                    Ok(()) => {
-                        drop(plugin);
-                        ShowWindow(hwnd, SW_SHOW);
-                        UpdateWindow(hwnd);
-                        self.native_window = Some(hwnd);
-                    }
-                    Err(e) => {
-                        drop(plugin);
-                        DestroyWindow(hwnd);
-                        return Err(e);
-                    }
-                }
+            if hwnd.is_null() {
+                return Err(Error::Other("Failed to create native window".to_string()));
             }
+            Ok(Self { hwnd })
         }
 
         #[cfg(target_os = "linux")]
         {
-            use xcb::Xid;
-
-            // Create an X11 window via XCB and embed the plugin editor into it using the
-            // VST3 X11EmbedWindowID platform type (handled in plugin_impl::open_editor).
+            // Create an X11 window via XCB; editors embed into it as an X11 child.
             let (connection, screen_number) = xcb::Connection::connect(None)
                 .map_err(|e| Error::Other(format!("Failed to connect to X server: {e}")))?;
             let setup = connection.get_setup();
@@ -383,8 +279,6 @@ impl PluginWindow {
                 })
                 .map_err(|e| Error::Other(format!("Failed to create X11 window: {e}")))?;
 
-            // Window title.
-            let title = format!("{} - VST3", plugin_info.name);
             connection.send_request(&xcb::x::ChangeProperty {
                 mode: xcb::x::PropMode::Replace,
                 window,
@@ -393,26 +287,237 @@ impl PluginWindow {
                 data: title.as_bytes(),
             });
 
-            // Show the window, then attach the plugin editor to its X11 id.
+            // Show the window before the editor attaches to its X11 id.
             connection.send_request(&xcb::x::MapWindow { window });
             let _ = connection.flush();
-
-            let handle = crate::plugin::WindowHandle::from_x11(window.resource_id());
-            self.plugin
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .open_editor(handle)?;
-
-            self.native_window = Some(XcbWindowState { connection, window });
+            Ok(Self {
+                xcb: XcbWindowState { connection, window },
+            })
         }
 
-        #[cfg(target_os = "android")]
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         {
+            let _ = (title, width, height);
+            Err(Error::Other(
+                "Plugin editor windows are not supported on this platform".to_string(),
+            ))
+        }
+    }
+
+    /// The native parent for an embedded editor: an `NSView*` on macOS, an `HWND` on
+    /// Windows, or the X11 window id (as an integer, not a pointer) on Linux.
+    pub fn raw_handle(&self) -> *mut std::ffi::c_void {
+        #[cfg(target_os = "macos")]
+        let handle = Retained::as_ptr(&self.container_view) as *mut std::ffi::c_void;
+        #[cfg(target_os = "windows")]
+        let handle = self.hwnd as *mut std::ffi::c_void;
+        #[cfg(target_os = "linux")]
+        let handle = {
+            use xcb::Xid;
+            self.xcb.window.resource_id() as usize as *mut std::ffi::c_void
+        };
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        let handle = std::ptr::null_mut();
+        handle
+    }
+
+    /// Bring the window on screen once an editor is attached.
+    pub fn show(&self) {
+        #[cfg(target_os = "macos")]
+        {
+            self.window.makeKeyAndOrderFront(None);
+            self.window.center();
+        }
+        #[cfg(target_os = "windows")]
+        unsafe {
+            ShowWindow(self.hwnd, SW_SHOW);
+            UpdateWindow(self.hwnd);
+        }
+    }
+
+    /// The window's current DPI as a content scale factor (Windows only).
+    pub fn scale_factor(&self) -> Option<f32> {
+        #[cfg(target_os = "windows")]
+        let scale = dpi_scale_factor(unsafe { winapi::um::winuser::GetDpiForWindow(self.hwnd) });
+        #[cfg(not(target_os = "windows"))]
+        let scale = None;
+        scale
+    }
+
+    /// The newest DPI the window procedure recorded for this window, as a content scale.
+    pub fn take_pending_scale_factor(&self) -> Option<f32> {
+        #[cfg(target_os = "windows")]
+        let scale = dpi_changes()
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .remove(&(self.hwnd as usize))
+            .and_then(dpi_scale_factor);
+        #[cfg(not(target_os = "windows"))]
+        let scale = None;
+        scale
+    }
+
+    /// Resize the window so its content area is `width` x `height` pixels.
+    pub fn resize(&self, width: i32, height: i32) {
+        if width <= 0 || height <= 0 {
+            return;
+        }
+        log::debug!("editor asked the host to resize its window to {width}x{height}");
+
+        #[cfg(target_os = "macos")]
+        {
+            let size = NSSize::new(width as f64, height as f64);
+            self.container_view
+                .setFrame(NSRect::new(NSPoint::new(0.0, 0.0), size));
+            self.window.setContentSize(size);
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            // The editor sizes its *client* area; grow the frame by the window's chrome, the
+            // same way `create()` sizes the window in the first place.
+            let mut rect = RECT {
+                left: 0,
+                top: 0,
+                right: width,
+                bottom: height,
+            };
+            unsafe {
+                winapi::um::winuser::AdjustWindowRectEx(&mut rect, WS_OVERLAPPEDWINDOW, 0, 0);
+                SetWindowPos(
+                    self.hwnd,
+                    std::ptr::null_mut(),
+                    0,
+                    0,
+                    rect.right - rect.left,
+                    rect.bottom - rect.top,
+                    SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
+                );
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            self.xcb.connection.send_request(&xcb::x::ConfigureWindow {
+                window: self.xcb.window,
+                value_list: &[
+                    xcb::x::ConfigWindow::Width(width as u32),
+                    xcb::x::ConfigWindow::Height(height as u32),
+                ],
+            });
+            let _ = self.xcb.connection.flush();
+        }
+    }
+
+    /// Whether the user closed the window themselves, through its title-bar close button.
+    /// Native window state only; it never calls into the editor.
+    #[cfg(target_os = "macos")]
+    pub fn closed_by_user(&self) -> bool {
+        // A closed window is ordered out — but so is a miniaturized one, and so is every
+        // window of a hidden application. Neither means the user dismissed the editor.
+        if self.window.isVisible() || self.window.isMiniaturized() {
+            return false;
+        }
+        match MainThreadMarker::new() {
+            Some(mtm) => !NSApplication::sharedApplication(mtm).isHidden(),
+            // AppKit state can only be read from the main thread; assume it still stands.
+            None => false,
+        }
+    }
+
+    /// Whether the user closed the window themselves, through its title-bar close button.
+    #[cfg(target_os = "windows")]
+    pub fn closed_by_user(&self) -> bool {
+        close_requests()
+            .lock()
+            .is_ok_and(|requests| requests.contains(&(self.hwnd as usize)))
+    }
+
+    /// X11 editor windows carry no close affordance of their own.
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    pub fn closed_by_user(&self) -> bool {
+        false
+    }
+}
+
+impl Drop for HostWindow {
+    fn drop(&mut self) {
+        #[cfg(target_os = "macos")]
+        self.window.close();
+
+        #[cfg(target_os = "windows")]
+        {
+            if let Ok(mut requests) = close_requests().lock() {
+                requests.remove(&(self.hwnd as usize));
+            }
+            if let Ok(mut changes) = dpi_changes().lock() {
+                changes.remove(&(self.hwnd as usize));
+            }
+            unsafe {
+                DestroyWindow(self.hwnd);
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            self.xcb.connection.send_request(&xcb::x::UnmapWindow {
+                window: self.xcb.window,
+            });
+            self.xcb.connection.send_request(&xcb::x::DestroyWindow {
+                window: self.xcb.window,
+            });
+            let _ = self.xcb.connection.flush();
+        }
+    }
+}
+
+/// A plugin window that manages the native window and plugin editor lifecycle
+pub struct PluginWindow {
+    plugin: Arc<Mutex<Plugin>>,
+    native_window: Option<HostWindow>,
+}
+
+impl PluginWindow {
+    /// Create a new plugin window for the given plugin
+    pub fn new(plugin: Arc<Mutex<Plugin>>) -> Self {
+        Self {
+            plugin,
+            native_window: None,
+        }
+    }
+
+    /// Open the plugin window
+    pub fn open(&mut self) -> Result<()> {
+        let mut plugin = self.plugin.lock().unwrap_or_else(|p| p.into_inner());
+        if !plugin.has_editor() {
             return Err(Error::Other(
-                "PluginWindow::open() is not supported on Android".to_string(),
+                "Plugin does not have a GUI editor".to_string(),
             ));
         }
+        drop(plugin);
 
+        // Close existing window if any. Keyed on the handle rather than `is_open()`, which also
+        // reports `false` for a window the user already dismissed — that one still needs closing.
+        if self.native_window.is_some() {
+            self.close();
+        }
+
+        plugin = self.plugin.lock().unwrap_or_else(|p| p.into_inner());
+        let name = plugin.info().name.clone();
+        let (width, height) = plugin.get_editor_size().unwrap_or((800, 600));
+        drop(plugin);
+
+        let window = HostWindow::create(&format!("{name} - VST3"), width, height)?;
+        let mut plugin = self.plugin.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(scale_factor) = window.scale_factor() {
+            plugin.set_editor_scale_factor(scale_factor)?;
+        }
+        // SAFETY: `window` is live and is destroyed only after the editor is detached
+        // (in `close()`; on error it drops here before any editor is attached).
+        plugin.open_editor(unsafe { crate::plugin::WindowHandle::from_raw(window.raw_handle()) })?;
+        drop(plugin);
+        window.show();
+        self.native_window = Some(window);
         Ok(())
     }
 
@@ -436,14 +541,14 @@ impl PluginWindow {
     /// [`Self::is_open`] and [`Self::closed_by_user`] do *not* run this — they stay lock-free
     /// so they are safe to call while holding the plugin lock.
     pub fn service_platform_events(&self) -> Result<()> {
-        if self.native_window.is_none() {
+        let Some(window) = self.native_window.as_ref() else {
             return Ok(());
-        }
+        };
         let Some(mut plugin) = self.try_lock_plugin() else {
             return Ok(());
         };
 
-        let scale_result = self
+        let scale_result = window
             .take_pending_scale_factor()
             .map(|factor| plugin.set_editor_scale_factor(factor));
         let resize = plugin.take_editor_resize_request();
@@ -453,7 +558,7 @@ impl PluginWindow {
         drop(plugin);
 
         if let Some((width, height)) = resize {
-            self.resize_native_window(width, height);
+            window.resize(width, height);
         }
         match scale_result {
             Some(Err(error)) => Err(error),
@@ -472,91 +577,6 @@ impl PluginWindow {
         }
     }
 
-    /// The newest DPI the window procedure recorded for this window, as a VST3 content scale.
-    #[cfg(target_os = "windows")]
-    fn take_pending_scale_factor(&self) -> Option<f32> {
-        let hwnd = self.native_window?;
-        dpi_changes()
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner())
-            .remove(&(hwnd as usize))
-            .and_then(dpi_scale_factor)
-    }
-
-    /// Only Windows reports DPI changes through the window procedure.
-    #[cfg(not(target_os = "windows"))]
-    fn take_pending_scale_factor(&self) -> Option<f32> {
-        None
-    }
-
-    /// Resize the native window so it fits an editor of `width` x `height` pixels.
-    ///
-    /// The plugin has already resized its own view (the host answered `resizeView` with
-    /// `onSize`); this catches the window up.
-    fn resize_native_window(&self, width: i32, height: i32) {
-        if width <= 0 || height <= 0 {
-            return;
-        }
-        log::debug!("editor asked the host to resize its window to {width}x{height}");
-
-        #[cfg(target_os = "macos")]
-        {
-            let Some(window) = self.native_window.as_ref() else {
-                return;
-            };
-            let size = NSSize::new(width as f64, height as f64);
-            if let Some(container) = self.container_view.as_ref() {
-                container.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), size));
-            }
-            window.setContentSize(size);
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            let Some(hwnd) = self.native_window else {
-                return;
-            };
-            // The plugin sizes its *client* area; grow the frame by the window's chrome, the
-            // same way `open()` sizes the window to the editor in the first place.
-            let mut rect = RECT {
-                left: 0,
-                top: 0,
-                right: width,
-                bottom: height,
-            };
-            unsafe {
-                winapi::um::winuser::AdjustWindowRectEx(&mut rect, WS_OVERLAPPEDWINDOW, 0, 0);
-                SetWindowPos(
-                    hwnd,
-                    std::ptr::null_mut(),
-                    0,
-                    0,
-                    rect.right - rect.left,
-                    rect.bottom - rect.top,
-                    SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
-                );
-            }
-        }
-
-        #[cfg(target_os = "linux")]
-        {
-            let Some(state) = self.native_window.as_ref() else {
-                return;
-            };
-            state.connection.send_request(&xcb::x::ConfigureWindow {
-                window: state.window,
-                value_list: &[
-                    xcb::x::ConfigWindow::Width(width as u32),
-                    xcb::x::ConfigWindow::Height(height as u32),
-                ],
-            });
-            let _ = state.connection.flush();
-        }
-
-        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-        let _ = (width, height);
-    }
-
     /// Close the plugin window
     pub fn close(&mut self) {
         // Detach the plugin editor first — it must never outlive the window it is embedded in.
@@ -568,48 +588,7 @@ impl PluginWindow {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .close_editor();
-
-        // Then close the native window
-        #[cfg(target_os = "macos")]
-        {
-            self.container_view = None;
-            if let Some(window) = self.native_window.take() {
-                window.close();
-            }
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            if let Some(hwnd) = self.native_window.take() {
-                if let Ok(mut requests) = close_requests().lock() {
-                    requests.remove(&(hwnd as usize));
-                }
-                if let Ok(mut changes) = dpi_changes().lock() {
-                    changes.remove(&(hwnd as usize));
-                }
-                unsafe {
-                    DestroyWindow(hwnd);
-                }
-            }
-        }
-
-        #[cfg(target_os = "linux")]
-        {
-            if let Some(state) = self.native_window.take() {
-                state.connection.send_request(&xcb::x::UnmapWindow {
-                    window: state.window,
-                });
-                state.connection.send_request(&xcb::x::DestroyWindow {
-                    window: state.window,
-                });
-                let _ = state.connection.flush();
-            }
-        }
-
-        #[cfg(target_os = "android")]
-        {
-            let _ = self.native_window.take();
-        }
+        self.native_window = None;
     }
 
     /// Check if the window is currently open.
@@ -621,7 +600,9 @@ impl PluginWindow {
     /// while holding it. Pair it with [`Self::service_platform_events`], which does the work
     /// that has to reach the plugin.
     pub fn is_open(&self) -> bool {
-        self.native_window.is_some() && !self.native_window_dismissed()
+        self.native_window
+            .as_ref()
+            .is_some_and(|window| !window.closed_by_user())
     }
 
     /// Whether the user closed the window themselves, through its title-bar close button.
@@ -634,43 +615,9 @@ impl PluginWindow {
     /// Cheap and lock-free in the same sense as [`Self::is_open`]: native window state only,
     /// never the plugin lock.
     pub fn closed_by_user(&self) -> bool {
-        self.native_window_dismissed()
-    }
-
-    /// Platform probe behind [`Self::closed_by_user`].
-    #[cfg(target_os = "macos")]
-    fn native_window_dismissed(&self) -> bool {
-        let Some(window) = self.native_window.as_ref() else {
-            return false;
-        };
-        // A closed window is ordered out — but so is a miniaturized one, and so is every window
-        // of a hidden application. Neither of those means the user dismissed the editor.
-        if window.isVisible() || window.isMiniaturized() {
-            return false;
-        }
-        match MainThreadMarker::new() {
-            Some(mtm) => !NSApplication::sharedApplication(mtm).isHidden(),
-            // AppKit state can only be read from the main thread; assume the window still stands.
-            None => false,
-        }
-    }
-
-    /// Platform probe behind [`Self::closed_by_user`].
-    #[cfg(target_os = "windows")]
-    fn native_window_dismissed(&self) -> bool {
-        let Some(hwnd) = self.native_window else {
-            return false;
-        };
-        close_requests()
-            .lock()
-            .is_ok_and(|requests| requests.contains(&(hwnd as usize)))
-    }
-
-    /// Platform probe behind [`Self::closed_by_user`]. X11 and Android editor windows carry no
-    /// close affordance of their own, so there is nothing to observe.
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    fn native_window_dismissed(&self) -> bool {
-        false
+        self.native_window
+            .as_ref()
+            .is_some_and(HostWindow::closed_by_user)
     }
 }
 

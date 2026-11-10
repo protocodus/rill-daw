@@ -8,8 +8,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 impl Effect {
     pub(crate) fn validate(&self) -> Result<()> {
         let Self::Vst3 { path, class_id } = self;
-        ensure!(!path.is_empty(), "Missing VST3 insert path");
-        crate::model::validate_vst_class_id(class_id.as_deref())?;
+        ensure!(!path.is_empty(), "Missing plug-in insert path");
+        crate::model::validate_plugin_class_id(path, class_id.as_deref())?;
         Ok(())
     }
 }

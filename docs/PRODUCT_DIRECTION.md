@@ -174,7 +174,7 @@ VST3 supports only the musical mappings exposed by the destination plug-in.
 Keep these boundaries visible when comparing Rill with established expressive
 performance and controller workflows.
 
-VST3 support does not imply AU, CLAP, AAX, LV2 or ARA compatibility. A few tested
+VST3, CLAP and (Linux) LV2 support does not imply AU, AAX or ARA compatibility. A few tested
 plugins do not establish a broad vendor matrix. Conversely, Cubase 16 no longer
 supports VST2, so a stale checklist would unfairly overstate its advantage.
 [Steinberg format guidance](https://helpcenter.steinberg.de/hc/en-us/articles/22554401894162-Using-VST-2-Plug-ins-in-Cubase-Nuendo-14-and-15).
@@ -183,13 +183,14 @@ supports VST2, so a stale checklist would unfairly overstate its advantage.
 
 Rust is not the principal obstacle; each format needs discovery, identity,
 bus/events, automation, state recall, native editors, isolation and fault tests.
-No safe dependency-only addition was verified during this audit.
+CLAP and LV2 now use the helper's format seam (see
+[Plug-in formats](ARCHITECTURE.md#plug-in-formats)); a further format is one adapter.
 
 | Format | Practical assessment |
 | --- | --- |
-| CLAP | The strongest next candidate. [`clack-host` 0.2](https://docs.rs/clack-host/0.2.0/clack_host/) supplies Rust wrappers, but Rill must implement host callbacks, lifecycle and isolated processing/editor adapters. |
+| CLAP | Hosted on macOS, Linux and Windows through [`clack-host` 0.2](https://docs.rs/clack-host/0.2.0/clack_host/): discovery, audio ports including sidechain/multi-out, notes and note expressions, parameters and gestures, state, latency and embedded editors. Remaining gaps: CLAP-specific extensions such as voice info, remote controls, preset discovery and the context-menu extension; the transport carries no loop range. |
 | AU v2/v3 | Feasible on macOS through [Apple Audio Units](https://developer.apple.com/documentation/AudioToolbox/AUAudioUnit) and Rust bindings. It needs AU-specific identities/parameters and real Mac validation. |
-| LV2 | Feasible with current Rust hosting libraries such as [`livi`](https://docs.rs/livi/0.9.0/livi/). State/worker/URI handling, native UI toolkits and portable assets still need a complete Rill integration. |
+| LV2 | Hosted on Linux through a run-time binding to the system lilv library: discovery, audio/control/atom MIDI ports, URID, options, worker, state and latency. Remaining gaps: native LV2 UIs (the generic parameter browser is used), MIDI output, `time:Position` transport atoms, CV ports, plug-ins requiring other host features (for example `state:makePath`), and LV2 on macOS/Windows. |
 | AAX | No practical generic host path was verified. [Avid's public SDK](https://developer.avid.com/aax/) primarily supports producing plug-ins for Avid products; public SDK availability/licensing does not establish arbitrary commercial AAX hosting. |
 | ARA | A deeper document/random-access extension, not another ordinary loader. [Celemony's SDK](https://github.com/Celemony/ARA_SDK) is Apache-2.0; integration needs source readers, region/modification graphs, archive state and edit/Undo lifecycle coordination. |
 

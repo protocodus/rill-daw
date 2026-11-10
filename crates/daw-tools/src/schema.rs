@@ -754,15 +754,15 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "list_plugins",
-            "Search already scanned and trusted local VST3 instruments/effects, with the user's favorites and categories; use returned catalog plugin_id for assignment. refresh rescans plug-in folders in the background, for example after an install; call again until scanning is false.",
+            "Search already scanned and trusted local VST3, CLAP and (on Linux) LV2 instruments/effects, with the user's favorites and categories; each result names its format, and format filters the search. Use returned catalog plugin_id for assignment. refresh rescans plug-in folders in the background, for example after an install; call again until scanning is false.",
             object(
-                json!({"query":{"type":"string","maxLength":256},"refresh":boolean()}),
+                json!({"query":{"type":"string","maxLength":256},"format":choices(&["VST3","CLAP","LV2"]),"refresh":boolean()}),
                 &[],
             ),
         ),
         (
             "organize_plugin",
-            "Organize the user's plug-in library: mark a catalog plug-in as a favorite and/or replace its categories. An empty categories list restores the plug-in's own VST3 categories. The song is not changed.",
+            "Organize the user's plug-in library: mark a catalog plug-in as a favorite and/or replace its categories. An empty categories list restores the plug-in's own categories. The song is not changed.",
             object(
                 json!({"plugin_id":string(),"favorite":boolean(),"categories":array(json!({"type":"string","minLength":1,"maxLength":64}),32)}),
                 &["plugin_id"],
@@ -770,9 +770,9 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "assign_plugin",
-            "Assign a scanned catalog instrument, or add an insert when insert is true, to the current song. The host resolves plugin_id; paths and opaque plugin states are not accepted.",
+            "Assign a scanned catalog instrument, or add an insert when insert is true, to the current song. The host resolves plugin_id; paths and opaque plugin states are not accepted. An optional format must match the catalog entry's format.",
             object(
-                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"plugin_id":string(),"insert":boolean()}),
+                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"plugin_id":string(),"format":choices(&["VST3","CLAP","LV2"]),"insert":boolean()}),
                 &["session_id", "expected_revision", "track_id", "plugin_id"],
             ),
         ),

@@ -324,11 +324,11 @@ Projects persist each instrument's optional VST3 class ID, opaque state (at most
 
 `PluginCatalog` stores validated PNG captures and metadata under the platform's Rill cache directory (`RILL_CACHE_DIR` overrides it). SHA-256 fingerprints cover the canonical bundle path, selected class, metadata, and bundle file sizes/modification times. Capture writes a temporary image, validates dimensions and pixels, then atomically publishes the image and record. Failed captures are recorded and do not retry on every frame. `plugin-index-v1.json` in the same directory persists the last scanned catalog, first-indexed times and preview status; thumbnails are referenced by fingerprint, never by a stored path. `daw_plugins::sync::CatalogSync` owns one background worker: it publishes the index first, rescans the configured folders, writes the index, and then captures missing previews of verified instruments/effects one at a time, with explicit captures ahead of the queue. The UI only reads its snapshots, status and errors; it starts a sync at launch, on **Refresh** and after plug-in folder changes. macOS captures the editor view; Windows captures the helper-owned window; Linux uses XRes ownership and XComposite offscreen pixels. No synthetic image stands in for an unavailable native editor.
 
-VST3 remains the only hosted plug-in format. Stored UMP/per-note performance data does not imply raw UMP transport through VST3 or support for every expression/controller in every plug-in. Unsupported target mappings require a visible advisory while original data remains saved. Live latency renegotiation and a standalone preset browser remain unimplemented.
+Plug-in formats: VST3 and CLAP on every platform, LV2 on Linux; see "Plug-in formats" below. Stored UMP/per-note performance data does not imply raw UMP transport through any plug-in format or support for every expression/controller in every plug-in. Unsupported target mappings require a visible advisory while original data remains saved. Live latency renegotiation and a standalone preset browser remain unimplemented.
 
 ## Scope and verification
 
-This implementation supplies audio recording/takes, expressive MIDI project data, editing/playback, note-only Standard MIDI delivery with an explicit downgrade decision, device selection, dry monitoring, multi-bus VST3 routing, Master processing, reversible Freeze, disk-backed large-audio playback and stereo WAV delivery. Tempo maps, surround/immersive routing and hosting VST2/AU/CLAP/LV2/AAX remain unimplemented. ARA requires a separate document/random-access integration.
+This implementation supplies audio recording/takes, expressive MIDI project data, editing/playback, note-only Standard MIDI delivery with an explicit downgrade decision, device selection, dry monitoring, multi-bus VST3 routing, Master processing, reversible Freeze, disk-backed large-audio playback and stereo WAV delivery. Tempo maps, surround/immersive routing and hosting VST2/AU/AAX remain unimplemented. ARA requires a separate document/random-access integration.
 
 Audio import supports PCM/32-bit float WAV, MP3, FLAC and OGG/Vorbis. A one-shot `--decode-audio-worker` process decodes outside the UI/audio-device process, using Hound for WAV and pinned Symphonia for compressed sources. Successful decoding produces a finalized 32-bit float WAV at the source sample rate; originals are never replaced. Imports support mono/stereo at 8–384 kHz, with a per-source canonical decoded limit of `u32::MAX - 4096` bytes and an 8 GiB batch budget. This remains a bounded RIFF pipeline, not RF64 support. Batch supervision discards failed, canceled or stale assets before a project edit. Codec errors, nonfinite samples, inconsistent durations, corrupt OGG pages/checksums and partial MPEG frames fail admission. Metadata/packet allocations are bounded; artwork, chained/multiple OGG streams and free-format MP3 are unsupported. These checks contain tested failures rather than establishing a general security sandbox. No external FFmpeg executable is needed at runtime.
 
@@ -386,3 +386,42 @@ cargo test --release -p daw-engine --lib native_prepared_graph_uses_automatic_wo
 ```
 
 A separate 250 ms playback smoke check on the available 48 kHz CPAL device reported zero underruns and zero render errors. That short check verifies device integration; it is not a sustained driver stability test or a plugin throughput benchmark.
+
+## Plug-in formats
+
+A plug-in reference stays a bundle path plus an optional class identifier; the
+format follows the bundle extension (`.vst3`, `.clap`, `.lv2`), so persisted
+projects, settings and catalog records without a format remain VST3. The model's
+`Instrument::Vst3`/`Effect::Vst3` variants keep their historic name and hold any
+format; `daw_plugins::PluginFormat` names it, validates its identifier (a 32-hex
+VST3 class ID, a CLAP plug-in ID, an LV2 URI) and lists its standard folders
+(`VST3_PATH`, `CLAP_PATH`, `LV2_PATH`).
+
+Everything engine-facing is format-neutral: `VstInstrument`/`VstEffect` drive the
+`daw-plugin-host` helper through the existing `vst3_host::process_isolation`
+protocol, shared-memory PCM and block batching. Inside the helper,
+`native::NativeProcessor` is the seam; `native::load` picks the adapter by
+extension:
+
+- **VST3** forwards to `vst3_host::Plugin`.
+- **CLAP** (`clap.rs`, `clack-host`) runs every call on the helper's main thread,
+  reports the audio thread to `thread-check` during processing, maps normalized
+  wire values to plain parameter ranges, sends notes as CLAP note events (MIDI when
+  the port only speaks MIDI), translates VST3 note-expression IDs, and services
+  timers, POSIX fds, flush and restart requests between commands.
+- **LV2** (`lv2.rs`, Linux) opens `liblilv-0.so.0` at run time with `libloading`,
+  maps control ports to parameters (port index = parameter ID), atom MIDI input,
+  main/`isSideChain` audio buses, URID map/unmap, options and a synchronous
+  worker (requests from `run` are served after it, responses delivered before the
+  next block). State is lilv's Turtle serialization of port values and the state
+  extension. Control changes split the block at their offsets.
+
+CLAP and LV2 bundles are scanned by `daw-plugin-host --scan <bundle>` (one
+disposable process per bundle, 15 s deadline); the parent overwrites any path or
+format a plug-in echoes. CLAP editors run in the editor helper's CLAP loop
+(`editor_clap.rs`) inside the same `vst3_host::HostWindow` as VST3 editors, so
+capture, close and resize behave identically; LV2 editors are refused with "This
+plug-in has no native editor" and the app's generic parameter browser is used.
+A further format (for example Audio Units) adds one adapter module, one
+`PluginFormat` variant and one arm in `native::load`.
+

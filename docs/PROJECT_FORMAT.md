@@ -192,6 +192,12 @@ precision. Bundles contain this decoded audio, so opening a project does not
 require the original compressed files or invoke their decoders. Original tags
 and cover art are not stored in the WAV.
 
+Instrument and insert references (`"Vst3": {"path", "class_id"}`) hold any hosted
+format; the format follows the path's extension (`.vst3`, `.clap`, `.lv2`, otherwise
+VST3). `class_id` is a 32-hex VST3 class ID, a CLAP plug-in ID or an LV2 plug-in URI.
+CLAP state is the plug-in's own stream; LV2 state is lilv's Turtle text. No
+project-version change was needed.
+
 Plug-in binaries and external sample libraries managed by a plug-in are not
 included. Plug-in paths are made absolute when saving a bundle and retained when
 loading. A different machine still needs compatible plug-ins and their external

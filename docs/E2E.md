@@ -480,6 +480,28 @@ cargo test --locked -p daw-plugins --lib editor_context_menu
 
 On Linux, `cargo test --locked -p daw-plugins --test native_context_menu -- --ignored` creates its own private Xvfb display and drives the real menu worker with X11 pointer/keyboard events. It checks selection of action zero, disabled items, Escape cancellation, and physical positioning at 1× and 2× scale. It requires Xvfb and Mesa, connects only to its private display, and is included in container tests and Linux CI.
 
+`clap_e2e` and `lv2_e2e` (Linux only) compile in-tree CLAP and LV2 fixtures and run them through the production `daw-plugin-host`. Each scans the fixture folder, checks the Library card's format badge, assigns the instrument through Window → Instrument → Choose instrument, exports audible audio, inserts the gain effect and checks that its 32-sample latency is compensated (same peak and onset), then checks Undo/Redo and save/reopen with identical export. `lv2_e2e` also opens the generic parameter browser through “Automate…”, because LV2 native UIs are not hosted. A second `clap_e2e` test checks that `list_plugins` reports and filters by `format`, and that `assign_plugin` rejects a mismatched format. The LV2 target needs the system lilv runtime (`liblilv-0-0`).
+
+```sh
+cargo build --locked --workspace --bins
+cargo test --locked -p daw-app --test clap_e2e --test lv2_e2e
+```
+
+The plug-in level tests cover the same fixtures directly: scanning metadata, isolation-process crash and hang recovery, identical audio across block transports, state round trips, parameter automation split at block offsets, latency reporting, sidechain buses and the LV2 worker extension.
+
+```sh
+cargo test --locked -p daw-plugins --test clap --test lv2
+```
+
+On Linux, `cargo test --locked -p daw-plugins --test clap_editor -- --ignored` creates its own private Xvfb display with Composite, embeds the CLAP fixture's native editor in the isolated editor helper, captures its pixels, and checks parameter pick, change and state events, close-time saving and reopen restore. It is included in Linux CI.
+
+`installed_bundle_smoke` is an optional, ignored test for real installed plug-ins of any format. It scans one bundle or folder, loads up to `RILL_TEST_PLUGIN_LIMIT` (default 8) plug-ins whose names contain `RILL_TEST_PLUGIN_NAME`, processes audio, and round-trips state; `RILL_TEST_PLUGIN_EDITOR=1` also captures the first plug-in's editor on a display. CI does not run it.
+
+```sh
+RILL_TEST_PLUGIN_BUNDLE=/usr/lib/lv2/calf.lv2 cargo test --locked -p daw-plugins \
+  --test installed_bundle_smoke -- --ignored --nocapture
+```
+
 `workspace_switch_e2e` exercises the persistent Arranger/Mixer switch from both workspaces, Clip Editor, and contextual utilities, including selecting the already active caller to dismiss a popup. It checks bounds at 800×600 and 1100×720, both appearances and densities, and preserves project/history/selection. `channel_properties_e2e` verifies separate Clip/Track/Channel scopes, audio-only clip gain, channel gain/pan, and navigation among Mixer, Channel, Effects, Instrument, and Routing. `instrument_context_e2e` checks concise native-editor overviews, the on-demand **Automate…** parameter page, contextual titles, effect-editor-to-instrument navigation, and clean failure of metadata-only plugin fixtures.
 
 `cursor_visibility_e2e` places the cursor through the mouse in the arranger,

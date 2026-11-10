@@ -119,7 +119,7 @@ pub use plugin::{
 };
 pub use realtime::{RealtimePluginRunner, RtControl};
 pub use transport::{AutomationLane, BlockEvents, MidiClip, Timeline};
-pub use window::PluginWindow;
+pub use window::{HostWindow, PluginWindow};
 
 /// Prelude module for convenient imports
 pub mod prelude {

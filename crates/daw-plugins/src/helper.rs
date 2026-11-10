@@ -6,8 +6,10 @@
 
 use anyhow::{Context, Result, bail, ensure};
 use std::io::{BufRead, BufWriter, Write};
-use vst3_host::process_isolation::{HostCommand, HostResponse, ProtocolChannel};
-use vst3_host::{AudioBuffers, BusAudioBuffers, Plugin, Vst3Host, audio::AudioBusBuffer};
+use vst3_host::process_isolation::{BlockCommand, HostCommand, HostResponse, ProtocolChannel};
+use vst3_host::{AudioBuffers, BusAudioBuffers, audio::AudioBusBuffer};
+
+use crate::native::{LoadRequest, NativeProcessor};
 
 use crate::audio_buffers::{prepare_bus_outputs, prepare_outputs, validate_audio_bus_layout};
 
@@ -18,6 +20,7 @@ pub fn run() -> Result<()> {
         Some("--editor") => return crate::editor::helper_main(),
         #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
         Some("--native-context-menu") => return crate::editor_context_menu::run_worker(),
+        Some("--scan") => return crate::scan::helper_main(),
         _ => {}
     }
     // Coalesce JSON punctuation and payload writes into buffered pipe writes;
@@ -65,7 +68,7 @@ fn write_response(writer: &mut impl Write, response: &HostResponse) -> Result<()
 
 #[derive(Default)]
 struct Worker {
-    plugin: Option<Plugin>,
+    plugin: Option<Box<dyn NativeProcessor>>,
     sample_rate: f64,
     max_block: usize,
     block_failed: bool,
@@ -112,31 +115,52 @@ impl Worker {
                 (1..=65_536).contains(&block_size),
                 "Invalid maximum block size"
             );
-            let mut host = Vst3Host::builder()
-                .with_process_isolation(false)
-                .sample_rate(sample_rate)
-                .block_size(block_size as usize)
-                .tempo(tempo)
-                .time_signature(time_sig_numerator, time_sig_denominator)
-                .build()?;
-            let plugin = match class_id {
-                Some(id) => host.load_plugin_class(path, &id)?,
-                None => host.load_plugin(path)?,
+            let mut plugin = crate::native::load(LoadRequest {
+                path: std::path::Path::new(&path),
+                class_id: class_id.as_deref(),
+                sample_rate,
+                block_size: block_size as usize,
+                tempo,
+                time_signature: (time_sig_numerator, time_sig_denominator),
+            })?;
+            let info = plugin.loaded_info();
+            let layout = plugin.audio_bus_layout()?;
+            let (compatibility, bus_counts) = match plugin.as_vst3() {
+                Some(vst3) => (
+                    vst3.class_compatibility().to_vec(),
+                    (
+                        vst3.info().audio_inputs as i32,
+                        vst3.info().audio_outputs as i32,
+                        vst3.output_channel_count() as i32,
+                    ),
+                ),
+                None => (
+                    Vec::new(),
+                    (
+                        layout.inputs.len() as i32,
+                        layout.outputs.len() as i32,
+                        layout
+                            .outputs
+                            .iter()
+                            .map(|bus| bus.channel_count)
+                            .sum::<usize>()
+                            .min(i32::MAX as usize) as i32,
+                    ),
+                ),
             };
-            let info = plugin.info();
             let response = HostResponse::PluginInfo {
-                vendor: info.vendor.clone(),
-                name: info.name.clone(),
-                version: info.version.clone(),
-                category: info.category.clone(),
-                uid: info.uid.clone(),
+                vendor: info.vendor,
+                name: info.name,
+                version: info.version,
+                category: info.category,
+                uid: info.uid,
                 has_gui: false,
-                audio_inputs: info.audio_inputs as i32,
-                audio_outputs: info.audio_outputs as i32,
-                output_channels: plugin.output_channel_count() as i32,
+                audio_inputs: bus_counts.0,
+                audio_outputs: bus_counts.1,
+                output_channels: bus_counts.2,
                 has_midi_input: info.has_midi_input,
                 has_midi_output: info.has_midi_output,
-                compatibility: plugin.class_compatibility().to_vec(),
+                compatibility,
             };
             self.shared_audio = None;
             self.shared_buffers = None;
@@ -157,6 +181,7 @@ impl Worker {
             return Ok(success());
         }
         let plugin = self.plugin.as_mut().context("No plugin loaded")?;
+        plugin.service();
         match command {
             HostCommand::ConfigureSharedAudio { descriptor } => {
                 let layout = plugin.audio_bus_layout()?;
@@ -224,7 +249,7 @@ impl Worker {
                     // Full shape/value admission precedes every stateful native operation.
                     let processed = (|| -> Result<()> {
                         for command in &commands {
-                            command.apply(plugin)?;
+                            apply(plugin.as_mut(), command)?;
                         }
                         plugin.process_bus_audio(buffers)?;
                         Ok(())
@@ -252,7 +277,7 @@ impl Worker {
                 };
                 let processed = (|| -> Result<()> {
                     for command in &commands {
-                        command.apply(plugin)?;
+                        apply(plugin.as_mut(), command)?;
                     }
                     plugin.process_bus_audio(&mut buffers)?;
                     Ok(())
@@ -284,7 +309,7 @@ impl Worker {
             HostCommand::SetProcessMode { mode } => plugin.set_process_mode(mode)?,
             HostCommand::ServiceHostRequests => {
                 return Ok(HostResponse::RestartFlags {
-                    bits: plugin.service_host_requests()?.bits(),
+                    bits: plugin.service_host_requests()?,
                 });
             }
             HostCommand::NoteExpressions { bus, channel } => {
@@ -316,11 +341,11 @@ impl Worker {
             } => plugin.set_bus_active(media_type, direction, bus_index, active)?,
             HostCommand::BusArrangements => {
                 return Ok(HostResponse::BusArrangements {
-                    arrangements: plugin.bus_arrangements()?,
+                    arrangements: vst3(plugin.as_mut())?.bus_arrangements()?,
                 });
             }
             HostCommand::SetBusArrangements { inputs, outputs } => {
-                plugin.set_bus_arrangements(&inputs, &outputs)?
+                vst3(plugin.as_mut())?.set_bus_arrangements(&inputs, &outputs)?
             }
             HostCommand::SetTransportPosition { position } => {
                 plugin.set_transport_position(position)?
@@ -355,7 +380,7 @@ impl Worker {
                     value: plugin.format_parameter(id, normalized)?,
                 });
             }
-            HostCommand::SendMidi { event } => plugin.send_midi_event(event)?,
+            HostCommand::SendMidi { event } => plugin.send_midi_event_at(event, 0)?,
             HostCommand::SendMidiAt {
                 event,
                 sample_offset,
@@ -387,9 +412,10 @@ impl Worker {
                     data: plugin.save_state()?,
                 });
             }
-            HostCommand::LoadState { data, context } => {
-                plugin.load_state_with_context(&data, &context)?
-            }
+            HostCommand::LoadState { data, context } => match plugin.as_vst3() {
+                Some(vst3) => vst3.load_state_with_context(&data, &context)?,
+                None => plugin.load_state(&data)?,
+            },
             HostCommand::ProcessBuses {
                 inputs,
                 outputs,
@@ -417,7 +443,7 @@ impl Worker {
                 };
                 if let Err(error) = plugin.process_bus_audio(&mut buffers) {
                     self.bus_outputs = buffers.outputs;
-                    return Err(error.into());
+                    return Err(error);
                 }
                 return Ok(HostResponse::BusAudioOutput {
                     outputs: buffers.outputs,
@@ -434,6 +460,7 @@ impl Worker {
                     "Native block failed; reload the processor before processing again"
                 );
                 ensure!(plugin.is_processing(), "Plug-in is not processing");
+                let plugin = vst3(plugin.as_mut())?;
                 let output_channels = plugin.output_channel_count();
                 ensure!(
                     inputs.len().saturating_add(output_channels)
@@ -462,6 +489,37 @@ impl Worker {
             _ => bail!("Command is not supported by this version of the DAW plugin helper"),
         }
         Ok(success())
+    }
+}
+
+fn vst3(plugin: &mut dyn NativeProcessor) -> Result<&mut vst3_host::Plugin> {
+    plugin
+        .as_vst3()
+        .context("Command is supported only for VST3 plug-ins")
+}
+
+/// `BlockCommand::apply` targets VST3 directly; route it through the format seam.
+fn apply(plugin: &mut dyn NativeProcessor, command: &BlockCommand) -> Result<()> {
+    match command {
+        BlockCommand::SetParameter { id, value } => plugin.set_parameter(*id, *value),
+        BlockCommand::SetParameterAt { id, value, offset } => {
+            plugin.set_parameter_at(*id, *value, *offset)
+        }
+        BlockCommand::SendMidiAt {
+            event,
+            sample_offset,
+        } => plugin.send_midi_event_at(*event, *sample_offset),
+        BlockCommand::SendPluginEvent { event } => plugin.send_plugin_event(event.clone()),
+        BlockCommand::SendMidiControllerAt {
+            bus,
+            channel,
+            controller,
+            value,
+            sample_offset,
+        } => plugin.send_midi_controller_at(*bus, *channel, *controller, *value, *sample_offset),
+        BlockCommand::SetTransportPosition { position } => plugin.set_transport_position(*position),
+        BlockCommand::SetTempo { bpm } => plugin.set_tempo(*bpm),
+        BlockCommand::SetPlaying { playing } => plugin.set_playing(*playing),
     }
 }
 

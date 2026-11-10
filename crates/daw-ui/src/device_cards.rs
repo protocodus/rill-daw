@@ -135,6 +135,9 @@ pub struct DeviceCard<'a> {
     /// Marked with a star badge; toggling it is the caller's action.
     pub favorite: bool,
     pub icon: Icon,
+    /// Short format label, such as "CLAP", painted on the preview and read out
+    /// with the name; empty for none.
+    pub format: &'a str,
 }
 
 pub struct DeviceCardResponse {
@@ -287,9 +290,14 @@ fn device_target(ui: &mut Ui, card: &DeviceCard<'_>, size: egui::Vec2) -> Respon
             ui.is_enabled(),
             card.selected,
             format!(
-                "{} · {}{}",
+                "{} · {}{}{}",
                 card.name,
                 producer(card),
+                if card.format.is_empty() {
+                    String::new()
+                } else {
+                    format!(" · {}", card.format)
+                },
                 if card.favorite { " · Favorite" } else { "" }
             ),
         )
@@ -368,6 +376,25 @@ fn paint_favorite_badge(painter: &egui::Painter, corner: egui::Pos2, size: f32) 
     Icon::StarFilled.paint(painter, badge.shrink(size * 0.18), colors.accent);
 }
 
+/// A format label in the preview's top-left corner; display only.
+fn paint_format_badge(painter: &egui::Painter, corner: egui::Pos2, format: &str) {
+    if format.is_empty() {
+        return;
+    }
+    let colors = theme::palette(painter.ctx());
+    let galley = painter.layout_no_wrap(format.to_owned(), TextRole::Note.font(), colors.muted);
+    let badge = Rect::from_min_size(
+        corner,
+        galley.size() + egui::vec2(2.0 * tokens::SPACE_XS, 0.0),
+    );
+    painter.rect_filled(badge, tokens::RADIUS, colors.panel);
+    painter.galley(
+        badge.min + egui::vec2(tokens::SPACE_XS, 0.0),
+        galley,
+        colors.muted,
+    );
+}
+
 /// One quiet, whole-card input target. Preview arrival never moves its labels,
 /// changes the target bounds, or alters the caller's selection. Short parent
 /// rows reduce the preview area while keeping both name rows and producer text.
@@ -404,6 +431,11 @@ pub fn device_card(ui: &mut Ui, card: &DeviceCard<'_>, width: f32) -> DeviceCard
                 22.0,
             );
         }
+        paint_format_badge(
+            &painter,
+            preview_rect.left_top() + egui::Vec2::splat(tokens::SPACE_XS),
+            card.format,
+        );
         crate::text::paint_bounded_block(
             &painter,
             Rect::from_min_max(
@@ -454,6 +486,11 @@ pub fn device_row(
         let painter = ui.painter_at(rect);
         paint_item_frame(&painter, rect, card, &response);
         paint_preview(&painter, preview_rect, card);
+        paint_format_badge(
+            &painter,
+            preview_rect.left_top() + egui::Vec2::splat(tokens::SPACE_XS),
+            card.format,
+        );
         let star = tokens::ICON_SIZE;
         let detail_width = if detail.is_empty() {
             0.0
@@ -524,6 +561,7 @@ pub fn device_preview(
                 selected: false,
                 favorite: false,
                 icon,
+                format: "",
             },
         );
     }
@@ -735,6 +773,7 @@ mod tests {
                                 selected: index == 0,
                                 favorite: false,
                                 icon: Icon::Instrument,
+                                format: "",
                             },
                             width,
                         )
@@ -842,6 +881,7 @@ mod tests {
                                 selected: index == target,
                                 favorite: false,
                                 icon: Icon::Instrument,
+                                format: "",
                             },
                             width,
                         );
@@ -882,6 +922,7 @@ mod tests {
                             selected: true,
                             favorite: true,
                             icon: Icon::Instrument,
+                            format: "",
                         },
                         220.0,
                     );
@@ -944,6 +985,7 @@ mod tests {
                                         selected,
                                         favorite: true,
                                         icon: Icon::Instrument,
+                                        format: "",
                                     };
                                     let result = if list {
                                         device_row(ui, &card, "", 240.0)
@@ -1015,6 +1057,7 @@ mod tests {
                                 selected: false,
                                 favorite: false,
                                 icon: Icon::Instrument,
+                                format: "",
                             },
                             width,
                         );
@@ -1106,6 +1149,7 @@ mod tests {
                                     selected: index == 1,
                                     favorite: index == 1,
                                     icon: Icon::Effect,
+                                    format: "",
                                 },
                                 "Delay · Reverb",
                                 width,
