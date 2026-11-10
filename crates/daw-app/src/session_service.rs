@@ -589,7 +589,7 @@ impl DawApp {
 
 fn plugin_format(label: &str) -> Result<daw_plugins::PluginFormat, ToolError> {
     daw_plugins::PluginFormat::from_label(label)
-        .ok_or_else(|| ToolError::new("invalid_arguments", "Format must be VST3, CLAP or LV2"))
+        .ok_or_else(|| ToolError::new("invalid_arguments", "Format must be VST3, CLAP, LV2 or AU"))
 }
 
 pub(crate) fn catalog_id(entry: &daw_plugins::catalog::CatalogEntry) -> String {
@@ -598,4 +598,20 @@ pub(crate) fn catalog_id(entry: &daw_plugins::catalog::CatalogEntry) -> String {
         entry.fingerprint,
         entry.plugin.class_id.as_deref().unwrap_or("default")
     )
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn tool_formats_accept_every_label_including_au_on_every_platform() {
+        for format in daw_plugins::PluginFormat::ALL {
+            assert_eq!(
+                super::plugin_format(&format.label().to_lowercase()).unwrap(),
+                format
+            );
+        }
+        let error = super::plugin_format("AAX").unwrap_err();
+        assert_eq!(error.code, "invalid_arguments");
+        assert!(error.message.contains("AU"), "{}", error.message);
+    }
 }
