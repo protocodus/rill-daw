@@ -3,9 +3,7 @@
 use super::{AudioEngine, Controls};
 use anyhow::{Result, ensure};
 use daw_core::{MAX_METER_CHANGES, Project};
-use std::sync::atomic::{
-    AtomicBool, AtomicU8, AtomicU32, AtomicU64, AtomicUsize, Ordering, fence,
-};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, AtomicUsize, Ordering, fence};
 
 const IDLE: usize = 0;
 const ARMED: usize = 1;
@@ -147,7 +145,10 @@ impl TimingShared {
                 std::hint::spin_loop();
                 continue;
             }
-            let count = self.meter_count.load(Ordering::Relaxed).clamp(1, self.meters.len());
+            let count = self
+                .meter_count
+                .load(Ordering::Relaxed)
+                .clamp(1, self.meters.len());
             let mut segment = self.meters[0].load(Ordering::Relaxed);
             for stored in &self.meters[1..count] {
                 let value = stored.load(Ordering::Relaxed);

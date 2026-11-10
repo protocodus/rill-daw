@@ -86,7 +86,6 @@ pub mod waveform;
 pub mod widgets;
 
 pub use assistant::*;
-pub use daw_timeline::MeterMap;
 pub use audio_clip_controls::*;
 pub use audio_clip_storage::*;
 pub use automation::*;
@@ -103,6 +102,7 @@ pub use clip_navigation::*;
 pub use color::*;
 pub use crossfade::*;
 pub use curve::*;
+pub use daw_timeline::MeterMap;
 pub use device_cards::*;
 pub use device_metadata::*;
 pub use effect_chain::*;

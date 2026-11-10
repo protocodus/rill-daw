@@ -6,21 +6,23 @@ use anyhow::{Context, Result, ensure};
 impl Project {
     /// Add a meter change at `bar`, or replace the meter of an existing one.
     pub fn set_meter_change(&mut self, bar: u32, beats_per_bar: u8) -> Result<()> {
-        ensure!(bar >= 2, "Change the meter of bar 1 with the time signature");
+        ensure!(
+            bar >= 2,
+            "Change the meter of bar 1 with the time signature"
+        );
         ensure!(
             (1..=32).contains(&beats_per_bar),
             "Meter changes need 1–32 beats per bar"
         );
         let previous = self.meter_changes.clone();
-        match self.meter_changes.binary_search_by_key(&bar, |change| change.bar) {
+        match self
+            .meter_changes
+            .binary_search_by_key(&bar, |change| change.bar)
+        {
             Ok(index) => self.meter_changes[index].beats_per_bar = beats_per_bar,
-            Err(index) => self.meter_changes.insert(
-                index,
-                MeterChange {
-                    bar,
-                    beats_per_bar,
-                },
-            ),
+            Err(index) => self
+                .meter_changes
+                .insert(index, MeterChange { bar, beats_per_bar }),
         }
         let result = self.validate_timeline();
         if result.is_err() {
@@ -73,7 +75,10 @@ impl Project {
     }
 
     pub fn add_marker(&mut self, beat: f64, name: &str, color: Option<[u8; 3]>) -> Result<u64> {
-        ensure!(self.markers.len() < MAX_MARKERS, "Too many markers (at most 1024)");
+        ensure!(
+            self.markers.len() < MAX_MARKERS,
+            "Too many markers (at most 1024)"
+        );
         check_marker_beat(beat)?;
         validate_marker_name(name)?;
         let id = new_id();
@@ -111,9 +116,14 @@ impl Project {
     pub fn adjacent_marker(&self, beat: f64, forward: bool) -> Option<&Marker> {
         const EPSILON: f64 = 1e-6;
         if forward {
-            self.markers.iter().find(|marker| marker.beat > beat + EPSILON)
+            self.markers
+                .iter()
+                .find(|marker| marker.beat > beat + EPSILON)
         } else {
-            self.markers.iter().rev().find(|marker| marker.beat < beat - EPSILON)
+            self.markers
+                .iter()
+                .rev()
+                .find(|marker| marker.beat < beat - EPSILON)
         }
     }
 
@@ -151,8 +161,14 @@ mod tests {
         assert_eq!(
             project.meter_changes,
             [
-                MeterChange { bar: 3, beats_per_bar: 7 },
-                MeterChange { bar: 5, beats_per_bar: 6 }
+                MeterChange {
+                    bar: 3,
+                    beats_per_bar: 7
+                },
+                MeterChange {
+                    bar: 5,
+                    beats_per_bar: 6
+                }
             ]
         );
         assert!(project.set_meter_change(1, 3).is_err());
@@ -166,7 +182,13 @@ mod tests {
         assert!(project.move_meter_change(3, 1).is_err());
         assert!(project.move_meter_change(9, 10).is_err());
         project.move_meter_change(3, 8).unwrap();
-        assert_eq!(project.meter_changes[1], MeterChange { bar: 8, beats_per_bar: 7 });
+        assert_eq!(
+            project.meter_changes[1],
+            MeterChange {
+                bar: 8,
+                beats_per_bar: 7
+            }
+        );
         // 4/4 for bars 1–4, 6/4 for bars 5–7, then 7/4.
         assert_eq!(project.meter_map().bar_start(8), 34.0);
         project.remove_meter_change(5).unwrap();

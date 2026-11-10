@@ -266,7 +266,10 @@ impl PositionDraft {
 
     /// Beats in the staged bar.
     fn bar_meter(&self) -> u8 {
-        self.meter.meter_at(self.meter.bar_start(self.bar.clamp(1.0, f64::from(u32::MAX)) as u32))
+        self.meter.meter_at(
+            self.meter
+                .bar_start(self.bar.clamp(1.0, f64::from(u32::MAX)) as u32),
+        )
     }
 
     fn position(&self, range: &std::ops::RangeInclusive<f64>) -> Option<f64> {

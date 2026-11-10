@@ -18,7 +18,10 @@ struct MeterDraft {
 }
 
 pub(crate) fn meter_dialog_open(ctx: &egui::Context) -> bool {
-    ctx.data(|data| data.get_temp::<MeterDraft>(egui::Id::new(METER_DIALOG)).is_some())
+    ctx.data(|data| {
+        data.get_temp::<MeterDraft>(egui::Id::new(METER_DIALOG))
+            .is_some()
+    })
 }
 
 pub(crate) fn reset(ctx: &egui::Context) {
@@ -238,7 +241,9 @@ impl DawApp {
             response.ctx.data_mut(|data| data.insert_temp(id, beat));
         }
         response.context_menu(|ui| {
-            let beat = ui.data(|data| data.get_temp::<f64>(id)).unwrap_or(self.cursor);
+            let beat = ui
+                .data(|data| data.get_temp::<f64>(id))
+                .unwrap_or(self.cursor);
             let enabled = !self.recording_busy();
             if ui
                 .add_enabled(enabled, daw_ui::button_widget("Add marker at playhead"))
@@ -269,7 +274,8 @@ impl DawApp {
     }
 
     fn marker_navigation_items(&mut self, ui: &mut egui::Ui) {
-        for (label, shortcut, forward) in [("Previous marker", ",", false), ("Next marker", ".", true)]
+        for (label, shortcut, forward) in
+            [("Previous marker", ",", false), ("Next marker", ".", true)]
         {
             let available = self.project.adjacent_marker(self.cursor, forward).is_some();
             if daw_ui::menu_item_enabled(ui, available, label, Some(shortcut)).clicked() {
@@ -291,7 +297,10 @@ impl DawApp {
             self.marker_navigation_items(ui);
             ui.separator();
             if ui
-                .add_enabled(enabled, daw_ui::button_widget("Insert meter change at playhead…"))
+                .add_enabled(
+                    enabled,
+                    daw_ui::button_widget("Insert meter change at playhead…"),
+                )
                 .clicked()
             {
                 let bar = self.project.meter_map().position(self.cursor).0;
@@ -351,19 +360,21 @@ impl DawApp {
                 color: None,
             })
             .collect();
-        flags.extend(self.project.markers.iter().map(|marker| daw_ui::TimelineFlag {
-            key: marker.id,
-            kind: daw_ui::TimelineFlagKind::Marker,
-            beat: marker.beat,
-            label: marker.name.clone(),
-            hover: format!(
-                "{} · {}\nClick to go there · Drag to move · Double-click to rename",
-                marker.name,
-                daw_ui::musical_position_label(marker.beat, &meter)
-            ),
-            color: marker
-                .color
-                .map(|[r, g, b]| egui::Color32::from_rgb(r, g, b)),
+        flags.extend(self.project.markers.iter().map(|marker| {
+            daw_ui::TimelineFlag {
+                key: marker.id,
+                kind: daw_ui::TimelineFlagKind::Marker,
+                beat: marker.beat,
+                label: marker.name.clone(),
+                hover: format!(
+                    "{} · {}\nClick to go there · Drag to move · Double-click to rename",
+                    marker.name,
+                    daw_ui::musical_position_label(marker.beat, &meter)
+                ),
+                color: marker
+                    .color
+                    .map(|[r, g, b]| egui::Color32::from_rgb(r, g, b)),
+            }
         }));
         let mut command = None;
         let snap = |beat: f64, bypass: bool| if bypass { beat } else { self.snapped(beat) };
@@ -450,9 +461,7 @@ impl DawApp {
             self.seek(self.snapped(view.beat_at(lane, position.x)).max(0.0));
         }
         self.timeline_context_menu(&response.lane, |x| view.beat_at(lane, x));
-        let rect_json = |rect: egui::Rect| {
-            serde_json::json!({"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]})
-        };
+        let rect_json = |rect: egui::Rect| serde_json::json!({"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]});
         serde_json::json!({
             "lane": rect_json(lane),
             "flags": response.flags.iter().map(|(kind, key, rect)| serde_json::json!({

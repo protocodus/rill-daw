@@ -2062,13 +2062,7 @@ impl DawApp {
             keys.y_range(),
             Stroke::new(1.0 / ui.pixels_per_point(), palette(ui.ctx()).line),
         );
-        daw_ui::paint_timeline_ruler(
-            &painter,
-            ruler,
-            view,
-            self.project.tempo,
-            &clip_meter,
-        );
+        daw_ui::paint_timeline_ruler(&painter, ruler, view, self.project.tempo, &clip_meter);
         let time_origin = Rect::from_min_max(canvas.min, Pos2::new(plot.left(), ruler.bottom()));
         // On the clock baseline, the same anchor as the ruler's lower labels.
         painter.text(

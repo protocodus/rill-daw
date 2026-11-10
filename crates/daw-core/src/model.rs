@@ -1,6 +1,6 @@
 use crate::{
-    MeterChange, MeterMap,
     AudioBoundaryFades, AudioCrossfade, AudioEnvelope, AudioProcessing, AutomationLane, FadeCurve,
+    MeterChange, MeterMap,
 };
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -1066,7 +1066,10 @@ impl Project {
             "Invalid time signature numerator"
         );
         self.validate_timeline()?;
-        ensure!(self.markers.len() <= MAX_MARKERS, "Too many markers (at most 1024)");
+        ensure!(
+            self.markers.len() <= MAX_MARKERS,
+            "Too many markers (at most 1024)"
+        );
         for marker in &self.markers {
             ensure!(
                 marker.beat.is_finite() && (0.0..=MAX_BEAT).contains(&marker.beat),
@@ -1541,7 +1544,12 @@ impl Project {
         resolve_plugin_paths: bool,
     ) -> Result<Self> {
         self.validate()?;
-        let mut max_id = self.markers.iter().map(|marker| marker.id).max().unwrap_or(0);
+        let mut max_id = self
+            .markers
+            .iter()
+            .map(|marker| marker.id)
+            .max()
+            .unwrap_or(0);
         for track in self.channels_mut() {
             max_id = max_id.max(track.id);
             if let Some(lane) = &track.automation {

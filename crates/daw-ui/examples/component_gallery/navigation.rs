@@ -33,8 +33,14 @@ impl Default for State {
 pub fn show(ui: &mut Ui, state: &mut State) {
     let song_context = format!(
         "Song {}–{} · Evening lead",
-        controls::duration::compact_musical_position(state.start - 1.0, &controls::MeterMap::uniform(4)),
-        controls::duration::compact_musical_position(state.start - 1.0 + state.length, &controls::MeterMap::uniform(4)),
+        controls::duration::compact_musical_position(
+            state.start - 1.0,
+            &controls::MeterMap::uniform(4)
+        ),
+        controls::duration::compact_musical_position(
+            state.start - 1.0 + state.length,
+            &controls::MeterMap::uniform(4)
+        ),
     );
     controls::workspace_header_with_context(
         ui,
@@ -210,7 +216,13 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 text::label(ui, "Duration");
                 ui.add(controls::number(&mut state.length).suffix(" beats"));
                 ui.end_row();
-                controls::duration::timing_summary(ui, state.start - 1.0, state.length, 112.0, &controls::MeterMap::uniform(4));
+                controls::duration::timing_summary(
+                    ui,
+                    state.start - 1.0,
+                    state.length,
+                    112.0,
+                    &controls::MeterMap::uniform(4),
+                );
             });
             footer.show(window_ui, |ui| {
                 controls::action_row(

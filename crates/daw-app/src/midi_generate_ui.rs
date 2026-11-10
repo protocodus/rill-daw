@@ -171,7 +171,12 @@ impl GenerateDialog {
         }
     }
 
-    pub fn show(&mut self, ctx: &egui::Context, clip_name: &str, meter: &daw_core::MeterMap) -> GenerateAction {
+    pub fn show(
+        &mut self,
+        ctx: &egui::Context,
+        clip_name: &str,
+        meter: &daw_core::MeterMap,
+    ) -> GenerateAction {
         let mut action = GenerateAction::default();
         let mut open = true;
         self.controls = json!({});

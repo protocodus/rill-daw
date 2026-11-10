@@ -47,7 +47,10 @@ mod position_tests {
         assert_eq!(musical_position_label(0.25, &four), "1.1.2");
         assert_eq!(musical_position_label(3.75, &four), "1.4.4");
         assert_eq!(musical_position_label(4.0, &four), "2.1.1");
-        assert_eq!(musical_position_label(6.5, &crate::MeterMap::uniform(3)), "3.1.3");
+        assert_eq!(
+            musical_position_label(6.5, &crate::MeterMap::uniform(3)),
+            "3.1.3"
+        );
         assert_eq!(musical_position_label(-2.0, &four), "1.1.1");
         assert_eq!(musical_position_label(3.999, &four), "2.1.1");
         let changing = crate::MeterMap::new(

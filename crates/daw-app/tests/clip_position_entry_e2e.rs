@@ -97,8 +97,10 @@ fn unchanged(state: &Value, before: &Value) {
 
 fn open_position(app: &mut Harness, id: u64, meter: u8) -> Value {
     let before = app.inspect();
-    let caption =
-        daw_ui::duration::musical_position(clip(&before, id)["start"].as_f64().unwrap(), meter);
+    let caption = daw_ui::duration::musical_position(
+        clip(&before, id)["start"].as_f64().unwrap(),
+        &daw_ui::MeterMap::uniform(meter),
+    );
     let opener = before["label_rects"]
         .as_array()
         .unwrap()

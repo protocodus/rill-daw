@@ -108,7 +108,9 @@ impl MeterMap {
         let meter = f64::from(segment.beats_per_bar);
         let elapsed = (beat - segment.start).max(0.0);
         let bars = ((elapsed + EPSILON) / meter).floor();
-        let bar = segment.bar.saturating_add(bars.min(f64::from(u32::MAX)) as u32);
+        let bar = segment
+            .bar
+            .saturating_add(bars.min(f64::from(u32::MAX)) as u32);
         (bar, (elapsed - bars * meter).max(0.0))
     }
 
@@ -228,7 +230,14 @@ mod tests {
     #[test]
     fn bar_starts_and_downbeats_round_trip() {
         let map = map();
-        for (bar, beat) in [(1, 0.0), (2, 4.0), (3, 8.0), (4, 11.0), (5, 14.0), (6, 21.0)] {
+        for (bar, beat) in [
+            (1, 0.0),
+            (2, 4.0),
+            (3, 8.0),
+            (4, 11.0),
+            (5, 14.0),
+            (6, 21.0),
+        ] {
             assert_eq!(map.bar_start(bar), beat);
             assert_eq!(map.position(beat), (bar, 0.0));
             assert!(map.is_downbeat(beat));
@@ -273,7 +282,9 @@ mod tests {
         assert!(validate_meter_changes(&[change(5, 3), change(3, 4)]).is_err());
         assert!(validate_meter_changes(&[change(2, 0)]).is_err());
         assert!(validate_meter_changes(&[change(2, 33)]).is_err());
-        let many: Vec<_> = (2..(MAX_METER_CHANGES as u32 + 3)).map(|bar| change(bar, 3)).collect();
+        let many: Vec<_> = (2..(MAX_METER_CHANGES as u32 + 3))
+            .map(|bar| change(bar, 3))
+            .collect();
         assert!(validate_meter_changes(&many).is_err());
     }
 }

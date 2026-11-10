@@ -558,12 +558,21 @@ fn meter_and_marker_edits_are_atomic_and_undoable() {
     assert_eq!(
         p.meter_changes,
         [
-            MeterChange { bar: 3, beats_per_bar: 3 },
-            MeterChange { bar: 5, beats_per_bar: 5 }
+            MeterChange {
+                bar: 3,
+                beats_per_bar: 3
+            },
+            MeterChange {
+                bar: 5,
+                beats_per_bar: 5
+            }
         ]
     );
     let marker = &p.markers[0];
-    assert_eq!((marker.id, marker.beat, marker.name.as_str()), (result.created[0].id, 11.0, "Hook"));
+    assert_eq!(
+        (marker.id, marker.beat, marker.name.as_str()),
+        (result.created[0].id, 11.0, "Hook")
+    );
     assert_eq!(p.meter_map().position(11.0), (4, 0.0));
     history.commit_named(&before, "Timeline");
     let edited = p.clone();

@@ -69,13 +69,13 @@ pub fn timeline_flags(
         .enumerate()
         .map(|(index, flag)| {
             let beat = match drag {
-                Some(drag) if flag.kind == TimelineFlagKind::Marker && drag.key == flag.key => {
-                    ui.input(|input| input.pointer.interact_pos()).map_or(flag.beat, |pointer| {
+                Some(drag) if flag.kind == TimelineFlagKind::Marker && drag.key == flag.key => ui
+                    .input(|input| input.pointer.interact_pos())
+                    .map_or(flag.beat, |pointer| {
                         let raw = drag.original
                             + f64::from((pointer.x - drag.pointer) / view.pixels_per_beat);
                         snap(raw.max(0.0), ui.input(|input| input.modifiers.shift)).max(0.0)
-                    })
-                }
+                    }),
                 _ => flag.beat,
             };
             (index, beat)
@@ -131,8 +131,9 @@ pub fn timeline_flags(
         let response = ui
             .interact(rect.intersect(lane), id.with((flag.kind, flag.key)), sense)
             .on_hover_text(&flag.hover);
+        // Measure from the press, not the point where the drag threshold passed.
         if response.drag_started()
-            && let Some(pointer) = response.interact_pointer_pos()
+            && let Some(pointer) = ui.input(|input| input.pointer.press_origin())
         {
             ui.data_mut(|data| {
                 data.insert_temp(
@@ -145,15 +146,32 @@ pub fn timeline_flags(
                 )
             });
         }
-        if response.drag_stopped() && flag.kind == TimelineFlagKind::Marker {
+        let moved = response.drag_stopped()
+            && flag.kind == TimelineFlagKind::Marker
+            && beat.to_bits() != flag.beat.to_bits();
+        if response.drag_stopped() {
             ui.data_mut(|data| data.remove::<FlagDrag>(drag_id));
-            if beat.to_bits() != flag.beat.to_bits() {
-                action = Some(TimelineFlagAction::Moved(flag.key, beat));
-            }
-        } else if response.double_clicked() {
-            action = Some(TimelineFlagAction::DoubleClicked(flag.kind, flag.key));
-        } else if response.clicked() {
-            action = Some(TimelineFlagAction::Clicked(flag.kind, flag.key));
+        }
+        if moved {
+            action = Some(TimelineFlagAction::Moved(flag.key, beat));
+        } else if response.clicked()
+            && let Some(position) = response.interact_pointer_pos()
+        {
+            // The shared tracker counts the second release, independent of
+            // frame timing, exactly like arranger clips.
+            let tracker_id = id.with("double_click");
+            let mut tracker: crate::ItemClickTracker = ui
+                .data(|data| data.get_temp(tracker_id))
+                .unwrap_or_default();
+            let item = flag.key.wrapping_mul(2) + u64::from(flag.kind == TimelineFlagKind::Meter);
+            let now = ui.input(|input| input.time);
+            let plain = !ui.input(|input| input.modifiers.any());
+            action = Some(if tracker.register(item, position, now, plain) {
+                TimelineFlagAction::DoubleClicked(flag.kind, flag.key)
+            } else {
+                TimelineFlagAction::Clicked(flag.kind, flag.key)
+            });
+            ui.data_mut(|data| data.insert_temp(tracker_id, tracker));
         }
         if enabled {
             response.context_menu(|ui| menu(ui, flag));

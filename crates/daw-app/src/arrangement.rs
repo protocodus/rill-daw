@@ -791,13 +791,7 @@ impl DawApp {
             Pos2::new(canvas.right(), ruler.bottom()),
         );
         let meter = self.project.meter_map();
-        daw_ui::paint_timeline_ruler(
-            &p,
-            label_ruler,
-            view,
-            self.project.tempo,
-            &meter,
-        );
+        daw_ui::paint_timeline_ruler(&p, label_ruler, view, self.project.tempo, &meter);
         let loop_response = self.timeline_loop_ui(
             ui,
             "arrangement_loop",
@@ -814,8 +808,7 @@ impl DawApp {
         {
             new_cursor = Some(self.snapped(((pos.x - origin) / self.zoom) as f64).max(0.0));
         }
-        let flag_diagnostics =
-            self.timeline_flag_lane(ui, flag_lane, view, !navigation.navigating);
+        let flag_diagnostics = self.timeline_flag_lane(ui, flag_lane, view, !navigation.navigating);
         let zoom = self.zoom;
         self.timeline_context_menu(&ruler_response, |x| f64::from((x - origin) / zoom));
         // Folder "After" means after its complete subtree, even when the

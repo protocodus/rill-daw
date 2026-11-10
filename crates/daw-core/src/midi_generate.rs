@@ -609,8 +609,16 @@ mod tests {
                 beats_per_bar: 3,
             }],
         );
-        assert_eq!(complete_visible_bars(1.0, 10.5, &changing), Some((4.0, 6.0)));
-        for (start, end) in [(0.2, 3.9), (0.0, 0.0), (f64::NAN, 8.0), (0.0, f64::INFINITY)] {
+        assert_eq!(
+            complete_visible_bars(1.0, 10.5, &changing),
+            Some((4.0, 6.0))
+        );
+        for (start, end) in [
+            (0.2, 3.9),
+            (0.0, 0.0),
+            (f64::NAN, 8.0),
+            (0.0, f64::INFINITY),
+        ] {
             assert_eq!(complete_visible_bars(start, end, &four), None);
         }
     }

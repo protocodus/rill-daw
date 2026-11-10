@@ -365,7 +365,10 @@ mod tests {
         assert_eq!(beat_grid_level(0.0, &four), GridLevel::Bar);
         assert_eq!(beat_grid_level(8.0, &four), GridLevel::Bar);
         assert_eq!(beat_grid_level(3.0, &four), GridLevel::Beat);
-        assert_eq!(beat_grid_level(3.0, &crate::MeterMap::uniform(3)), GridLevel::Bar);
+        assert_eq!(
+            beat_grid_level(3.0, &crate::MeterMap::uniform(3)),
+            GridLevel::Bar
+        );
         assert_eq!(beat_grid_level(2.25, &four), GridLevel::Subdivision);
         assert_eq!(beat_grid_level(-1.5, &four), GridLevel::Subdivision);
         let changing = crate::MeterMap::new(
