@@ -664,8 +664,8 @@ struct PortInfo {
 /// Run on the helper only: lilv reads the bundle's Turtle, never its binary.
 pub(crate) fn scan(path: &Path) -> Result<Vec<PluginInfo>> {
     let bundle = Bundle::load(path)?;
+    // Specification and preset bundles (atom.lv2, presets.lv2, ...) hold no plug-ins; that is not a failure.
     let plugins = bundle.plugins();
-    ensure!(!plugins.is_empty(), "No LV2 plug-ins in {}", path.display());
     let mut found: Vec<_> = plugins
         .into_iter()
         .map(|plugin| bundle.info(plugin, path))
