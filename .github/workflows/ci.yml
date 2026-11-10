@@ -12,8 +12,8 @@ permissions:
 jobs:
   check:
     name: ${{ matrix.target }}
-    # Intel macOS needs time for both full suites and release packaging.
-    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 75 || 45 }}
+    # Both full E2E passes and packaging must fit, even with a cold cache.
+    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 120 || 90 }}
     strategy:
       fail-fast: false
       matrix:
