@@ -275,6 +275,19 @@ impl PluginCatalog {
 /// version fields even when an installer preserves its filesystem timestamp.
 /// Symlink targets are tracked and directory cycles are not followed twice.
 pub fn fingerprint(plugin: &PluginInfo) -> Result<String> {
+    if plugin.format == crate::PluginFormat::Au {
+        // Audio Units share one locator; their registered version marks an update.
+        let mut digest = Sha256::new();
+        digest.update(b"rill-plugin-thumbnail-v1\0au\0");
+        digest.update(serde_json::to_vec(&(
+            &plugin.class_id,
+            &plugin.name,
+            &plugin.vendor,
+            &plugin.category,
+            &plugin.version,
+        ))?);
+        return Ok(format!("{:x}", digest.finalize()));
+    }
     let canonical = plugin
         .path
         .canonicalize()
@@ -589,6 +602,32 @@ mod tests {
             !cache.root().exists(),
             "metadata scan must not initialize a plug-in or create a preview"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn audio_units_fingerprint_their_identity_and_version_without_a_bundle() -> Result<()> {
+        let unit = PluginInfo {
+            name: "AUDelay".into(),
+            path: crate::audio_unit::AU_LOCATOR.into(),
+            vendor: "Apple".into(),
+            category: "Fx".into(),
+            class_id: Some("aufx:dely:appl".into()),
+            version: "1.7.0".into(),
+            format: crate::PluginFormat::Au,
+            ..PluginInfo::default()
+        };
+        let original = fingerprint(&unit)?;
+        assert_eq!(original.len(), 64);
+        let mut other = unit.clone();
+        other.class_id = Some("aufx:lpas:appl".into());
+        assert_ne!(fingerprint(&other)?, original);
+        let mut updated = unit.clone();
+        updated.version = "1.8.0".into();
+        assert_ne!(fingerprint(&updated)?, original);
+        let temp = tempfile::tempdir()?;
+        let cache = PluginCatalog::new(temp.path());
+        assert_eq!(cache.lookup(&unit)?.status, ThumbnailStatus::Missing);
         Ok(())
     }
 

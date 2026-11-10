@@ -3404,7 +3404,7 @@ impl DawApp {
                 }
                 SetupPage::Plugins => {
                     daw_ui::text::section_heading(ui, "Plug-in folders");
-                    daw_ui::text::note(ui, format!("{} system folders included", daw_plugins::PluginFormat::available().map(|format| format.label()).collect::<Vec<_>>().join(", "))).on_hover_text(daw_plugins::default_locations().iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"));
+                    daw_ui::text::note(ui, plugin_sources_note()).on_hover_text(daw_plugins::default_locations().iter().filter(|p| daw_plugins::PluginFormat::of_bundle(p) != Some(daw_plugins::PluginFormat::Au)).map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"));
                     let mut remove = None;
                     // Keep the wrapped folder field/actions and Apply/Cancel
                     // outside the scrolling list even in a small viewport.
@@ -4018,6 +4018,21 @@ impl DawApp {
     }
 }
 
+/// Setup → Plug-ins summary of what a scan includes besides the listed folders.
+/// Audio Units come from the system registry, not a folder.
+pub(crate) fn plugin_sources_note() -> String {
+    let folders: Vec<_> = daw_plugins::PluginFormat::available()
+        .filter(|format| *format != daw_plugins::PluginFormat::Au)
+        .map(|format| format.label())
+        .collect();
+    let mut note = format!("{} system folders included", folders.join(", "));
+    if daw_plugins::PluginFormat::available().any(|format| format == daw_plugins::PluginFormat::Au)
+    {
+        note.push_str(", plus installed Audio Units");
+    }
+    note
+}
+
 /// Cosmetic edits never rebuild the audio graph or restart plug-in processes.
 pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
     // Track order belongs to the workspace. Compare stable channel identities
@@ -4108,6 +4123,15 @@ mod engine_lifecycle_tests;
 #[cfg(test)]
 mod export_feedback_tests {
     use super::*;
+
+    #[test]
+    fn plugin_sources_name_audio_units_only_on_macos() {
+        let note = plugin_sources_note();
+        assert!(note.starts_with("VST3, CLAP"), "{note}");
+        assert_eq!(note.contains("Audio Units"), cfg!(target_os = "macos"));
+        assert_eq!(note.contains("LV2"), cfg!(target_os = "linux"));
+        assert!(!note.contains("AU,"), "{note}");
+    }
 
     #[test]
     fn completed_export_preserves_an_unrelated_error_and_pending_feedback() {

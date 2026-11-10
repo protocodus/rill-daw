@@ -497,6 +497,13 @@ cargo test --locked -p daw-app --test clap_e2e --test lv2_e2e
 
 The plug-in level tests cover the same fixtures directly: scanning metadata, isolation-process crash and hang recovery, identical audio across block transports, state round trips, parameter automation split at block offsets, latency reporting, sidechain buses and the LV2 worker extension.
 
+`audio_unit_e2e` (macOS only) uses Apple's system Audio Units, which every Mac ships, so it needs no fixture. It scans the AU locator, checks the **AU** badge, assigns DLSMusicDevice (`aumu:dls :appl`) and exports audible audio, inserts AUDelay (`aufx:dely:appl`) and checks that the export changes, then checks Undo/Redo, save/reopen with the same tracks and peak, and `list_plugins` filtered by `AU`. `daw-plugins --test audio_unit` covers the same units directly: registry scan with vendor and kind, AUDelay processing and its mix parameter set directly and as block automation, AULowpass filtering, AUPeakLimiter latency/tail, DLS audibility, binary-plist state round trip, recovery after the helper is killed, inspection and clean errors. No AU editor window is opened, because macOS CI has no GUI session. On other platforms both targets compile to nothing.
+
+```sh
+cargo test --locked -p daw-plugins --test audio_unit
+cargo test --locked -p daw-app --test audio_unit_e2e
+```
+
 ```sh
 cargo test --locked -p daw-plugins --test clap --test lv2
 ```

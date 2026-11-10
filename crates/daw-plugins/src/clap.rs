@@ -5,6 +5,7 @@
 //! References: <https://github.com/free-audio/clap/tree/main/include/clap> and
 //! <https://docs.rs/clack-host/0.2.0/clack_host/>.
 use crate::PluginInfo;
+pub(crate) use crate::native::ParameterEdit;
 use crate::native::{
     LoadRequest, LoadedInfo, NativeProcessor, RESTART_IO_CHANGED, RESTART_LATENCY_CHANGED,
     RESTART_PARAM_TITLES_CHANGED, RESTART_PARAM_VALUES_CHANGED, Transport, plain_from_normalized,
@@ -55,13 +56,6 @@ use vst3_host::{
     parameters::Parameter,
     plugin::{ProcessMode, TransportPosition},
 };
-
-/// Plug-in GUI gestures and value changes, drained by the editor helper.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum ParameterEdit {
-    Begin(u32),
-    Value(u32, f64),
-}
 
 struct ClapHost;
 

@@ -50,7 +50,7 @@ For Windows, extract the complete archive and launch `rill.exe`, keeping `daw-pl
 
 Native VST3 and CLAP editors on Linux require X11 or XWayland. Thumbnail capture also needs the XRes and Composite extensions on that display.
 
-LV2 hosting on Linux loads the system lilv library (`liblilv-0.so.0`) at run time; it is not bundled or linked, so the archive starts without it. Install `liblilv-0-0` (Ubuntu/Debian) to use LV2 plug-ins; without it LV2 bundles fail to scan or load with an error that names the package. CI and `Dockerfile.e2e` install it for the LV2 tests. CLAP needs no extra runtime. Plug-ins of every format must match the application's CPU architecture.
+LV2 hosting on Linux loads the system lilv library (`liblilv-0.so.0`) at run time; it is not bundled or linked, so the archive starts without it. Install `liblilv-0-0` (Ubuntu/Debian) to use LV2 plug-ins; without it LV2 bundles fail to scan or load with an error that names the package. CI and `Dockerfile.e2e` install it for the LV2 tests. CLAP needs no extra runtime, and Audio Units (macOS) use the system AudioToolbox and CoreAudioKit frameworks. Plug-ins of every format must match the application's CPU architecture.
 
 ### ASIO in Windows builds
 

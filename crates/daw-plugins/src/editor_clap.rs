@@ -1,12 +1,17 @@
-//! CLAP native editor loop, the counterpart of the VST3 loop in `editor_native`.
-//! It speaks the same editor protocol, so the owner cannot tell the formats apart.
+//! Native editor loop for formats that embed a view into Rill's own host window
+//! (CLAP and, on macOS, Audio Units); the counterpart of the VST3 loop in
+//! `editor_native`. It speaks the same editor protocol, so the owner cannot tell the
+//! formats apart.
 use super::{SnapshotSchedule, emit};
 use crate::{
     ParameterInfo,
-    clap::{ClapProcessor, ParameterEdit},
+    clap::ClapProcessor,
     editor::{EditorCommand, EditorEvent},
     editor_platform::Platform,
-    native::{LoadRequest, NativeProcessor, RESTART_IO_CHANGED, RESTART_PARAM_TITLES_CHANGED},
+    native::{
+        LoadRequest, NativeProcessor, ParameterEdit, RESTART_IO_CHANGED,
+        RESTART_PARAM_TITLES_CHANGED,
+    },
 };
 use anyhow::{Result, ensure};
 use std::{
@@ -20,7 +25,98 @@ use vst3_host::{BusAudioBuffers, HostWindow};
 const BLOCK: usize = 256;
 const SAMPLE_RATE: f64 = 48_000.0;
 
-fn parameters(plugin: &mut ClapProcessor) -> Result<Vec<ParameterInfo>> {
+/// A processor whose editor embeds into a [`HostWindow`] and reports gestures.
+pub(super) trait EmbeddedEditor: NativeProcessor + Sized {
+    /// Suffix of the window title, such as "CLAP".
+    const FORMAT: &'static str;
+    fn load_editor(request: &LoadRequest<'_>) -> Result<Self>;
+    fn has_gui(&self) -> bool;
+    fn name(&self) -> &str;
+    fn open_gui(&mut self, window: &HostWindow, title: &str) -> Result<(u32, u32)>;
+    fn take_gui_resize(&mut self) -> Option<(u32, u32)>;
+    fn resize_gui(&mut self, width: u32, height: u32);
+    fn set_gui_scale(&mut self, scale: f32);
+    fn gui_closed(&self) -> bool;
+    fn close_gui(&mut self);
+    fn take_edits(&mut self) -> Vec<ParameterEdit>;
+    fn take_dirty(&mut self) -> bool;
+}
+
+impl EmbeddedEditor for ClapProcessor {
+    const FORMAT: &'static str = "CLAP";
+    fn load_editor(request: &LoadRequest<'_>) -> Result<Self> {
+        ClapProcessor::load(request)
+    }
+    fn has_gui(&self) -> bool {
+        ClapProcessor::has_gui(self)
+    }
+    fn name(&self) -> &str {
+        ClapProcessor::name(self)
+    }
+    fn open_gui(&mut self, window: &HostWindow, title: &str) -> Result<(u32, u32)> {
+        ClapProcessor::open_gui(self, parent(window), title)
+    }
+    fn take_gui_resize(&mut self) -> Option<(u32, u32)> {
+        ClapProcessor::take_gui_resize(self)
+    }
+    fn resize_gui(&mut self, width: u32, height: u32) {
+        ClapProcessor::resize_gui(self, width, height)
+    }
+    fn set_gui_scale(&mut self, scale: f32) {
+        ClapProcessor::set_gui_scale(self, scale)
+    }
+    fn gui_closed(&self) -> bool {
+        ClapProcessor::gui_closed(self)
+    }
+    fn close_gui(&mut self) {
+        ClapProcessor::close_gui(self)
+    }
+    fn take_edits(&mut self) -> Vec<ParameterEdit> {
+        ClapProcessor::take_edits(self)
+    }
+    fn take_dirty(&mut self) -> bool {
+        ClapProcessor::take_dirty(self)
+    }
+}
+
+/// Cocoa views (or the generic view) are embedded in the window's container view.
+#[cfg(target_os = "macos")]
+impl EmbeddedEditor for crate::au::AuProcessor {
+    const FORMAT: &'static str = "AU";
+    fn load_editor(request: &LoadRequest<'_>) -> Result<Self> {
+        Self::load(request)
+    }
+    fn has_gui(&self) -> bool {
+        true
+    }
+    fn name(&self) -> &str {
+        Self::name(self)
+    }
+    fn open_gui(&mut self, window: &HostWindow, _title: &str) -> Result<(u32, u32)> {
+        Self::open_gui(self, window.raw_handle())
+    }
+    fn take_gui_resize(&mut self) -> Option<(u32, u32)> {
+        Self::take_gui_resize(self)
+    }
+    fn resize_gui(&mut self, width: u32, height: u32) {
+        Self::resize_gui(self, width, height)
+    }
+    fn set_gui_scale(&mut self, _scale: f32) {}
+    fn gui_closed(&self) -> bool {
+        false
+    }
+    fn close_gui(&mut self) {
+        Self::close_gui(self)
+    }
+    fn take_edits(&mut self) -> Vec<ParameterEdit> {
+        Self::take_edits(self)
+    }
+    fn take_dirty(&mut self) -> bool {
+        Self::take_dirty(self)
+    }
+}
+
+fn parameters(plugin: &mut impl NativeProcessor) -> Result<Vec<ParameterInfo>> {
     Ok(plugin
         .get_parameters()?
         .into_iter()
@@ -36,14 +132,14 @@ fn parameters(plugin: &mut ClapProcessor) -> Result<Vec<ParameterInfo>> {
         .collect())
 }
 
-fn automatable(plugin: &mut ClapProcessor, id: u32) -> Result<bool> {
+fn automatable(plugin: &mut impl NativeProcessor, id: u32) -> Result<bool> {
     Ok(plugin
         .get_parameters()?
         .iter()
         .any(|p| p.id == id && p.can_automate && !p.is_read_only))
 }
 
-fn buffers(plugin: &ClapProcessor) -> Result<BusAudioBuffers> {
+fn buffers(plugin: &impl NativeProcessor) -> Result<BusAudioBuffers> {
     Ok(BusAudioBuffers::new(
         &plugin.audio_bus_layout()?,
         BLOCK,
@@ -52,7 +148,7 @@ fn buffers(plugin: &ClapProcessor) -> Result<BusAudioBuffers> {
 }
 
 fn save_state(
-    plugin: &mut ClapProcessor,
+    plugin: &mut impl NativeProcessor,
     buffers: &mut BusAudioBuffers,
     output: &mut impl Write,
     snapshots: &mut SnapshotSchedule,
@@ -95,7 +191,7 @@ fn parent(window: &HostWindow) -> clack_extensions::gui::Window<'static, 'static
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn run(
+pub(super) fn run<P: EmbeddedEditor>(
     output: &mut impl Write,
     commands: &mpsc::Receiver<EditorCommand>,
     platform: &Platform,
@@ -105,7 +201,7 @@ pub(super) fn run(
     initial: Vec<(u32, f64)>,
     visible: bool,
 ) -> Result<()> {
-    let mut plugin = ClapProcessor::load(&LoadRequest {
+    let mut plugin = P::load_editor(&LoadRequest {
         path,
         class_id,
         sample_rate: SAMPLE_RATE,
@@ -126,9 +222,9 @@ pub(super) fn run(
     }
     let mut buffers = buffers(&plugin)?;
     plugin.start_processing()?;
-    let title = format!("{} - CLAP", plugin.name());
+    let title = format!("{} - {}", plugin.name(), P::FORMAT);
     let window = HostWindow::create(&title, 640, 480)?;
-    let (width, height) = plugin.open_gui(parent(&window), &title)?;
+    let (width, height) = plugin.open_gui(&window, &title)?;
     window.resize(width as i32, height as i32);
     window.show();
     platform.configure(&title, visible)?;

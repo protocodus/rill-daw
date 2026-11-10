@@ -41,10 +41,27 @@ fn default_source_rate() -> f64 {
 pub const MAX_PLUGIN_STATE_BYTES: usize = 64 * 1024 * 1024;
 pub const MAX_INSTRUMENT_STATE_BYTES: usize = MAX_PLUGIN_STATE_BYTES;
 
+/// Shared reference path of every Audio Unit, matching `daw_plugins::audio_unit`.
+const AUDIO_UNIT_LOCATOR: &str = "/System/Library/Frameworks/AudioToolbox.framework";
+
 /// The plug-in format follows the bundle extension: `.clap` and `.lv2` carry
-/// textual IDs (CLAP plug-in ID, LV2 URI); anything else keeps the VST3 rule.
+/// textual IDs (CLAP plug-in ID, LV2 URI); the Audio Unit locator carries
+/// `type:subtype:manufacturer` four-character codes (each code may instead be
+/// `0x` and eight hex digits); anything else keeps the VST3 rule.
 pub(crate) fn validate_plugin_class_id(path: &str, class_id: Option<&str>) -> Result<()> {
     let Some(id) = class_id else { return Ok(()) };
+    if path == AUDIO_UNIT_LOCATOR {
+        let code = |code: &str| match code.strip_prefix("0x") {
+            Some(hex) => hex.len() == 8 && hex.bytes().all(|byte| byte.is_ascii_hexdigit()),
+            None => code.len() == 4 && code.bytes().all(|byte| (0x20..=0x7E).contains(&byte)),
+        };
+        let codes: Vec<_> = id.split(':').collect();
+        ensure!(
+            codes.len() == 3 && codes.iter().all(|c| code(c)),
+            "Audio Unit ID must be type:subtype:manufacturer four-character codes"
+        );
+        return Ok(());
+    }
     let textual = std::path::Path::new(path)
         .extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("clap") || ext.eq_ignore_ascii_case("lv2"));
@@ -231,7 +248,7 @@ impl EffectSlot {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Effect {
-    /// Any hosted plug-in (VST3, CLAP or LV2, chosen by the path's extension);
+    /// Any hosted plug-in (VST3, CLAP, LV2 or AU, chosen by the path);
     /// the variant keeps its historic name so existing projects load unchanged.
     Vst3 {
         path: String,

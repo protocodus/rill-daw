@@ -5,7 +5,7 @@
 
 **From the first loop to the final mix.**
 
-Rill is a free, open-source desktop music workstation for **macOS, Linux, and Windows**. Record audio and MIDI, develop a phrase with the integrated AI assistant, and bring your song together with your favorite VST3, CLAP and (on Linux) LV2 instruments and effects. Focused workspaces keep arranging, editing, and mixing close to the music.
+Rill is a free, open-source desktop music workstation for **macOS, Linux, and Windows**. Record audio and MIDI, develop a phrase with the integrated AI assistant, and bring your song together with your favorite VST3, CLAP, (on Linux) LV2 and (on macOS) Audio Unit instruments and effects. Focused workspaces keep arranging, editing, and mixing close to the music.
 
 [Download](#download) · [Features](#make-it-your-song) · [AI assistant](#make-music-with-ai) · [Screenshots](#screenshots) · [User guide](docs/USER_GUIDE.md) · [Website](https://protocodus.cz/product/rill/)
 
@@ -17,7 +17,7 @@ Rill is a free, open-source desktop music workstation for **macOS, Linux, and Wi
 - **Capture a performance.** Record audio and MIDI with a pre-count and metronome. Keep audio loop passes as takes, comp your favorite passages with crossfades, or record separate overdub layers. MIDI loop passes build one overdubbed phrase.
 - **Develop the notes.** Write in the piano roll, preview chords, arpeggios and melodies, and refine timing with quantize and humanize. Edit velocity and supported note expression while retaining richer performance data in the project.
 - **Work with AI in context.** Ask for a new part, a phrase variation, an audio edit or a mix adjustment. Keep a conversation scoped to the open clip, channel or processor, with changes available in normal Undo/Redo history.
-- **Shape the mix.** Host VST3, CLAP and LV2 (Linux) instruments and effects in isolated processes. Connect buses, pre/post-fader sends, sidechains and grouped instrument outputs. Draw automation for plug-in parameters, sends, and channel/Master gain, volume and pan; inspect spectrum, loudness and stereo levels.
+- **Shape the mix.** Host VST3, CLAP, LV2 (Linux) and Audio Unit (macOS) instruments and effects in isolated processes. Connect buses, pre/post-fader sends, sidechains and grouped instrument outputs. Draw automation for plug-in parameters, sends, and channel/Master gain, volume and pan; inspect spectrum, loudness and stereo levels.
 - **Freeze and return.** Print clips or tracks to new audio, including configured instrument outputs together. Originals remain retained and muted; **Return to originals** brings them back while keeping your prints and edits.
 - **Take the song with you.** Save portable `.rill` projects with referenced audio, retained takes and Freeze originals embedded. Export songs or loops as 16/24-bit PCM or 32-bit float WAV, FLAC, Ogg Vorbis or MP3, write aligned stems of tracks, buses and folders in one step, or make a MIDI file.
 
@@ -37,7 +37,7 @@ Get a development build for your platform. These links serve the latest successf
 
 **Installing:** extract the download ZIP, then the platform archive inside it. Keep the application and `daw-plugin-host` helper together; keep the macOS app bundle intact. Each package includes a SHA-256 checksum and installation notes. Builds are unsigned and macOS builds are not notarized. macOS requires version 11 or newer; Linux requires glibc 2.35 or newer. See [platform requirements and installation](docs/RELEASING.md).
 
-**Bring your own instruments:** VST3, CLAP and LV2 instruments and effects are installed separately. Rill includes an original audio drum loop to try immediately.
+**Bring your own instruments:** VST3, CLAP, LV2 and AU instruments and effects are installed separately. Rill includes an original audio drum loop to try immediately.
 
 Build artifacts expire after 14 days. If a link is unavailable, visit the [successful main builds](https://github.com/protocodus/rill-daw/actions/workflows/ci.yml?query=branch%3Amain+is%3Asuccess) and open a run's **Artifacts** section; GitHub sign-in is required for that route. A newer build can be in progress while the links serve an earlier successful version.
 
@@ -93,7 +93,7 @@ Draw volume changes, bend individual curve segments, and enter precise point val
 ## Start making music
 
 1. Launch Rill and click **Play** to hear the included drum loop, or choose **File → New** for an empty song.
-2. Drop WAV, MP3, FLAC or OGG files onto an audio track or empty arranger space, or choose **File → Import audio…** to create a track at the cursor. For MIDI, choose **Track → Add MIDI track** and assign a VST3, CLAP or LV2 instrument.
+2. Drop WAV, MP3, FLAC or OGG files onto an audio track or empty arranger space, or choose **File → Import audio…** to create a track at the cursor. For MIDI, choose **Track → Add MIDI track** and assign a VST3, CLAP, LV2 or AU instrument.
 3. Double-click a clip to edit its audio or notes. Open **Window → Mixer** to balance the tracks.
 4. Save a portable `.rill` project, then use **File → Export WAV…** to share a mix.
 
@@ -103,7 +103,7 @@ Use the menus and on-screen tools, or speed up familiar actions with keyboard sh
 
 Audio runs through the platform driver (ALSA, WASAPI or CoreAudio) or, from Setup → Audio → Driver, JACK on Linux. Windows builds also offer ASIO, built with Steinberg's ASIO SDK under its GPLv3 option, so the Windows executable is distributed under the GPLv3 while Rill's source stays MIT (see [releasing](docs/RELEASING.md)). ASIO has not been tested on hardware.
 
-Rill is in active development and focuses on audio/MIDI music production. It hosts **VST3** and **CLAP** on every platform and **LV2** on Linux (through the system lilv library); instruments and effects are installed separately. LV2 plug-ins use Rill's generic parameter browser instead of their own editor windows. Songs can change meter at bar lines and carry named markers; audio clips can be warped with markers and quantized to the grid. Tempo maps, surround mixing, Audio Units/VST2/AAX/ARA, and video/scoring-to-picture workflows are not supported. See the [current capabilities and limits](docs/PRODUCT_DIRECTION.md).
+Rill is in active development and focuses on audio/MIDI music production. It hosts **VST3** and **CLAP** on every platform, **LV2** on Linux (through the system lilv library) and **Audio Units** (AUv2, and AUv3 through Apple's bridge) on macOS; instruments and effects are installed separately. LV2 plug-ins use Rill's generic parameter browser instead of their own editor windows. Songs can change meter at bar lines and carry named markers; audio clips can be warped with markers and quantized to the grid. Tempo maps, surround mixing, VST2/AAX/ARA, and video/scoring-to-picture workflows are not supported. See the [current capabilities and limits](docs/PRODUCT_DIRECTION.md).
 
 `.rill` projects preserve high-resolution MIDI note/controller data. Native UMP input targets macOS 11 and newer; Linux and Windows use MIDI 1.0 input. Audible expression depends on the instrument's supported mappings (VST3 note expressions, CLAP note expressions, MIDI for LV2); per-note pitch-bend packets are retained but not currently played. Exporting richer performances as `.mid` requires an explicit MIDI 1.0 copy. This is not universal MIDI 2.0 device or plug-in compatibility; see [MIDI recording and expression](docs/USER_GUIDE.md#midi-recording-and-pre-count).
 

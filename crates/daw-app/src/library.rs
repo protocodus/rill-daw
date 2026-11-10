@@ -229,6 +229,7 @@ fn kind_label(plugin: &PluginInfo) -> &'static str {
             daw_plugins::PluginFormat::Vst3 => "Unverified VST3",
             daw_plugins::PluginFormat::Clap => "Unverified CLAP",
             daw_plugins::PluginFormat::Lv2 => "Unverified LV2",
+            daw_plugins::PluginFormat::Au => "Unverified AU",
         },
         _ => "Other",
     }
@@ -600,7 +601,7 @@ impl DawApp {
                                     DeviceKind::Unknown => "Search unverified devices",
                                 },
                                 (ui.available_width() - 2.0 * daw_ui::tokens::BUTTON_PADDING_X).max(0.0),
-                            ).on_hover_text("Search by name, category or producer; combine words in any order"),
+                            ).on_hover_text(format!("Search by name, category, producer or format ({}); combine words in any order", daw_plugins::PluginFormat::available().map(|format| format.label()).collect::<Vec<_>>().join(", "))),
                         ).inner.1,
                     ).inner;
                     if clear_search {
