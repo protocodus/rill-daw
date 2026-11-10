@@ -819,7 +819,7 @@ impl ToolScope {
 
     /// Bounded, path-free context. Hosts add the current session and revision.
     pub fn context(&self, project: &Project) -> Value {
-        let mut result = json!({"scope":self,"scope_label":self.label(project),"available":self.validate_target(project).is_ok(),"tempo":project.tempo,"beats_per_bar":project.beats_per_bar});
+        let mut result = json!({"scope":self,"scope_label":self.label(project),"available":self.validate_target(project).is_ok(),"tempo":project.tempo,"beats_per_bar":project.beats_per_bar,"meter_changes":crate::query::meter_changes(project)});
         if self.is_global() {
             result["name"] = json!(crate::bounded_text(&project.name));
             return result;

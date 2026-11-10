@@ -76,6 +76,20 @@ fn note_summary(note: &Note) -> Value {
     }
     value
 }
+/// Each change with its start beat, so callers need not rebuild the bar map.
+pub(crate) fn meter_changes(project: &Project) -> Value {
+    let meter = project.meter_map();
+    json!(
+        project
+            .meter_changes
+            .iter()
+            .map(|change| json!({"bar":change.bar,"beats_per_bar":change.beats_per_bar,"start_beat":meter.bar_start(change.bar)}))
+            .collect::<Vec<_>>()
+    )
+}
+fn marker_summary(marker: &Marker) -> Value {
+    json!({"id":marker.id,"name":bounded_text(&marker.name),"beat":marker.beat,"color":marker.color})
+}
 pub(crate) fn clip_summary(clip: &Clip) -> Value {
     json!({"id":clip.id,"name":bounded_text(&clip.name),"name_truncated":clip.name.len()>1024,"muted":clip.muted,"start":clip.start,"length":clip.length,"offset":clip.offset,"source_rate":clip.source_rate,"midi_event_count":clip.midi_events.len(),"link_group":clip.link_group,"audio_take":clip.audio_take,"kind":match clip.content {ClipContent::Midi{..}=>"midi",ClipContent::Audio{..}=>"audio"}})
 }
@@ -101,7 +115,7 @@ pub(crate) fn dispatch<H: SongToolHost + ?Sized>(
             let p = host.project();
             let session = host.song_session();
             Ok(
-                json!({"session_id":session.id,"revision":session.revision,"name":bounded_text(&p.name),"name_truncated":p.name.len()>1024,"tempo":p.tempo,"beats_per_bar":p.beats_per_bar,"end_beat":p.end_beat(),"track_count":p.tracks.len(),"master":track_summary(&p.master),"loop":{"enabled":p.loop_enabled,"start":p.loop_start,"end":p.loop_end},"metronome":{"enabled":p.metronome_enabled,"gain":p.metronome_gain,"precount_bars":p.precount_bars},"timeline_units":"Quarter-note beats. Arrangement starts at 0; MIDI note positions use clip source beats.","limits":{"edits_per_batch":MAX_BATCH_EDITS,"notes_per_batch":MAX_BATCH_NOTES,"growth_bytes_per_batch":MAX_BATCH_GROWTH_BYTES,"query_items":MAX_QUERY_ITEMS}}),
+                json!({"session_id":session.id,"revision":session.revision,"name":bounded_text(&p.name),"name_truncated":p.name.len()>1024,"tempo":p.tempo,"beats_per_bar":p.beats_per_bar,"meter_changes":meter_changes(p),"markers":p.markers.iter().take(MAX_QUERY_ITEMS).map(marker_summary).collect::<Vec<_>>(),"marker_count":p.markers.len(),"end_beat":p.end_beat(),"track_count":p.tracks.len(),"master":track_summary(&p.master),"loop":{"enabled":p.loop_enabled,"start":p.loop_start,"end":p.loop_end},"metronome":{"enabled":p.metronome_enabled,"gain":p.metronome_gain,"precount_bars":p.precount_bars},"timeline_units":"Quarter-note beats. Arrangement starts at 0; bars use beats_per_bar from bar 1, then each meter change from its bar; MIDI note positions use clip source beats.","limits":{"edits_per_batch":MAX_BATCH_EDITS,"notes_per_batch":MAX_BATCH_NOTES,"growth_bytes_per_batch":MAX_BATCH_GROWTH_BYTES,"query_items":MAX_QUERY_ITEMS}}),
             )
         }
         "list_tracks" => {

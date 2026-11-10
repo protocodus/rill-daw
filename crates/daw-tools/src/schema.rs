@@ -78,9 +78,38 @@ pub fn song_edit_schema() -> Value {
     );
     add!(
         "set_meter",
-        json!({"beats_per_bar":{"type":"integer","minimum":1,"maximum":32}}),
+        json!({"beats_per_bar":{"type":"integer","minimum":1,"maximum":32,"description":"Quarter-note beats per bar from bar 1."}}),
         ["beats_per_bar"]
     );
+    let bar = || json!({"type":"integer","minimum":2,"maximum":1_000_000,"description":"One-based bar number; bar 1 uses set_meter."});
+    add!(
+        "set_meter_change",
+        json!({"bar":bar(),"beats_per_bar":{"type":"integer","minimum":1,"maximum":32,"description":"Quarter-note beats per bar from this bar until the next change."}}),
+        ["bar", "beats_per_bar"]
+    );
+    add!(
+        "move_meter_change",
+        json!({"from_bar":bar(),"to_bar":bar()}),
+        ["from_bar", "to_bar"]
+    );
+    add!("remove_meter_change", json!({"bar":bar()}), ["bar"]);
+    let marker_name = || json!({"type":"string","minLength":1,"maxLength":256});
+    add!(
+        "add_marker",
+        json!({"beat":{"type":"number","minimum":0,"description":"Arrangement beat for the marker."},"name":marker_name(),"color":{"type":"array","minItems":3,"maxItems":3,"items":{"type":"integer","minimum":0,"maximum":255}},"key":key()}),
+        ["beat", "name"]
+    );
+    add!(
+        "rename_marker",
+        json!({"marker":reference(),"name":marker_name()}),
+        ["marker", "name"]
+    );
+    add!(
+        "move_marker",
+        json!({"marker":reference(),"beat":{"type":"number","minimum":0}}),
+        ["marker", "beat"]
+    );
+    add!("remove_marker", json!({"marker":reference()}), ["marker"]);
     add!(
         "set_loop",
         json!({"enabled":boolean(),"start":number(),"end":number()}),

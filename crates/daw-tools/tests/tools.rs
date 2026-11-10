@@ -621,7 +621,7 @@ fn schema_example(schema: &Value) -> Value {
 fn every_published_edit_shape_deserializes_to_the_real_command_contract() {
     let schema = song_edit_schema();
     let variants = schema["oneOf"].as_array().unwrap();
-    assert_eq!(variants.len(), 82);
+    assert_eq!(variants.len(), 89);
     for variant in variants {
         let example = schema_example(variant);
         serde_json::from_value::<SongEdit>(example.clone()).unwrap_or_else(|error| {
@@ -702,4 +702,54 @@ fn automation_spline_and_override_commands_match_the_shared_model_and_queries() 
     assert_eq!(host.p, changed);
     assert!(host.history.undo(&mut host.p));
     assert_eq!(host.p, before);
+}
+
+#[test]
+fn song_context_lists_meter_changes_and_markers_that_apply_edits_create() {
+    let mut host = Host::default();
+    let session = host.session;
+    let result = call(
+        &mut host,
+        "apply_edits",
+        json!({
+            "session_id":session.id,"expected_revision":session.revision,"label":"Song form",
+            "edits":[
+                {"op":"set_meter_change","bar":5,"beats_per_bar":3},
+                {"op":"add_marker","beat":16.0,"name":"Chorus","key":"chorus"},
+                {"op":"rename_marker","marker":"chorus","name":"Hook"}
+            ]
+        }),
+    );
+    let marker = result["created"][0]["id"].as_u64().unwrap();
+    assert_eq!(host.history.undo_labels().count(), 1);
+    let context = call(&mut host, "get_song_context", json!({}));
+    assert_eq!(
+        context["meter_changes"],
+        json!([{"bar":5,"beats_per_bar":3,"start_beat":16.0}])
+    );
+    assert_eq!(
+        context["markers"],
+        json!([{"id":marker,"name":"Hook","beat":16.0,"color":null}])
+    );
+    let session = host.session;
+    let error = dispatch_song_tool(
+        &mut host,
+        "apply_edits",
+        json!({
+            "session_id":session.id,"expected_revision":session.revision,"label":"Bad",
+            "edits":[{"op":"move_marker","marker":marker,"beat":19.0},{"op":"set_meter_change","bar":1,"beats_per_bar":3}]
+        }),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "edit_failed");
+    assert_eq!(host.p.markers[0].beat, 16.0);
+    call(
+        &mut host,
+        "apply_edits",
+        json!({
+            "session_id":session.id,"expected_revision":session.revision,"label":"Tidy",
+            "edits":[{"op":"remove_marker","marker":marker},{"op":"remove_meter_change","bar":5}]
+        }),
+    );
+    assert!(host.p.markers.is_empty() && host.p.meter_changes.is_empty());
 }
