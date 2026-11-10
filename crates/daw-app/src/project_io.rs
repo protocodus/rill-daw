@@ -131,7 +131,12 @@ fn write_recovery(snapshot: &Project, directory: &std::path::Path) -> Result<()>
         ));
         let result = (|| -> Result<()> {
             std::fs::copy(&latest, &temporary)?;
-            std::fs::File::open(&temporary)?.sync_all()?;
+            // Windows flushes only through a writable handle; a read-only one
+            // fails with "Access is denied".
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open(&temporary)?
+                .sync_all()?;
             std::fs::rename(&temporary, directory.join("recovery.previous.daw.json"))?;
             Ok(())
         })();
