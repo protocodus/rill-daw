@@ -94,9 +94,9 @@ fn close_buttons_and_menus_work_after_typing_and_restore_the_editor() {
             assert_eq!(restored["project"], edited["project"]);
             assert_eq!(restored["history"], edited["history"]);
 
-            let library = window(&mut app, "Library");
+            let library = window(&mut app, "Device browser");
             assert_eq!(library["popups"]["library"], true);
-            let restored = close(&mut app, "Library");
+            let restored = close(&mut app, "Device browser");
             assert_eq!(restored["popups"]["library"], false);
             assert_eq!(restored["view"], "Clip");
             assert_eq!(restored["project"], edited["project"]);

@@ -452,7 +452,7 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
     );
     let name = path.file_stem().unwrap().to_string_lossy().to_string();
     let mut app = Harness::with_vst_path(path.parent().unwrap());
-    menu(&mut app, "Window", "Library");
+    menu(&mut app, "Window", "Device browser");
     app.click("Search instruments");
     app.command(json!({"command":"text","text":name.chars().take(4).collect::<String>()}));
     common::wait_visible(&mut app, &name);
@@ -632,7 +632,7 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
     );
     // Headless runs never initialize installed devices just to fill previews.
     // This opt-in native scenario explicitly asks for its selected instrument.
-    menu(&mut app, "Window", "Library");
+    menu(&mut app, "Window", "Device browser");
     app.click("Instruments");
     app.click("Search instruments");
     app.command(json!({"command":"key", "key":"A", "cmd":true}));

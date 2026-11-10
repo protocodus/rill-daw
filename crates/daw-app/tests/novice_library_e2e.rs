@@ -141,7 +141,7 @@ fn unmatched_searches_clear_both_search_and_developer_without_assigning_a_stale_
         "Instrument",
     );
     let mut app = Harness::with_vst_path(inventory.path());
-    let baseline = window(&mut app, "Library");
+    let baseline = window(&mut app, "Device browser");
     common::wait_library_device(&mut app, "Novice Keys");
     app.click("All developers");
     // The sidebar row precedes the card's producer text.
@@ -237,5 +237,46 @@ fn silent_instrument_overview_opens_assignment_and_restores_the_clip_editor() {
     assert!(!caller["midi_editor"].is_null());
     assert_eq!(caller["view"], "Clip");
     preserved(&caller, &baseline);
+    app.quit();
+}
+
+#[test]
+fn device_browser_opens_on_the_callers_kind_and_lists_built_in_devices() {
+    let inventory = common::plugin_fixture();
+    let mut app = Harness::with_vst_path(inventory.path());
+    // A new instrument track browses instruments.
+    app.click("Track");
+    let chooser = app.click("Add MIDI track");
+    assert_eq!(chooser["popups"]["library"], true);
+    assert!(visible(&chooser, "Search instruments"), "{chooser}");
+    common::wait_library_device(&mut app, "Rill Fixture A");
+    let builtin = app.click("Built-in (R1)");
+    assert_eq!(builtin["library"]["collection"], "Built-in (R1)");
+    assert_eq!(builtin["library"]["order"], json!(["R1 Mini"]));
+    app.key("Escape");
+
+    // An insert browses effects, still within the chosen collection.
+    window(&mut app, "Effects");
+    let inserts = app.click("+ Insert");
+    assert!(visible(&inserts, "Search effects"), "{inserts}");
+    assert_eq!(inserts["library"]["order"], json!(["R1 Filter"]));
+    app.key("Escape");
+    app.key("Escape");
+
+    // So does a send.
+    window(&mut app, "Routing");
+    let send = app.click("New return with effect…");
+    assert_eq!(send["popups"]["library"], true);
+    assert!(visible(&send, "Search effects"), "{send}");
+    let all = app.click("All plug-ins");
+    assert!(
+        all["library"]["order"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|name| name == "Rill Fixture FX"),
+        "{}",
+        all["library"]
+    );
     app.quit();
 }

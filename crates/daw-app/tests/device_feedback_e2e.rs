@@ -85,7 +85,7 @@ fn device_library_can_move_and_resize_without_changing_the_project() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|label| label["text"] == "Library")
+        .find(|label| label["text"] == "Device browser")
         .unwrap();
     let moved = drag(&mut app, center(title), (70.0, 35.0));
     let after = &moved["library"]["window"];
@@ -114,7 +114,7 @@ fn device_library_can_move_and_resize_without_changing_the_project() {
     assert_eq!(resized["project"], before["project"]);
     assert_eq!(resized["history"], before["history"]);
     app.key("Escape");
-    let recalled = menu(&mut app, "Window", "Library");
+    let recalled = menu(&mut app, "Window", "Device browser");
     assert_eq!(recalled["library"]["window"], resized["library"]["window"]);
     app.quit();
 }
@@ -127,7 +127,7 @@ fn unknown_plugins_are_separate_and_explain_missing_or_malformed_metadata() {
     std::fs::create_dir_all(&broken).unwrap();
     std::fs::write(broken.join("moduleinfo.json"), "{not valid JSON").unwrap();
     let mut app = Harness::with_vst_path(fixture.path());
-    menu(&mut app, "Window", "Library");
+    menu(&mut app, "Window", "Device browser");
     app.click("Search instruments");
     app.command(json!({"command":"text","text":"Rill"}));
     common::wait_library_device(&mut app, "Rill Fixture A");

@@ -49,6 +49,7 @@ enum DeviceKind {
 enum Collection {
     #[default]
     All,
+    Builtin,
     RecentlyUsed,
     Favorites,
     WithPreview,
@@ -56,8 +57,9 @@ enum Collection {
 }
 
 impl Collection {
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 6] = [
         Self::All,
+        Self::Builtin,
         Self::RecentlyUsed,
         Self::Favorites,
         Self::WithPreview,
@@ -67,6 +69,7 @@ impl Collection {
     fn label(self) -> &'static str {
         match self {
             Self::All => "All plug-ins",
+            Self::Builtin => "Built-in (R1)",
             Self::RecentlyUsed => "Recently used",
             Self::Favorites => "Favorites",
             Self::WithPreview => "With preview",
@@ -77,6 +80,7 @@ impl Collection {
     fn accepts(self, item: &Item<'_>) -> bool {
         match self {
             Self::All => true,
+            Self::Builtin => crate::builtin_devices::is_builtin(&item.entry.plugin),
             Self::RecentlyUsed => item.recent_position.is_some(),
             Self::Favorites => item.favorite,
             Self::WithPreview => item.entry.status == ThumbnailStatus::Ready,
@@ -506,7 +510,7 @@ impl DawApp {
         if activate {
             state.activate_when_ready = false;
         }
-        daw_ui::popup("Library", ctx)
+        daw_ui::popup("Device browser", ctx)
             .id(egui::Id::new("library"))
             .open(&mut open)
             // A large popup plus the collections sidebar.

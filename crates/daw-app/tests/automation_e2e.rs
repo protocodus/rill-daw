@@ -678,7 +678,7 @@ fn installed_vst_parameter_discovery_creates_named_lane_with_current_value() {
     drop(plugin);
     let mut app = Harness::new();
     menu(&mut app, "Track", "Add MIDI track");
-    menu(&mut app, "Window", "Library");
+    menu(&mut app, "Window", "Device browser");
     app.click("Search instruments");
     let name = path.file_stem().unwrap().to_string_lossy();
     app.command(json!({"command":"text","text":name.chars().take(4).collect::<String>()}));

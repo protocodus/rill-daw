@@ -371,7 +371,7 @@ fn long_library_catalog_scrolls_without_moving_search_or_device_actions() {
     for density in [1.0, 2.0] {
         for dark in [false, true] {
             appearance(&mut app, density, dark);
-            window(&mut app, "Library");
+            window(&mut app, "Device browser");
             let current_search = if visible(&app.inspect(), "Search instruments") {
                 "Search instruments"
             } else {

@@ -1233,8 +1233,10 @@ primary notice, and the last-WAV re-export command keeps its own destination.
 
 ## Device library and effect chains
 
-**Window → Library** opens a movable card grid with Instruments,
-Effects, and Unverified tabs. Drag any edge or lower corner to resize both its
+**Window → Device browser** opens a movable card grid with Instruments,
+Effects, and Unverified tabs. Choosing an instrument opens it on Instruments;
+adding an insert or send effect opens it on Effects. The **Built-in (R1)**
+collection lists Rill's own devices. Drag any edge or lower corner to resize both its
 width and height, including when choosing an instrument or effect. Its catalogue,
 collections and details share the resized body height while actions remain
 reachable below them; each pane scrolls independently. Instrument and effect lists require a declared
