@@ -1187,6 +1187,14 @@ phrase repeat with rests and partial final windows, bounded allocations,
 re-export after successful and failed attempts, remembered tail options, and
 reset on Open. `time_signature_e2e` chooses 3/4 entirely through the UI, verifies
 Undo/Redo and portable recall, and disables the choice during live capture.
+`meter_change_e2e` inserts a 3/4 change from the ruler context menu, moves it
+with its flag's dialog and removes it from the flag menu, checking that clips keep
+their beats, Undo/Redo, MIDI time-signature export/import and portable recall;
+song tools set and remove changes through the same history. `markers_e2e` adds
+markers from the menu and ruler, drags one with snap, renames it by double-click,
+seeks by click, steps with menu items and `,`/`.`, adds with M, deletes from the
+flag menu, and checks exact Undo/Redo, MIDI marker export, portable recall and
+tool-driven add/move/rename/remove.
 
 ## Empty workspaces and first actions
 
