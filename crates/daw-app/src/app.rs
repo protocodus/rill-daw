@@ -1099,6 +1099,9 @@ impl DawApp {
         }
         if self.panel_wheels.map(|(track, _, _)| track) != panel_track {
             self.panel_wheels = None;
+            // A hidden wheel cannot spring back on release; the engine centres
+            // the bend, and the panel shows it centred when it returns.
+            self.instrument_ui.device_panel.pitch_wheel = 0.0;
         }
         let note = self
             .midi_audition(ctx)

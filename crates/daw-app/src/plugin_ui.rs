@@ -123,7 +123,7 @@ pub(crate) struct InstrumentUi {
     last_saved_request: Option<u64>,
     error: Option<String>,
     pending: Option<PendingState>,
-    device_panel: daw_devices_ui::PanelState,
+    pub(crate) device_panel: daw_devices_ui::PanelState,
     /// Read once per editor owner and after a save, not every frame.
     user_presets: Option<Vec<daw_devices::Preset>>,
 }

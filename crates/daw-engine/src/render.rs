@@ -2734,19 +2734,34 @@ impl Renderer {
     }
 
     /// Sends changed panel wheels to their track's instrument as pitch bend
-    /// and mod wheel, through the live input queue.
+    /// and mod wheel, through the live input queue. Detaching the wheels
+    /// centres the bend they left behind, as a wheel springs back; the mod
+    /// wheel stays where it was, as a hardware one does.
     pub(crate) fn set_audition_wheels(&mut self, wheels: Option<(u64, f32, f32)>) {
-        use daw_plugins::{
-            ExpressiveController as Controller, ExpressiveMidiData as Data,
-            ExpressiveMidiMessage as Message,
-        };
-        if self.audition_wheels == wheels {
+        use daw_plugins::ExpressiveController as Controller;
+        let previous = std::mem::replace(&mut self.audition_wheels, wheels);
+        if previous == wheels {
             return;
         }
-        self.audition_wheels = wheels;
-        let Some((id, pitch, modulation)) = wheels else {
-            return;
-        };
+        if let Some((id, pitch, _)) = previous
+            && pitch != 0.0
+            && wheels.is_none_or(|(next, _, _)| next != id)
+        {
+            self.send_live_controller(id, Controller::PitchBend, 0.5);
+        }
+        if let Some((id, pitch, modulation)) = wheels {
+            self.send_live_controller(id, Controller::PitchBend, (f64::from(pitch) + 1.0) / 2.0);
+            self.send_live_controller(id, Controller::ControlChange(1), f64::from(modulation));
+        }
+    }
+
+    fn send_live_controller(
+        &mut self,
+        id: u64,
+        controller: daw_plugins::ExpressiveController,
+        value: f64,
+    ) {
+        use daw_plugins::{ExpressiveMidiData as Data, ExpressiveMidiMessage as Message};
         let Some(track) = self
             .tracks
             .iter_mut()
@@ -2755,23 +2770,18 @@ impl Renderer {
         else {
             return;
         };
-        for (controller, value) in [
-            (Controller::PitchBend, (f64::from(pitch) + 1.0) / 2.0),
-            (Controller::ControlChange(1), f64::from(modulation)),
-        ] {
-            if track.expression.live.len() < 4096 {
-                track.expression.live.push((
-                    0,
-                    Message {
-                        offset: 0,
-                        data: Data::Controller {
-                            channel: 0,
-                            controller,
-                            value,
-                        },
+        if track.expression.live.len() < 4096 {
+            track.expression.live.push((
+                0,
+                Message {
+                    offset: 0,
+                    data: Data::Controller {
+                        channel: 0,
+                        controller,
+                        value,
                     },
-                ));
-            }
+                },
+            ));
         }
     }
 

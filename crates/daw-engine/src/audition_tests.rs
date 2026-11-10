@@ -235,6 +235,11 @@ fn builtin_instrument_auditions_and_follows_the_panel_wheels() {
     let bent = render(&mut renderer, 100);
     let frequency = preview_frequency(&bent[bent.len() / 2..], 48_000.0);
     assert!((frequency - 880.0).abs() < 2.0, "{frequency}");
+    // Closing the panel mid-bend detaches the wheels; the bend springs back.
+    renderer.set_audition_wheels(None);
+    let detached = render(&mut renderer, 100);
+    let frequency = preview_frequency(&detached[detached.len() / 2..], 48_000.0);
+    assert!((frequency - 440.0).abs() < 1.0, "{frequency}");
     renderer.set_audition(None).unwrap();
     render(&mut renderer, 400);
     let released = render(&mut renderer, 10);

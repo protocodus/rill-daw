@@ -1431,8 +1431,14 @@ impl Mini {
                 voice.filter_envelope.reset();
                 self.start(index, pending.note, pending.glide_from);
                 if !pending.held {
-                    self.voices[index].held = false;
-                    self.voices[index].release();
+                    // Released during the fade: the same pedal rules as a sounding note.
+                    let voice = &mut self.voices[index];
+                    voice.held = false;
+                    if self.sustain {
+                        voice.sustained = true;
+                    } else {
+                        voice.release();
+                    }
                 }
             }
         }

@@ -315,6 +315,25 @@ fn sustain_pedal_holds_released_notes() {
 }
 
 #[test]
+fn sustain_pedal_holds_a_note_released_while_it_steals_a_voice() {
+    let values = [sine_values(), vec![(VOICES, 1.0)]].concat();
+    let mut device = synth(&values);
+    let output = render(
+        &mut *device,
+        1.0,
+        &[
+            (0, EventKind::Sustain(true)),
+            (0, note_on(0, 1, 60.0, 1.0).kind),
+            (4800, note_off(0, 1).kind),
+            // Released within the 5 ms fade of the stolen voice.
+            (9600, note_on(0, 2, 64.0, 1.0).kind),
+            (9700, note_off(0, 2).kind),
+        ],
+    );
+    assert!(rms(&output[30_000..40_000]) > 0.05);
+}
+
+#[test]
 fn drawn_response_follows_cutoff_and_resonance() {
     let settings = |cutoff: f32, resonance: f32| {
         Settings::from_normalized(|id| {
