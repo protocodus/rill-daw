@@ -294,6 +294,10 @@ pub struct Clip {
     /// including when its content belongs to a shared ghost group.
     #[serde(default = "default_source_rate")]
     pub source_rate: f64,
+    /// Optional audio warp map; empty plays the whole clip at `source_rate`.
+    /// Local to this occurrence like `source_rate`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warp_markers: Vec<crate::WarpMarker>,
     pub content: ClipContent,
 }
 
@@ -389,6 +393,7 @@ impl Clip {
             length,
             offset: 0.0,
             source_rate: 1.0,
+            warp_markers: Vec::new(),
             content: ClipContent::Midi { notes },
         }
     }
@@ -411,6 +416,7 @@ impl Clip {
             length,
             offset: 0.0,
             source_rate: 1.0,
+            warp_markers: Vec::new(),
             content: ClipContent::Audio {
                 path: path.into(),
                 processing: AudioProcessing::default(),
@@ -431,17 +437,10 @@ impl Clip {
         self.start + self.length
     }
 
+    /// Clip length in rate-scaled source beats. Fades and envelopes use this
+    /// unit; with warp markers the played source window is `offset..source_end()`.
     pub fn source_length(&self) -> f64 {
         self.length * self.source_rate
-    }
-    pub fn source_end(&self) -> f64 {
-        self.offset + self.source_length()
-    }
-    pub fn source_to_local(&self, source_beat: f64) -> f64 {
-        (source_beat - self.offset) / self.source_rate
-    }
-    pub fn local_to_source(&self, local_beat: f64) -> f64 {
-        self.offset + local_beat * self.source_rate
     }
 
     fn refresh_ids(&mut self) {
@@ -867,9 +866,9 @@ impl Project {
             *crossfade = None;
         }
         if matches!(clip.content, ClipContent::Audio { reverse: true, .. }) {
-            clip.offset += (clip.length - delta) * clip.source_rate;
+            clip.shift_source_origin(clip.length - delta);
         } else {
-            right.offset += delta * clip.source_rate;
+            right.shift_source_origin(delta);
         }
         let envelope = match &mut clip.content {
             ClipContent::Audio { envelope, .. } => {
@@ -971,11 +970,12 @@ impl Project {
         let clip = self.clip_mut(track_id, clip_id).context("Clip not found")?;
         ensure!(!clip.is_take_source(), "Choose a take before trimming it");
         let delta = new_start - clip.start;
-        let new_offset = if matches!(clip.content, ClipContent::Audio { reverse: true, .. }) {
-            clip.offset + (clip.length - delta - new_length) * clip.source_rate
+        let origin = if matches!(clip.content, ClipContent::Audio { reverse: true, .. }) {
+            clip.length - delta - new_length
         } else {
-            clip.offset + delta * clip.source_rate
+            delta
         };
+        let new_offset = clip.local_to_source(origin);
         ensure!(
             valid_range(new_offset, new_length * clip.source_rate),
             "Trim extends before the source or overflows its range"
@@ -1012,7 +1012,7 @@ impl Project {
                 boundary.offset += delta * clip.source_rate;
             }
         }
-        clip.offset = new_offset;
+        clip.shift_source_origin(origin);
         clip.start = new_start;
         clip.length = new_length;
         clip.constrain_fades();
@@ -1051,6 +1051,10 @@ impl Project {
                 length: source_length,
             });
         }
+        let mut warped = clip.clone();
+        warped.scale_warp(new_length / clip.length);
+        crate::validate_warp_markers(&warped.warp_markers)?;
+        clip.warp_markers = warped.warp_markers;
         clip.length = new_length;
         clip.source_rate = rate;
         Ok(())
@@ -1291,6 +1295,18 @@ impl Project {
                         && (MIN_SOURCE_RATE..=MAX_SOURCE_RATE).contains(&clip.source_rate),
                     "Invalid clip source rate"
                 );
+                if clip.is_warped() {
+                    ensure!(
+                        matches!(clip.content, ClipContent::Audio { .. }),
+                        "Warp markers apply to audio clips"
+                    );
+                    crate::validate_warp_markers(&clip.warp_markers)?;
+                    let start = clip.local_to_source(0.0);
+                    ensure!(
+                        (clip.offset - start).abs() <= 1e-6 * start.abs().max(1.0),
+                        "Warp markers disagree with the clip source offset"
+                    );
+                }
                 match &clip.content {
                     ClipContent::Midi { notes } => {
                         ensure!(

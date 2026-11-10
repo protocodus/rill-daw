@@ -88,7 +88,20 @@ impl<'a, S: FnMut(f64, usize) -> Result<f32>> AudioAnalysis<'a, S> {
         let frames_per_beat = f64::from(self.sample_rate) * 60.0 / self.tempo;
         // Inspect every source frame even for a compressed clip: output-rate
         // sampling would skip narrow transients when source_rate exceeds one.
-        let frames = (self.clip.source_length() * frames_per_beat).ceil() as usize;
+        let frames =
+            ((self.clip.source_end() - self.clip.offset) * frames_per_beat).ceil() as usize;
+        let warped = self.clip.is_warped();
+        // Warped clips scan the same source window; each source frame then
+        // maps through the warp to where it sounds.
+        let local_at = |distance: usize| {
+            let unwarped = distance as f64 / frames_per_beat / self.clip.source_rate;
+            if warped {
+                self.clip
+                    .playback_local(self.clip.playback_source(unwarped))
+            } else {
+                unwarped
+            }
+        };
         let window = (f64::from(self.sample_rate) * 0.005 * self.clip.source_rate)
             .round()
             .max(1.0) as usize;
@@ -107,11 +120,19 @@ impl<'a, S: FnMut(f64, usize) -> Result<f32>> AudioAnalysis<'a, S> {
             let mut peak = 0.0_f32;
             let length = window.min(frames - block * window);
             for frame in 0..length {
-                let beat =
-                    (block * window + frame) as f64 / frames_per_beat / self.clip.source_rate;
-                let source = self
-                    .clip
-                    .audio_source_frame(beat, self.tempo, self.sample_rate);
+                let source = if warped {
+                    let distance = (block * window + frame) as f64;
+                    if matches!(self.clip.content, ClipContent::Audio { reverse: true, .. }) {
+                        self.clip.source_end() * frames_per_beat - 1.0 - distance
+                    } else {
+                        self.clip.offset * frames_per_beat + distance
+                    }
+                } else {
+                    let beat =
+                        (block * window + frame) as f64 / frames_per_beat / self.clip.source_rate;
+                    self.clip
+                        .audio_source_frame(beat, self.tempo, self.sample_rate)
+                };
                 let mut level = 0.0_f32;
                 for channel in 0..self.channels {
                     level = level.max((self.sample)(source, channel)?.abs());
@@ -146,7 +167,7 @@ impl<'a, S: FnMut(f64, usize) -> Result<f32>> AudioAnalysis<'a, S> {
                         && level > baseline * (1.1 + (1.0 - settings.sensitivity))
                 }
             };
-            let beat = (index * window) as f64 / frames_per_beat / self.clip.source_rate;
+            let beat = local_at(index * window);
             if attack
                 && beat > 1e-9
                 && beat < self.clip.length - 1e-9
@@ -168,6 +189,72 @@ impl<'a, S: FnMut(f64, usize) -> Result<f32>> AudioAnalysis<'a, S> {
             }
             baseline = baseline * 0.9 + level * 0.1;
             previous = level;
+        }
+        Ok(result)
+    }
+
+    /// Detected transients refined to the first source frame reaching half
+    /// of the local peak, so warp markers pin the attack rather than the
+    /// start of its 5 ms analysis window.
+    pub(crate) fn onsets(
+        &mut self,
+        settings: TransientSettings,
+        mut check_cancelled: impl FnMut() -> Result<()>,
+    ) -> Result<Vec<f64>> {
+        let detected = self.transients(settings, &mut check_cancelled)?;
+        let frames_per_beat = f64::from(self.sample_rate) * 60.0 / self.tempo;
+        let window = (f64::from(self.sample_rate) * 0.005 * self.clip.source_rate)
+            .round()
+            .max(1.0);
+        let reverse = matches!(self.clip.content, ClipContent::Audio { reverse: true, .. });
+        let first = self.clip.offset * frames_per_beat;
+        let last = self.clip.source_end() * frames_per_beat - 1.0;
+        let span = ((last - first).max(0.0)).floor();
+        let mut result = Vec::with_capacity(detected.len());
+        for beat in detected {
+            check_cancelled()?;
+            let source = self
+                .clip
+                .audio_source_frame(beat, self.tempo, self.sample_rate);
+            let distance = if reverse {
+                last - source
+            } else {
+                source - first
+            }
+            .round();
+            let from = (distance - window).max(0.0) as usize;
+            let to = (distance + 2.0 * window).min(span) as usize;
+            let mut levels = Vec::with_capacity(to.saturating_sub(from) + 1);
+            for index in from..=to {
+                let frame = if reverse {
+                    last - index as f64
+                } else {
+                    first + index as f64
+                };
+                let mut level = 0.0_f32;
+                for channel in 0..self.channels {
+                    level = level.max((self.sample)(frame, channel)?.abs());
+                }
+                levels.push(level);
+            }
+            let peak = levels.iter().copied().fold(0.0_f32, f32::max);
+            let onset = levels
+                .iter()
+                .position(|level| *level >= peak * 0.5 && peak > 0.0)
+                .map_or(distance, |index| (from + index) as f64);
+            let unwarped = onset / frames_per_beat / self.clip.source_rate;
+            let local = if self.clip.is_warped() {
+                self.clip
+                    .playback_local(self.clip.playback_source(unwarped))
+            } else {
+                unwarped
+            };
+            if local > 1e-9
+                && local < self.clip.length - 1e-9
+                && result.last().is_none_or(|previous| local > *previous)
+            {
+                result.push(local);
+            }
         }
         Ok(result)
     }

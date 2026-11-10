@@ -63,11 +63,13 @@ impl Clip {
         );
         let mut region = self.clone();
         let delta = start - self.start;
-        region.offset += if matches!(self.content, ClipContent::Audio { reverse: true, .. }) {
-            (self.end() - end) * self.source_rate
-        } else {
-            delta * self.source_rate
-        };
+        region.shift_source_origin(
+            if matches!(self.content, ClipContent::Audio { reverse: true, .. }) {
+                self.end() - end
+            } else {
+                delta
+            },
+        );
         region.start = start;
         region.length = end - start;
         if let ClipContent::Audio {
@@ -141,6 +143,13 @@ impl Clip {
     pub fn audio_source_frame(&self, beat: f64, tempo: f64, sample_rate: u32) -> f64 {
         let frames_per_beat = f64::from(sample_rate) * 60.0 / tempo;
         let reverse = matches!(self.content, ClipContent::Audio { reverse: true, .. });
+        if self.is_warped() {
+            return if reverse {
+                self.local_to_source(self.length - beat) * frames_per_beat - 1.0
+            } else {
+                self.local_to_source(beat) * frames_per_beat
+            };
+        }
         self.offset * frames_per_beat
             + if reverse {
                 (self.length - beat) * self.source_rate * frames_per_beat - 1.0
@@ -211,7 +220,9 @@ pub fn nearest_audio_zero_crossing(
             if !crossing {
                 return None;
             }
-            let local = if reverse {
+            let local = if clip.is_warped() {
+                clip.playback_local((frame as f64 + if reverse { 1.0 } else { 0.0 }) / fpb)
+            } else if reverse {
                 clip.length - (frame as f64 - clip.offset * fpb + 1.0) / fpb / clip.source_rate
             } else {
                 (frame as f64 - clip.offset * fpb) / fpb / clip.source_rate
@@ -396,6 +407,24 @@ pub fn detect_transients(
     .transients(settings, || Ok(()))
 }
 
+/// Transients refined to their attack frame, for placing warp markers.
+pub fn detect_transient_onsets(
+    clip: &Clip,
+    data: &AudioData,
+    tempo: f64,
+    settings: TransientSettings,
+) -> Result<Vec<f64>> {
+    data.validate()?;
+    crate::audio_analysis::AudioAnalysis::new(
+        clip,
+        tempo,
+        data.sample_rate,
+        data.channels,
+        |frame, channel| Ok(audio_sample(data, frame, channel)),
+    )?
+    .onsets(settings, || Ok(()))
+}
+
 impl Project {
     /// Close a time selection on one audio track. All audible regions intersecting
     /// the selection are cut; subsequent regions move left by its duration.
@@ -548,6 +577,11 @@ impl Project {
             source_beats + 1e-9 >= clip.source_length(),
             "Trim the clip to fit its source before slipping"
         );
+        if clip.is_warped() {
+            let direction = if reverse { -1.0 } else { 1.0 };
+            clip.slip_warped(movement * direction, source_beats);
+            return Ok(());
+        }
         let direction = if reverse { 1.0 } else { -1.0 };
         clip.offset = (clip.offset + movement * clip.source_rate * direction)
             .clamp(0.0, (source_beats - clip.source_length()).max(0.0));
