@@ -351,3 +351,103 @@ fn midi_rejects_tempo_maps_and_accepts_velocity_zero_note_off() {
     smf.save(&path).unwrap();
     assert!(daw_core::import_midi(&path).is_err());
 }
+
+#[test]
+fn midi_round_trips_meter_changes_and_writes_markers() {
+    use midly::{MetaMessage, Smf, TrackEventKind};
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("meters.mid");
+    let (mut project, _, _) = fixture();
+    project.beats_per_bar = 3;
+    project.set_meter_change(3, 5).unwrap();
+    project.set_meter_change(4, 7).unwrap();
+    project.add_marker(6.0, "Verse", None).unwrap();
+    project.add_marker(0.0, "Intro", None).unwrap();
+    project.export_midi(&path).unwrap();
+    let bytes = std::fs::read(&path).unwrap();
+    let smf = Smf::parse(&bytes).unwrap();
+    let mut tick = 0;
+    let mut meta = Vec::new();
+    for event in &smf.tracks[0] {
+        tick += event.delta.as_int();
+        match event.kind {
+            TrackEventKind::Meta(MetaMessage::TimeSignature(n, d, _, _)) => {
+                meta.push((tick, format!("{n}/{}", 1 << d)))
+            }
+            TrackEventKind::Meta(MetaMessage::Marker(text)) => {
+                meta.push((tick, String::from_utf8_lossy(text).into_owned()))
+            }
+            _ => {}
+        }
+    }
+    // Bars 1–2 in 3/4, bar 3 in 5/4 (beat 6), then 7/4 from beat 11.
+    assert_eq!(
+        meta,
+        [
+            (0, "3/4".to_owned()),
+            (0, "Intro".to_owned()),
+            (6 * 960, "5/4".to_owned()),
+            (6 * 960, "Verse".to_owned()),
+            (11 * 960, "7/4".to_owned()),
+        ]
+    );
+    let imported = daw_core::import_midi(&path).unwrap();
+    assert_eq!(imported.beats_per_bar, Some(3));
+    assert_eq!(imported.meter_changes, project.meter_changes);
+    let mut empty = Project::new();
+    empty.import_midi(&path, 0.0).unwrap();
+    assert_eq!(
+        (empty.beats_per_bar, empty.meter_changes.clone()),
+        (3, project.meter_changes.clone())
+    );
+}
+
+#[test]
+fn midi_import_rejects_meter_changes_off_bar_lines() {
+    use midly::{Header, MetaMessage, MidiMessage, Smf, TrackEvent, TrackEventKind};
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("offbar.mid");
+    let signature = |delta: u32, numerator: u8| TrackEvent {
+        delta: delta.into(),
+        kind: TrackEventKind::Meta(MetaMessage::TimeSignature(numerator, 2, 24, 8)),
+    };
+    let note = |delta: u32, velocity: u8| TrackEvent {
+        delta: delta.into(),
+        kind: TrackEventKind::Midi {
+            channel: 0.into(),
+            message: MidiMessage::NoteOn {
+                key: 60.into(),
+                vel: velocity.into(),
+            },
+        },
+    };
+    let mut smf = Smf {
+        header: Header::new(
+            midly::Format::SingleTrack,
+            midly::Timing::Metrical(480.into()),
+        ),
+        tracks: vec![vec![
+            note(0, 96),
+            signature(480 * 4, 3),
+            note(0, 0),
+            TrackEvent {
+                delta: 0.into(),
+                kind: TrackEventKind::Meta(MetaMessage::EndOfTrack),
+            },
+        ]],
+    };
+    smf.save(&path).unwrap();
+    // No signature at tick 0 means 4/4; beat 4 is bar 2.
+    let imported = daw_core::import_midi(&path).unwrap();
+    assert_eq!(imported.beats_per_bar, Some(4));
+    assert_eq!(
+        imported.meter_changes,
+        [daw_core::MeterChange {
+            bar: 2,
+            beats_per_bar: 3
+        }]
+    );
+    smf.tracks[0][1].delta = 480.into();
+    smf.save(&path).unwrap();
+    assert!(daw_core::import_midi(&path).is_err());
+}

@@ -12,6 +12,7 @@ glow-backdrop = ["dep:egui_glow"]
 egui = "=0.33.3"
 egui_glow = { version = "=0.33.3", optional = true, default-features = false }
 serde.workspace = true
+daw-timeline.workspace = true
 image = { version = "0.25", default-features = false, features = ["png"] }
 
 [dev-dependencies]

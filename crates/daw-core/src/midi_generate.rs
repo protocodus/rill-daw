@@ -186,23 +186,17 @@ pub struct GeneratedNote {
 
 /// Return (start beat, length in beats) for bars entirely inside the viewport.
 /// No outward epsilon is used: even slightly clipped bars remain excluded.
-pub fn complete_visible_bars(start: f64, end: f64, beats_per_bar: u8) -> Option<(f64, f64)> {
-    if !start.is_finite() || !end.is_finite() || end <= start || beats_per_bar == 0 {
+pub fn complete_visible_bars(start: f64, end: f64, meter: &crate::MeterMap) -> Option<(f64, f64)> {
+    if !start.is_finite() || !end.is_finite() || end <= start {
         return None;
     }
-    let bar = f64::from(beats_per_bar);
-    let mut first = (start.max(0.0) / bar).ceil() * bar;
-    let mut last = (end / bar).floor() * bar;
-    // Division can round to an integer at very large positions. Retain the
-    // inward-only contract after multiplication as well.
-    if first < start {
-        first += bar;
-    }
-    if last > end {
-        last -= bar;
-    }
-    (first.is_finite() && last.is_finite() && first >= start && last <= end && last > first)
-        .then_some((first, last - first))
+    let mut lines = meter
+        .bar_lines(start, end)
+        .map(|(_, beat)| beat)
+        .filter(|beat| *beat >= start && *beat <= end);
+    let first = lines.next()?;
+    let last = lines.last()?;
+    Some((first, last - first))
 }
 
 /// Build an immutable draft. Invalid or excessively large requests fail before
@@ -598,22 +592,26 @@ mod tests {
 
     #[test]
     fn complete_bars_round_strictly_inward_and_reject_empty_views() {
-        assert_eq!(complete_visible_bars(0.0, 16.0, 4), Some((0.0, 16.0)));
-        assert_eq!(complete_visible_bars(0.5, 15.5, 4), Some((4.0, 8.0)));
-        assert_eq!(complete_visible_bars(4.0, 12.0, 4), Some((4.0, 8.0)));
+        let four = crate::MeterMap::uniform(4);
+        assert_eq!(complete_visible_bars(0.0, 16.0, &four), Some((0.0, 16.0)));
+        assert_eq!(complete_visible_bars(0.5, 15.5, &four), Some((4.0, 8.0)));
+        assert_eq!(complete_visible_bars(4.0, 12.0, &four), Some((4.0, 8.0)));
         assert_eq!(
-            complete_visible_bars(0.001, 12.0 - 1e-10, 4),
+            complete_visible_bars(0.001, 12.0 - 1e-10, &four),
             Some((4.0, 4.0))
         );
-        assert_eq!(complete_visible_bars(-1.0, 6.0, 3), Some((0.0, 6.0)));
-        for (start, end, meter) in [
-            (0.2, 3.9, 4),
-            (0.0, 0.0, 4),
-            (0.0, 4.0, 0),
-            (f64::NAN, 8.0, 4),
-            (0.0, f64::INFINITY, 4),
-        ] {
-            assert_eq!(complete_visible_bars(start, end, meter), None);
+        let three = crate::MeterMap::uniform(3);
+        assert_eq!(complete_visible_bars(-1.0, 6.0, &three), Some((0.0, 6.0)));
+        let changing = crate::MeterMap::new(
+            4,
+            &[crate::MeterChange {
+                bar: 2,
+                beats_per_bar: 3,
+            }],
+        );
+        assert_eq!(complete_visible_bars(1.0, 10.5, &changing), Some((4.0, 6.0)));
+        for (start, end) in [(0.2, 3.9), (0.0, 0.0), (f64::NAN, 8.0), (0.0, f64::INFINITY)] {
+            assert_eq!(complete_visible_bars(start, end, &four), None);
         }
     }
 

@@ -904,6 +904,7 @@ name = "daw-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "daw-timeline",
  "flate2",
  "hound",
  "libc",
@@ -965,6 +966,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "daw-timeline"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "daw-tools"
 version = "0.1.0"
 dependencies = [
@@ -978,6 +986,7 @@ dependencies = [
 name = "daw-ui"
 version = "0.1.0"
 dependencies = [
+ "daw-timeline",
  "eframe",
  "egui",
  "egui_glow",

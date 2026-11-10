@@ -50,22 +50,25 @@ impl GenerateDialog {
         settings: GenerateSettings,
         view: TimelineViewport,
         visible_end: f64,
-        beats_per_bar: u8,
+        meter: &daw_core::MeterMap,
         clip_window: (f64, f64, f64, f64),
         chord: Chord,
         scale: Scale,
     ) -> Self {
-        let meter = f64::from(beats_per_bar);
-        let (start, length) = complete_visible_bars(view.start_beat, visible_end, beats_per_bar)
-            .unwrap_or(((view.start_beat.max(0.0) / meter).ceil() * meter, 0.0));
+        let (start, length) = complete_visible_bars(view.start_beat, visible_end, meter)
+            .unwrap_or_else(|| {
+                let (bar, offset) = meter.position(view.start_beat);
+                (meter.bar_start(bar + u32::from(offset > 0.0)), 0.0)
+            });
+        let start_bar = meter.position(start).0;
         let mut dialog = Self {
             settings,
             notes: Vec::new(),
             preview: true,
             original_view: view,
             clip_window,
-            start_bar: (start / meter).round() as u32 + 1,
-            length_bars: (length / meter).round() as u32,
+            start_bar,
+            length_bars: meter.position(start + length).0 - start_bar,
             cached: None,
             error: None,
             controls: Value::Null,
@@ -74,7 +77,7 @@ impl GenerateDialog {
             added_notes: 0,
             applied: None,
         };
-        dialog.refresh(beats_per_bar);
+        dialog.refresh(meter);
         dialog
     }
 
@@ -89,7 +92,7 @@ impl GenerateDialog {
         }
     }
 
-    pub fn restore(&mut self, memory: &GenerateMemory, meter: u8) {
+    pub fn restore(&mut self, memory: &GenerateMemory, meter: &daw_core::MeterMap) {
         self.settings = memory.settings.clone();
         self.preview = memory.preview;
         self.start_bar = memory.start_bar;
@@ -114,7 +117,7 @@ impl GenerateDialog {
         self.preview && !self.already_added()
     }
 
-    fn next_start_bar(&self, meter: u8) -> Option<u32> {
+    fn next_start_bar(&self, meter: &daw_core::MeterMap) -> Option<u32> {
         if self.length_bars == 0 {
             return None;
         }
@@ -122,20 +125,21 @@ impl GenerateDialog {
         if start_bar > 1_000_000 {
             return None;
         }
-        let end = f64::from(start_bar - 1 + self.length_bars) * f64::from(meter);
+        let end = meter.bar_start(start_bar.saturating_add(self.length_bars));
         let (clip_start, offset, clip_length, rate) = self.clip_window;
         let end = end.max(clip_length);
         (clip_start + end <= daw_core::MAX_BEAT && (offset + end) * rate <= daw_core::MAX_BEAT)
             .then_some(start_bar)
     }
 
-    fn refresh(&mut self, meter: u8) {
+    fn refresh(&mut self, meter: &daw_core::MeterMap) {
         match self.settings.harmony {
             GenerateHarmony::Chord(chord) => self.chord = chord,
             GenerateHarmony::Scale(scale) => self.scale = scale,
         }
-        self.settings.start = f64::from(self.start_bar.saturating_sub(1)) * f64::from(meter);
-        self.settings.length = f64::from(self.length_bars) * f64::from(meter);
+        self.settings.start = meter.bar_start(self.start_bar);
+        self.settings.length =
+            meter.bar_start(self.start_bar.saturating_add(self.length_bars)) - self.settings.start;
         if self.cached.as_ref() == Some(&self.settings) {
             return;
         }
@@ -167,7 +171,7 @@ impl GenerateDialog {
         }
     }
 
-    pub fn show(&mut self, ctx: &egui::Context, clip_name: &str, meter: u8) -> GenerateAction {
+    pub fn show(&mut self, ctx: &egui::Context, clip_name: &str, meter: &daw_core::MeterMap) -> GenerateAction {
         let mut action = GenerateAction::default();
         let mut open = true;
         self.controls = json!({});

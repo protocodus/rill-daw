@@ -9,6 +9,7 @@ rust-version.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+daw-timeline.workspace = true
 hound = "=3.5.1"
 symphonia = { version = "=0.6.1", default-features = false, features = ["mp3", "flac", "ogg", "vorbis", "pcm"] }
 rustfft = "=6.4.1"

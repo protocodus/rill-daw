@@ -1,4 +1,5 @@
 use crate::{
+    MeterChange, MeterMap,
     AudioBoundaryFades, AudioCrossfade, AudioEnvelope, AudioProcessing, AutomationLane, FadeCurve,
 };
 use anyhow::{Context, Result, bail, ensure};
@@ -71,6 +72,35 @@ pub struct Project {
     pub metronome_gain: f32,
     #[serde(default)]
     pub precount_bars: u8,
+    /// Meter changes after bar 1; `beats_per_bar` remains the meter of bar 1.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub meter_changes: Vec<MeterChange>,
+    /// Named song positions, kept in beat order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub markers: Vec<Marker>,
+}
+
+pub const MAX_MARKERS: usize = 1024;
+pub const MAX_MARKER_NAME_CHARS: usize = 256;
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Marker {
+    pub id: u64,
+    pub beat: f64,
+    pub name: String,
+    /// Optional identity color, using the same RGB form as track colors.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<[u8; 3]>,
+}
+
+pub fn validate_marker_name(name: &str) -> Result<()> {
+    ensure!(
+        !name.trim().is_empty()
+            && name.chars().count() <= MAX_MARKER_NAME_CHARS
+            && !name.chars().any(char::is_control),
+        "Marker names need 1–256 printable characters"
+    );
+    Ok(())
 }
 
 fn default_metronome_gain() -> f32 {
@@ -514,7 +544,18 @@ impl Project {
             metronome_enabled: false,
             metronome_gain: default_metronome_gain(),
             precount_bars: 0,
+            meter_changes: Vec::new(),
+            markers: Vec::new(),
         }
+    }
+
+    /// The song's bar/beat layout; every bar-derived position uses this map.
+    pub fn meter_map(&self) -> MeterMap {
+        MeterMap::new(self.beats_per_bar, &self.meter_changes)
+    }
+
+    pub fn marker(&self, id: u64) -> Option<&Marker> {
+        self.markers.iter().find(|marker| marker.id == id)
     }
 
     pub fn add_audio_track(&mut self, name: impl Into<String>) -> u64 {
@@ -1024,6 +1065,15 @@ impl Project {
             (1..=32).contains(&self.beats_per_bar),
             "Invalid time signature numerator"
         );
+        self.validate_timeline()?;
+        ensure!(self.markers.len() <= MAX_MARKERS, "Too many markers (at most 1024)");
+        for marker in &self.markers {
+            ensure!(
+                marker.beat.is_finite() && (0.0..=MAX_BEAT).contains(&marker.beat),
+                "Marker position is outside the timeline"
+            );
+            validate_marker_name(&marker.name)?;
+        }
         ensure!(
             nonnegative(self.loop_start)
                 && nonnegative(self.loop_end)
@@ -1071,6 +1121,9 @@ impl Project {
             );
             Ok(())
         };
+        for marker in &self.markers {
+            check_id(marker.id)?;
+        }
         for (is_master, track) in self
             .tracks
             .iter()
@@ -1488,7 +1541,7 @@ impl Project {
         resolve_plugin_paths: bool,
     ) -> Result<Self> {
         self.validate()?;
-        let mut max_id = 0;
+        let mut max_id = self.markers.iter().map(|marker| marker.id).max().unwrap_or(0);
         for track in self.channels_mut() {
             max_id = max_id.max(track.id);
             if let Some(lane) = &track.automation {
