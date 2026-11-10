@@ -45,6 +45,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                         selected: state.selected == index,
                         favorite: false,
                         icon,
+                        format: ["VST3", "CLAP"][index],
                     },
                     width,
                 );

@@ -384,9 +384,11 @@ impl Harness {
         // Subprocess tests discover only explicitly supplied fixtures; installed
         // system plug-ins must not change their inventory or launch real code.
         app.plugin_scan_roots = Some(
-            std::env::var_os("VST3_PATH")
-                .map(|paths| std::env::split_paths(&paths).collect())
-                .unwrap_or_default(),
+            ["VST3_PATH", "CLAP_PATH", "LV2_PATH"]
+                .into_iter()
+                .filter_map(std::env::var_os)
+                .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+                .collect(),
         );
         app.refresh_plugins();
         let mut harness = Self {

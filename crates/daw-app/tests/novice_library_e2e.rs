@@ -112,7 +112,7 @@ fn empty_and_effect_only_libraries_offer_plugin_setup_and_restore_the_assignment
         let setup = app.click("Plug-in folders");
         assert_eq!(setup["popups"]["setup"], true);
         assert_eq!(setup["popups"]["library"], false);
-        assert!(visible(&setup, "VST3 folders"));
+        assert!(visible(&setup, "Plug-in folders"));
         assert!(visible(&setup, "Folder path"));
         preserved(&setup, &baseline);
         let original_settings = setup["settings"].clone();

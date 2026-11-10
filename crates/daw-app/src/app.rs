@@ -3327,8 +3327,8 @@ impl DawApp {
                     daw_ui::text::note(ui, "Recover from File → Recover last session…");
                 }
                 SetupPage::Plugins => {
-                    daw_ui::text::section_heading(ui, "VST3 folders");
-                    daw_ui::text::note(ui, "System folders included").on_hover_text(daw_plugins::default_locations().iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"));
+                    daw_ui::text::section_heading(ui, "Plug-in folders");
+                    daw_ui::text::note(ui, format!("{} system folders included", daw_plugins::PluginFormat::available().map(|format| format.label()).collect::<Vec<_>>().join(", "))).on_hover_text(daw_plugins::default_locations().iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"));
                     let mut remove = None;
                     // Keep the wrapped folder field/actions and Apply/Cancel
                     // outside the scrolling list even in a small viewport.
