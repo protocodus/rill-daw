@@ -2557,6 +2557,7 @@ impl Renderer {
         }
         self.source_sample = sample;
         self.logical_sample = sample;
+        let wheels = self.audition_wheels;
         for track in self.tracks.iter_mut().flatten() {
             track.audio_transition_cursor = track.audio_transition.len();
             for parameter in &mut track.instrument_automation {
@@ -2612,6 +2613,21 @@ impl Renderer {
             track
                 .expression
                 .seek(sample, track.instrument_input_latency, !loop_wrap);
+            // A loop wrap resets touched controllers to their defaults; the
+            // panel's wheels are still where the user holds them.
+            if let Some((_, pitch, modulation)) = wheels.filter(|(id, _, _)| *id == track.id) {
+                use daw_plugins::ExpressiveController as Controller;
+                track.expression.chase_after_seek(
+                    0,
+                    Controller::PitchBend,
+                    (f64::from(pitch) + 1.0) / 2.0,
+                );
+                track.expression.chase_after_seek(
+                    0,
+                    Controller::ControlChange(1),
+                    f64::from(modulation),
+                );
+            }
             track.chase.clear();
             if loop_wrap {
                 // Looping restarts sequencer notes, not the independent live

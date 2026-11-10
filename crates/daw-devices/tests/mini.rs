@@ -371,6 +371,36 @@ fn a_mode_change_during_a_steal_fade_keeps_the_next_mono_note() {
 }
 
 #[test]
+fn mono_falls_back_to_a_held_key_while_a_steal_fade_runs() {
+    let values = [sine_values(), vec![(VOICES, 1.0)]].concat();
+    let mut device = synth(&values);
+    render(
+        &mut *device,
+        19.0 * BLOCK as f32 / RATE,
+        &[
+            (0, note_on(0, 1, 60.0, 1.0).kind),
+            (4700, note_on(0, 2, 64.0, 1.0).kind),
+        ],
+    );
+    let spec = mini::DESCRIPTOR.parameter(VOICE_MODE).unwrap();
+    device.set_parameter(VOICE_MODE, spec.to_normalized(1.0));
+    // Two keys during the fade; releasing the newer leaves the older held.
+    let output = render(
+        &mut *device,
+        1.0,
+        &[
+            (0, note_on(0, 3, 67.0, 1.0).kind),
+            (10, note_on(0, 4, 69.0, 1.0).kind),
+            (20, note_off(0, 4).kind),
+        ],
+    );
+    let held = &output[30_000..40_000];
+    assert!(rms(held) > 0.05);
+    let pitch = 440.0 * ((67.0 - 69.0) / 12.0_f32).exp2();
+    assert!((frequency(held) - pitch).abs() < 1.0, "{}", frequency(held));
+}
+
+#[test]
 fn drawn_response_follows_cutoff_and_resonance() {
     let settings = |cutoff: f32, resonance: f32| {
         Settings::from_normalized(|id| {

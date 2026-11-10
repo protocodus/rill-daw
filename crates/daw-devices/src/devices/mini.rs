@@ -1326,10 +1326,20 @@ impl Mini {
         if mono {
             self.remove_held(id);
             let voice = &mut self.voices[0];
-            if voice.note.id == id && self.held_count > 0 {
-                // Back to the most recent key still held, without retrigger.
-                voice.note = self.held[self.held_count - 1];
-                return;
+            if self.held_count > 0 {
+                // Back to the most recent key still held, without retrigger,
+                // also for a note still waiting on a steal fade.
+                let back = self.held[self.held_count - 1];
+                if let Some(pending) = &mut voice.pending
+                    && pending.note.is_some_and(|note| note.id == id)
+                {
+                    pending.note = Some(back);
+                    return;
+                }
+                if voice.note.id == id {
+                    voice.note = back;
+                    return;
+                }
             }
         }
         let sustain = self.sustain;

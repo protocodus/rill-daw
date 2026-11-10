@@ -245,3 +245,50 @@ fn builtin_instrument_auditions_and_follows_the_panel_wheels() {
     let released = render(&mut renderer, 10);
     assert!(released.iter().flatten().all(|sample| *sample == 0.0));
 }
+
+#[test]
+fn panel_wheels_survive_a_loop_wrap() {
+    use daw_devices::devices::mini;
+    let mut project = Project::new();
+    project.loop_enabled = true;
+    project.loop_start = 0.0;
+    project.loop_end = 0.5;
+    let track = project.add_midi_track("Mini");
+    project
+        .set_instrument(
+            track,
+            Instrument::Builtin {
+                device: "r1-mini".into(),
+            },
+        )
+        .unwrap();
+    let parameters = [
+        (mini::OSC1_MODEL, 1.0),
+        (mini::OSC1_WAVE, 3.0),
+        (mini::MIX_OSC2, 0.0),
+        (mini::CUTOFF, 20_000.0),
+        (mini::FILTER_ENV, 0.0),
+        (mini::BEND_RANGE, 12.0),
+    ];
+    project.track_mut(track).unwrap().instrument_parameters = parameters
+        .iter()
+        .map(|&(id, plain)| daw_core::PluginParameterValue {
+            id,
+            value: f64::from(mini::DESCRIPTOR.parameter(id).unwrap().to_normalized(plain)),
+        })
+        .collect();
+    let mut renderer = Renderer::new(&project, 48_000, true).unwrap();
+    renderer.set_audition(Some((track, 69, 127))).unwrap();
+    renderer.set_audition_wheels(Some((track, 1.0, 0.0)));
+    let mut output = [[0.0; 2]; BLOCK];
+    let mut positions = [0.0; BLOCK];
+    let mut frames = Vec::new();
+    // 0.25 s loops: a full second wraps four times.
+    for _ in 0..(48_000 / BLOCK) {
+        renderer.render(&mut output, &mut positions).unwrap();
+        frames.extend_from_slice(&output);
+    }
+    // The last loop pass, after several wraps.
+    let frequency = preview_frequency(&frames[frames.len() - 9_600..], 48_000.0);
+    assert!((frequency - 880.0).abs() < 2.0, "{frequency}");
+}
