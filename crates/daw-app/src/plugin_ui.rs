@@ -1119,7 +1119,14 @@ impl DawApp {
             .id(egui::Id::new(("instrument_editor", parameter_page)))
             .open(&mut open)
             .default_width(if parameter_page { 920.0 } else { 600.0 })
-            .default_height(if parameter_page { 520.0 } else { 400.0 })
+            .default_height(if parameter_page {
+                520.0
+            } else if matches!(instrument, Instrument::Builtin { .. }) {
+                // A device panel shows its response and every control at once.
+                680.0
+            } else {
+                400.0
+            })
             .vscroll(false)
             .show(ctx, |ui| {
                 let scope = match target.effect {

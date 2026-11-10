@@ -205,6 +205,8 @@ pub fn frequency_plot(ui: &mut Ui, plot: &FrequencyPlot<'_>) -> FrequencyPlotOut
             clicked = Some(index);
             hit.request_focus();
         }
+        // A focused node is a parameter control: Undo/Redo still reach the song.
+        crate::parameter_focus::register_parameter_history_focus(&hit);
         let mut next = (node.frequency, node.gain_db);
         if hit.dragged() {
             if fine < 1.0 {

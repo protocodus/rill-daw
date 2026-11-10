@@ -5,6 +5,9 @@ use daw_devices::devices::filter;
 
 pub type Values<'a> = &'a dyn Fn(u32) -> f64;
 
+/// Drawing only; at other host rates the curve differs only near Nyquist.
+const RESPONSE_RATE: f32 = 48_000.0;
+
 pub struct Section {
     pub title: &'static str,
     pub parameters: Vec<u32>,
@@ -18,6 +21,15 @@ pub struct Layout {
     pub visible: fn(u32, Values<'_>) -> bool,
     /// Choice options that apply in the current mode, when not all do.
     pub options: fn(u32, Values<'_>) -> Option<&'static [&'static str]>,
+    /// The response curve drawn above the controls.
+    pub response: Option<ResponseView>,
+}
+
+pub struct ResponseView {
+    /// Fills dB values for the given frequencies.
+    pub curve: fn(Values<'_>, &[f32], &mut [f32]),
+    /// The frequency parameter whose node moves along the curve's axis.
+    pub node: u32,
 }
 
 pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
@@ -28,6 +40,14 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
         layout.options = |id, values| {
             (id == filter::TYPE).then(|| filter::type_options(filter_settings(values).model))
         };
+        layout.response = Some(ResponseView {
+            curve: |values, frequencies, out| {
+                let settings = filter_settings(values);
+                // The drawn curve is static; the sounding cutoff also moves with the LFO and envelope.
+                filter::response_db(&settings, settings.cutoff, RESPONSE_RATE, frequencies, out);
+            },
+            node: filter::CUTOFF,
+        });
     }
     layout
 }
@@ -57,5 +77,6 @@ fn generic(descriptor: &DeviceDescriptor) -> Layout {
         hero: None,
         visible: |_, _| true,
         options: |_, _| None,
+        response: None,
     }
 }

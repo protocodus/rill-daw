@@ -208,6 +208,31 @@ fn r1_filter_shapes_audio_loads_presets_and_automates_from_its_panel() {
     assert_eq!(dragged["history"]["undo"][0], "Effect parameter");
     let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(undone["project"], before["project"]);
+
+    // The response plot's cutoff node moves the same parameter.
+    let window = &undone["window_rects"][0];
+    let inside = |rect: &Value| {
+        (0..2).all(|axis| {
+            rect["min"][axis].as_f64() >= window["min"][axis].as_f64()
+                && rect["max"][axis].as_f64() <= window["max"][axis].as_f64()
+        })
+    };
+    let marker = undone["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["text"] == "1" && inside(entry))
+        .unwrap_or_else(|| panic!("No cutoff node: {}", undone["label_rects"]));
+    // The node's number sits 10 points above its center.
+    let node_x = (marker["min"][0].as_f64().unwrap() + marker["max"][0].as_f64().unwrap()) * 0.5;
+    let node_y = marker["max"][1].as_f64().unwrap() + 10.0;
+    let moved = app.command(json!({"command":"pointer","phase":"drag",
+        "x":node_x,"y":node_y,"to_x":node_x + 60.0,"to_y":node_y}));
+    assert!(cutoff(&moved) > cutoff(&before), "{}", moved["project"]);
+    assert_eq!(moved["history"]["undo"][0], "Effect parameter");
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], before["project"]);
+
     app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":knob}));
     let state = app.click("Automate");
     let lane = state["project"]["tracks"]

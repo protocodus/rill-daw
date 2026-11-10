@@ -54,6 +54,10 @@ pub fn show(
     preset_bar(ui, descriptor, host, state);
     daw_ui::section_gap(ui);
     let layout = panels::layout(descriptor);
+    if let Some(view) = &layout.response {
+        response(ui, descriptor, view, host);
+        daw_ui::section_gap(ui);
+    }
     for section in &layout.sections {
         let visible: Vec<_> = section
             .parameters
@@ -72,6 +76,51 @@ pub fn show(
             }
         });
         daw_ui::section_gap(ui);
+    }
+}
+
+const RESPONSE_POINTS: usize = 128;
+const RESPONSE_RANGE_DB: f32 = 24.0;
+const RESPONSE_HEIGHT: f32 = 120.0;
+
+/// The device's response with a node on its frequency parameter. Dragging the
+/// node is one gesture on that parameter, like turning its knob.
+fn response(
+    ui: &mut Ui,
+    descriptor: &DeviceDescriptor,
+    view: &panels::ResponseView,
+    host: &mut dyn DeviceHost,
+) {
+    let frequencies: Vec<f32> = (0..RESPONSE_POINTS)
+        .map(|index| daw_ui::log_grid_frequency(index, RESPONSE_POINTS))
+        .collect();
+    let mut db = vec![0.0; RESPONSE_POINTS];
+    (view.curve)(&|id| host.value(id), &frequencies, &mut db);
+    let Some(spec) = descriptor.parameter(view.node) else {
+        return;
+    };
+    let frequency = spec.to_plain(host.value(view.node) as f32);
+    let output = daw_ui::frequency_plot(
+        ui,
+        &daw_ui::FrequencyPlot {
+            curves: &[daw_ui::FrequencyCurve {
+                db: &db,
+                emphasis: true,
+            }],
+            spectrum: None,
+            nodes: &[daw_ui::FrequencyNode {
+                frequency,
+                gain_db: 0.0,
+                selected: false,
+                color: None,
+                gain_editable: false,
+            }],
+            range_db: RESPONSE_RANGE_DB,
+            size: egui::vec2(ui.available_width(), RESPONSE_HEIGHT),
+        },
+    );
+    if let Some(drag) = output.drags.last() {
+        host.set_value(view.node, f64::from(spec.to_normalized(drag.frequency)));
     }
 }
 
