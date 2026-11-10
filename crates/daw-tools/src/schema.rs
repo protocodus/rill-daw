@@ -806,7 +806,7 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
             ),
         ),
         (
-            "save_device_preset",
+            "store_device_preset",
             "Save the current settings of the Rill built-in device on a track's instrument or an insert as a user preset under name, replacing a user preset of the same name. Factory presets are never changed and no path is accepted. The song is not changed.",
             object(
                 json!({"track_id":integer(),"insert_id":id(),"name":{"type":"string","minLength":1,"maxLength":128}}),

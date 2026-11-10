@@ -617,7 +617,7 @@ impl ToolHost for DawApp {
                     "track_id":args.track_id,"insert_id":args.insert_id,"parameters":parameters}),
                 )
             }
-            "list_device_presets" | "load_device_preset" | "save_device_preset" => {
+            "list_device_presets" | "load_device_preset" | "store_device_preset" => {
                 #[derive(Deserialize)]
                 #[serde(deny_unknown_fields)]
                 struct Args {

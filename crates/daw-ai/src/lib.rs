@@ -89,7 +89,7 @@ pub fn tool_activity(name: &str) -> &'static str {
         "set_device_parameters" => "Setting device parameters…",
         "list_device_presets" => "Browsing device presets…",
         "load_device_preset" => "Loading a device preset…",
-        "save_device_preset" => "Saving a device preset…",
+        "store_device_preset" => "Storing a device preset…",
         "plugin_describe_parameters" => "Inspecting sound controls…",
         "audio_analyze" => "Measuring the mix…",
         "audio_analyze_clip" => "Measuring an audio clip…",

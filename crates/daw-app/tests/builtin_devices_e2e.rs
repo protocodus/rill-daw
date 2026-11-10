@@ -168,7 +168,7 @@ fn r1_filter_shapes_audio_loads_presets_and_automates_from_its_panel() {
     assert_eq!(loaded["history"]["undo"][0], "Device preset");
     song_tool(
         &mut app,
-        "save_device_preset",
+        "store_device_preset",
         json!({"name":"My Acid","track_id":track,"insert_id":insert}),
     );
     let saved = app

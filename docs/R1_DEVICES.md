@@ -223,7 +223,7 @@ One format, one browser and one set of tools for every device.
 - Maxi needs no special case: its modules, matrix and effects rack are all
   parameters.
 - Tools: `list_device_presets` (name, category, tags, description, with
-  search), `load_device_preset` and `save_device_preset`. Saving takes a name
+  search), `load_device_preset` and `store_device_preset`. Saving takes a name
   and writes only into the user preset directory, never to an arbitrary path.
 
 The shared `preset_bar` in every panel header shows the current preset name
