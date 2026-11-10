@@ -31,11 +31,12 @@ pub use device::{
     list_output_devices,
 };
 pub use render::{
-    CompensationDelay, ExportOptions, ExportRange, ExportReport, FreezeRenderOutput,
-    FreezeRenderReport, FreezeRenderRequest, WavEncoding, export_project_wav,
-    export_project_wav_with_options, export_project_wav_with_report, export_wav,
-    export_wav_with_options, freeze_track_wav, render, render_range_cancellable,
-    render_with_options, render_with_workers,
+    CompensationDelay, ExportFormat, ExportOptions, ExportRange, ExportReport, FreezeRenderOutput,
+    FreezeRenderReport, FreezeRenderRequest, StemFile, StemPlan, StemRequest, WavEncoding,
+    export_project_cancellable, export_project_wav, export_project_wav_with_options,
+    export_project_wav_with_report, export_stems, export_wav, export_wav_with_options,
+    freeze_track_wav, plan_stems, render, render_range_cancellable, render_with_options,
+    render_with_workers,
 };
 
 /// Control-thread query using the same folder, mute, solo and bus eligibility as
