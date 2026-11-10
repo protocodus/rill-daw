@@ -263,6 +263,7 @@ impl ToolScope {
                             | "set_crossfade"
                             | "set_clip_muted"
                             | "slip_audio"
+                            | "set_warp_markers"
                     )
             }
             Self::Instrument { .. } => op == "set_plugin_parameters" || automation_op(op),
@@ -378,10 +379,13 @@ impl ToolScope {
                     return Err(denied("Use the pinned clip ID"));
                 }
                 if name == "audio_process_clip"
-                    && args.get("operation").and_then(Value::as_str) != Some("normalize")
+                    && !matches!(
+                        args.get("operation").and_then(Value::as_str),
+                        Some("normalize" | "quantize" | "warp_transients")
+                    )
                 {
                     return Err(denied(
-                        "This clip context supports normalization only; structural audio edits require song scope",
+                        "This clip context supports normalization and warp edits only; structural audio edits require song scope",
                     ));
                 }
             }
@@ -644,8 +648,8 @@ impl ToolScope {
             }
             if properties.get("track_id").is_some() && spec.name != "get_track" { properties["track_id"] = json!({"type":"integer","const":self.track_id()}); }
             if properties.get("clip_id").is_some() { properties["clip_id"] = json!({"type":"integer","const":self.clip_id()}); }
-            if spec.name == "audio_process_clip" { properties["operation"] = json!({"type":"string","const":"normalize"}); spec.description="Normalize only this audio clip in one undoable action. Analysis runs in the background; the unchanged song revision and pinned scope are checked before publishing. Structural audio edits require song scope.".into(); }
-            if spec.name == "audio_analyze_clip" { spec.description="Analyze only this audio clip. Measurements and suggested edits are read-only; this context permits normalization and in-place settings, not splitting or stripping silence.".into(); }
+            if spec.name == "audio_process_clip" { properties["operation"] = json!({"type":"string","enum":["normalize","quantize","warp_transients"]}); spec.description="Normalize, quantize or place warp markers at transients in only this audio clip, in one undoable action. Analysis runs in the background; the unchanged song revision and pinned scope are checked before publishing. Structural audio edits require song scope.".into(); }
+            if spec.name == "audio_analyze_clip" { spec.description="Analyze only this audio clip. Measurements and suggested edits are read-only; this context permits normalization, warp markers and in-place settings, not splitting or stripping silence.".into(); }
             if spec.name == "assign_plugin" { properties["insert"] = json!({"type":"boolean","const":true}); spec.description="Add a scanned catalog plug-in as an insert in this effect chain. Instrument replacement is unavailable in this context.".into(); }
             if spec.name == "list_plugins" { properties["refresh"] = json!({"type":"boolean","const":false}); }
             if spec.name == "plugin_describe_parameters" {
@@ -1330,6 +1334,26 @@ mod tests {
                 &project,
                 "audio_process_clip",
                 &json!({"track_id":track,"clip_id":clip,"operation":"normalize"}),
+            )
+            .unwrap();
+        for operation in ["quantize", "warp_transients"] {
+            scope
+                .validate_call(
+                    &project,
+                    "audio_process_clip",
+                    &json!({"track_id":track,"clip_id":clip,"operation":operation}),
+                )
+                .unwrap();
+        }
+        scope
+            .validate_call(
+                &project,
+                "apply_edits",
+                &call(vec![SongEdit::SetWarpMarkers {
+                    track: track.into(),
+                    clip: clip.into(),
+                    markers: Vec::new(),
+                }]),
             )
             .unwrap();
         for operation in ["split_transients", "strip_silence"] {

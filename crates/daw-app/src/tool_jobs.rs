@@ -3,9 +3,10 @@
 #[cfg(test)]
 use daw_core::AudioData;
 use daw_core::{
-    AudioFile, AudioSilenceSettings, ClipContent, Effect, Instrument, Project, TrackKind,
-    TransientAlgorithm, TransientSettings, detect_audio_silence_file, detect_transients_file,
-    normalization_gain_file,
+    AudioFile, AudioQuantizeSettings, AudioSilenceSettings, ClipContent, Effect, Instrument,
+    Project, TrackKind, TransientAlgorithm, TransientSettings, WarpQuantizePlan,
+    detect_audio_silence_file, detect_transient_onsets_file, detect_transients_file,
+    normalization_gain_file, plan_warp_markers,
 };
 use daw_plugins::{ParameterInfo, VstEffect, VstInstrument};
 use serde::Deserialize;
@@ -378,6 +379,18 @@ struct ClipAnalysisArgs {
     padding_ms: f32,
     #[serde(default = "default_normalization_target")]
     normalize_target_db: f32,
+    #[serde(default = "default_grid")]
+    grid_beats: f64,
+    #[serde(default = "default_strength")]
+    strength: f64,
+    max_move_beats: Option<f64>,
+}
+
+fn default_grid() -> f64 {
+    1.0
+}
+fn default_strength() -> f64 {
+    1.0
 }
 
 fn default_sensitivity() -> f32 {
@@ -476,6 +489,44 @@ fn analyze_clip(
                 .to_string()
         })?;
     check_cancelled(cancel)?;
+    let quantize = AudioQuantizeSettings {
+        grid: args.grid_beats,
+        strength: args.strength,
+        max_move: args.max_move_beats.unwrap_or(args.grid_beats * 0.5),
+    };
+    quantize
+        .validate()
+        .map_err(|error| format!("Invalid quantize settings: {error}"))?;
+    // Warp edits replace the whole map, so they are proposed only when the
+    // analysis covers the entire clip.
+    let whole_clip = start <= clip.start && end >= clip.end();
+    let (warp_edit, quantize_edit, warp_summary) = if whole_clip {
+        let onsets = detect_transient_onsets_file(clip, &file, project.tempo, settings, cancel)
+            .map_err(|_| {
+                "Unable to analyze transients; shorten the range or increase the minimum gap"
+                    .to_string()
+            })?;
+        let meter = project.meter_map();
+        let pinned = plan_warp_markers(clip, &onsets, &meter, None)
+            .map_err(|error| format!("Unable to place warp markers: {error}"))?;
+        let quantized = plan_warp_markers(clip, &onsets, &meter, Some(quantize))
+            .map_err(|error| format!("Unable to quantize: {error}"))?;
+        let edit = |plan: &WarpQuantizePlan| {
+            (!plan.hits.is_empty()).then(|| json!({"op":"set_warp_markers","track":args.track_id,"clip":args.clip_id,"markers":plan.markers}))
+        };
+        (
+            edit(&pinned),
+            edit(&quantized),
+            json!({"transients":quantized.hits.len(),"moved":quantized.moved,"largest_move_beats":quantized.largest_move,"largest_move_ms":quantized.largest_move*60_000.0/project.tempo,"grid_beats":quantize.grid,"strength":quantize.strength,"max_move_beats":quantize.max_move,"hits_clip_beats":quantized.hits}),
+        )
+    } else {
+        (
+            None,
+            None,
+            json!({"unavailable_reason":"Warp markers and quantize analyze the whole clip; omit start_beat/end_beat"}),
+        )
+    };
+    check_cancelled(cancel)?;
     let clip_onsets: Vec<_> = region_onsets
         .iter()
         .map(|beat| start - clip.start + beat)
@@ -530,7 +581,8 @@ fn analyze_clip(
         "transients":{"clip_relative_beats":clip_onsets,"arrangement_beats":arrangement_onsets},
         "silence":{"retained_arrangement_ranges":retained,"threshold_dbfs":args.silence_threshold_db,"minimum_silence_ms":args.minimum_silence_ms,"padding_ms":args.padding_ms},
         "normalization":{"target_dbfs":args.normalize_target_db,"source_peak_linear":normalization_peak,"recommended_absolute_gain":gain,"scope":"Entire current clip source window, before gain/fades/pitch processing, even when a smaller analysis range is selected","linked_occurrences_affected":linked_occurrences,"unavailable_reason":gain.is_none().then_some("Source window is silent or below the normalization floor")},
-        "suggested_edits":{"normalize":normalize_edit,"split_transients":transient_edit,"strip_silence":silence_edit},
+        "warp":warp_summary,
+        "suggested_edits":{"normalize":normalize_edit,"split_transients":transient_edit,"strip_silence":silence_edit,"warp_transients":warp_edit,"quantize":quantize_edit},
         "apply_note":"Analysis only. Choose the edit matching the user's request and submit it in an edit batch for the same song revision. The topology edits are alternatives: applying one invalidates the other analysis for this clip. Transient edit beats are clip-relative; silence ranges are arrangement beats.",
         "measurement_limits":"Source analysis respects source offset, reverse and stretch; it excludes fades, clip/channel gain, inserts and pitch processing. No source files were modified."
     }))

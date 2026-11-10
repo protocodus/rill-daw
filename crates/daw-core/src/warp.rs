@@ -348,6 +348,32 @@ pub fn plan_warp_markers(
     Ok(plan)
 }
 
+/// Forward-beat range marker `index` can move to while its neighbours stay
+/// fixed, keeping both adjacent segments within the supported rates and the
+/// clip start inside the source.
+pub fn warp_marker_bounds(clip: &Clip, index: usize) -> (f64, f64) {
+    let markers = &clip.warp_markers;
+    let Some(marker) = markers.get(index) else {
+        return (0.0, 0.0);
+    };
+    let mut low = -MAX_BEAT;
+    let mut high = MAX_BEAT;
+    if let Some(left) = index.checked_sub(1).map(|left| markers[left]) {
+        let source = marker.source - left.source;
+        low = low.max(left.beat + source / MAX_SOURCE_RATE);
+        high = high.min(left.beat + source / MIN_SOURCE_RATE);
+    } else {
+        // Before the first marker source_rate applies down to local zero.
+        high = high.min(marker.source / clip.source_rate);
+    }
+    if let Some(right) = markers.get(index + 1) {
+        let source = right.source - marker.source;
+        low = low.max(right.beat - source / MIN_SOURCE_RATE);
+        high = high.min(right.beat - source / MAX_SOURCE_RATE);
+    }
+    (low, high.max(low))
+}
+
 impl Project {
     /// Replace one clip's warp markers in a single edit. An empty list returns
     /// the clip to its whole-clip `source_rate`, keeping the audio at its start.

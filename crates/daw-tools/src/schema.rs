@@ -409,6 +409,11 @@ pub fn song_edit_schema() -> Value {
         ["track", "clip", "beats"]
     );
     add!(
+        "set_warp_markers",
+        json!({"track":channel_reference(),"clip":reference(),"markers":array(object(json!({"source":{"type":"number","minimum":0,"description":"Source position in quarter-note beats at the song tempo, the unit of the clip offset."},"beat":{"type":"number","description":"Forward clip-relative beat where that source position plays."}}),&["source","beat"]),2048)}),
+        ["track", "clip", "markers"]
+    );
+    add!(
         "strip_audio_silence",
         json!({"track":channel_reference(),"clip":reference(),"start":number(),"end":number(),"retained":array(pair.clone(),2048)}),
         ["track", "clip", "start", "end", "retained"]
@@ -713,17 +718,17 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "audio_analyze_clip",
-            "Analyze an audio source once for normalization, transient splitting and stripping silence. Returns measurements and prepared typed SongEdit proposals; apply_edits commits chosen edits separately. start/end use arrangement beats. Does not edit audio.",
+            "Analyze an audio source once for normalization, transient splitting, stripping silence, warp markers at transients and audio quantize. Returns measurements and prepared typed SongEdit proposals; apply_edits commits chosen edits separately. start/end use arrangement beats. Does not edit audio.",
             object(
-                json!({"track_id":id(),"clip_id":id(),"start_beat":number(),"end_beat":number(),"transient_algorithm":choices(&["energy_rise","amplitude_gate"]),"sensitivity":number(),"minimum_gap_ms":number(),"silence_threshold_db":number(),"minimum_silence_ms":number(),"padding_ms":number(),"normalize_target_db":number()}),
+                json!({"track_id":id(),"clip_id":id(),"grid_beats":{"type":"number","exclusiveMinimum":0,"maximum":64},"strength":{"type":"number","minimum":0,"maximum":1},"max_move_beats":{"type":"number","minimum":0,"maximum":64},"start_beat":number(),"end_beat":number(),"transient_algorithm":choices(&["energy_rise","amplitude_gate"]),"sensitivity":number(),"minimum_gap_ms":number(),"silence_threshold_db":number(),"minimum_silence_ms":number(),"padding_ms":number(),"normalize_target_db":number()}),
                 &["track_id", "clip_id"],
             ),
         ),
         (
             "audio_process_clip",
-            "Normalize, split at detected transients, or strip silence in one undoable action. The host analyzes the existing clip in a background worker and commits only against the requested unchanged song revision. No file paths are accepted.",
+            "Normalize, split at detected transients, strip silence, quantize (place warp markers on detected transients and move them toward the grid) or warp_transients (place warp markers on transients without moving them) in one undoable action. Quantize uses grid_beats (a value equal to the first bar's length follows real bar lines across meter changes), strength 0..1 and max_move_beats; clip start and end stay pinned so the clip length is unchanged. The host analyzes the existing clip in a background worker and commits only against the requested unchanged song revision. No file paths are accepted.",
             object(
-                json!({"session_id":id(),"expected_revision":integer(),"track_id":id(),"clip_id":id(),"operation":choices(&["normalize","split_transients","strip_silence"]),"start_beat":number(),"end_beat":number(),"transient_algorithm":choices(&["energy_rise","amplitude_gate"]),"sensitivity":number(),"minimum_gap_ms":number(),"silence_threshold_db":number(),"minimum_silence_ms":number(),"padding_ms":number(),"normalize_target_db":number()}),
+                json!({"session_id":id(),"expected_revision":integer(),"track_id":id(),"clip_id":id(),"operation":choices(&["normalize","split_transients","strip_silence","quantize","warp_transients"]),"grid_beats":{"type":"number","exclusiveMinimum":0,"maximum":64,"description":"Quantize grid in beats; default 1"},"strength":{"type":"number","minimum":0,"maximum":1,"description":"Quantize strength; default 1"},"max_move_beats":{"type":"number","minimum":0,"maximum":64,"description":"Hits further than this from their grid line stay in place; default half the grid"},"start_beat":number(),"end_beat":number(),"transient_algorithm":choices(&["energy_rise","amplitude_gate"]),"sensitivity":number(),"minimum_gap_ms":number(),"silence_threshold_db":number(),"minimum_silence_ms":number(),"padding_ms":number(),"normalize_target_db":number()}),
                 &[
                     "session_id",
                     "expected_revision",
