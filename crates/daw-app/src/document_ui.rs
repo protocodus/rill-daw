@@ -12,6 +12,8 @@ pub(crate) enum DocumentDialog {
     ImportAudio,
     Export,
     ExportMidi,
+    /// A folder that receives one file per stem.
+    ExportStems,
 }
 
 /// A headless picker result still passes through the production destination
@@ -70,7 +72,10 @@ impl DawApp {
     pub(crate) fn document_dialog_filename(&self, kind: DocumentDialog) -> Option<String> {
         if matches!(
             kind,
-            DocumentDialog::Open | DocumentDialog::Import | DocumentDialog::ImportAudio
+            DocumentDialog::Open
+                | DocumentDialog::Import
+                | DocumentDialog::ImportAudio
+                | DocumentDialog::ExportStems
         ) {
             return None;
         }
@@ -80,8 +85,21 @@ impl DawApp {
         {
             return Some(name.to_string_lossy().into_owned());
         }
-        let stem = self
-            .project_path
+        let extension = match kind {
+            DocumentDialog::Save => "rill",
+            DocumentDialog::Export => self.settings.export.format.extension(),
+            DocumentDialog::ExportMidi => "mid",
+            DocumentDialog::Open
+            | DocumentDialog::Import
+            | DocumentDialog::ImportAudio
+            | DocumentDialog::ExportStems => unreachable!(),
+        };
+        Some(format!("{}.{extension}", self.document_file_stem()))
+    }
+
+    /// The saved filename stem, or the musical name of an unsaved project.
+    pub(crate) fn document_file_stem(&self) -> String {
+        self.project_path
             .as_ref()
             .and_then(|path| path.file_stem())
             .map(|name| name.to_string_lossy().into_owned())
@@ -92,16 +110,7 @@ impl DawApp {
                 } else {
                     name
                 }
-            });
-        let extension = match kind {
-            DocumentDialog::Save => "rill",
-            DocumentDialog::Export => "wav",
-            DocumentDialog::ExportMidi => "mid",
-            DocumentDialog::Open | DocumentDialog::Import | DocumentDialog::ImportAudio => {
-                unreachable!()
-            }
-        };
-        Some(format!("{stem}.{extension}"))
+            })
     }
 
     pub(crate) fn document_dialog_directory(&self) -> Option<&Path> {
@@ -161,7 +170,10 @@ impl DawApp {
                     "Audio / MIDI",
                     &["wav", "mp3", "flac", "ogg", "mid", "midi"],
                 ),
-                DocumentDialog::Export => rfd::FileDialog::new().add_filter("Wave audio", &["wav"]),
+                DocumentDialog::Export => {
+                    let format = self.settings.export.format;
+                    rfd::FileDialog::new().add_filter(format.label(), &[format.extension()])
+                }
                 DocumentDialog::ExportMidi => {
                     rfd::FileDialog::new().add_filter("MIDI", &["mid", "midi"])
                 }
@@ -171,6 +183,7 @@ impl DawApp {
                 DocumentDialog::Save => {
                     rfd::FileDialog::new().add_filter("Rill project", &["rill"])
                 }
+                DocumentDialog::ExportStems => unreachable!("use pick_stem_folder"),
             };
             let dialog = if let Some(parent) = self.document_dialog_directory() {
                 dialog.set_directory(parent)
@@ -211,7 +224,11 @@ impl DawApp {
             .validate_audio_destination(&chosen)
             .and_then(|_| {
                 self.project
-                    .validate_audio_destination(&normalize_document_path(chosen.clone(), kind))
+                    .validate_audio_destination(&normalize_document_path(
+                        chosen.clone(),
+                        kind,
+                        self.settings.export.format.extension(),
+                    ))
             })
         {
             // Selecting active source media remains an error even when a file
@@ -223,9 +240,52 @@ impl DawApp {
             }
             return None;
         }
-        normalize_and_confirm_document_path(chosen, kind, |destination| {
-            replacement_decision.unwrap_or_else(|| confirm_normalized_replacement(destination))
-        })
+        normalize_and_confirm_document_path(
+            chosen,
+            kind,
+            self.settings.export.format.extension(),
+            |destination| {
+                replacement_decision.unwrap_or_else(|| confirm_normalized_replacement(destination))
+            },
+        )
+    }
+
+    /// Choose the folder for stems and whether existing files may be replaced.
+    /// Files are replaced only after an explicit confirmation naming them; a
+    /// declined (or, headless, unspecified) decision cancels the export.
+    pub(crate) fn pick_stem_folder(
+        &mut self,
+        existing_files: impl FnOnce(&Path) -> Vec<String>,
+    ) -> Option<(PathBuf, bool)> {
+        let injected = self
+            .next_document_dialog
+            .as_ref()
+            .is_some_and(|selection| selection.kind == DocumentDialog::ExportStems);
+        let (folder, decision) = if injected {
+            let selection = self.next_document_dialog.take().unwrap();
+            (
+                selection.path?,
+                Some(selection.replace_existing.unwrap_or(false)),
+            )
+        } else {
+            let dialog = rfd::FileDialog::new().set_title("Choose a folder for the stems");
+            let dialog = if let Some(parent) = self.document_dialog_directory() {
+                dialog.set_directory(parent)
+            } else {
+                dialog
+            };
+            (
+                daw_ui::with_native_dialog_menu(|| dialog.pick_folder())?,
+                None,
+            )
+        };
+        let existing = existing_files(&folder);
+        if existing.is_empty() {
+            return Some((folder, false));
+        }
+        decision
+            .unwrap_or_else(|| confirm_stem_replacement(&existing))
+            .then_some((folder, true))
     }
 
     pub(crate) fn request_document_transition(&mut self, transition: DocumentTransition) {
@@ -640,11 +700,18 @@ impl DawApp {
 
 /// Normal saves use the portable extension; legacy JSON remains an import path.
 /// Appending preserves dots in names without producing `Song.RILL.rill`.
-fn normalize_document_path(mut path: PathBuf, kind: DocumentDialog) -> PathBuf {
+fn normalize_document_path(
+    mut path: PathBuf,
+    kind: DocumentDialog,
+    export_extension: &str,
+) -> PathBuf {
     let (extension, accepted): (&str, &[&str]) = match kind {
-        DocumentDialog::Open | DocumentDialog::Import | DocumentDialog::ImportAudio => return path,
+        DocumentDialog::Open
+        | DocumentDialog::Import
+        | DocumentDialog::ImportAudio
+        | DocumentDialog::ExportStems => return path,
         DocumentDialog::Save => ("rill", &["rill"]),
-        DocumentDialog::Export => ("wav", &["wav"]),
+        DocumentDialog::Export => (export_extension, &[export_extension]),
         DocumentDialog::ExportMidi => ("mid", &["mid", "midi"]),
     };
     if !path.extension().is_some_and(|actual| {
@@ -665,9 +732,10 @@ fn normalize_document_path(mut path: PathBuf, kind: DocumentDialog) -> PathBuf {
 fn normalize_and_confirm_document_path(
     chosen: PathBuf,
     kind: DocumentDialog,
+    export_extension: &str,
     confirm_replacement: impl FnOnce(&Path) -> bool,
 ) -> Option<PathBuf> {
-    let destination = normalize_document_path(chosen.clone(), kind);
+    let destination = normalize_document_path(chosen.clone(), kind, export_extension);
     let entry_exists = match std::fs::symlink_metadata(&destination) {
         Ok(_) => true,
         Err(error) => error.kind() != std::io::ErrorKind::NotFound,
@@ -676,6 +744,32 @@ fn normalize_and_confirm_document_path(
         return None;
     }
     Some(destination)
+}
+
+fn confirm_stem_replacement(existing: &[String]) -> bool {
+    let shown: Vec<_> = existing.iter().take(8).map(String::as_str).collect();
+    let more = existing.len().saturating_sub(shown.len());
+    let result = daw_ui::with_native_dialog_menu(|| {
+        rfd::MessageDialog::new()
+            .set_level(rfd::MessageLevel::Warning)
+            .set_title("Replace existing files?")
+            .set_description(format!(
+                "These files already exist in the folder:\n{}{}\n\nReplace them?",
+                shown.join("\n"),
+                if more > 0 {
+                    format!("\nand {more} more")
+                } else {
+                    String::new()
+                }
+            ))
+            .set_buttons(rfd::MessageButtons::OkCancelCustom(
+                "Replace".into(),
+                "Cancel".into(),
+            ))
+            .show()
+    });
+    result == rfd::MessageDialogResult::Ok
+        || result == rfd::MessageDialogResult::Custom("Replace".into())
 }
 
 fn confirm_normalized_replacement(destination: &Path) -> bool {
@@ -718,15 +812,16 @@ mod tests {
                 .join(format!("Song.{extension}.other.{extension}"));
             std::fs::write(&normalized, b"preserve me").unwrap();
             let mut asked = false;
-            let cancelled = normalize_and_confirm_document_path(chosen.clone(), kind, |path| {
-                assert_eq!(path, normalized);
-                asked = true;
-                false
-            });
+            let cancelled =
+                normalize_and_confirm_document_path(chosen.clone(), kind, "wav", |path| {
+                    assert_eq!(path, normalized);
+                    asked = true;
+                    false
+                });
             assert!(asked);
             assert!(cancelled.is_none());
             assert_eq!(std::fs::read(&normalized).unwrap(), b"preserve me");
-            let accepted = normalize_and_confirm_document_path(chosen, kind, |path| {
+            let accepted = normalize_and_confirm_document_path(chosen, kind, "wav", |path| {
                 assert_eq!(path, normalized);
                 true
             });
@@ -735,15 +830,17 @@ mod tests {
             // The picker already confirmed an existing exact filename, while
             // an absent normalized filename has nothing to replace.
             assert_eq!(
-                normalize_and_confirm_document_path(normalized.clone(), kind, |_| panic!(
+                normalize_and_confirm_document_path(normalized.clone(), kind, "wav", |_| panic!(
                     "second overwrite prompt"
                 )),
                 Some(normalized)
             );
             let absent = directory.path().join(format!("New {extension}"));
             assert!(
-                normalize_and_confirm_document_path(absent, kind, |_| panic!("new file prompt"))
-                    .is_some()
+                normalize_and_confirm_document_path(absent, kind, "wav", |_| panic!(
+                    "new file prompt"
+                ))
+                .is_some()
             );
         }
         let existing = directory.path().join("Existing without extension");
@@ -752,6 +849,7 @@ mod tests {
             normalize_and_confirm_document_path(
                 existing.clone(),
                 DocumentDialog::Open,
+                "wav",
                 |_| panic!("open replacement prompt")
             ),
             Some(existing)
@@ -766,7 +864,7 @@ mod tests {
         std::fs::create_dir(&normalized).unwrap();
         let mut asked = false;
         assert!(
-            normalize_and_confirm_document_path(chosen, DocumentDialog::Save, |path| {
+            normalize_and_confirm_document_path(chosen, DocumentDialog::Save, "wav", |path| {
                 assert_eq!(path, normalized);
                 asked = true;
                 false
@@ -788,7 +886,7 @@ mod tests {
         assert!(!normalized.exists());
         let mut asked = false;
         assert!(
-            normalize_and_confirm_document_path(chosen, DocumentDialog::Save, |path| {
+            normalize_and_confirm_document_path(chosen, DocumentDialog::Save, "wav", |path| {
                 assert_eq!(path, normalized);
                 asked = true;
                 false

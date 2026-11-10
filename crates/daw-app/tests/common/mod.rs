@@ -77,6 +77,21 @@ impl Harness {
         )
     }
 
+    /// Hold only this app child's export worker for deterministic cancellation
+    /// checks; normal launches never read this variable.
+    pub fn with_export_delay(delay_ms: u64) -> Self {
+        let directory = tempfile::tempdir().expect("create isolated export E2E directory");
+        Self::launch_configured_with_environment(
+            None,
+            directory,
+            None,
+            None,
+            false,
+            false,
+            &[("RILL_E2E_EXPORT_DELAY_MS", delay_ms.to_string().into())],
+        )
+    }
+
     /// Hold source-analysis workers only in this isolated app child.
     pub fn with_audio_analysis_delay(delay_ms: u64) -> Self {
         let directory = tempfile::tempdir().expect("create isolated analysis E2E directory");

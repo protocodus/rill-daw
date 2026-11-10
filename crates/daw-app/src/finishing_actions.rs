@@ -15,14 +15,15 @@ const MAX_RECENT_EXPORTS: usize = 5;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum ExportKind {
-    Wav,
+    /// Mixdown or stems, named by their format.
+    Audio(&'static str),
     Midi,
 }
 
 impl ExportKind {
     fn label(self) -> &'static str {
         match self {
-            Self::Wav => "WAV",
+            Self::Audio(label) => label,
             Self::Midi => "MIDI",
         }
     }
@@ -78,8 +79,13 @@ impl FinishingActions {
                 target.specification.summary(),
                 daw_ui::format_clock_time(report.frames as f64 / f64::from(report.sample_rate), 3)
             ));
+            let kind = if target.specification.stems.is_some() {
+                "Stems"
+            } else {
+                target.specification.options.format.label()
+            };
             self.last_export = Some(target);
-            self.record_export(ExportKind::Wav, path, summary);
+            self.record_export(ExportKind::Audio(kind), path, summary);
         }
     }
 
@@ -177,7 +183,7 @@ impl DawApp {
                 diagnostic["path"] = serde_json::json!(target.path);
                 diagnostic["report"] = target.report.map(|report| serde_json::json!({
                     "sample_peak":report.sample_peak,"clipped_samples":report.clipped_samples,"frames":report.frames,
-                    "sample_rate":report.sample_rate,"encoding":report.encoding,"dither":report.dither,
+                    "sample_rate":report.sample_rate,"encoding":report.encoding,"format":report.format,"dither":report.dither,
                     "unsupported_midi_events":report.unsupported_midi_events,"unsupported_midi_groups":report.unsupported_midi_groups,
                 })).unwrap_or(serde_json::Value::Null);
                 diagnostic
@@ -462,9 +468,23 @@ impl DawApp {
     pub(crate) fn reexport_menu(&mut self, ui: &mut egui::Ui) {
         let target = self.finishing.last_export.as_ref();
         let enabled = target.is_some() && self.export_job.is_none();
+        let label = target.map_or_else(String::new, |target| {
+            if target.specification.stems.is_some() {
+                "Re-export last stems (replace)".to_owned()
+            } else {
+                format!(
+                    "Re-export last {} (replace)",
+                    target.specification.options.format.label()
+                )
+            }
+        });
         let response = ui.add_enabled(
             enabled,
-            daw_ui::button_widget("Re-export last WAV (replace)"),
+            daw_ui::button_widget(if label.is_empty() {
+                "Re-export last WAV (replace)"
+            } else {
+                &label
+            }),
         );
         let response = if let Some(target) = target {
             response.on_hover_text(target.path.display().to_string())
@@ -472,7 +492,11 @@ impl DawApp {
             response
         };
         if response.clicked() {
-            if let Some(target) = self.finishing.last_export.clone() {
+            if let Some(mut target) = self.finishing.last_export.clone() {
+                // Re-export is explicitly labelled as replacing the earlier files.
+                if let Some(stems) = &mut target.specification.stems {
+                    stems.replace_existing = true;
+                }
                 self.export_to_with_specification(target.path, target.specification);
             }
             ui.close();

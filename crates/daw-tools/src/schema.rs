@@ -47,6 +47,9 @@ fn array(value: Value, max: usize) -> Value {
 fn choices(values: &[&str]) -> Value {
     json!({"type":"string","enum":values})
 }
+fn choices_int(values: &[u16]) -> Value {
+    json!({"type":"integer","enum":values})
+}
 fn note() -> Value {
     object(
         json!({"pitch":{"type":"integer","minimum":0,"maximum":127},"start":number(),"length":number(),"velocity":{"type":"integer","minimum":1,"maximum":127}}),
@@ -848,9 +851,12 @@ pub fn application_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "document_action",
-            "Use the application's guarded New/Open/Save/Save As/Import/Export/Recover pipeline. Paths are accepted only by this explicitly privileged application tool. Unsaved edits are preserved unless discard_unsaved is true. Import beat uses zero-based quarter-note beats.",
+            "Use the application's guarded New/Open/Save/Save As/Import/Export/Recover pipeline. Paths are accepted only by this explicitly privileged application tool. Unsaved edits are preserved unless discard_unsaved is true. Import beat uses zero-based quarter-note beats. Export writes the mix to path as format wav (default, 32-bit float), flac (24-bit default), ogg (quality 0-10, default 5) or mp3 (bitrate_kbps 128/192/256/320, default 192, sample rates up to 48000); sample_rate overrides the audio setup rate. With stems=true, path is an existing folder that receives one file per channel named '<song> - NN <channel>.<ext>' (channels: track ids, default every audio/instrument track; buses and folders may be named), each the song with only that channel audible, all the same length; include_mix adds the full mix, through_master keeps Master processing on each stem, and existing files fail the call unless replace_existing is true. Export runs in the background: the result lists the files it will write, and document_status is pending until they are complete.",
             object(
-                json!({"action":choices(&["new","open","save","save_as","import","export","recover"]),"path":string(),"discard_unsaved":boolean(),"beat":number(),"track_id":id(),"include_tails":boolean()}),
+                json!({"action":choices(&["new","open","save","save_as","import","export","recover"]),"path":string(),"discard_unsaved":boolean(),"beat":number(),"track_id":id(),"include_tails":boolean(),
+                    "format":choices(&["wav","flac","ogg","mp3"]),"bit_depth":choices_int(&[16,24,32]),"quality":{"type":"integer","minimum":0,"maximum":10},
+                    "bitrate_kbps":choices_int(&[128,192,256,320]),"sample_rate":{"type":"integer","minimum":8000,"maximum":192000},
+                    "stems":boolean(),"channels":array(id(),512),"include_mix":boolean(),"through_master":boolean(),"replace_existing":boolean()}),
                 &["action"],
             ),
         ),
