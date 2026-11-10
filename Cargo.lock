@@ -1060,6 +1060,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "daw-devices"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "daw-devices-ui"
+version = "0.1.0"
+dependencies = [
+ "daw-devices",
+ "daw-ui",
+ "egui",
+]
+
+[[package]]
 name = "daw-engine"
 version = "0.1.0"
 dependencies = [

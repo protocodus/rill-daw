@@ -1,0 +1,17 @@
+r1-filter 1 model "Model" choice Clean|Ladder|Sallen-Key|State Variable|Comb|Vowel
+r1-filter 2 type "Type" choice Low-pass|High-pass|Band-pass|Notch
+r1-filter 3 slope "Slope" choice 12 dB|24 dB
+r1-filter 4 cutoff "Cutoff" log 20 20000
+r1-filter 5 resonance "Resonance" linear 0 100
+r1-filter 6 drive "Drive" linear 0 24
+r1-filter 7 morph "Morph" linear 0 100
+r1-filter 10 lfo.rate "Rate" log 0.01 20
+r1-filter 11 lfo.sync "Sync" choice Off|4 bars|2 bars|1 bar|1/2|1/4|1/8|1/16
+r1-filter 12 lfo.shape "Shape" choice Sine|Triangle|Saw|Square|S&H
+r1-filter 13 lfo.depth "Depth" linear -5 5
+r1-filter 14 lfo.stereo "Stereo" linear 0 180
+r1-filter 20 env.amount "Amount" linear -5 5
+r1-filter 21 env.attack "Attack" log 0.1 100
+r1-filter 22 env.release "Release" log 10 2000
+r1-filter 30 mix "Mix" linear 0 100
+r1-filter 31 output "Output" linear -24 24
