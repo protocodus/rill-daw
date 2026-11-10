@@ -449,7 +449,10 @@ impl DawApp {
             + spacing
             + role_height
             + section_gap
+            // Polarity and input gain, then the width rail.
             + control
+            + spacing
+            + daw_ui::tokens::COMPACT_HEIGHT
             + spacing
             + section_gap
             + pan_row_height
@@ -805,7 +808,9 @@ impl DawApp {
                         ui.add_space(section_gap - spacing);
                         let mut input_gain = input_automation.filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
                             .map(|(_, _, value)| AutomationParameter::TrackInputGain.denormalize(value)).unwrap_or(track.input_gain);
-                        let input_gain_response = daw_ui::mixer_input_gain(ui, &mut input_gain, content_width, &format!("{} · Input gain", track.name));
+                        let input_row = daw_ui::mixer_input_gain(ui, &mut input_gain, &mut track.invert_polarity, content_width, &format!("{} · Input gain", track.name));
+                        let polarity = input_row.polarity;
+                        let input_gain_response = input_row.gain;
                         let (action, exact) = daw_ui::automatable_parameter_value_context_named(ui, &input_gain_response,
                             daw_ui::AutomationControl::InputGain { track: track.id }, input_automation.map(|(lane, state, _)| (lane, state)),
                             f64::from(daw_ui::channel_gain_to_db(input_gain)), -60.0..=f64::from(daw_ui::channel_gain_to_db(16.0)), "dB", &format!("{} · Input gain", track.name));
@@ -815,6 +820,8 @@ impl DawApp {
                             track.input_gain = input_gain; changed = true;
                             automation_overrides.push((input_target, AutomationParameter::TrackInputGain.normalize(input_gain)));
                         }
+                        let stereo_width = daw_ui::mixer_stereo_width(ui, &mut track.stereo_width, content_width, &format!("{} · Stereo width", track.name));
+                        changed |= polarity.changed() || stereo_width.changed();
                         let processing = daw_ui::mixer_processing_row(ui, content_width,
                             track.inserts.len(), track.inserts.iter().filter(|slot| slot.enabled).count());
                         let analyze = processing.analyze;
@@ -978,6 +985,8 @@ impl DawApp {
                                 "measuring":rect_json(level.rect),"output":rect_json(target.rect.union(sends_rect))}});
                         details["input_gain"] = rect_json(input_gain_response.rect);
                         details["input_gain_value"] = serde_json::json!(input_gain);
+                        details["polarity"] = rect_json(polarity.rect);
+                        details["stereo_width"] = rect_json(stereo_width.rect);
                         details["statistics"] = rect_json(statistics.rect);
                         details["rms"] = serde_json::json!(rms);
                         details
@@ -1066,7 +1075,9 @@ impl DawApp {
                         ui.add_space(section_gap - spacing);
                         let mut input_gain = input_automation.filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
                             .map(|(_, _, value)| AutomationParameter::TrackInputGain.denormalize(value)).unwrap_or(master_track.input_gain);
-                        let input = daw_ui::mixer_input_gain(ui, &mut input_gain, content_width, "Master · Input gain");
+                        let input_row = daw_ui::mixer_input_gain(ui, &mut input_gain, &mut master_track.invert_polarity, content_width, "Master · Input gain");
+                        let polarity = input_row.polarity;
+                        let input = input_row.gain;
                         let (action, exact) = daw_ui::automatable_parameter_value_context_named(ui, &input,
                             daw_ui::AutomationControl::InputGain { track: master_id }, input_automation.map(|(lane, state, _)| (lane, state)),
                             f64::from(daw_ui::channel_gain_to_db(input_gain)), -60.0..=f64::from(daw_ui::channel_gain_to_db(16.0)), "dB", "Master · Input gain");
@@ -1076,6 +1087,8 @@ impl DawApp {
                             master_track.input_gain = input_gain; changed = true;
                             automation_overrides.push((input_target, AutomationParameter::TrackInputGain.normalize(input_gain)));
                         }
+                        let stereo_width = daw_ui::mixer_stereo_width(ui, &mut master_track.stereo_width, content_width, "Master · Stereo width");
+                        changed |= polarity.changed() || stereo_width.changed();
                         let processing = daw_ui::mixer_processing_row(ui, content_width, master_track.inserts.len(), master_track.inserts.iter().filter(|slot| slot.enabled).count());
                         let effects = processing.effects;
                         let analyze = processing.analyze;
@@ -1165,7 +1178,7 @@ impl DawApp {
                         if output.clicked() { master_output = true; }
                         serde_json::json!({"track":master_id,"meter":rect_json(level.rect),"meter_readout":rect_json(readout.rect),"peak_hold":master_peak_hold,"peak_clipped":master_peak_hold.iter().any(|peak| *peak >= 1.0),"target":rect_json(output.rect),
                             "name":rect_json(name.rect),"source":rect_json(source.response.rect),"source_menu":rect_json(source.inner.0),"analyze":rect_json(analyze.rect),"effects":rect_json(effects.rect),"insert_summary":rect_json(insert_summary.rect),
-                            "input_gain":rect_json(input.rect),"input_gain_value":input_gain,"pan":rect_json(pan_response.rect),"mute":rect_json(pan_row.mute.rect),"gain":rect_json(gain.rect),"fader":rect_json(fader.rect),"fader_scale":scale_json(daw_ui::slider_scale_geometry(ui.ctx(), fader.id)),"statistics":rect_json(statistics.rect),"rms":rms})
+                            "input_gain":rect_json(input.rect),"input_gain_value":input_gain,"polarity":rect_json(polarity.rect),"stereo_width":rect_json(stereo_width.rect),"pan":rect_json(pan_response.rect),"mute":rect_json(pan_row.mute.rect),"gain":rect_json(gain.rect),"fader":rect_json(fader.rect),"fader_scale":scale_json(daw_ui::slider_scale_geometry(ui.ctx(), fader.id)),"statistics":rect_json(statistics.rect),"rms":rms})
                 });
                 anchors.insert(None, master.response.rect.center_bottom());
                 if reveal_channel == Some(daw_core::MASTER_CHANNEL_ID) {

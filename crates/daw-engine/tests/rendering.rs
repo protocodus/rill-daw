@@ -14,6 +14,9 @@ static NEXT_TEST_WAV: AtomicU64 = AtomicU64::new(0);
 struct TestWav(PathBuf);
 impl TestWav {
     fn new(samples: Vec<f32>, sample_rate: u32) -> Self {
+        Self::with_channels(samples, sample_rate, 1)
+    }
+    fn with_channels(samples: Vec<f32>, sample_rate: u32, channels: usize) -> Self {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -28,7 +31,7 @@ impl TestWav {
         AudioData {
             samples,
             sample_rate,
-            channels: 1,
+            channels,
         }
         .write_wav(&path)
         .unwrap();
@@ -183,6 +186,38 @@ fn mute_solo_and_pan_are_applied() {
             .iter()
             .all(|sample| *sample == 0.0)
     );
+}
+
+#[test]
+fn polarity_and_stereo_width_shape_the_channel() {
+    let mut project = empty_project();
+    let wav = TestWav::with_channels([0.5, 0.1].repeat(4_000), 8_000, 2);
+    project.tracks.push(audio_track(&wav, 1.0));
+    let middle = |project: &Project| {
+        let audio = render(project, 8_000, 1.0).unwrap();
+        audio.as_chunks::<2>().0[2_000]
+    };
+    let close = |actual: [f32; 2], expected: [f32; 2]| {
+        assert!(
+            (actual[0] - expected[0]).abs() < 1e-5 && (actual[1] - expected[1]).abs() < 1e-5,
+            "{actual:?} != {expected:?}"
+        );
+    };
+    close(middle(&project), [0.5, 0.1]);
+    project.tracks[0].stereo_width = 0.0;
+    close(middle(&project), [0.3, 0.3]);
+    project.tracks[0].stereo_width = 2.0;
+    close(middle(&project), [0.7, -0.1]);
+    project.tracks[0].stereo_width = 1.0;
+    project.tracks[0].invert_polarity = true;
+    close(middle(&project), [-0.5, -0.1]);
+    // Width comes before balance, so a hard-left pan keeps the folded sum.
+    project.tracks[0].invert_polarity = false;
+    project.tracks[0].stereo_width = 0.0;
+    project.tracks[0].pan = -1.0;
+    close(middle(&project), [0.3, 0.0]);
+    project.tracks[0].stereo_width = 2.5;
+    assert!(render(&project, 8_000, 1.0).is_err());
 }
 
 #[test]

@@ -148,6 +148,8 @@ pub fn freeze_track_wav(
     prepared.master.inserts.clear();
     prepared.master.mute = false;
     prepared.master.input_gain = 1.0;
+    prepared.master.invert_polarity = false;
+    prepared.master.stereo_width = 1.0;
     prepared.master.gain = 1.0;
     prepared.master.pan = 0.0;
     prepared.master.latency_samples = 0;

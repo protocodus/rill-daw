@@ -789,33 +789,36 @@ impl InputController {
         let audible = crate::render::audible_tracks(project, &order);
         let mut matrix = [[0.0_f32; 2]; MAX_CHANNELS];
         for route in self.settings.routes.iter().filter(|route| route.monitor) {
-            let mut factors = [1.0_f32; 2];
+            // Rows are output sides, columns the input pair. Width mixes the
+            // sides, so the dry path needs a matrix rather than two gains.
+            let mut factors = [[1.0_f32, 0.0], [0.0, 1.0]];
             let mut current = Some(route.track);
             while let Some(track) = current.and_then(|id| project.track(id)) {
                 if !audible.contains(&track.id) {
-                    factors = [0.0; 2];
+                    factors = [[0.0; 2]; 2];
                     break;
                 }
-                factors[0] *= track.input_gain * track.gain * (1.0 - track.pan.max(0.0));
-                factors[1] *= track.input_gain * track.gain * (1.0 + track.pan.min(0.0));
+                factors = monitor_stage(factors, track);
                 current = track.output_bus;
             }
             // Monitoring is explicitly dry and bypasses inserts, but the final
             // Master trim/volume/balance and mute still govern its output.
             let master = &project.master;
-            if master.mute {
-                factors = [0.0; 2];
-            }
-            factors[0] *= master.input_gain * master.gain * (1.0 - master.pan.max(0.0));
-            factors[1] *= master.input_gain * master.gain * (1.0 + master.pan.min(0.0));
+            factors = if master.mute {
+                [[0.0; 2]; 2]
+            } else {
+                monitor_stage(factors, master)
+            };
             match route.channels {
                 AudioInputChannels::Mono { channel } => {
-                    matrix[channel as usize][0] += factors[0];
-                    matrix[channel as usize][1] += factors[1];
+                    matrix[channel as usize][0] += factors[0][0] + factors[0][1];
+                    matrix[channel as usize][1] += factors[1][0] + factors[1][1];
                 }
                 AudioInputChannels::Stereo { left, right } => {
-                    matrix[left as usize][0] += factors[0];
-                    matrix[right as usize][1] += factors[1];
+                    matrix[left as usize][0] += factors[0][0];
+                    matrix[left as usize][1] += factors[1][0];
+                    matrix[right as usize][0] += factors[0][1];
+                    matrix[right as usize][1] += factors[1][1];
                 }
             }
         }
@@ -1715,8 +1718,40 @@ fn record_to_disk(
     result
 }
 
+/// One channel's trim, polarity, width, volume and balance applied to a dry
+/// monitoring matrix.
+fn monitor_stage(factors: [[f32; 2]; 2], track: &daw_core::Track) -> [[f32; 2]; 2] {
+    let trim = track.input_gain * crate::render::polarity_sign(track) * track.gain;
+    let sides = [
+        trim * (1.0 - track.pan.max(0.0)),
+        trim * (1.0 + track.pan.min(0.0)),
+    ];
+    let direct = (1.0 + track.stereo_width) * 0.5;
+    let cross = (1.0 - track.stereo_width) * 0.5;
+    std::array::from_fn(|side| {
+        std::array::from_fn(|input| {
+            sides[side] * (direct * factors[side][input] + cross * factors[1 - side][input])
+        })
+    })
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn dry_monitoring_applies_polarity_width_and_balance_in_strip_order() {
+        let mut track = daw_core::Track::new("Input", daw_core::TrackKind::Audio);
+        track.gain = 1.0;
+        let identity = [[1.0, 0.0], [0.0, 1.0]];
+        assert_eq!(monitor_stage(identity, &track), identity);
+        track.invert_polarity = true;
+        assert_eq!(monitor_stage(identity, &track), [[-1.0, 0.0], [0.0, -1.0]]);
+        track.invert_polarity = false;
+        track.stereo_width = 0.0;
+        assert_eq!(monitor_stage(identity, &track), [[0.5, 0.5], [0.5, 0.5]]);
+        track.pan = -1.0;
+        assert_eq!(monitor_stage(identity, &track), [[0.5, 0.5], [0.0, 0.0]]);
+    }
     use super::*;
     use crate::DeviceSettings;
     use daw_core::AudioData;

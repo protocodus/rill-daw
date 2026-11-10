@@ -64,7 +64,7 @@ pub(crate) fn bounded_text(value: &str) -> &str {
     &value[..end]
 }
 pub(crate) fn track_summary(track: &Track) -> Value {
-    json!({"id":track.id,"name":bounded_text(&track.name),"name_truncated":track.name.len()>1024,"kind":track.kind,"gain":track.gain,"input_gain":track.input_gain,"instrument_output":track.instrument_output,"gain_db":if track.gain > 0.0 {Some(20.0 * f64::from(track.gain).log10())} else {None},"pan":track.pan,"mute":track.mute,"solo":track.solo,"latency_samples":track.latency_samples,"clip_count":track.clips.len(),"output_bus":track.output_bus,"parent_folder":track.parent_folder,"has_instrument":!matches!(track.instrument, Instrument::None),"midi_input_group":track.midi_input_group,"insert_count":track.inserts.len()})
+    json!({"id":track.id,"name":bounded_text(&track.name),"name_truncated":track.name.len()>1024,"kind":track.kind,"gain":track.gain,"input_gain":track.input_gain,"invert_polarity":track.invert_polarity,"stereo_width":track.stereo_width,"instrument_output":track.instrument_output,"gain_db":if track.gain > 0.0 {Some(20.0 * f64::from(track.gain).log10())} else {None},"pan":track.pan,"mute":track.mute,"solo":track.solo,"latency_samples":track.latency_samples,"clip_count":track.clips.len(),"output_bus":track.output_bus,"parent_folder":track.parent_folder,"has_instrument":!matches!(track.instrument, Instrument::None),"midi_input_group":track.midi_input_group,"insert_count":track.inserts.len()})
 }
 fn note_summary(note: &Note) -> Value {
     let mut value = json!({"id":note.id,"pitch":note.pitch,"start":note.start,"length":note.length,"velocity":note.velocity});

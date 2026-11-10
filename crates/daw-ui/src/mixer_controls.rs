@@ -289,6 +289,131 @@ pub fn mixer_pan(ui: &mut Ui, pan: &mut f32, width: f32) -> Response {
     )
 }
 
+/// The strip's short width value, a whole percentage of the original side.
+pub fn mixer_width_caption(width: f32) -> String {
+    format!("{}%", (width * 100.0).round())
+}
+
+/// Square polarity switch for the input row. It flips both channels together.
+pub fn mixer_polarity_switch(ui: &mut Ui, invert: &mut bool) -> Response {
+    let height = crate::mixer_control_height(ui);
+    let colors = crate::theme::palette(ui.ctx());
+    let mut response = ui.add_sized(
+        Vec2::new(height, height),
+        crate::IconButton::new("Ø")
+            .min_size(Vec2::new(height, height))
+            .label_color(if *invert {
+                crate::theme::contrast_text(colors.accent)
+            } else {
+                colors.text
+            })
+            .selected(*invert)
+            .fill(if *invert {
+                colors.accent
+            } else {
+                colors.control_fill
+            }),
+    );
+    if response.clicked() && ui.is_enabled() {
+        *invert = !*invert;
+        response.mark_changed();
+    }
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::Checkbox,
+            ui.is_enabled(),
+            *invert,
+            "Invert polarity",
+        )
+    });
+    crate::hover_text(
+        response,
+        "Invert polarity · flips both channels before the inserts",
+    )
+}
+
+/// Width rail in the pan rail's skin, snapping to 100%, with the value in a
+/// caption right of it. Right-click enters an exact value; `name` identifies
+/// the channel in that editor.
+pub fn mixer_stereo_width(ui: &mut Ui, stereo_width: &mut f32, width: f32, name: &str) -> Response {
+    let height = crate::tokens::COMPACT_HEIGHT;
+    ui.allocate_ui_with_layout(
+        Vec2::new(width, height),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.set_min_size(Vec2::new(width, height));
+            ui.set_max_height(height);
+            ui.spacing_mut().interact_size.y = height;
+            ui.spacing_mut().item_spacing.x = crate::tokens::SPACE_XS;
+            ui.spacing_mut().slider_width =
+                (width - MIXER_PAN_CAPTION_WIDTH - crate::tokens::SPACE_XS).max(0.0);
+            let mut response = ui.add(
+                crate::slider(stereo_width, 0.0..=2.0)
+                    .mixer_style()
+                    .scale_ticks(&[(0.5, true)])
+                    .zero_reference(1.0)
+                    .clamping(SliderClamping::Always)
+                    .show_value(false)
+                    .scale_labels(false),
+            );
+            let pointer =
+                ui.input(|input| input.pointer.any_down() || input.pointer.any_released());
+            if response.changed()
+                && pointer
+                && *stereo_width != 1.0
+                && (*stereo_width - 1.0).abs() < PAN_DETENT
+            {
+                *stereo_width = 1.0;
+                response.mark_changed();
+            }
+            ui.allocate_ui_with_layout(
+                Vec2::new(MIXER_PAN_CAPTION_WIDTH, height),
+                egui::Layout::right_to_left(egui::Align::Center),
+                |ui| {
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(mixer_width_caption(*stereo_width))
+                                .size(crate::tokens::FONT_CAPTION)
+                                .color(crate::theme::palette(ui.ctx()).muted),
+                        )
+                        .selectable(false)
+                        .sense(Sense::hover()),
+                    )
+                },
+            );
+            let mut exact = None;
+            response.context_menu(|ui| {
+                if let Some(value) = crate::value_entry_named(
+                    ui,
+                    response.id.with("exact_width"),
+                    f64::from(*stereo_width) * 100.0,
+                    0.0..=200.0,
+                    "%",
+                    name,
+                ) {
+                    exact = Some((value / 100.0) as f32);
+                    ui.close();
+                }
+            });
+            if let Some(value) = exact {
+                *stereo_width = value.clamp(0.0, 2.0);
+                response.mark_changed();
+            }
+            response.widget_info(|| {
+                egui::WidgetInfo::slider(ui.is_enabled(), f64::from(*stereo_width), "Stereo width")
+            });
+            crate::hover_text(
+                response,
+                format!(
+                    "Stereo width · {} · 0% is mono, 100% unchanged, 200% doubles the side\nSnaps to 100%. Right-click for exact value entry",
+                    mixer_width_caption(*stereo_width)
+                ),
+            )
+        },
+    )
+    .inner
+}
+
 pub struct MixerMuteSoloResponse {
     pub mute: Response,
     pub solo: Response,

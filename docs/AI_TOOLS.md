@@ -290,7 +290,7 @@ functionality must add its tool mapping in the same change.
 | Audio regions | Range copy/cut/paste/duplicate/delete; gap/ripple delete; slip/nudge; clip gain/fades/crossfade; reverse; stretch/pitch; warp markers and audio quantize; silence removal | `audio_edit.rs`, `audio_processing.rs`, `audio_silence.rs`, `audio_editor.rs`, `crossfade_ui.rs` |
 | Takes and comping | Inspect alternatives; choose whole/range takes; comp boundaries; overdub layer; retain/discard alternatives | `audio_takes.rs`, `audio_takes_ui.rs` |
 | Instruments and effects | Discover/select instance; inspect/set parameters; preset/state edits; insert/remove/reorder/bypass | `daw-plugins`, `plugin_ui.rs`, `library.rs` |
-| Routing and mixing | Main outputs; sends and levels; insert chains; bus structure; channel gain/pan/mute/solo | `routing.rs`, `daw-app/src/routing.rs`, `editor.rs` |
+| Routing and mixing | Main outputs; sends and levels; insert chains; bus structure; channel gain/pan/mute/solo, polarity and stereo width (`set_mix`) | `routing.rs`, `daw-app/src/routing.rs`, `editor.rs` |
 | Automation | Discover targets; create/remove lanes; bulk edit points; interpolation; enable/mute | `automation.rs`, `automation_editor.rs` |
 | Timing and audition | Tempo/meter; loop range/enable; play/pause/stop/seek; note/region audition; click/pre-count/level | `model.rs`, `app.rs`, `library_preview.rs`, `recording_ui.rs` |
 | Recording | Inputs/channels; arm/monitor/placement; start/stop capture; finalized takes; recovery | `recording.rs`, `recording_ui.rs`, `engine_lifecycle.rs` |

@@ -76,6 +76,12 @@ All audio channels gain a finite `input_gain` field in `0..=16`, defaulting to
 volume and `pan`. `AutomationParameter::TrackInputGain` automates it; ordinary
 automation targets use `track: 0` for Master, including its insert parameters.
 
+Every audio channel, Master included, may also carry `invert_polarity`
+(default `false`, omitted when false) and `stereo_width` (finite, `0..=2`,
+default `1.0`). Polarity applies with the input trim before inserts. Width is a
+mid/side scale of the side signal after inserts and before volume and pan.
+Neither is automatable. Older files load unchanged.
+
 `Track.instrument_inputs` and `EffectSlot.inputs` contain `PluginInputRoute`
 records: `source_track`, destination `bus` and `first_channel`, linear `gain`
 and `pre_fader`. Bus/channel indices are zero-based native plug-in addresses;

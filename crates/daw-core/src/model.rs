@@ -147,6 +147,13 @@ pub struct Track {
     /// Linear input/trim gain before inserts; `gain` remains the output fader.
     #[serde(default = "unity_gain")]
     pub input_gain: f32,
+    /// Inverts both channels together with the input trim, before inserts.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub invert_polarity: bool,
+    /// Side level after inserts and before the fader: 0 is mono, 1 leaves the
+    /// signal unchanged and 2 doubles the side signal.
+    #[serde(default = "unity_gain")]
+    pub stereo_width: f32,
     pub pan: f32,
     pub mute: bool,
     pub solo: bool,
@@ -532,6 +539,8 @@ impl Track {
                 0.75
             },
             input_gain: 1.0,
+            invert_polarity: false,
+            stereo_width: 1.0,
             pan: 0.0,
             mute: false,
             solo: false,
@@ -1225,6 +1234,10 @@ impl Project {
             ensure!(
                 track.input_gain.is_finite() && (0.0..=16.0).contains(&track.input_gain),
                 "Input gain must be between 0 and 16"
+            );
+            ensure!(
+                track.stereo_width.is_finite() && (0.0..=2.0).contains(&track.stereo_width),
+                "Stereo width must be between 0 and 2"
             );
             ensure!(
                 track.pan.is_finite() && (-1.0..=1.0).contains(&track.pan),

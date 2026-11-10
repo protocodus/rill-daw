@@ -58,7 +58,7 @@ fn note() -> Value {
 }
 fn mix() -> Value {
     object(
-        json!({"track":channel_reference(),"gain":{"type":"number","minimum":0,"maximum":16,"description":"Linear gain, including exact zero; omit gain_db when using gain."},"gain_db":{"type":"number","minimum":-120,"maximum":24,"description":"Gain in dB; omit gain when using gain_db."},"input_gain":{"type":"number","minimum":0,"maximum":16,"description":"Pre-insert linear trim; omit input_gain_db."},"input_gain_db":{"type":"number","minimum":-120,"maximum":24,"description":"Pre-insert trim in dB; omit input_gain."},"pan":{"type":"number","minimum":-1,"maximum":1},"mute":boolean(),"solo":boolean()}),
+        json!({"track":channel_reference(),"gain":{"type":"number","minimum":0,"maximum":16,"description":"Linear gain, including exact zero; omit gain_db when using gain."},"gain_db":{"type":"number","minimum":-120,"maximum":24,"description":"Gain in dB; omit gain when using gain_db."},"input_gain":{"type":"number","minimum":0,"maximum":16,"description":"Pre-insert linear trim; omit input_gain_db."},"input_gain_db":{"type":"number","minimum":-120,"maximum":24,"description":"Pre-insert trim in dB; omit input_gain."},"invert_polarity":{"type":"boolean","description":"Invert both channels before inserts."},"stereo_width":{"type":"number","minimum":0,"maximum":2,"description":"Width after inserts, before the fader: 0 mono, 1 unchanged, 2 doubled side."},"pan":{"type":"number","minimum":-1,"maximum":1},"mute":boolean(),"solo":boolean()}),
         &["track"],
     )
 }

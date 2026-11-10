@@ -343,6 +343,15 @@ impl AutomatedValue {
         }
     }
 
+    fn manual(manual: f32) -> Self {
+        Self {
+            manual,
+            lane: None,
+            smooth_value: manual,
+            smooth_remaining: 0,
+        }
+    }
+
     fn set_manual(&mut self, value: f32, sample_rate: u32) {
         if self.manual != value {
             self.manual = value;
@@ -401,6 +410,17 @@ fn active_automation_lane(
 }
 
 #[inline]
+/// Mid/side width: 0 folds to mono, 1 is unchanged, 2 doubles the side.
+pub(crate) fn stereo_width([left, right]: [f32; 2], width: f32) -> [f32; 2] {
+    let mid = (left + right) * 0.5;
+    let side = (left - right) * 0.5 * width;
+    [mid + side, mid - side]
+}
+
+pub(crate) fn polarity_sign(track: &daw_core::Track) -> f32 {
+    if track.invert_polarity { -1.0 } else { 1.0 }
+}
+
 fn fader_factors(gain: f32, pan: f32) -> [f32; 2] {
     let pan = pan.clamp(-1.0, 1.0);
     [gain * (1.0 - pan.max(0.0)), gain * (1.0 + pan.min(0.0))]
@@ -834,6 +854,9 @@ struct RenderTrack {
     mix_left: Vec<f64>,
     mix_right: Vec<f64>,
     input_gain: AutomatedValue,
+    // Manual-only values, smoothed so switching polarity or width cannot click.
+    polarity: AutomatedValue,
+    width: AutomatedValue,
     gain: AutomatedValue,
     pan: AutomatedValue,
     instrument_automation: Vec<PluginAutomation>,
@@ -1211,6 +1234,7 @@ impl RenderTrack {
         // Convert once after every source/bus contribution is accumulated.
         // Plug-in buffers and graph edges retain their f32 representation.
         let input_gain = self.input_gain.constant();
+        let polarity = self.polarity.constant();
         for index in 0..count {
             let gain = input_gain.unwrap_or_else(|| {
                 let position = if context.timeline {
@@ -1220,7 +1244,7 @@ impl RenderTrack {
                 };
                 self.input_gain
                     .next_value(position as f64 * beats_per_sample)
-            });
+            }) * polarity.unwrap_or_else(|| self.polarity.next_value(0.0));
             self.left[index] = self.mix_left[index] as f32 * gain;
             self.right[index] = self.mix_right[index] as f32 * gain;
         }
@@ -1303,13 +1327,18 @@ impl RenderTrack {
             .constant()
             .zip(self.pan.constant())
             .map(|(gain, pan)| fader_factors(gain, pan));
+        let width = self.width.constant();
         for index in 0..count {
             let delayed = self.delay.process([self.left[index], self.right[index]]);
-            self.left[index] = delayed[0];
-            self.right[index] = delayed[1];
             if let Some(tap) = &mut self.freeze_tap {
                 tap.frames[index] = tap.delay.process(delayed);
             }
+            let width = width.unwrap_or_else(|| self.width.next_value(0.0));
+            [self.left[index], self.right[index]] = if width == 1.0 {
+                delayed
+            } else {
+                stereo_width(delayed, width)
+            };
             let factors = fader.unwrap_or_else(|| {
                 let position = if context.timeline {
                     start as i64 + index as i64 - self.latency as i64
@@ -1914,6 +1943,8 @@ impl Renderer {
                 mix_left: vec![0.0; BLOCK],
                 mix_right: vec![0.0; BLOCK],
                 input_gain: control(AutomationParameter::TrackInputGain, track.input_gain),
+                polarity: AutomatedValue::manual(polarity_sign(track)),
+                width: AutomatedValue::manual(track.stereo_width),
                 gain: control(AutomationParameter::TrackGain, track.gain),
                 pan: control(AutomationParameter::TrackPan, track.pan),
                 instrument_automation,

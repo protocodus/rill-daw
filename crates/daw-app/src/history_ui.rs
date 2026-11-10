@@ -192,6 +192,12 @@ fn edit_name(before: &Project, after: &Project) -> &'static str {
         if before.input_gain != after.input_gain {
             return "Channel input gain";
         }
+        if before.invert_polarity != after.invert_polarity {
+            return "Invert polarity";
+        }
+        if before.stereo_width != after.stereo_width {
+            return "Stereo width";
+        }
         if before.gain != after.gain {
             return "Track volume";
         }

@@ -507,6 +507,39 @@ fn master_and_pre_insert_controls_are_visible_editable_and_scope_safe() {
 }
 
 #[test]
+fn polarity_and_stereo_width_are_editable_readable_and_validated() {
+    let mut host = Host::default();
+    let track = host.p.add_audio_track("Overhead");
+    let session = host.session;
+    call(
+        &mut host,
+        "apply_edits",
+        json!({"session_id":session.id,"expected_revision":session.revision,"label":"Width","edits":[
+            {"op":"set_mix","channels":[{"track":track,"invert_polarity":true,"stereo_width":1.5}]}
+        ]}),
+    );
+    let read = call(&mut host, "get_track", json!({"track_id":track}));
+    assert_eq!(read["invert_polarity"], true);
+    assert_eq!(read["stereo_width"], 1.5);
+    let session = host.session;
+    let rejected = dispatch_song_tool(
+        &mut host,
+        "apply_edits",
+        json!({"session_id":session.id,"expected_revision":session.revision,"label":"Too wide","edits":[
+            {"op":"set_mix","channels":[{"track":track,"stereo_width":2.5}]}
+        ]}),
+    );
+    assert!(rejected.is_err());
+    assert_eq!(host.p.track(track).unwrap().stereo_width, 1.5);
+    let mut leaked = host.p.clone();
+    leaked.track_mut(track).unwrap().invert_polarity = false;
+    let other = ToolScope::Channel {
+        track_id: MASTER_CHANNEL_ID,
+    };
+    assert!(other.validate_candidate(&host.p, &leaked).is_err());
+}
+
+#[test]
 fn expressive_queries_page_exact_packets_and_keep_ordinary_note_queries_bounded() {
     assert_eq!(tool_effect("get_note_expressions"), ToolEffect::Read);
     let mut host = Host::default();
