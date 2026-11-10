@@ -105,7 +105,14 @@ fn device_details_read_native_ports_search_parameters_and_preserve_project() {
         assert!(report.contains("No Editor Probe"));
         assert!(report.contains("Outputs: 2 audio channels, 1 buses"));
         assert!(report.contains("#7 Level [%]"));
-        assert!(report.contains(fixture.path.to_str().unwrap()));
+        let bundle = fixture.path.canonicalize().unwrap();
+        assert_eq!(
+            report
+                .lines()
+                .find_map(|line| line.strip_prefix("Bundle: ")),
+            bundle.to_str(),
+            "The report should name the bundle resolved by the scanner"
+        );
         app.click("Technical details");
         assert!(visible(&app.inspect(), "Parameters"));
         app.click("Parameters");
