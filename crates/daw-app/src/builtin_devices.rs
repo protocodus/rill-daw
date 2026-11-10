@@ -247,7 +247,9 @@ pub(crate) fn describe_parameter(
             description["value"] = serde_json::json!(normalized >= 0.5);
             description["default"] = serde_json::json!(spec.default >= 0.5);
         }
-        daw_devices::ParamRange::Linear { .. } | daw_devices::ParamRange::Log { .. } => {
+        daw_devices::ParamRange::Linear { .. }
+        | daw_devices::ParamRange::Log { .. }
+        | daw_devices::ParamRange::Integer { .. } => {
             description["min"] = serde_json::json!(f64::from(spec.plain_min()));
             description["max"] = serde_json::json!(f64::from(spec.plain_max()));
         }
@@ -273,6 +275,9 @@ pub(crate) fn normalized_from_tool(
                     (plain.fract() == 0.0 && plain >= 0.0 && plain < spec.steps()? as f32)
                         .then(|| spec.to_normalized(plain))
                 }
+                daw_devices::ParamRange::Integer { .. } => (plain.fract() == 0.0
+                    && (spec.plain_min()..=spec.plain_max()).contains(&plain))
+                .then(|| spec.to_normalized(plain)),
                 _ => (spec.plain_min()..=spec.plain_max())
                     .contains(&plain)
                     .then(|| spec.to_normalized(plain)),

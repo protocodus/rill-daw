@@ -189,6 +189,9 @@ fn descriptors_are_well_formed() {
             match spec.range {
                 ParamRange::Linear { min, max } => assert!(min < max, "{label}"),
                 ParamRange::Log { min, max } => assert!(0.0 < min && min < max, "{label}"),
+                ParamRange::Integer { min, max } => {
+                    assert!(min < max && spec.default.fract() == 0.0, "{label}")
+                }
                 ParamRange::Choice(options) => assert!(!options.is_empty(), "{label}"),
                 ParamRange::Toggle => {}
             }
@@ -218,6 +221,7 @@ fn parameter_ids_and_keys_never_change() {
             let range = match spec.range {
                 ParamRange::Linear { min, max } => format!("linear {min} {max}"),
                 ParamRange::Log { min, max } => format!("log {min} {max}"),
+                ParamRange::Integer { min, max } => format!("integer {min} {max}"),
                 ParamRange::Choice(options) => format!("choice {}", options.join("|")),
                 ParamRange::Toggle => "toggle".into(),
             };

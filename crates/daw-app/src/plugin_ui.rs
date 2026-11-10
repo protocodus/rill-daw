@@ -139,6 +139,9 @@ struct PanelHost<'a> {
     batch: Option<Vec<(u32, f64)>>,
     navigation: Option<daw_ui::AutomationNavigation>,
     saved: Option<daw_devices::Preset>,
+    /// `Some(None)` releases the panel keyboard's note.
+    audition: Option<Option<(u8, f32)>>,
+    wheels: Option<(f32, f32)>,
 }
 
 impl PanelHost<'_> {
@@ -199,6 +202,12 @@ impl daw_devices_ui::DeviceHost for PanelHost<'_> {
     fn save_preset(&mut self, preset: daw_devices::Preset) {
         self.saved = Some(preset);
     }
+    fn audition(&mut self, note: Option<(u8, f32)>) {
+        self.audition = Some(note);
+    }
+    fn wheels(&mut self, pitch: f32, modulation: f32) {
+        self.wheels = Some((pitch, modulation));
+    }
 }
 
 #[derive(Default)]
@@ -210,6 +219,15 @@ struct ParameterActions {
 }
 
 impl DawApp {
+    /// The track whose instrument (not insert) the editor window shows.
+    pub(crate) fn instrument_panel_track(&self) -> Option<u64> {
+        self.instrument_ui
+            .owner
+            .as_ref()
+            .filter(|(target, _)| target.effect.is_none())
+            .map(|(target, _)| target.track)
+    }
+
     fn plugin_error_details_button(&mut self, ui: &mut egui::Ui, target: EditorTarget, name: &str) {
         if daw_ui::button(ui, "Details").clicked() {
             let Some(error) = self.instrument_ui.error.clone() else {
@@ -1100,6 +1118,9 @@ impl DawApp {
         let mut automate = None;
         let mut resume = None;
         let mut device_requests = None;
+        // Panel keyboard note and wheels, applied after drawing.
+        let mut panel_note: Option<Option<(u8, f32)>> = None;
+        let mut panel_wheels: Option<(f32, f32)> = None;
         if let Instrument::Builtin { device } = &instrument {
             // Registry metadata is cheap and must follow Undo, so it is never cached.
             let (_, overrides) = self.editor_state(target).unwrap();
@@ -1115,13 +1136,26 @@ impl DawApp {
                 && self.instrument_ui.opening.is_none();
         }
         let parameter_page = self.instrument_ui.parameters_open;
+        let builtin = instrument
+            .builtin_device()
+            .and_then(daw_devices::descriptor);
         daw_ui::popup(&title, ctx)
             .id(egui::Id::new(("instrument_editor", parameter_page)))
             .open(&mut open)
-            .default_width(if parameter_page { 920.0 } else { 600.0 })
+            .default_width(if parameter_page {
+                920.0
+            } else if let Some(descriptor) = builtin {
+                daw_devices_ui::panel_width(descriptor) + 2.0 * daw_ui::tokens::POPUP_MARGIN
+            } else {
+                600.0
+            })
             .default_height(if parameter_page {
                 520.0
-            } else if matches!(instrument, Instrument::Builtin { .. }) {
+            } else if builtin.is_some_and(|d| d.kind == daw_devices::DeviceKind::Instrument) {
+                // The response, every control and the keyboard at once where
+                // the screen allows; the window keeps it on screen otherwise.
+                1080.0
+            } else if builtin.is_some() {
                 // A device panel shows its response and every control at once.
                 680.0
             } else {
@@ -1317,8 +1351,14 @@ impl DawApp {
                                 batch: None,
                                 navigation: None,
                                 saved: None,
+                                audition: None,
+                                wheels: None,
                             };
                             daw_devices_ui::show(ui, descriptor, &mut host, &mut panel);
+                            if let Some(note) = host.audition {
+                                panel_note = Some(note);
+                            }
+                            panel_wheels = host.wheels.or(panel_wheels);
                             device_requests =
                                 Some((host.updates, host.batch, host.navigation, host.saved));
                             self.instrument_ui.device_panel = panel;
@@ -1529,6 +1569,17 @@ impl DawApp {
         }
         if let Some((updates, batch, navigation, saved)) = device_requests {
             self.apply_device_panel(target, updates, batch, navigation, saved);
+        }
+        if target.effect.is_none() {
+            if let Some(note) = panel_note {
+                self.panel_audition = note.map(|(pitch, velocity)| {
+                    let velocity = (velocity * 127.0).round().clamp(1.0, 127.0) as u8;
+                    (target.track, pitch, velocity)
+                });
+            }
+            if let Some((pitch, modulation)) = panel_wheels {
+                self.panel_wheels = Some((target.track, pitch, modulation));
+            }
         }
         if let Some((id, value)) = automate {
             self.automate_plugin_parameter(target, id, value);

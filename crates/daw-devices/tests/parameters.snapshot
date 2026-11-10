@@ -15,3 +15,47 @@ r1-filter 21 env.attack "Attack" log 0.1 100
 r1-filter 22 env.release "Release" log 10 2000
 r1-filter 30 mix "Mix" linear 0 100
 r1-filter 31 output "Output" linear -24 24
+r1-mini 1 osc1.model "Model" choice VCO|DCO
+r1-mini 2 osc1.wave "Wave" choice Saw|Pulse|Triangle|Sine
+r1-mini 3 osc1.octave "Octave" integer -2 2
+r1-mini 4 osc1.width "Width" linear 5 95
+r1-mini 10 osc2.model "Model" choice VCO|DCO
+r1-mini 11 osc2.wave "Wave" choice Saw|Pulse|Triangle|Sine
+r1-mini 12 osc2.octave "Octave" integer -2 2
+r1-mini 13 osc2.semitones "Semitones" integer -12 12
+r1-mini 14 osc2.detune "Detune" linear -50 50
+r1-mini 15 osc2.width "Width" linear 5 95
+r1-mini 16 osc2.sync "Sync" toggle
+r1-mini 20 mix.osc1 "Osc 1" linear 0 100
+r1-mini 21 mix.osc2 "Osc 2" linear 0 100
+r1-mini 22 mix.sub "Sub" linear 0 100
+r1-mini 23 mix.noise "Noise" linear 0 100
+r1-mini 30 filter.model "Model" choice Transistor Ladder|OTA Cascade|Sallen-Key|OTA Multimode|Diode Pair
+r1-mini 31 filter.cutoff "Cutoff" log 20 20000
+r1-mini 32 filter.resonance "Resonance" linear 0 100
+r1-mini 33 filter.env "Envelope" linear -5 5
+r1-mini 34 filter.keytrack "Key track" linear 0 100
+r1-mini 35 filter.drive "Drive" linear 0 24
+r1-mini 40 fenv.attack "Attack" log 0.5 10000
+r1-mini 41 fenv.decay "Decay" log 1 10000
+r1-mini 42 fenv.sustain "Sustain" linear 0 100
+r1-mini 43 fenv.release "Release" log 1 10000
+r1-mini 50 aenv.attack "Attack" log 0.5 10000
+r1-mini 51 aenv.decay "Decay" log 1 10000
+r1-mini 52 aenv.sustain "Sustain" linear 0 100
+r1-mini 53 aenv.release "Release" log 1 10000
+r1-mini 60 lfo.rate "Rate" log 0.01 20
+r1-mini 61 lfo.sync "Sync" choice Off|4 bars|2 bars|1 bar|1/2|1/4|1/8|1/16
+r1-mini 62 lfo.shape "Shape" choice Sine|Triangle|Saw|Square|S&H
+r1-mini 63 lfo.pitch "Pitch" linear 0 12
+r1-mini 64 lfo.cutoff "Cutoff" linear 0 5
+r1-mini 65 lfo.width "Width" linear 0 100
+r1-mini 66 lfo.wheel "Mod wheel" linear 0 100
+r1-mini 70 velocity.amp "Amp" linear 0 100
+r1-mini 71 velocity.cutoff "Cutoff" linear 0 5
+r1-mini 80 voice.mode "Mode" choice Poly|Mono|Legato
+r1-mini 81 voice.count "Voices" integer 1 8
+r1-mini 82 voice.glide "Glide" log 1 2000
+r1-mini 83 voice.bend "Bend" integer 0 24
+r1-mini 84 voice.drift "Drift" linear 0 100
+r1-mini 85 voice.volume "Volume" linear -36 6

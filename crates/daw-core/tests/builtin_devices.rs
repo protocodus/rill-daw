@@ -72,3 +72,16 @@ fn builtin_device_ids_are_bounded_and_carry_no_opaque_state() {
     channel.instrument_state = vec![1];
     assert!(project.validate().is_err());
 }
+
+#[test]
+fn new_instrument_tracks_start_with_the_default_synth() {
+    let mut project = Project::new();
+    let track = project.add_instrument_track("Synth");
+    assert_eq!(
+        project.track(track).unwrap().instrument,
+        Instrument::Builtin {
+            device: "r1-mini".into()
+        }
+    );
+    project.validate().unwrap();
+}

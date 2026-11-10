@@ -1,0 +1,31 @@
+{
+  "format": 1,
+  "device": "r1-mini",
+  "name": "Glass Keys",
+  "author": "Rill",
+  "category": "Keys",
+  "tags": ["poly", "bell"],
+  "description": "Triangle and an octave-up sine with a fast filter decay, bright and percussive.",
+  "parameters": {
+    "osc1.wave": "Triangle",
+    "osc2.wave": "Sine",
+    "osc2.octave": 1,
+    "osc2.detune": 3.0,
+    "mix.osc2": 55.0,
+    "filter.model": "Sallen-Key",
+    "filter.cutoff": 1400.0,
+    "filter.resonance": 25.0,
+    "filter.env": 2.5,
+    "filter.keytrack": 80.0,
+    "fenv.attack": 0.5,
+    "fenv.decay": 350.0,
+    "fenv.sustain": 10.0,
+    "fenv.release": 600.0,
+    "aenv.attack": 0.5,
+    "aenv.decay": 1800.0,
+    "aenv.sustain": 0.0,
+    "aenv.release": 700.0,
+    "velocity.amp": 80.0,
+    "velocity.cutoff": 1.5
+  }
+}

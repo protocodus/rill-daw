@@ -105,7 +105,8 @@ fn a_mouse_renamed_track_keeps_its_name_through_assignment_save_and_replacement(
     let renamed = app.click("Apply name");
     assert_eq!(tracks(&renamed)[0]["name"], "lead");
     menu(&mut app, "Window", "Instrument");
-    app.click("Choose instrument");
+    // A new MIDI track already plays R1 Mini.
+    app.click("Change instrument");
     let assigned = assign(&mut app, "Rill Fixture A");
     assert_eq!(tracks(&assigned)[0]["name"], "lead");
 

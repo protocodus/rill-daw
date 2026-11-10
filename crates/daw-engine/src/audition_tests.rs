@@ -172,3 +172,71 @@ fn paused_audition_holds_gain_pan_and_send_automation_at_the_cursor() {
         "Playback automation must still advance"
     );
 }
+
+/// Rising zero crossings per second of the left channel.
+fn preview_frequency(frames: &[[f32; 2]], rate: f32) -> f32 {
+    let crossings: Vec<f32> = frames
+        .windows(2)
+        .enumerate()
+        .filter(|(_, pair)| pair[0][0] < 0.0 && pair[1][0] >= 0.0)
+        .map(|(index, pair)| index as f32 + pair[0][0] / (pair[0][0] - pair[1][0]))
+        .collect();
+    (crossings.len() - 1) as f32 * rate / (crossings[crossings.len() - 1] - crossings[0])
+}
+
+#[test]
+fn builtin_instrument_auditions_and_follows_the_panel_wheels() {
+    use daw_devices::devices::mini;
+    let mut project = Project::new();
+    let track = project.add_midi_track("Mini");
+    project
+        .set_instrument(
+            track,
+            Instrument::Builtin {
+                device: "r1-mini".into(),
+            },
+        )
+        .unwrap();
+    // One sine, filter open: the pitch is easy to read.
+    let parameters = [
+        (mini::OSC1_MODEL, 1.0),
+        (mini::OSC1_WAVE, 3.0),
+        (mini::MIX_OSC2, 0.0),
+        (mini::CUTOFF, 20_000.0),
+        (mini::FILTER_ENV, 0.0),
+        (mini::BEND_RANGE, 12.0),
+    ];
+    project.track_mut(track).unwrap().instrument_parameters = parameters
+        .iter()
+        .map(|&(id, plain)| daw_core::PluginParameterValue {
+            id,
+            value: f64::from(mini::DESCRIPTOR.parameter(id).unwrap().to_normalized(plain)),
+        })
+        .collect();
+    let mut renderer = Renderer::new(&project, 48_000, true).unwrap();
+    renderer.set_preview(true, 0.0).unwrap();
+    renderer.set_audition(Some((track, 69, 127))).unwrap();
+    let render = |renderer: &mut Renderer, blocks: usize| {
+        let mut output = [[0.0; 2]; BLOCK];
+        let mut positions = [0.0; BLOCK];
+        let mut frames = Vec::new();
+        for _ in 0..blocks {
+            renderer
+                .render_preview(&mut output, &mut positions)
+                .unwrap();
+            frames.extend_from_slice(&output);
+        }
+        frames
+    };
+    let held = render(&mut renderer, 100);
+    let frequency = preview_frequency(&held[held.len() / 2..], 48_000.0);
+    assert!((frequency - 440.0).abs() < 1.0, "{frequency}");
+    renderer.set_audition_wheels(Some((track, 1.0, 0.5)));
+    let bent = render(&mut renderer, 100);
+    let frequency = preview_frequency(&bent[bent.len() / 2..], 48_000.0);
+    assert!((frequency - 880.0).abs() < 2.0, "{frequency}");
+    renderer.set_audition(None).unwrap();
+    render(&mut renderer, 400);
+    let released = render(&mut renderer, 10);
+    assert!(released.iter().flatten().all(|sample| *sample == 0.0));
+}

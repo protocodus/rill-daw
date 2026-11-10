@@ -158,6 +158,10 @@ pub struct DawApp {
     pub(crate) virtual_audio: bool,
     pub(crate) automatic_plugin_previews: bool,
     pub(crate) audition_request: Option<(u64, u8, u8)>,
+    /// A note held on an instrument panel's keyboard: track, pitch, velocity.
+    pub(crate) panel_audition: Option<(u64, u8, u8)>,
+    /// An instrument panel's pitch and mod wheels: track, pitch, modulation.
+    pub(crate) panel_wheels: Option<(u64, f32, f32)>,
     pub loading: Option<std::sync::mpsc::Receiver<(u64, anyhow::Result<AudioEngine>)>>,
     loading_cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     settings_rollback: Option<Settings>,
@@ -322,6 +326,8 @@ impl DawApp {
             virtual_audio: false,
             automatic_plugin_previews: !cfg!(test),
             audition_request: None,
+            panel_audition: None,
+            panel_wheels: None,
             loading: None,
             loading_cancel: None,
             settings_rollback: None,
@@ -1077,26 +1083,46 @@ impl DawApp {
     }
 
     fn update_note_audition(&mut self, ctx: &egui::Context) {
-        let note = self.midi_audition(ctx).filter(|(track, _, _)| {
-            self.project
-                .track(*track)
-                .is_some_and(|track| matches!(track.instrument, Instrument::Vst3 { .. }))
-                && self.document_guard.is_none()
-                && self.error_details.is_none()
-                && !self.assistant.open
-                && !self.library_open
-                && !self.instrument_open
-                && !self.effects_open
-                && !self.setup_open
-                && !self.routing_open
-                && !self.inspector_open
-                && !self.automation_open
-                && !self.history_open
-                && !self.export_open
-                && !self.midi_export_open
-                && !self.analysis.open
-                && !self.about_open
-        });
+        let has_instrument = |app: &Self, track: u64| {
+            app.project
+                .track(track)
+                .is_some_and(|track| track.instrument.is_processor())
+        };
+        // The open instrument panel's keyboard and wheels; nothing once the
+        // window closes, so a key held while closing cannot stick.
+        let panel_track = self
+            .instrument_open
+            .then(|| self.instrument_panel_track())
+            .flatten();
+        if self.panel_audition.map(|(track, _, _)| track) != panel_track {
+            self.panel_audition = None;
+        }
+        if self.panel_wheels.map(|(track, _, _)| track) != panel_track {
+            self.panel_wheels = None;
+        }
+        let note = self
+            .midi_audition(ctx)
+            .filter(|(track, _, _)| {
+                has_instrument(self, *track)
+                    && self.document_guard.is_none()
+                    && self.error_details.is_none()
+                    && !self.assistant.open
+                    && !self.library_open
+                    && !self.instrument_open
+                    && !self.effects_open
+                    && !self.setup_open
+                    && !self.routing_open
+                    && !self.inspector_open
+                    && !self.automation_open
+                    && !self.history_open
+                    && !self.export_open
+                    && !self.midi_export_open
+                    && !self.analysis.open
+                    && !self.about_open
+            })
+            .or(self
+                .panel_audition
+                .filter(|(track, _, _)| has_instrument(self, *track)));
         if note != self.audition_request {
             self.audition_request = note;
             if note.is_some()
@@ -1108,7 +1134,9 @@ impl DawApp {
             }
         }
         if let Some(engine) = &self.engine
-            && let Err(error) = engine.audition_note(note)
+            && let Err(error) = engine
+                .audition_note(note)
+                .and_then(|()| engine.audition_wheels(self.panel_wheels))
         {
             self.message(Err(error), "");
         }

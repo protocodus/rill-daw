@@ -11,6 +11,11 @@ pub enum ParamRange {
         min: f32,
         max: f32,
     },
+    /// Whole numbers, such as octaves, semitones or a voice count.
+    Integer {
+        min: i32,
+        max: i32,
+    },
     /// Plain value is the option index.
     Choice(&'static [&'static str]),
     /// Plain value is 0 (off) or 1 (on).
@@ -37,6 +42,7 @@ impl ParamSpec {
     /// Number of discrete values, for choices and toggles.
     pub fn steps(&self) -> Option<usize> {
         match self.range {
+            ParamRange::Integer { min, max } => Some((max - min) as usize + 1),
             ParamRange::Choice(options) => Some(options.len()),
             ParamRange::Toggle => Some(2),
             _ => None,
@@ -46,6 +52,7 @@ impl ParamSpec {
     pub fn plain_min(&self) -> f32 {
         match self.range {
             ParamRange::Linear { min, .. } | ParamRange::Log { min, .. } => min,
+            ParamRange::Integer { min, .. } => min as f32,
             ParamRange::Choice(_) | ParamRange::Toggle => 0.0,
         }
     }
@@ -53,6 +60,7 @@ impl ParamSpec {
     pub fn plain_max(&self) -> f32 {
         match self.range {
             ParamRange::Linear { max, .. } | ParamRange::Log { max, .. } => max,
+            ParamRange::Integer { max, .. } => max as f32,
             ParamRange::Choice(options) => options.len().saturating_sub(1) as f32,
             ParamRange::Toggle => 1.0,
         }
@@ -70,6 +78,7 @@ impl ParamSpec {
         match self.range {
             ParamRange::Linear { min, max } => (plain - min) / (max - min),
             ParamRange::Log { min, max } => (plain / min).ln() / (max / min).ln(),
+            ParamRange::Integer { min, max } => (plain.round() - min as f32) / (max - min) as f32,
             ParamRange::Choice(options) if options.len() > 1 => {
                 plain.round() / (options.len() - 1) as f32
             }
@@ -87,6 +96,9 @@ impl ParamSpec {
         match self.range {
             ParamRange::Linear { min, max } => min + normalized * (max - min),
             ParamRange::Log { min, max } => min * (max / min).powf(normalized),
+            ParamRange::Integer { min, max } => {
+                (min as f32 + normalized * (max - min) as f32).round()
+            }
             ParamRange::Choice(options) => {
                 (normalized * options.len().saturating_sub(1) as f32).round()
             }
@@ -113,6 +125,18 @@ impl ParamSpec {
             ParamRange::Choice(_) => self.choice_label(normalized).unwrap_or("").to_string(),
             ParamRange::Toggle => if plain >= 0.5 { "On" } else { "Off" }.to_string(),
             ParamRange::Linear { .. } | ParamRange::Log { .. } => format_value(plain, self.unit),
+            ParamRange::Integer { min, .. } => {
+                let number = if min < 0 && plain > 0.0 {
+                    format!("+{plain:.0}")
+                } else {
+                    format!("{plain:.0}")
+                };
+                if self.unit.is_empty() {
+                    number
+                } else {
+                    format!("{number} {}", self.unit)
+                }
+            }
         }
     }
 
@@ -131,7 +155,7 @@ impl ParamSpec {
                 "off" | "false" | "0" | "no" => Some(0.0),
                 _ => None,
             },
-            ParamRange::Linear { .. } | ParamRange::Log { .. } => {
+            ParamRange::Linear { .. } | ParamRange::Log { .. } | ParamRange::Integer { .. } => {
                 parse_value(text, self.unit).map(|plain| self.to_normalized(plain))
             }
         }
@@ -226,6 +250,25 @@ mod tests {
         assert_eq!(MODE.format(0.9), "C");
         assert_eq!(MODE.parse("b"), Some(0.5));
         assert_eq!(MODE.to_plain(0.3), 1.0);
+    }
+
+    #[test]
+    fn integers_snap_and_show_their_sign() {
+        let semitones = ParamSpec {
+            unit: "st",
+            range: ParamRange::Integer { min: -12, max: 12 },
+            default: 0.0,
+            ..CUTOFF
+        };
+        assert_eq!(semitones.steps(), Some(25));
+        assert_eq!(semitones.to_plain(semitones.to_normalized(6.6)), 7.0);
+        assert_eq!(semitones.format(semitones.to_normalized(7.0)), "+7 st");
+        assert_eq!(semitones.format(semitones.to_normalized(-3.0)), "-3 st");
+        assert_eq!(
+            semitones.parse("-5 st"),
+            Some(semitones.to_normalized(-5.0))
+        );
+        assert_eq!(semitones.default_normalized(), 0.5);
     }
 
     #[test]

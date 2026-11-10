@@ -206,7 +206,8 @@ and `-`; their state is only the normalized `parameters` overrides keyed by the
 device's stable parameter IDs, so `state` must be empty. A device ID this
 version does not know stays in the project unchanged: an unknown insert passes
 audio through and an unknown instrument is silent. Older Rill versions reject
-the variant.
+the variant. New MIDI tracks start with `"Builtin": {"device": "r1-mini"}`;
+projects saved before keep the instrument they had.
 
 Plug-in binaries and external sample libraries managed by a plug-in are not
 included. Plug-in paths are made absolute when saving a bundle and retained when

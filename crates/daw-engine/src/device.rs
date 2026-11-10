@@ -417,6 +417,7 @@ pub struct AudioEngine {
     sample_rate: u32,
     parameters: mpsc::SyncSender<ParameterChange>,
     audition: Arc<Mutex<Option<(u64, u8, u8)>>>,
+    audition_wheels: Arc<Mutex<Option<(u64, f32, f32)>>>,
     channel_meters: Arc<ChannelMeters>,
 }
 
@@ -649,6 +650,8 @@ impl AudioEngine {
         let (parameter_tx, parameter_rx) = mpsc::sync_channel::<ParameterChange>(128);
         let audition = Arc::new(Mutex::new(None));
         let worker_audition = Arc::clone(&audition);
+        let audition_wheels = Arc::new(Mutex::new(None));
+        let worker_wheels = Arc::clone(&audition_wheels);
         let worker_cancel = Arc::clone(&cancel);
         #[cfg(test)]
         let ready_test_gate = RENDER_READY_TEST_GATE.with(|gate| gate.borrow_mut().take());
@@ -772,6 +775,11 @@ impl AudioEngine {
                         thread::sleep(Duration::from_micros(250));
                         continue;
                     }
+                    renderer.set_audition_wheels(
+                        *worker_wheels
+                            .lock()
+                            .unwrap_or_else(|error| error.into_inner()),
+                    );
                     {
                         let current = worker_audition
                             .lock()
@@ -867,6 +875,7 @@ impl AudioEngine {
             sample_rate,
             parameters: parameter_tx,
             audition,
+            audition_wheels,
             channel_meters,
         };
         if let Some((device, config, format)) = output {
@@ -1040,6 +1049,23 @@ impl AudioEngine {
         if note.is_none() && !self.controls.midi.monitoring_requested() {
             self.controls.auditioning.store(false, Ordering::Release);
         }
+        Ok(())
+    }
+
+    /// Pitch wheel (−1–1) and mod wheel (0–1) of a track's instrument, as an
+    /// instrument panel's wheels set them. Sent to the instrument whenever
+    /// they change and while notes are previewed; the instrument keeps them.
+    pub fn audition_wheels(&self, wheels: Option<(u64, f32, f32)>) -> Result<()> {
+        if let Some((_, pitch, modulation)) = wheels {
+            ensure!(
+                (-1.0..=1.0).contains(&pitch) && (0.0..=1.0).contains(&modulation),
+                "Invalid wheel position"
+            );
+        }
+        *self
+            .audition_wheels
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = wheels;
         Ok(())
     }
 
@@ -1592,6 +1618,7 @@ mod tests {
             sample_rate: 48_000,
             parameters,
             audition: Arc::new(Mutex::new(None)),
+            audition_wheels: Arc::new(Mutex::new(None)),
             channel_meters: meters,
         };
         assert_eq!(engine.channel_peaks(channel), [0.0; 2]);
@@ -1703,6 +1730,7 @@ mod tests {
             sample_rate: 48_000,
             parameters,
             audition: Arc::new(Mutex::new(None)),
+            audition_wheels: Arc::new(Mutex::new(None)),
             channel_meters: Arc::new(ChannelMeters::new(&project)),
         };
         let mut settings = MidiSettings {
@@ -1758,6 +1786,7 @@ mod tests {
             sample_rate: 48_000,
             parameters,
             audition: Arc::new(Mutex::new(None)),
+            audition_wheels: Arc::new(Mutex::new(None)),
             channel_meters: Arc::new(ChannelMeters::default()),
         };
         engine.set_instrument_parameter(1, 7, 0.1).unwrap();

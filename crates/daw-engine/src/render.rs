@@ -1465,6 +1465,7 @@ pub(crate) struct Renderer {
     pub(crate) plugin_errors: u64,
     preview: bool,
     audition: Option<(u64, u8, u8)>,
+    audition_wheels: Option<(u64, f32, f32)>,
     midi_input_notes: Vec<(u64, u8, u8)>,
     expressive_input: Vec<(u64, u8, u8, daw_plugins::ExpressiveMidiData)>,
     live_edit_context: Arc<LiveEditContext>,
@@ -2386,6 +2387,7 @@ impl Renderer {
             plugin_errors: 0,
             preview: false,
             audition: None,
+            audition_wheels: None,
             midi_input_notes: Vec::with_capacity(4096),
             expressive_input: Vec::with_capacity(16384),
             live_edit_context: Arc::new(LiveEditContext::new(
@@ -2548,6 +2550,8 @@ impl Renderer {
         self.end_sample = self.timeline_end_sample;
         if !loop_wrap {
             self.audition = None;
+            // Instruments reset on a seek; send the wheels again.
+            self.audition_wheels = None;
             self.midi_input_notes.clear();
             self.expressive_input.clear();
         }
@@ -2727,6 +2731,48 @@ impl Renderer {
             self.audition = note;
         }
         Ok(())
+    }
+
+    /// Sends changed panel wheels to their track's instrument as pitch bend
+    /// and mod wheel, through the live input queue.
+    pub(crate) fn set_audition_wheels(&mut self, wheels: Option<(u64, f32, f32)>) {
+        use daw_plugins::{
+            ExpressiveController as Controller, ExpressiveMidiData as Data,
+            ExpressiveMidiMessage as Message,
+        };
+        if self.audition_wheels == wheels {
+            return;
+        }
+        self.audition_wheels = wheels;
+        let Some((id, pitch, modulation)) = wheels else {
+            return;
+        };
+        let Some(track) = self
+            .tracks
+            .iter_mut()
+            .flatten()
+            .find(|track| track.id == id)
+        else {
+            return;
+        };
+        for (controller, value) in [
+            (Controller::PitchBend, (f64::from(pitch) + 1.0) / 2.0),
+            (Controller::ControlChange(1), f64::from(modulation)),
+        ] {
+            if track.expression.live.len() < 4096 {
+                track.expression.live.push((
+                    0,
+                    Message {
+                        offset: 0,
+                        data: Data::Controller {
+                            channel: 0,
+                            controller,
+                            value,
+                        },
+                    },
+                ));
+            }
+        }
     }
 
     /// Normalize the complete held MIDI input chord on the render worker. A
