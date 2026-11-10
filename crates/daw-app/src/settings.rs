@@ -16,6 +16,8 @@ pub struct Settings {
     pub appearance: daw_ui::theme::Appearance,
     pub track_density: daw_ui::TrackDensity,
     pub export: ExportSettings,
+    /// Audio driver (CPAL host), such as JACK or ASIO. None is the platform default.
+    pub audio_host: Option<String>,
     pub device_name: Option<String>,
     pub input_device_name: Option<String>,
     pub midi_input_device: Option<String>,
@@ -131,6 +133,7 @@ impl Default for Settings {
             appearance: daw_ui::theme::Appearance::System,
             track_density: daw_ui::TrackDensity::default(),
             export: ExportSettings::default(),
+            audio_host: None,
             device_name: None,
             input_device_name: None,
             midi_input_device: None,
@@ -187,6 +190,12 @@ impl Settings {
             "Choose a scratch directory"
         );
         anyhow::ensure!(
+            self.audio_host
+                .as_ref()
+                .is_none_or(|name| !name.trim().is_empty()),
+            "Invalid audio driver name"
+        );
+        anyhow::ensure!(
             self.device_name
                 .as_ref()
                 .is_none_or(|name| !name.trim().is_empty()),
@@ -231,6 +240,7 @@ impl Settings {
     }
     pub fn audio(&self) -> DeviceSettings {
         DeviceSettings {
+            host: self.audio_host.clone(),
             device_name: self.device_name.clone(),
             sample_rate: self.sample_rate,
             buffer_frames: self.buffer_frames,

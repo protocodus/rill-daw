@@ -8,8 +8,8 @@ use daw_core::{
     Track, TrackKind,
 };
 use daw_engine::{
-    DeviceInfo, InputRoute, InputSettings, MidiPortInfo, MidiRecordingResult, MidiRoute,
-    MidiSettings, RecordingConfig, RecordingResult, RecordingTiming,
+    InputRoute, InputSettings, MidiPortInfo, MidiRecordingResult, MidiRoute, MidiSettings,
+    RecordingConfig, RecordingResult, RecordingTiming,
 };
 use eframe::egui;
 use std::{
@@ -140,17 +140,16 @@ impl DawApp {
         }
     }
     pub(crate) fn refresh_input_devices(&mut self) {
+        self.refresh_input_devices_for(self.settings.audio_host.clone().as_deref());
+    }
+
+    pub(crate) fn refresh_input_devices_for(&mut self, host: Option<&str>) {
         if self.virtual_audio {
-            self.input_devices = vec![DeviceInfo {
-                name: "Rill virtual input".into(),
-                is_default: true,
-                supported_sample_rates: vec![44100, 48000, 88200, 96000],
-                channels: self.virtual_io.input_channels,
-            }];
+            self.input_devices = vec![self.virtual_device(host, true)];
         } else if !self.audio_device_enabled {
             self.input_devices.clear();
         } else {
-            match daw_engine::list_input_devices() {
+            match daw_engine::list_input_devices(host) {
                 Ok(devices) => self.input_devices = devices,
                 Err(error) => self.message(Err(error.context("Enumerate audio inputs")), ""),
             }

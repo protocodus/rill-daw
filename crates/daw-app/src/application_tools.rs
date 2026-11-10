@@ -72,6 +72,7 @@ fn include_tails() -> bool {
 #[derive(Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]
 struct AudioPatch {
+    audio_host: Patch<Option<String>>,
     device_name: Patch<Option<String>>,
     input_device_name: Patch<Option<String>>,
     midi_input_device: Patch<Option<String>>,
@@ -110,7 +111,7 @@ fn required_path(value: Option<&str>) -> Result<PathBuf, ToolError> {
 }
 fn redacted_setup(settings: &Settings) -> Value {
     json!({
-        "audio":{"device_name":settings.device_name,"input_device_name":settings.input_device_name,
+        "audio":{"audio_host":settings.audio_host,"device_name":settings.device_name,"input_device_name":settings.input_device_name,
             "midi_input_device":settings.midi_input_device,"sample_rate":settings.sample_rate,
             "buffer_frames":settings.buffer_frames,"resample_quality":settings.resample_quality},
         "scratch_dir":settings.scratch_dir,"vst_dirs":settings.vst_dirs,
@@ -146,13 +147,21 @@ impl DawApp {
                 // The shared helper also refreshes audio inputs and MIDI ports.
                 self.refresh_devices();
                 let mut result = redacted_setup(&self.settings);
+                let chosen = crate::audio_driver::driver_name(
+                    &self.audio_hosts,
+                    self.settings.audio_host.as_deref(),
+                );
                 let audio_device = |device: &daw_engine::DeviceInfo| {
                     json!({
                         "name":device.name,"is_default":device.is_default,
-                        "channels":device.channels,"supported_sample_rates":device.supported_sample_rates
+                        "channels":device.channels,"supported_sample_rates":device.supported_sample_rates,
+                        "buffer_frames":device.buffer_frames.map(|(min,max)| json!({"min":min,"max":max}))
                     })
                 };
                 result["available_devices"] = json!({
+                    "hosts":self.audio_hosts.iter().map(|host| json!({
+                        "name":host.name,"is_default":host.is_default,"selected":host.name==chosen
+                    })).collect::<Vec<_>>(),
                     "outputs":self.devices.iter().map(audio_device).collect::<Vec<_>>(),
                     "inputs":self.input_devices.iter().map(audio_device).collect::<Vec<_>>(),
                     "midi":self.recording.midi_ports.iter().map(|port| json!({
@@ -421,7 +430,38 @@ impl DawApp {
             ));
         }
         let mut settings = self.settings.clone();
+        let (mut explicit_rate, mut explicit_buffer) = (None, None);
         if let Some(audio) = args.audio {
+            (explicit_rate, explicit_buffer) = (audio.sample_rate, audio.buffer_frames);
+            if let Patch::Set(value) = audio.audio_host {
+                self.refresh_hosts();
+                if let Some(name) = &value {
+                    // The platform default is stored as None, like the Setup control.
+                    let host = self
+                        .audio_hosts
+                        .iter()
+                        .find(|host| host.name.eq_ignore_ascii_case(name));
+                    let Some(host) = host else {
+                        let available: Vec<_> = self
+                            .audio_hosts
+                            .iter()
+                            .map(|host| host.name.as_str())
+                            .collect();
+                        return Err(invalid(format!(
+                            "Unknown audio driver '{name}'. Available: {}",
+                            available.join(", ")
+                        )));
+                    };
+                    settings.audio_host = (!host.is_default).then(|| host.name.clone());
+                } else {
+                    settings.audio_host = None;
+                }
+                // Device names belong to one driver; a new one starts from its defaults.
+                if settings.audio_host != self.settings.audio_host {
+                    settings.device_name = None;
+                    settings.input_device_name = None;
+                }
+            }
             if let Patch::Set(value) = audio.device_name {
                 settings.device_name = value;
             }
@@ -487,6 +527,19 @@ impl DawApp {
         }
         if settings.ai.model.trim().is_empty() || settings.ai.model.len() > 200 {
             return Err(invalid("Choose a model of at most 200 bytes"));
+        }
+        if settings.audio_host != self.settings.audio_host {
+            // Like Setup, adopt what the new driver dictates unless the caller chose.
+            let chosen_host = settings.audio_host.clone();
+            self.refresh_devices_for(chosen_host);
+            let mut adopted = settings.clone();
+            crate::audio_driver::follow_driver_limits(&self.devices, &mut adopted);
+            if explicit_rate.is_none() {
+                settings.sample_rate = adopted.sample_rate;
+            }
+            if explicit_buffer.is_none() {
+                settings.buffer_frames = adopted.buffer_frames;
+            }
         }
         settings
             .validate()

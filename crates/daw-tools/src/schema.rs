@@ -865,7 +865,7 @@ pub fn recording_tool_specs() -> Vec<ToolSpec> {
 /// Full application catalog is available only to explicitly privileged hosts.
 pub fn application_tool_specs() -> Vec<ToolSpec> {
     let audio = object(
-        json!({"device_name":nullable(string()),"input_device_name":nullable(string()),"midi_input_device":nullable(string()),"sample_rate":{"type":"integer","minimum":1},"buffer_frames":{"type":"integer","minimum":1},"resample_quality":choices(&["High","Fast"])}),
+        json!({"audio_host":nullable(json!({"type":"string","description":"Audio driver from get_setup available_devices.hosts, such as ALSA, JACK, WASAPI or ASIO. null selects the platform default. Changing it resets device names and adopts the driver's own sample rate and buffer size unless you also set them."})),"device_name":nullable(string()),"input_device_name":nullable(string()),"midi_input_device":nullable(string()),"sample_rate":{"type":"integer","minimum":1},"buffer_frames":{"type":"integer","minimum":1},"resample_quality":choices(&["High","Fast"])}),
         &[],
     );
     let ai = object(

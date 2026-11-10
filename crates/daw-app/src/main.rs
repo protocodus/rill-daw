@@ -7,6 +7,7 @@ mod arranger_selection;
 mod assistant;
 mod audio_batch;
 mod audio_decode_worker;
+mod audio_driver;
 mod audio_editor;
 mod audio_import;
 mod audio_silence;
@@ -167,6 +168,7 @@ fn main() -> anyhow::Result<()> {
         Box::new(move |cc| {
             let mut app = app::DawApp::new(cc, project, screenshot);
             app.refresh_plugins();
+            app.reconcile_audio_host();
             if mcp {
                 app.assistant
                     .start_mcp_stdio(mcp_profile, cc.egui_ctx.clone());

@@ -17,6 +17,8 @@ pub struct Harness {
     plugin_host: Option<std::path::PathBuf>,
     plugin_previews: bool,
     virtual_audio: bool,
+    /// `RILL_E2E_AUDIO_HOSTS`, kept so a restart offers the same drivers.
+    audio_hosts: Option<String>,
     child: Child,
     input: ChildStdin,
     output: Receiver<String>,
@@ -125,6 +127,32 @@ impl Harness {
     ) -> Self {
         let directory = tempfile::tempdir().expect("create isolated virtual-audio directory");
         Self::launch_configured(vst_path, directory, None, host, false, true)
+    }
+
+    /// Device-free audio that offers the given drivers (see `RILL_E2E_AUDIO_HOSTS`:
+    /// `Name` or `Name:rate:frames` for a server-dictated driver; the first is the
+    /// default), optionally starting from a saved settings file.
+    pub fn with_virtual_drivers(hosts: &str, saved_settings: Option<&str>) -> Self {
+        let directory = tempfile::tempdir().expect("create isolated driver E2E directory");
+        if let Some(settings) = saved_settings {
+            std::fs::create_dir_all(directory.path().join("config")).unwrap();
+            std::fs::write(directory.path().join("config/settings.json"), settings).unwrap();
+        }
+        Self::launch_hosts(directory, hosts)
+    }
+
+    fn launch_hosts(directory: TempDir, hosts: &str) -> Self {
+        let mut harness = Self::launch_configured_with_environment(
+            None,
+            directory,
+            None,
+            None,
+            false,
+            true,
+            &[("RILL_E2E_AUDIO_HOSTS", hosts.into())],
+        );
+        harness.audio_hosts = Some(hosts.into());
+        harness
     }
 
     /// A real CPAL/ALSA stream that discards all samples. The child sees only
@@ -283,6 +311,7 @@ impl Harness {
             plugin_host: plugin_host.map(std::path::Path::to_owned),
             plugin_previews,
             virtual_audio,
+            audio_hosts: None,
             child,
             input,
             output: rx,
@@ -309,7 +338,11 @@ impl Harness {
         let vst_path = self.vst_path.clone();
         let plugin_host = self.plugin_host.clone();
         let (plugin_previews, virtual_audio) = (self.plugin_previews, self.virtual_audio);
+        let audio_hosts = self.audio_hosts.clone();
         self.wait_exit();
+        if let Some(hosts) = audio_hosts {
+            return Self::launch_hosts(directory, &hosts);
+        }
         Self::launch_configured(
             vst_path.as_deref(),
             directory,
