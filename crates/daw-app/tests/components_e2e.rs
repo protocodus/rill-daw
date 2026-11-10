@@ -305,8 +305,18 @@ fn properties_controls_and_library_effect_mixer_navigation_work_in_both_themes_a
                         .as_f64()
                         .unwrap()
             );
-            let routing = app.command(json!({"command":"pointer","phase":"click",
+            let choices = app.command(json!({"command":"pointer","phase":"click",
                 "x":(left+right)*0.5,"y":(top_y+bottom)*0.5}));
+            // Output opens an inline picker; its Routing action opens the full view.
+            assert_eq!(choices["popups"]["routing"], false);
+            accessible(&choices, &["Routing…"]);
+            for field in ["project", "history", "selected_track"] {
+                assert_eq!(
+                    choices[field], scrolled[field],
+                    "Opening output choices changed {field}"
+                );
+            }
+            let routing = app.click("Routing…");
             assert_eq!(routing["popups"]["routing"], true);
             assert_eq!(routing["selected_track"], original["tracks"][0]["id"]);
             accessible(&routing, &["Routing of Calm controls", "Master output"]);
