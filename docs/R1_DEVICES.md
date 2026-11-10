@@ -3,8 +3,8 @@
 Status: **draft for review, nothing is implemented.** This document proposes the
 architecture, the shared UI additions and the per-device specifications for
 Rill's first built-in instruments and effects. Implementation follows in
-separate changes once the open decisions in [Decisions needed](#decisions-needed)
-are settled.
+separate changes. The review answers so far are recorded in
+[Decisions](#decisions).
 
 This reverses the current product position ("Built-in instruments and effects
 remain outside its scope", [PRODUCT_DIRECTION.md](PRODUCT_DIRECTION.md)). The
@@ -22,8 +22,9 @@ for a person and for the AI tools alike.
 5. [Effects](#effects): Spacer, Modulator, Saturator, Compressor, Equalizer, Filter
 6. [Instruments](#instruments): Mini, Maxi, Sampler, Drums
 7. [Verification](#verification)
-8. [Implementation order](#implementation-order)
-9. [Decisions needed](#decisions-needed)
+8. [Adding a device](#adding-a-device)
+9. [Implementation order](#implementation-order)
+10. [Decisions](#decisions)
 
 ## Goals and limits
 
@@ -42,10 +43,16 @@ for a person and for the AI tools alike.
   automation lanes, `set_plugin_parameters`, `plugin_describe_parameters`,
   Undo, the live parameter queue and the parameter browser work without a
   second implementation.
+- **Extensible and uniform.** A new device is one DSP module, one panel and
+  one registry line; it changes nothing in the project model, engine, app or
+  tools ([Adding a device](#adding-a-device)). Every device uses the same panel
+  frame and layout rules ([Panel grammar](#panel-grammar)) and the same preset
+  format and browser ([Presets](#presets)).
 - **Not in this design:** multi-zone sampling, user wavetable import, drawable
-  LFO shapes, linear-phase EQ, per-pad outputs for Drums, preset sharing, and
-  shipping the devices as VST3/CLAP plug-ins. The architecture leaves room for
-  each; none is specified here.
+  LFO shapes, linear-phase EQ, per-pad outputs for Drums, factory sample
+  content, and shipping the devices as VST3/CLAP plug-ins (they are for use
+  inside Rill only). The architecture leaves room for each; none is specified
+  here.
 
 ## Architecture
 
@@ -67,14 +74,12 @@ flowchart LR
     Core[daw-core<br/>device id strings only]
     Engine[daw-engine]
     App[daw-app]
-    Wrapper[future plug-in wrapper]
     Panels --> Devices
     Panels --> UI
     Engine --> Devices
     Engine --> Core
     App --> Panels
     App --> Engine
-    Wrapper -.-> Panels
 ```
 
 `daw-core` gains no dependency. It stores a device as a short identifier
@@ -83,9 +88,9 @@ locator constant instead of depending on `daw-plugins`.
 
 Why not put panels in `daw-devices` behind a feature: the DSP crate then
 compiles with or without egui depending on who asks, and the "no UI in DSP"
-rule becomes a convention instead of a dependency fact. Why not split `daw-ui`
-into a "plug-in subset": `daw-ui` already has no audio, app or window-runtime
-dependency, so a plug-in editor can link it as it is.
+rule becomes a convention instead of a dependency fact. `daw-ui` stays one
+library: the app and the device panels use the same components, theme and
+tokens.
 
 ### The device contract
 
@@ -102,6 +107,7 @@ pub struct DeviceDescriptor {
 
 pub struct ParamSpec {
     pub id: u32,                     // stable; never reused or renumbered
+    pub key: &'static str,           // "filter.cutoff"; stable, used in presets
     pub name: &'static str,          // "Filter cutoff"
     pub group: &'static str,         // "Filter"
     pub unit: &'static str,          // "Hz", "dB", "ms", "%", ""
@@ -150,7 +156,7 @@ pub fn create(id: &str) -> Option<Box<dyn Device>>;
   costs one odd frame in a drawing and is accepted. The FFT for the spectrum
   runs on the UI side.
 
-### State and presets
+### State
 
 Every device in this design is fully described by its parameter values plus,
 for Sampler and Drums, its sample references. No device needs an opaque state
@@ -159,17 +165,68 @@ blob, so:
 - The existing `instrument_parameters` / `EffectSlot.parameters` lists
   (normalized overrides by ID) are the saved state. `instrument_state` /
   `EffectSlot.state` stay empty for built-ins.
-- A preset is a named list of `(id, plain value)` pairs in JSON. Factory
-  presets are compiled into `daw-devices`; user presets are files in Rill's
-  data directory. Loading a preset is one ordinary `set_plugin_parameters`
-  batch: one Undo step, automation-safe, available to tools.
-- Maxi's modulation matrix is 24 fixed slots of three parameters each (source,
+- Maxi's modulation matrix is 32 fixed slots of three parameters each (source,
   destination, amount), so it is automatable and tool-editable like everything
   else.
 
-A snapshot test in `daw-devices` lists every `(device, id, name, range)` and
-fails when an ID is changed or reused, because saved projects and automation
-lanes refer to those IDs.
+A snapshot test in `daw-devices` lists every `(device, id, key, name, range)`
+and fails when an ID or key is changed or reused, because saved projects and
+automation lanes refer to IDs and presets refer to keys.
+
+### Presets
+
+One format, one browser and one set of tools for every device.
+
+```json
+{
+  "format": 1,
+  "device": "r1-mini",
+  "name": "Rubber Bass",
+  "author": "Rill",
+  "category": "Bass",
+  "tags": ["mono", "warm"],
+  "description": "Short plucky bass with filter envelope.",
+  "parameters": {
+    "osc1.wave": "Saw",
+    "filter.cutoff": 420.0,
+    "filter.resonance": 35.0,
+    "amp.release": 120.0
+  },
+  "samples": [{ "slot": 0, "file": "kick.wav" }]
+}
+```
+
+- A preset is a `.rillpreset` JSON file. `parameters` maps the stable
+  parameter **key** to a **plain** value in the parameter's unit; choices are
+  written as their labels. Files are readable, diffable and easy for the
+  assistant to write.
+- Loading is tolerant by rule: a parameter missing from the file takes its
+  default, an unknown key is skipped and reported, an out-of-range value is
+  clamped, an unknown choice label takes the default. Devices can therefore
+  gain parameters without invalidating existing presets. A preset whose
+  `device` differs from the target is refused.
+- `samples` is optional and used by Sampler and Drums. Files are referenced
+  by name relative to the preset file; loading imports them into the project
+  through the normal import path. A drum kit is a folder holding one preset
+  and its samples.
+- Factory presets use the same format and are compiled into `daw-devices`
+  (`presets/<device>/*.rillpreset`). User presets live under Rill's data
+  directory in `presets/<device>/`. Categories come from the `category`
+  field, not from folders.
+- Loading a preset is one ordinary parameter batch through the session
+  service: one Undo step, the same live update path as turning the knobs.
+  Automation lanes are kept; a parameter with an active lane follows the
+  existing override behavior.
+- Maxi needs no special case: its modules, matrix and effects rack are all
+  parameters.
+- Tools: `list_device_presets` (name, category, tags, description, with
+  search), `load_device_preset` and `save_device_preset`. Saving takes a name
+  and writes only into the user preset directory, never to an arbitrary path.
+
+The shared `preset_bar` in every panel header shows the current preset name
+with a modified marker, previous/next, and opens the shared `preset_browser`
+(search, category and tag filters, Factory/User, favorites, Save as…, Reset to
+default). Both are `daw-ui` components and identical for all devices.
 
 ### Project model (`daw-core`)
 
@@ -204,10 +261,36 @@ pub struct DeviceSample { pub slot: u32, pub path: String }
 
 ### Engine (`daw-engine`)
 
-Built-ins run **in process** on the graph workers, not in a `daw-plugin-host`
-child. The child process exists to contain third-party native code; this is
-our own safe Rust, and running it directly removes IPC cost and lets many
-instances stay cheap.
+Built-ins run **in process** on the graph workers, with failure containment
+at the device boundary, not in a `daw-plugin-host` child per instance.
+
+A separate process per device was considered and has real costs here:
+
+- One operating-system process per instance. Built-in effects are meant to be
+  used freely; a 30-track song with an equalizer and a compressor on every
+  channel would add 60 processes, each with its own memory, startup time and
+  threads competing for the scheduler.
+- One IPC round trip per instance per 256-frame block, plus copies through
+  shared memory. For hosted plug-ins this is the price of containment; for a
+  small equalizer the round trip costs more than the DSP it carries, and the
+  extra thread wake-ups are what turn into dropouts under load.
+- Live visualization (spectrum, gain reduction, playheads) and sample data
+  would each need another shared-memory channel.
+
+What the process boundary protects against, and how that is covered instead:
+
+| Failure | In third-party native code | In `daw-devices` |
+| --- | --- | --- |
+| Memory corruption, segfault | possible; needs a process boundary | excluded: `#![forbid(unsafe_code)]` |
+| Panic (bug, out-of-range index) | n/a | caught at the device boundary with `catch_unwind`: that device is silenced and marked failed, its panel shows **Restart**, the rest of the song keeps playing, offline export reports an error |
+| Unbounded memory | possible | `process` does not allocate; verified by test for every registered device |
+| Nonfinite output | possible | guarded at the device boundary: the block is replaced by silence and the device is reset |
+| Infinite loop | contained by the 100 ms hang bound | not contained; all loops in `process` are bounded by block length or fixed counts, and every device runs the randomized conformance sweep |
+
+The `Device` contract is hosting-agnostic (IDs, normalized values, events,
+buffers, a telemetry block), so moving one device or all of them behind the
+existing helper later is an engine-only change with no effect on devices,
+panels, presets or projects.
 
 - `Processor` gains `Builtin(Box<dyn Device>)` next to `Vst`, and `Insert`
   gains a `Builtin` arm. Preparation creates the device from the registry,
@@ -243,15 +326,19 @@ instances stay cheap.
   value in addition to the normalized value, and `set_plugin_parameters`
   accepts a plain value as an alternative to the normalized one. This meets
   the rule in `claude.md` that tools must not require guessing normalized
-  values. A new `set_device_sample` tool assigns an already imported project
+  values. The three preset tools are described under [Presets](#presets). A
+  new `set_device_sample` tool assigns an already imported project
   audio source to a sample slot; like other current-song tools it accepts no
   arbitrary path.
+- **Default instrument.** A new MIDI track, and a MIDI part created by tools
+  without an instrument, starts with R1 Mini on its default preset instead of
+  silence. Existing projects are unchanged.
 - **Audition.** Panel keyboards and drum pads use the existing held-note
   audition path to the render worker.
 - Every device ships with an end-to-end test through the running app, per
   `AGENTS.md` ([Verification](#verification)).
 
-### Plug-in readiness
+### Panel host
 
 A panel talks to its owner only through this trait:
 
@@ -272,10 +359,9 @@ pub trait DeviceHost {
 pub fn show(ui: &mut egui::Ui, device: &DeviceDescriptor, host: &mut dyn DeviceHost, state: &mut PanelState);
 ```
 
-The app implements it over the session service. A later VST3/CLAP wrapper
-would implement it over the plug-in parameter API and call the same `show`,
-with `daw_ui::theme::apply` on its own egui context. That wrapper (window
-embedding, format glue, packaging) is not part of this design.
+The app implements it over the session service. The gallery and the UI tests
+implement it over a plain value table, so every panel can be rendered and
+exercised without an engine.
 
 ## Shared UI library additions
 
@@ -304,8 +390,43 @@ handle uses the 21-point `HIT_TARGET`.
 | `pad_grid` | 4×4 pads with name, activity flash, selection and drop target. | Click height on the pad sets audition velocity. Returns pressed/released/selected/dropped. |
 | `keyboard_strip` | Horizontal audition keyboard with held-note and root-key display. | Reuses the `piano_key` painting. |
 | `mod_source_chip` and `mod_slot_row` | Draggable modulation source; one row of the matrix (source, destination, amount, remove). | Dropping a chip on a knob reports `(source, destination)`; a context menu on any modulatable knob offers the same without dragging. |
-| `preset_bar` | Preset name, previous/next, menu (factory/user, Save as…, Reset). | Part of `device_panel`. |
+| `preset_bar` and `preset_browser` | Preset name with modified marker, previous/next; searchable browser with category and tag filters, Factory/User, favorites, Save as…, Reset. | Part of `device_panel`; identical for every device. See [Presets](#presets). |
+| `generic_device_panel` | Complete panel generated from a descriptor: one `device_section` per parameter group, a knob, selector or toggle per parameter according to its range. | The fallback for a device without a custom panel, and the proof that the grammar below is enough. Takes plain parameter rows, so `daw-ui` still does not depend on `daw-devices`. |
 | `device_panel` and `device_section` | Panel frame: name, preset bar, bypass, input/output meters, optional Mix and Output knobs; titled sections with spacing instead of nested outlines. | Gives all ten devices one header and one rhythm. |
+
+### Panel grammar
+
+Every device panel follows the same rules, so the set reads as one product
+and a new device has little to decide:
+
+1. **Frame.** `device_panel`: name at the left, `preset_bar` in the middle,
+   then bypass and input/output meters. Effects end the header with Mix and
+   Output; instruments with Volume. No device draws its own header.
+2. **Width.** 610 points (`POPUP_WIDTH_MD`) or 987 points (`POPUP_WIDTH_LG`),
+   nothing in between. No panel scrolls; a device that does not fit uses
+   pages (`tab_choice`) in the header.
+3. **Picture first.** One main visualization at the top shows what the device
+   is doing, and is directly editable where that makes sense (drag the EQ
+   node, the threshold, the envelope point, the sample marker).
+4. **Signal order.** Sections run left to right in signal order, each a
+   `device_section` with a one-word title; modulation sources sit below the
+   audio path.
+5. **Controls by range.** Continuous value: `labeled_knob`. Two to five named
+   options: `segmented`. Longer lists: `stepped_selector`. On/off:
+   `toggle_led`. One hero knob at most per panel (64 points); standard knobs
+   are 48, dense rows 34.
+6. **Color.** Neutral surfaces from the theme; one value-arc color for all
+   knobs; orange only for automation, violet only for modulation, pink only
+   for AI. Devices do not have individual accent colors or skins.
+7. **Hidden, not disabled.** A control that does not apply in the current
+   mode is removed and the row closes up, with stable positions for the
+   controls that remain.
+8. **Text.** Parameter names of one or two words, the same word for the same
+   thing in every device (Cutoff, Resonance, Drive, Mix, Output, Attack,
+   Release). Units always shown with values.
+
+`generic_device_panel` applies these rules mechanically. Custom panels exist
+to place the visualization and order the sections well, not to restyle.
 
 ### Visualizations
 
@@ -515,13 +636,13 @@ Controls that do not apply in the current mode are hidden, not disabled.
 
 ### R1 Equalizer
 
-Eight bands: a high-pass, six parametric bands, a low-pass.
+Six bands: a high-pass, four parametric bands, a low-pass.
 
 | Band | Parameter | Range / choices | Default |
 | --- | --- | --- | --- |
-| 1 (HP) | On, Frequency, Slope, Q | 20 Hz – 2 kHz; 6, 12, 18, 24, 36, 48 dB/oct | off, 30 Hz, 12 dB/oct |
-| 2 – 7 | On, Type, Frequency, Gain, Q | Bell, Low shelf, High shelf, Notch; 20 Hz – 20 kHz; ±24 dB; Q 0.1 – 18 | on, 0 dB; band 2 low shelf 100 Hz, bands 3 – 6 bells at 250 Hz, 800 Hz, 2.5 kHz, 6 kHz, band 7 high shelf 10 kHz |
-| 8 (LP) | On, Frequency, Slope, Q | 200 Hz – 20 kHz; same slopes | off, 18 kHz, 12 dB/oct |
+| HP | On, Frequency, Slope | 20 Hz – 2 kHz; 12, 24, 48 dB/oct | off, 30 Hz, 12 dB/oct |
+| 1 – 4 | On, Type, Frequency, Gain, Q | Bell, Low shelf, High shelf, Notch; 20 Hz – 20 kHz; ±24 dB; Q 0.1 – 18 | on, 0 dB; band 1 low shelf 100 Hz, band 2 bell 400 Hz, band 3 bell 2.5 kHz, band 4 high shelf 8 kHz |
+| LP | On, Frequency, Slope | 200 Hz – 20 kHz; same slopes | off, 18 kHz, 12 dB/oct |
 | Global | Mode | Digital, Analog | Digital |
 | | Auto gain | toggle | off |
 | | Analyzer | Off, Input, Output | Output |
@@ -534,12 +655,10 @@ subtle output-stage saturation; realized with SVFs. Coefficients are
 interpolated per sample, so sweeping a band is click-free. Zero latency in
 both modes. A band at 0 dB gain is skipped.
 
-**Panel.** A large `frequency_plot` (about 60 % of the height) with the
-`spectrum` backdrop and one draggable node per enabled band: drag for
-frequency and gain, vertical drag with the secondary button or the band strip
-knob for Q, double-click to toggle the band. Below it a strip of eight band
-columns (enable, type, three numeric knobs), with the selected band
-highlighted. Width 987 points (`POPUP_WIDTH_LG`).
+**Panel** (610 points). A large `frequency_plot` with the `spectrum` backdrop
+and one draggable node per enabled band: drag for frequency and gain,
+double-click to toggle the band. Below it one row of six band columns (enable,
+type or slope, Frequency, Gain, Q), with the selected band highlighted.
 
 ### R1 Filter
 
@@ -618,66 +737,106 @@ layout comes from.
 
 ### R1 Maxi
 
-A wavetable synth in the spirit of the current generation of "everything
-visible" synths: two wavetable oscillators, a third analog/noise oscillator,
-two filters, drag-and-drop modulation and a built-in effects rack. It is by
-far the largest device (about 280 parameters), so it is specified as three
-deliverable stages. Each stage is a usable instrument, and all parameter IDs
-are reserved from stage 1 so later stages do not break saved projects.
+The flagship: a modular wavetable synth in the spirit of the current
+generation of "everything visible" synths. It is specified as a fixed frame
+of **slots**, each holding one **module** chosen from a list. New module
+types (another oscillator engine, another filter model, another effect) are
+added without touching the frame, the panel layout, the modulation system or
+existing presets.
 
-**Stage 1: sound engine.**
+**Frame.**
 
-| Section | Parameters |
+```text
+3 oscillator slots ─┐                    ┌─ amp ─ 8 effect slots ─ out
+                    ├─ 2 filter slots ───┤
+  per-slot routing ─┘  serial/parallel   └─ per voice up to here
+
+modulation: 3 envelopes, 4 LFOs, 4 macros, note sources ─ 32-slot matrix ─ any modulatable parameter
+```
+
+| Slot kind | Count | Module types at first release | Room for later |
+| --- | --- | --- | --- |
+| Oscillator | 3 | Wavetable, Analog (saw, pulse, triangle, sine with PWM and sync), Noise (white, pink, with color filter), Off | Sample, granular, additive |
+| Filter | 2 | every R1 Filter model (Clean, Ladder, Sallen-Key, State Variable, Comb, Vowel), Off | further models arrive in R1 Filter and Maxi together |
+| Modulator | 3 envelopes, 4 LFOs | AHDSR with per-segment curves; LFO with sine, triangle, saw, square, S&H | drawable shapes, step sequencer, random generators |
+| Effect | 8, reorderable | every R1 effect kernel: Saturator, Modulator, Echo, Reverb, Compressor, Equalizer, Filter; Off | any future R1 effect |
+
+**How a slot stays extensible.**
+
+- A module implements one small trait per slot kind in `daw-devices`
+  (`OscillatorModule`, `FilterModule`, `ModulatorModule`; effect slots take
+  any `Device` of kind Effect) and declares its own parameter table and its
+  own section painter in `daw-devices-ui`.
+- Each slot owns a fixed block of parameter IDs. Inside it, a **Type**
+  parameter selects the module, a few IDs are common to all types of that
+  kind (oscillator: Level, Pan, Octave, Semitones, Fine, Filter routing), and
+  each module type has its own reserved sub-range. Adding a type claims a new
+  sub-range; nothing existing moves.
+- Because every type's values keep their own IDs, switching a slot's type and
+  back restores what was there, automation lanes never get reinterpreted as a
+  different parameter, and presets name parameters unambiguously
+  (`osc1.wavetable.position`, `osc1.analog.pulse_width`).
+- An effect slot embeds the full effect device, with its complete parameter
+  table at an offset and the same panel section as the standalone effect in a
+  compact layout. An effect therefore sounds and reads the same inside Maxi
+  and on a channel, and a standalone effect preset can be loaded into a slot.
+
+**Module parameters.**
+
+| Module | Parameters |
 | --- | --- |
-| Oscillators A and B | Wavetable (about 40 factory tables, generated in code: analog shapes, harmonic series, formants, digital), Position, Warp mode (None, Bend, Sync, Squeeze, Mirror, FM from the other oscillator), Warp amount, Octave, Semitones, Fine, Unison voices (1 – 16), Unison detune, Unison blend, Stereo spread, Phase, Random phase, Level, Pan, Filter routing (Filter 1 ↔ Filter 2) |
-| Oscillator C | Wave (sine, triangle, saw, square, white noise, pink noise), Octave, Semitones, Level, Pan, Filter routing |
-| Filters 1 and 2 | Model and Type (the R1 Filter kernels), Cutoff, Resonance, Drive, Morph, Key tracking; Filter routing Serial / Parallel |
-| Envelope 1 (amp) | Attack, Hold, Decay, Sustain, Release, with a curve per segment |
-| Voice | Mode, Voices (1 – 32), Glide, Bend range, Quality (1×, 2×), Volume |
-
-**Stage 2: modulation.**
-
-| Section | Parameters |
-| --- | --- |
-| Envelopes 2 and 3 | as Envelope 1 |
-| LFOs 1 – 4 | Shape (sine, triangle, saw, square, S&H), Rate, Sync, Trigger (Free, Retrigger, One-shot), Fade in, Phase |
+| Wavetable oscillator | Table (about 40 factory tables generated in code: analog shapes, harmonic series, formants, digital), Position, Warp mode (None, Bend, Sync, Squeeze, Mirror, FM from the previous oscillator), Warp amount, Unison voices (1 – 16), Unison detune, Unison blend, Stereo spread, Phase, Random phase |
+| Analog oscillator | Wave, Pulse width, Sync to the previous oscillator, Unison voices (1 – 8), Unison detune, Drift |
+| Noise oscillator | Color (white – pink – dark), Low cut, High cut, Stereo width |
+| Filter | Model, Type, Cutoff, Resonance, Drive, Morph, Key tracking; global Filter routing Serial / Parallel |
+| Envelope | Attack, Hold, Decay, Sustain, Release, curve per segment. Envelope 1 is wired to the amp. |
+| LFO | Shape, Rate, Sync, Trigger (Free, Retrigger, One-shot), Fade in, Phase |
 | Macros 1 – 4 | 0 – 100 %, renamable |
-| Matrix | 24 slots: Source, Destination, Amount (bipolar). Sources: envelopes, LFOs, macros, velocity, key, mod wheel, per-note pressure, pitch bend, per-note random. Destinations: every parameter marked `modulatable`. |
-
-Modulation is evaluated per voice at control rate (every 16 samples) and
-interpolated, with per-sample evaluation for amp and pitch.
-
-**Stage 3: effects and presets.** A fixed-order rack of six slots, each with
-an enable and a reduced parameter set, reusing the effect kernels: Saturator
-(Model, Drive, Mix), Modulator (Mode, Rate, Depth, Mix), Echo (Division,
-Feedback, Mix), Reverb (Size, Decay, Mix), Compressor (Threshold, Ratio,
-Makeup), Equalizer (Low, Mid, High). Plus a factory preset bank that covers
-bass, lead, pad, pluck, keys and effects.
+| Matrix | 32 slots: Source, Destination, Amount (bipolar). Sources: envelopes, LFOs, macros, velocity, key, mod wheel, per-note pressure, pitch bend, per-note random. Destinations: every parameter marked `modulatable`, in any module, including effect slots. |
+| Voice | Mode, Voices (1 – 32), Glide, Bend range, Quality (1×, 2×), Volume |
 
 **DSP.** Mip-mapped band-limited wavetables with frame and level
 crossfading, so a saw stays alias-free across the keyboard and Position sweeps
 are smooth. Unison voices are spread in pitch and pan with level compensation.
-FM is phase modulation between A and B. Per-note pressure and Pitch 7.9
+FM is phase modulation from the previous oscillator slot. Modulation is
+evaluated per voice at control rate (every 16 samples) and interpolated, with
+per-sample evaluation for amp and pitch. Per-note pressure and Pitch 7.9
 tuning from Rill's MIDI 2.0 model reach the voice directly, so expressive
-data recorded in Rill is audible without controller mapping.
+data recorded in Rill is audible without controller mapping. Modules that are
+Off cost nothing.
+
+**Delivery stages.** The frame, the slot ID blocks and the module traits are
+complete from stage 1, so later stages add modules and do not break projects
+or presets.
+
+1. **Sound engine:** oscillator slots with Wavetable, Analog and Noise;
+   filter slots; Envelope 1; voice handling.
+2. **Modulation:** Envelopes 2 – 3, LFOs, macros, the matrix and drag-and-drop
+   assignment.
+3. **Effects and presets:** the effect slots and a factory bank covering
+   bass, lead, pad, pluck, keys and effects.
 
 **Panel** (987 points, three pages as `tab_choice`: **Synth**, **Matrix**,
 **Effects**):
 
 ```text
 ┌ R1 Maxi ── preset ◂ ▸ ── [Synth] Matrix Effects ── scope/spectrum ─ Vol ┐
-│ OSC A [wavetable view] table pos warp  unison det  lvl │ FILTER 1 [plot] │
-│ OSC B [wavetable view] table pos warp  unison det  lvl │ FILTER 2 [plot] │
-│ OSC C  wave oct lvl                                    │ routing         │
+│ OSC 1 [type ▾] [module view]  module knobs…   lvl pan │ FILTER 1 [plot] │
+│ OSC 2 [type ▾] [module view]  module knobs…   lvl pan │ FILTER 2 [plot] │
+│ OSC 3 [type ▾] [module view]  module knobs…   lvl pan │ routing         │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ ENV 1 ENV 2 ENV 3  [envelope editor]   │ LFO 1 2 3 4  [lfo view]         │
 │ sources: (ENV1)(ENV2)(ENV3)(LFO1)…(VEL)(KEY)(WHEEL)(PRESS)  MACROS ◉◉◉◉  │
 ├ keyboard ───────────────────────────────────────────────────────────────┤
 ```
 
-Source chips drag onto any modulatable knob; the knob then shows the
-modulation arc and its context menu lists its modulations with amounts. The
-Matrix page shows the same 24 slots as rows.
+Each slot row has the same shape whatever module it holds: type selector,
+the module's own view (`wavetable_view`, a waveform, a noise spectrum), the
+module's knobs, then the common knobs in fixed positions. Source chips drag
+onto any modulatable knob; the knob then shows the modulation arc and its
+context menu lists its modulations with amounts. The Matrix page shows the
+same 32 slots as rows. The Effects page is a reorderable list of the eight
+slots, each drawn by the effect's own compact section.
 
 ### R1 Sampler
 
@@ -752,14 +911,19 @@ Load, Clear, Copy/Paste pad, Swap with…). Right: the selected pad's
 waveform, then one knob row in signal order: Pitch, Pitch env, Attack, Hold,
 Decay, Filter, Drive, Gain, Pan.
 
-Without samples Drums is silent, which undercuts the reason for built-ins;
-see the factory content question in [Decisions needed](#decisions-needed).
+Rill ships no factory samples. An empty pad shows **Drop a sample** and the
+empty Sampler shows **Load sample…**; a kit preset can bring its own samples
+([Presets](#presets)).
 
 ## Verification
 
 **DSP unit tests in `daw-devices`** (fast, no audio device):
 
-- Parameter-ID snapshot (IDs never change or get reused).
+- Parameter-ID and key snapshot (never changed or reused).
+- **Registry-wide conformance:** the robustness, determinism, no-allocation
+  and preset checks below run over `registry()`, so a newly registered device
+  is covered without writing those tests again. Every factory preset must
+  load without a skipped key.
 - Response accuracy: each linear filter and EQ band matches its analytic
   magnitude within 0.1 dB up to 20 kHz at 44.1 and 48 kHz; the drawing
   functions and the audio path agree.
@@ -784,8 +948,10 @@ see the factory content question in [Decisions needed](#decisions-needed).
 built-in parameter equals the manual value path, latency compensation with
 Compressor lookahead, save/reopen round trip, unknown device ID.
 
-**UI tests in `daw-ui`:** each new component gets the same kind of interaction
-and geometry tests the existing ones have, and a gallery page.
+**UI tests:** each new `daw-ui` component gets the same kind of interaction
+and geometry tests the existing ones have, and a gallery page. Every device
+panel is rendered in the gallery over a plain value table, in light and dark,
+at its declared width, with a test that nothing overflows or scrolls.
 
 **End-to-end, through the running app** (required by `AGENTS.md`): for each
 device, add it to a track from the Library, play a MIDI part or audio clip,
@@ -793,20 +959,45 @@ change parameters through the panel and through tools, check the rendered
 audio changed in the expected direction (for example, a low-pass lowers
 high-band energy; Compressor lowers crest factor), Undo, save and reopen.
 
+## Adding a device
+
+The checklist for an eleventh device, which is also the test of whether the
+separation holds:
+
+1. `daw-devices/src/devices/<name>.rs`: the parameter table (IDs, keys,
+   ranges, defaults), the `Device` implementation built from toolkit blocks,
+   and any response functions its picture needs.
+2. One line in the registry.
+3. `daw-devices/presets/<id>/`: at least a default preset.
+4. `daw-devices-ui/src/panels/<name>.rs`: the panel, following the
+   [panel grammar](#panel-grammar). Until it exists, `generic_device_panel`
+   makes the device fully usable.
+5. Device-specific DSP tests; the registry-wide conformance tests, the ID
+   snapshot, the gallery rendering and the preset validation pick the device
+   up automatically.
+6. One end-to-end test through the running app.
+
+Nothing changes in `daw-core`, `daw-engine`, `daw-app` or `daw-tools`: the
+Library, the Instrument and Effects windows, automation, presets and the tools
+all work from the descriptor. A new Maxi module follows the same pattern one
+level down: a module file, a line in the slot's type list, a section painter.
+
 ## Implementation order
 
 Suggested split into separate threads, foundation first:
 
-1. **UI foundation** (`daw-ui`): the controls and visualizations above, with
-   gallery pages and tests. No DSP needed; uses fixed example data.
+1. **UI foundation** (`daw-ui`): the controls and visualizations above,
+   `device_panel`, `preset_bar`, `preset_browser` and `generic_device_panel`,
+   with gallery pages and tests. No DSP needed; uses fixed example data.
 2. **Device foundation and vertical slice**: `daw-devices` skeleton (trait,
-   parameters, registry, DSP toolkit basics, test harness), `daw-devices-ui`
-   with `DeviceHost`, the model/engine/app/tools integration, and **R1
-   Filter** end to end as the proof. After this, adding a device touches only
-   the two device crates plus its E2E test.
+   parameters, registry, preset format, DSP toolkit basics, conformance
+   harness), `daw-devices-ui` with `DeviceHost`, the model/engine/app/tools
+   integration including failure containment and the preset tools, and **R1
+   Filter** end to end as the proof. After this, adding a device follows
+   [Adding a device](#adding-a-device).
 3. **Effects**, in three independent pieces: Equalizer; Saturator and
    Compressor; Modulator and Spacer.
-4. **R1 Mini.**
+4. **R1 Mini**, then make it the default instrument.
 5. **Sample plumbing, R1 Sampler and R1 Drums.**
 6. **R1 Maxi** in its three stages.
 7. Documentation: PRODUCT_DIRECTION, ARCHITECTURE, PROJECT_FORMAT, USER_GUIDE,
@@ -818,30 +1009,23 @@ pieces (toolkit, nonlinear filters, compressor characters, reverb, Maxi) and
 the engine integration are the ones where the stronger model is worth it; the
 UI components, panels, gallery and documentation are well-bounded work.
 
-## Decisions needed
+## Decisions
 
-1. **What "plugins" means.** This design builds the devices into Rill and
-   keeps them wrapper-ready ([Plug-in readiness](#plug-in-readiness)). If you
-   also want them shipped as VST3/CLAP plug-ins for other DAWs now, that adds
-   a wrapper crate, native window embedding for egui, and packaging per
-   platform. Recommendation: in-app first.
-2. **Equalizer band count.** Specified as six parametric bands plus high-pass
-   and low-pass, eight in total. The alternative reading is eight parametric
-   bands plus the two filters (ten nodes). Recommendation: eight in total; it
-   fits the panel and covers ordinary mixing.
-3. **Default instrument.** Should a new MIDI track, and `create_midi_part`
-   without an instrument, start with R1 Mini instead of silence?
-   Recommendation: yes, once Mini exists; it is the main payoff of built-ins
-   for a first session and for the assistant.
-4. **Factory samples for Drums and Sampler.** Options: ship empty; ship a
-   small kit rendered by us from R1 Mini/Maxi patches (no licensing question,
-   a few hundred kilobytes); or source a CC0 kit. Recommendation: the
-   self-rendered kit, after Maxi stage 1.
-5. **Maxi scope.** Confirm the three-stage plan and the stage 1 limits (no
-   user wavetable import, no drawable LFOs) or name what must be in the first
-   version.
-6. **Naming.** Crates `daw-devices` and `daw-devices-ui`; device IDs
-   `r1-spacer`, `r1-modulator`, `r1-saturator`, `r1-compressor`,
-   `r1-equalizer`, `r1-filter`, `r1-mini`, `r1-maxi`, `r1-sampler`,
-   `r1-drums`. IDs are persisted in projects, so they are settled before the
-   first device ships.
+Settled in review on 2026-11-10:
+
+| Question | Decision |
+| --- | --- |
+| Plug-in builds for other DAWs | No. The devices are for use inside Rill only. |
+| Equalizer bands | High-pass, low-pass and four parametric bands. |
+| Default instrument | New MIDI tracks start with R1 Mini. |
+| Factory samples | None. |
+| Maxi | Modular flagship synth, delivered in three stages. |
+| Names | Crates `daw-devices` and `daw-devices-ui`; device IDs `r1-spacer`, `r1-modulator`, `r1-saturator`, `r1-compressor`, `r1-equalizer`, `r1-filter`, `r1-mini`, `r1-maxi`, `r1-sampler`, `r1-drums`. |
+| Extensibility and uniformity | One device contract and registry, one panel grammar, one preset format and browser for all devices. |
+
+Open:
+
+- **Hosting.** The draft runs devices in process with failure containment and
+  explains the cost of a process per instance under
+  [Engine](#engine-daw-engine). A separate process remains possible without
+  changing devices, panels, presets or projects.
