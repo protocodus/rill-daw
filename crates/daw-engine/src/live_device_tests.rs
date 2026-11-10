@@ -99,7 +99,7 @@ fn render_worker_exposes_parameter_failure_once_while_healthy_audio_continues() 
         .expect("Detailed render diagnostic");
     assert!(error.contains("parameter 71"));
     assert!(error.contains(&format!("channel ID {id}")));
-    assert!(error.contains("Track has no assigned VST instrument"));
+    assert!(error.contains("Track has no assigned instrument"));
     assert!(engine.take_render_error().is_none());
     let samples = engine.pump_virtual(2048).unwrap();
     assert!(samples.iter().all(|frame| (frame[0] - 0.4).abs() < 1e-6));

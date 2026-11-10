@@ -1,6 +1,9 @@
 # R1 built-in devices: design draft
 
-Status: **design approved on 2026-11-10, nothing is implemented.** This document proposes the
+Status: **design approved on 2026-11-10. Step 2 of the
+[implementation order](#implementation-order) is in place:** the device
+foundation, model/engine/app/tools integration and R1 Filter. The other
+devices are not implemented yet. This document proposes the
 architecture, the shared UI additions and the per-device specifications for
 Rill's first built-in instruments and effects. Implementation follows in
 separate changes. The review answers are recorded in
@@ -220,7 +223,7 @@ One format, one browser and one set of tools for every device.
 - Maxi needs no special case: its modules, matrix and effects rack are all
   parameters.
 - Tools: `list_device_presets` (name, category, tags, description, with
-  search), `load_device_preset` and `save_device_preset`. Saving takes a name
+  search), `load_device_preset` and `store_device_preset`. Saving takes a name
   and writes only into the user preset directory, never to an arbitrary path.
 
 The shared `preset_bar` in every panel header shows the current preset name
@@ -253,8 +256,9 @@ pub struct DeviceSample { pub slot: u32, pub path: String }
   ordinary parameters.
 - Validation: `device` is 1–32 characters of `[a-z0-9-]`; at most 16 samples
   with unique slots. An unknown `device` loads, stays in the project unchanged
-  and renders silence with a visible "Unknown device" advisory, like a missing
-  plug-in.
+  and shows a visible "Unknown device" advisory, like a missing plug-in. An
+  unknown instrument is silent; an unknown insert passes audio through, so a
+  project from a newer version keeps its signal path audible.
 - Older Rill versions reject the new variants, which matches how removed
   variants are handled today. [PROJECT_FORMAT.md](PROJECT_FORMAT.md) gets the
   new variants and a version note.
@@ -323,8 +327,9 @@ panels, presets or projects.
 - **Tools.** `create_instrument_part`, the instrument and insert tools accept
   built-in catalog IDs (`rill:r1-mini`). `plugin_describe_parameters` reports,
   for built-ins, the plain range, unit, choice labels and formatted current
-  value in addition to the normalized value, and `set_plugin_parameters`
-  accepts a plain value as an alternative to the normalized one. This meets
+  value in addition to the normalized value, and `set_device_parameters`
+  sets built-in parameters by key in plain units (`set_plugin_parameters`
+  keeps its normalized contract for hosted plug-ins). This meets
   the rule in `claude.md` that tools must not require guessing normalized
   values. The three preset tools are described under [Presets](#presets). A
   new `set_device_sample` tool assigns an already imported project
@@ -670,7 +675,7 @@ type or slope, Frequency, Gain, Q), with the selected band highlighted.
 | Cutoff | 20 Hz – 20 kHz (log) | 1 kHz |
 | Resonance | 0 – 100 % | 20 % |
 | Drive | 0 – 24 dB | 0 dB |
-| Morph | 0 – 100 % (State Variable: LP → notch → HP; Vowel: A-E-I-O-U) | 0 % |
+| Morph | 0 – 100 % (State Variable: LP → notch → HP; Vowel: A-E-I-O-U; Comb: feedback damping) | 0 % |
 | LFO rate, Sync, Shape | 0.01 – 20 Hz; sine, triangle, saw, square, S&H | 1 Hz, sine |
 | LFO depth | ±5 octaves | 0 |
 | LFO stereo | 0 – 180° | 0° |

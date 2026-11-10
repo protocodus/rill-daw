@@ -782,6 +782,38 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
             ),
         ),
         (
+            "set_device_parameters",
+            "Set parameters of a Rill built-in device (catalog plugin_id rill:…) on a track's instrument or an insert, in the parameter's own units: a number in its unit (Hz, dB, %, ms, …), a choice label, true/false for a switch, or text such as \"1.2 kHz\". Name each parameter by the key or ID that plugin_describe_parameters returns. One Undo step; returns the values as stored.",
+            object(
+                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"insert_id":id(),"parameters":array(object(json!({"parameter":{"oneOf":[string(),integer()]},"value":{"oneOf":[number(),string(),boolean()]}}),&["parameter","value"]),256)}),
+                &["session_id", "expected_revision", "track_id", "parameters"],
+            ),
+        ),
+        (
+            "list_device_presets",
+            "List the factory and user presets of the Rill built-in device on a track's instrument or an insert: name, category, tags, description and source. query filters by any of those.",
+            object(
+                json!({"track_id":integer(),"insert_id":id(),"query":{"type":"string","maxLength":256}}),
+                &["track_id"],
+            ),
+        ),
+        (
+            "load_device_preset",
+            "Load a preset by name (from list_device_presets) into the Rill built-in device on a track's instrument or an insert, as one Undo step. Reports preset keys the device skipped.",
+            object(
+                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"insert_id":id(),"name":{"type":"string","minLength":1,"maxLength":128}}),
+                &["session_id", "expected_revision", "track_id", "name"],
+            ),
+        ),
+        (
+            "store_device_preset",
+            "Save the current settings of the Rill built-in device on a track's instrument or an insert as a user preset under name, replacing a user preset of the same name. Factory presets are never changed and no path is accepted. The song is not changed.",
+            object(
+                json!({"track_id":integer(),"insert_id":id(),"name":{"type":"string","minLength":1,"maxLength":128}}),
+                &["track_id", "name"],
+            ),
+        ),
+        (
             "audio_analyze",
             "Render and analyze a bounded current-song excerpt locally (up to 30 seconds, ending within the first 120 seconds). Returns peak/RMS/clipping/stereo and spectral measurements, not perceptual listening. Optional track_id measures its contribution through the song routing.",
             object(
@@ -791,7 +823,7 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "plugin_describe_parameters",
-            "Read paginated parameter names, IDs, normalized values, units and writeability from the assigned instrument or optional insert. Discover actual IDs before parameter editing.",
+            "Read paginated parameter names, IDs, normalized values, units and writeability from the assigned instrument or optional insert. Discover actual IDs before parameter editing. Rill built-in devices also return each parameter's key, plain value, range or choices; set those with set_device_parameters.",
             object(
                 json!({"track_id":integer(),"insert_id":id(),"query":{"type":"string","maxLength":256},"offset":integer(),"limit":{"type":"integer","minimum":1,"maximum":200}}),
                 &["track_id"],

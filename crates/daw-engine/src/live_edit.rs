@@ -591,7 +591,7 @@ impl Renderer {
                             && old.routes.iter().filter(|route| route.send_bus.is_some()).count() == next.send_gains.len()
                             && old.inserts.len() == next.insert_automation.len()
                             && old.inserts.iter().zip(&next.insert_automation).all(|(old, (id, _))| {
-                                matches!(old, Insert::Vst { id: old_id, .. } if old_id == id)
+                                matches!(old, Insert { id: old_id, .. } if old_id == id)
                             })
                     })),
             "Prepared edit belongs to a different audio graph"
@@ -651,7 +651,7 @@ impl Renderer {
             for (insert, (_, next_parameters)) in
                 track.inserts.iter_mut().zip(&mut next.insert_automation)
             {
-                let Insert::Vst { parameters, .. } = insert;
+                let Insert { parameters, .. } = insert;
                 swap_plugin_automation(parameters, next_parameters, edit.automation_sequence);
             }
             if Arc::ptr_eq(&next.content.events, &track.events)

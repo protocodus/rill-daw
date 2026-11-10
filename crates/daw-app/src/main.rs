@@ -15,6 +15,7 @@ mod audio_takes_ui;
 mod automation;
 mod automation_editor;
 mod automation_state;
+mod builtin_devices;
 mod clip_actions;
 mod clip_navigation;
 mod crossfade_ui;

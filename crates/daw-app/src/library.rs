@@ -555,9 +555,10 @@ impl DawApp {
                     state.category_query.clear();
                     self.plugin_filter.clear();
                 }
-                let kind_items: Vec<_> = self
-                    .vst_catalog
+                // Built-in devices come first and need no scan.
+                let kind_items: Vec<_> = crate::builtin_devices::catalog()
                     .iter()
+                    .chain(&self.vst_catalog)
                     .filter(|entry| state.kind.accepts(entry))
                     .map(|entry| item(&self.plugin_library, entry))
                     .collect();
@@ -741,7 +742,7 @@ impl DawApp {
                                 item.entry.plugin.vendor,
                                 item.entry.plugin.category,
                                 item.categories.join(" "),
-                                item.entry.plugin.format.label()
+                                crate::builtin_devices::format_label(&item.entry.plugin)
                             )
                                 .to_lowercase();
                                 terms.iter().all(|term| searchable.contains(term))
@@ -892,7 +893,7 @@ impl DawApp {
                                 selected,
                                 favorite: item.favorite,
                                 icon,
-                                format: entry.plugin.format.label(),
+                                format: crate::builtin_devices::format_label(&entry.plugin),
                             };
                             let card = if state.list {
                                 let detail = if item.categories.is_empty() { kind_label(&entry.plugin).to_owned() } else { item.categories.join(" · ") };
@@ -925,7 +926,7 @@ impl DawApp {
                                 "rect": {"min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y]},
                                 "preview_rect": {"min": [preview.min.x, preview.min.y], "max": [preview.max.x, preview.max.y]},
                                 "preview": texture.is_some(), "texture_id": texture.as_ref().map(|texture| format!("{:?}", texture.id())),
-                                "favorite": item.favorite, "format": entry.plugin.format.label(),
+                                "favorite": item.favorite, "format": crate::builtin_devices::format_label(&entry.plugin),
                             })
                         };
                         let height = ui.available_height();
@@ -1080,7 +1081,7 @@ impl DawApp {
                                     daw_ui::text::body(ui, value);
                                     ui.end_row();
                                 };
-                                row("Format", entry.plugin.format.label().into());
+                                row("Format", crate::builtin_devices::format_label(&entry.plugin).into());
                                 row("Version", if entry.plugin.version.is_empty() { "Unknown".into() } else { entry.plugin.version.clone() });
                                 row("Architecture", if entry.plugin.architectures.is_empty() { "Unknown".into() } else { entry.plugin.architectures.join(", ") });
                                 row("Preview image", match &entry.status {
@@ -1170,7 +1171,7 @@ impl DawApp {
                             if details == 0.0 {
                                 // Without room for the detail pane, keep its facts reachable.
                                 ui.separator();
-                                daw_ui::text::note(ui, if entry.plugin.category.is_empty() { kind_label(&entry.plugin).to_owned() } else { format!("{} · {}", entry.plugin.format.label(), entry.plugin.category.replace('|', " · ")) });
+                                daw_ui::text::note(ui, if entry.plugin.category.is_empty() { kind_label(&entry.plugin).to_owned() } else { format!("{} · {}", crate::builtin_devices::format_label(&entry.plugin), entry.plugin.category.replace('|', " · ")) });
                                 daw_ui::text::note(ui, entry.plugin.path.display().to_string()).on_hover_text(entry.plugin.class_id.as_deref().unwrap_or("Unverified class"));
                             }
                         });
@@ -1291,13 +1292,7 @@ impl DawApp {
             } else {
                 source
             };
-            let slot = EffectSlot::new(
-                &plugin.name,
-                Effect::Vst3 {
-                    path: plugin.path.to_string_lossy().into_owned(),
-                    class_id: plugin.class_id.clone(),
-                },
-            );
+            let slot = EffectSlot::new(&plugin.name, crate::builtin_devices::effect(&plugin));
             self.project.track_mut(track).unwrap().inserts.push(slot);
             if action == DeviceAction::Send
                 && let Err(error) = self.project.add_send(source, track, 0.25, false)
@@ -1352,13 +1347,9 @@ impl DawApp {
             self.project.track_mut(id).unwrap().clips.push(clip);
             id
         };
-        let result = self.project.set_instrument(
-            track,
-            Instrument::Vst3 {
-                path: plugin.path.to_string_lossy().into_owned(),
-                class_id: plugin.class_id.clone(),
-            },
-        );
+        let result = self
+            .project
+            .set_instrument(track, crate::builtin_devices::instrument(&plugin));
         if result.is_ok() {
             if name_new_track {
                 self.project.track_mut(track).unwrap().name = instrument_name;
@@ -1396,6 +1387,25 @@ impl DawApp {
         if assigned {
             self.record_plugin_use(&plugin);
         }
+    }
+}
+
+/// "Producer · Name" of whatever an insert holds.
+pub(crate) fn effect_model(catalog: &[CatalogEntry], effect: &Effect) -> String {
+    match effect {
+        Effect::Vst3 { path, class_id } => plugin_model(catalog, path, class_id),
+        Effect::Builtin { device } => crate::builtin_devices::model(device),
+    }
+}
+
+pub(crate) fn instrument_model(
+    catalog: &[CatalogEntry],
+    instrument: &Instrument,
+) -> Option<String> {
+    match instrument {
+        Instrument::None => None,
+        Instrument::Vst3 { path, class_id } => Some(plugin_model(catalog, path, class_id)),
+        Instrument::Builtin { device } => Some(crate::builtin_devices::model(device)),
     }
 }
 

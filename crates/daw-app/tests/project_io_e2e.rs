@@ -38,6 +38,9 @@ fn add_source(project: &mut Project, source: &Path) {
 fn background_save_preserves_snapshot_and_keeps_later_cosmetic_edits_dirty() {
     let mut app = Harness::new();
     menu(&mut app, "Track", "Add audio track");
+    // Save waits for a running recovery checkpoint. Start it only once that
+    // is written, so the save snapshot precedes the rename below.
+    common::wait_until(&mut app, |state| state["recovery_pending"] == false);
     let path = app.directory.path().join("snapshot.rill");
     let started = app.command(json!({"command":"save","path":path,"wait":false}));
     assert_eq!(started["project_pending"], true);

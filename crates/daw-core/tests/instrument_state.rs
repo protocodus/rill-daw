@@ -101,7 +101,7 @@ fn processor_class_is_persistent_and_changing_class_clears_obsolete_state() {
     let (mut project, track) = fixture();
     let path = match &project.track(track).unwrap().instrument {
         Instrument::Vst3 { path, .. } => path.clone(),
-        Instrument::None => unreachable!(),
+        _ => unreachable!(),
     };
     project
         .set_instrument(

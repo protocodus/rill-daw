@@ -988,7 +988,9 @@ impl DawApp {
                                 TrackKind::Midi => {
                                     let instrument = match &track.instrument {
                                         Instrument::None => "Choose…".to_owned(),
-                                        Instrument::Vst3 { .. } if !track.instrument_name.is_empty() => track.instrument_name.clone(),
+                                        _ if !track.instrument_name.is_empty() => track.instrument_name.clone(),
+                                        Instrument::Builtin { device } => daw_devices::descriptor(device)
+                                            .map_or_else(|| device.clone(), |descriptor| descriptor.name.to_owned()),
                                         Instrument::Vst3 { path, class_id } => self.vst_catalog.iter()
                                             .find(|entry| entry.plugin.path == std::path::Path::new(path)
                                                 && entry.plugin.class_id == *class_id)
@@ -1069,7 +1071,7 @@ impl DawApp {
                                     match control {
                                         daw_ui::AutomationControl::Gain { .. } => { gain = daw_ui::channel_gain_from_db(value as f32); exact_gain = true; }
                                         daw_ui::AutomationControl::Pan { .. } => { pan = (value / 100.0) as f32; exact_pan = true; }
-                                        daw_ui::AutomationControl::Send { .. } | daw_ui::AutomationControl::InputGain { .. } => {}
+                                        daw_ui::AutomationControl::Send { .. } | daw_ui::AutomationControl::InputGain { .. } | daw_ui::AutomationControl::DeviceParameter { .. } => {}
                                     }
                                 }
                             }
@@ -2644,6 +2646,8 @@ impl DawApp {
                     daw_ui::AutomationControl::Send { track, bus } => {
                         (track, AutomationParameter::SendGain { bus })
                     }
+                    // Device panels resolve their own owner before this point.
+                    daw_ui::AutomationControl::DeviceParameter { .. } => return,
                 };
                 let target = AutomationTarget { track, parameter };
                 let existing = self

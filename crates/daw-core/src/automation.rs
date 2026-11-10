@@ -1,7 +1,7 @@
 //! Parameter automation in arrangement beats. Curves contain normalized values;
 //! stable track/effect/bus IDs keep targets independent of channel ordering.
 
-use crate::{Effect, EffectSlot, Instrument, MAX_BEAT, Project, Send, Track, TrackKind, new_id};
+use crate::{EffectSlot, Instrument, MAX_BEAT, Project, Send, Track, TrackKind, new_id};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, ops::RangeInclusive};
@@ -93,14 +93,12 @@ impl AutomationTarget {
             }
             AutomationParameter::VstParameter {
                 effect: Some(id), ..
-            } => ensure!(
-                matches!(effect(id)?, Effect::Vst3 { .. }),
-                "Automation target is not a VST3 insert"
-            ),
+            } => {
+                effect(id)?;
+            }
             AutomationParameter::VstParameter { effect: None, .. } => ensure!(
-                track.kind == TrackKind::Midi
-                    && matches!(track.instrument, Instrument::Vst3 { .. }),
-                "Automation target is not a VST3 instrument"
+                track.kind == TrackKind::Midi && track.instrument.is_processor(),
+                "Automation target is not an instrument"
             ),
         }
         Ok(())

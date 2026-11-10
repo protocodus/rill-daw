@@ -58,6 +58,7 @@ pub fn tool_effect(name: &str) -> ToolEffect {
         | "audio_analyze"
         | "audio_analyze_clip"
         | "plugin_describe_parameters"
+        | "list_device_presets"
         | "get_recording"
         | "document_status"
         | "get_setup" => ToolEffect::Read,

@@ -84,7 +84,10 @@ impl DawApp {
         let channel = self.project.track(target.track)?;
         let (path, class_id, state, parameters) = if let Some(id) = target.effect {
             let effect = channel.inserts.iter().find(|effect| effect.id == id)?;
-            let Effect::Vst3 { path, class_id } = &effect.effect;
+            // Built-in devices have one fixed stereo input and output.
+            let Effect::Vst3 { path, class_id } = &effect.effect else {
+                return None;
+            };
             (path, class_id, &effect.state, &effect.parameters)
         } else {
             let Instrument::Vst3 { path, class_id } = &channel.instrument else {
@@ -133,7 +136,9 @@ impl DawApp {
             let Some(effect) = channel.inserts.iter().find(|effect| effect.id == id) else {
                 return false;
             };
-            let Effect::Vst3 { path, class_id } = &effect.effect;
+            let Effect::Vst3 { path, class_id } = &effect.effect else {
+                return false;
+            };
             (path, class_id, &effect.state, &effect.parameters)
         } else {
             let Instrument::Vst3 { path, class_id } = &channel.instrument else {

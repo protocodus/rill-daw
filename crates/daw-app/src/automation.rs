@@ -1619,6 +1619,7 @@ impl Harness {
             },
             "project": self.app.project,
             "project_pending": self.app.project_io_pending() || self.app.state_sync_pending() || self.app.audio_admission.is_some(),
+            "recovery_pending": self.app.recovery_pending(),
             "modified": self.app.modified,
             "history": { "undo": self.app.history.undo_labels().collect::<Vec<_>>(),
                 "redo": self.app.history.redo_labels().collect::<Vec<_>>(),

@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device": "r1-filter",
+  "name": "Screaming High-pass",
+  "author": "Rill",
+  "category": "Resonant",
+  "tags": ["sallen-key", "aggressive"],
+  "description": "Driven Sallen-Key high-pass close to self-oscillation.",
+  "parameters": {
+    "model": "Sallen-Key",
+    "type": "High-pass",
+    "cutoff": 600.0,
+    "resonance": 90.0,
+    "drive": 12.0,
+    "output": -6.0
+  }
+}

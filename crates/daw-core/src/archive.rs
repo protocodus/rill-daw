@@ -236,8 +236,9 @@ fn save_with_options(
             absolute_plugin(path, &base);
         }
         for slot in &mut track.inserts {
-            let Effect::Vst3 { path, .. } = &mut slot.effect;
-            absolute_plugin(path, &base);
+            if let Effect::Vst3 { path, .. } = &mut slot.effect {
+                absolute_plugin(path, &base);
+            }
         }
         for clip in &mut track.clips {
             check_cancelled(cancel)?;

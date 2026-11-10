@@ -248,8 +248,12 @@ pub(crate) fn snapshot_bytes(project: &Project) -> usize {
             + track.instrument_parameters.len() * size_of::<crate::PluginParameterValue>()
             + track.instrument_inputs.len() * size_of::<crate::PluginInputRoute>()
             + track.sends.len() * size_of::<crate::Send>();
-        if let Instrument::Vst3 { path, class_id } = &track.instrument {
-            bytes += path.len() + class_id.as_ref().map_or(0, String::len);
+        match &track.instrument {
+            Instrument::Vst3 { path, class_id } => {
+                bytes += path.len() + class_id.as_ref().map_or(0, String::len);
+            }
+            Instrument::Builtin { device } => bytes += device.len(),
+            Instrument::None => {}
         }
         for effect in &track.inserts {
             bytes += size_of_val(effect)
@@ -257,8 +261,12 @@ pub(crate) fn snapshot_bytes(project: &Project) -> usize {
                 + effect.state.len()
                 + effect.parameters.len() * size_of::<crate::PluginParameterValue>();
             bytes += effect.inputs.len() * size_of::<crate::PluginInputRoute>();
-            let Effect::Vst3 { path, class_id } = &effect.effect;
-            bytes += path.len() + class_id.as_ref().map_or(0, String::len);
+            bytes += match &effect.effect {
+                Effect::Vst3 { path, class_id } => {
+                    path.len() + class_id.as_ref().map_or(0, String::len)
+                }
+                Effect::Builtin { device } => device.len(),
+            };
         }
         if let Some(lane) = &track.automation {
             bytes += lane.points.len() * size_of::<crate::AutomationPoint>();
