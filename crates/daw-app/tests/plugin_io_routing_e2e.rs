@@ -17,12 +17,20 @@ fn open(app: &mut Harness, project: &Project) {
     app.command(json!({"command":"open","path":path}));
 }
 
-fn inspect_io(app: &mut Harness, clip: &str) -> Value {
+/// `control` is the panel control the caller clicks next: the inspection can
+/// report ready one frame before the panel paints it.
+fn inspect_io(app: &mut Harness, clip: &str, control: &str) -> Value {
     app.click(clip);
     app.click("Window");
     app.click("Routing");
     app.click("Inspect I/O");
-    let state = wait_until(app, |state| state["plugin_io"]["status"] != "loading");
+    let state = wait_until(app, |state| {
+        state["plugin_io"]["status"] != "loading"
+            && (state["plugin_io"]["status"] != "ready"
+                || state["visible_labels"]
+                    .as_array()
+                    .is_some_and(|labels| labels.iter().any(|label| label == control)))
+    });
     assert_eq!(state["plugin_io"]["status"], "ready", "{state}");
     assert_eq!(state["plugin_io"]["current"], true);
     state
@@ -85,7 +93,7 @@ fn sidechain_gui_uses_saved_overrides_and_routes_real_audio_with_one_undo() {
     open(&mut app, &project);
     let before = export(&mut app, "before.wav");
     assert!((sample(&before) - 0.3).abs() < 1e-6);
-    let inspected = inspect_io(&mut app, "Main signal");
+    let inspected = inspect_io(&mut app, "Main signal", "Add source…");
     assert_eq!(
         inspected["plugin_io"]["details"]["inputs"][1]["name"],
         "Restored sidechain"
@@ -143,7 +151,7 @@ fn native_output_gui_creates_all_stereo_pairs_and_odd_mono_outputs_atomically() 
     open(&mut app, &project);
     let before = export(&mut app, "main-only.wav");
     assert!((sample(&before) - 0.125).abs() < 1e-6);
-    let state = inspect_io(&mut app, "Output phrase");
+    let state = inspect_io(&mut app, "Output phrase", "Enable all output channels");
     assert_eq!(state["plugin_io"]["details"]["outputs"][1]["channels"], 5);
     let created = app.click("Enable all output channels");
     let tracks = created["project"]["tracks"].as_array().unwrap();
