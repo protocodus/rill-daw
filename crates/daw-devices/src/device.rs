@@ -13,6 +13,8 @@ pub struct DeviceDescriptor {
     pub id: &'static str,
     pub name: &'static str,
     pub kind: DeviceKind,
+    /// Library category, such as "Filter" or "Synth".
+    pub category: &'static str,
     pub parameters: &'static [ParamSpec],
     /// 0, 1 (Sampler) or 16 (Drums).
     pub sample_slots: u32,

@@ -2644,6 +2644,8 @@ impl DawApp {
                     daw_ui::AutomationControl::Send { track, bus } => {
                         (track, AutomationParameter::SendGain { bus })
                     }
+                    // Device panels resolve their own owner before this point.
+                    daw_ui::AutomationControl::DeviceParameter { .. } => return,
                 };
                 let target = AutomationTarget { track, parameter };
                 let existing = self

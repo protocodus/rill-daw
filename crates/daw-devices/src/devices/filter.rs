@@ -265,6 +265,7 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
     id: "r1-filter",
     name: "R1 Filter",
     kind: DeviceKind::Effect,
+    category: "Filter",
     parameters: &PARAMETERS,
     sample_slots: 0,
     sidechain_input: false,
