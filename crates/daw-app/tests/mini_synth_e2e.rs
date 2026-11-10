@@ -186,3 +186,85 @@ fn new_midi_tracks_play_r1_mini_shaped_by_tools_presets_and_its_panel() {
     assert_eq!(state["selected_track"], lane["id"]);
     app.quit();
 }
+
+fn center(rect: &Value) -> (f64, f64) {
+    (
+        (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5,
+        (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5,
+    )
+}
+
+fn pointer(app: &mut Harness, phase: &str, (x, y): (f64, f64)) -> Value {
+    app.command(json!({"command":"pointer","phase":phase,"x":x,"y":y}))
+}
+
+#[test]
+fn panel_keyboard_and_wheels_play_the_track_and_let_go_when_the_panel_closes() {
+    let mut app = Harness::new();
+    app.key("Escape");
+    let added = menu(&mut app, "Track", "Add MIDI track");
+    let track = added["project"]["tracks"][0]["id"].clone();
+    app.key("Escape");
+    app.command(json!({"command":"viewport","width":1600,"height":1400,"pixels_per_point":1.0}));
+    menu(&mut app, "Window", "Instrument");
+    common::wait_visible(&mut app, "Cutoff");
+    // The keyboard is the panel's last row: scroll it into view.
+    let window = app.inspect()["window_rects"][0].clone();
+    let (x, y) = center(&window);
+    let state = app.command(json!({"command":"scroll","x":x,"y":y,"delta":-2000.0}));
+    let performance = state["native_editor"]["performance"].clone();
+    assert!(
+        performance["keyboard"]["max"][1].as_f64() < window["max"][1].as_f64(),
+        "{performance} {window}"
+    );
+
+    // Middle C: the 15th of 28 white keys from C2, pressed near its bottom.
+    let keyboard = &performance["keyboard"];
+    let left = keyboard["min"][0].as_f64().unwrap();
+    let key_width = (keyboard["max"][0].as_f64().unwrap() - left) / 28.0;
+    let middle_c = (
+        left + 14.5 * key_width,
+        keyboard["max"][1].as_f64().unwrap() - 5.0,
+    );
+    let pressed = pointer(&mut app, "down", middle_c);
+    assert_eq!(
+        pressed["audition_request"][0], track,
+        "{}",
+        pressed["audition_request"]
+    );
+    assert_eq!(pressed["audition_request"][1], 60);
+    let released = pointer(&mut app, "up", middle_c);
+    assert!(released["audition_request"].is_null());
+
+    // The pitch wheel bends while held and springs back on release.
+    let pitch = center(&performance["pitch_wheel"]);
+    pointer(&mut app, "down", pitch);
+    let bent = pointer(&mut app, "move", (pitch.0, pitch.1 - 20.0));
+    let wheels = &bent["native_editor"]["performance"]["wheels"];
+    assert_eq!(wheels[0], track, "{wheels}");
+    assert!(wheels[1].as_f64().unwrap() > 0.2, "{wheels}");
+    let back = pointer(&mut app, "up", (pitch.0, pitch.1 - 20.0));
+    assert_eq!(back["native_editor"]["performance"]["wheels"][1], 0.0);
+
+    // The mod wheel stays where it is left.
+    let modulation = center(&performance["mod_wheel"]);
+    let moved = app.command(
+        json!({"command":"pointer","phase":"drag","x":modulation.0,"y":modulation.1,
+        "to_x":modulation.0,"to_y":modulation.1 - 20.0}),
+    );
+    let wheels = &moved["native_editor"]["performance"]["wheels"];
+    assert!(wheels[2].as_f64().unwrap() > 0.2, "{wheels}");
+
+    // Closing the panel while a key is held lets the note go.
+    pointer(&mut app, "down", middle_c);
+    let closed = app.key("Escape");
+    assert_eq!(closed["popups"]["instrument"], false);
+    assert!(
+        closed["audition_request"].is_null(),
+        "{}",
+        closed["audition_request"]
+    );
+    assert!(closed["native_editor"]["performance"]["wheels"].is_null());
+    pointer(&mut app, "up", middle_c);
+    app.quit();
+}

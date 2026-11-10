@@ -451,6 +451,10 @@ impl DawApp {
                 .filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
                 .map_or(parameter.value, |(_, _, value)| f64::from(value))),
             "automation_state": automation.map(|(_, state, _)| state.label()),
+            "performance": self.instrument_ui.device_panel.performance_rects.map(|[pitch, modulation, keyboard]| serde_json::json!({
+                "pitch_wheel": rect(pitch), "mod_wheel": rect(modulation), "keyboard": rect(keyboard),
+                "wheels": self.panel_wheels,
+            })),
         })
     }
 

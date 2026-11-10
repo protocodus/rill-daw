@@ -66,7 +66,8 @@ fn unavailable_images_keep_details_retry_and_the_original_assignment_identity() 
     // Missing and failed images belong to a neutral collection, not a list of
     // broken instruments. An empty image collection is not an empty inventory.
     let without = app.click("Without preview");
-    assert_eq!(without["library"]["total"], 2);
+    // The two fixtures and the built-in R1 Mini, which has no captured image.
+    assert_eq!(without["library"]["total"], 3);
     preserved(&without, &baseline);
     let with = app.click("With preview");
     assert_eq!(with["library"]["total"], 0);

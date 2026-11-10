@@ -44,6 +44,8 @@ pub struct PanelState {
     pub pitch_wheel: f32,
     /// Mod wheel, 0–1; stays where it is left.
     pub mod_wheel: f32,
+    /// Last drawn pitch wheel, mod wheel and keyboard, for host diagnostics.
+    pub performance_rects: Option<[egui::Rect; 3]>,
 }
 
 /// Knob diameters from the panel grammar.
@@ -136,6 +138,9 @@ fn performance(ui: &mut Ui, host: &mut dyn DeviceHost, state: &mut PanelState) {
             host.wheels(state.pitch_wheel, state.mod_wheel);
         }
         let width = ui.available_width();
+        let keyboard =
+            egui::Rect::from_min_size(ui.cursor().min, egui::vec2(width, KEYBOARD_HEIGHT));
+        state.performance_rects = Some([pitch.rect, modulation.rect, keyboard]);
         let keys = daw_ui::keyboard_strip(
             ui,
             KEYBOARD_FIRST,
