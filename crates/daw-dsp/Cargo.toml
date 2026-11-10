@@ -1,0 +1,9 @@
+[package]
+name = "daw-dsp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Rill's shared DSP: filter kernels, oversampling, modulators and smoothing, for devices and the app alike"
+
+[dependencies]

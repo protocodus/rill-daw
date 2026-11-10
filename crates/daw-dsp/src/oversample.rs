@@ -16,6 +16,8 @@ pub struct Oversampler2x {
 }
 
 const HISTORY: usize = TAPS + 1;
+/// Half of the nonzero side taps; the other half mirrors them.
+const HALF: usize = CENTER.div_ceil(2);
 
 impl Default for Oversampler2x {
     fn default() -> Self {
@@ -56,9 +58,10 @@ impl Oversampler2x {
         self.up_cursor = (self.up_cursor + 1) % HISTORY;
         self.up[self.up_cursor] = 2.0 * input;
         let at = |delay: usize| self.up[(self.up_cursor + HISTORY - delay) % HISTORY];
+        // The taps are symmetric, so fold each pair into one multiply.
         let mut between = 0.0;
-        for (delay, &tap) in self.even.iter().enumerate() {
-            between += tap * at(delay);
+        for (delay, &tap) in self.even[..HALF].iter().enumerate() {
+            between += tap * (at(delay) + at(CENTER - delay));
         }
         [between, 0.5 * at(CENTER / 2)]
     }
@@ -74,8 +77,8 @@ impl Oversampler2x {
         // integer base-rate delay.
         let at = |delay: usize| self.down[(self.down_cursor + HISTORY - 1 - delay) % HISTORY];
         let mut sum = 0.5 * at(CENTER);
-        for (index, &tap) in self.even.iter().enumerate() {
-            sum += tap * at(2 * index);
+        for (index, &tap) in self.even[..HALF].iter().enumerate() {
+            sum += tap * (at(2 * index) + at(2 * (CENTER - index)));
         }
         sum
     }

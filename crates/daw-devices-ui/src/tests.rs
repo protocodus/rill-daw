@@ -115,12 +115,18 @@ fn filter_hides_controls_that_do_not_apply() {
     let clean = model(0.0);
     assert!((layout.visible)(filter::SLOPE, &clean));
     assert!(!(layout.visible)(filter::MORPH, &clean));
-    let vowel = model(5.0);
+    let vowel = model(8.0);
     assert!((layout.visible)(filter::MORPH, &vowel));
     assert!(!(layout.visible)(filter::TYPE, &vowel));
     let sallen_key = model(2.0);
     assert_eq!(
         (layout.options)(filter::TYPE, &sallen_key).unwrap().len(),
         2
+    );
+    let ota_cascade = model(3.0);
+    assert!((layout.visible)(filter::SLOPE, &ota_cascade));
+    assert_eq!(
+        (layout.options)(filter::TYPE, &ota_cascade).unwrap().len(),
+        4
     );
 }

@@ -1,4 +1,4 @@
-use super::flush;
+use super::{flush, tanh_fast};
 
 /// Linear zero-delay-feedback (TPT) state-variable filter after Simper. Stable
 /// under per-sample coefficient changes, so cutoff can be modulated freely.
@@ -42,6 +42,26 @@ impl Svf {
             band: v1,
             high: input - k * v1 - v2,
         }
+    }
+
+    /// [`Self::process`] with the band state soft-clipped, like a diode pair
+    /// in the resonance path: bounded at any damping, including slightly
+    /// negative damping, which self-oscillates.
+    #[inline]
+    pub fn process_clipped(&mut self, input: f32, g: f32, k: f32) -> SvfOutputs {
+        let outputs = self.process(input, g, k);
+        self.ic1 = tanh_fast(self.ic1);
+        outputs
+    }
+
+    /// [`Self::process`] with both integrator states saturating, like the
+    /// OTAs of an analog state-variable filter: bounded at any damping.
+    #[inline]
+    pub fn process_saturated(&mut self, input: f32, g: f32, k: f32) -> SvfOutputs {
+        let outputs = self.process(input, g, k);
+        self.ic1 = tanh_fast(self.ic1);
+        self.ic2 = tanh_fast(self.ic2);
+        outputs
     }
 }
 
