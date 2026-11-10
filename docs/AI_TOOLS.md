@@ -244,6 +244,9 @@ storage, VST-directory, and AI settings through the normal settings apply path.
 clients can select actual IDs/names without opening Setup or a device stream.
 Audio inventory includes channel counts, supported sample rates, and default
 flags; MIDI ports expose their stable selectable IDs and names.
+`get_setup` lists the audio drivers (`available_devices.hosts`) and each device's buffer range;
+`configure_setup` `audio.audio_host` selects one (null is the platform default), resets the device
+names and adopts a server-dictated driver's sample rate and buffer unless given.
 An omitted device selector preserves it; explicit null clears it. API key input
 is encrypted and its temporary parsed string is cleared. `get_setup` reports
 only whether a key is configured, never plaintext or encrypted secret data.

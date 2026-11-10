@@ -222,6 +222,8 @@ exceptions. Compare restoration coverage and fault tests, not just counts.
 [REAPER guide](https://dlx.reaper.fm/userguide/html/),
 [Cubase history](https://www.steinberg.help/r/cubase-pro/15.0/en/cubase_nuendo/topics/project_window/project_window_edit_history_dialog_r.html).
 
+Setup offers a Driver choice: ALSA/JACK on Linux, WASAPI on Windows, CoreAudio on macOS. JACK was exercised only against a dummy-backend server, and the ASIO build option (not in releases, for licensing reasons) is untested; neither has been checked against a physical interface.
+
 A 256-frame device buffer at 48 kHz is a starting configuration, not a
 demonstrated optimum for every M1-or-newer MacBook. Rill's render queue and
 plugin/device latency also contribute; device-buffer duration is not round-trip
