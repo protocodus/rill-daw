@@ -105,7 +105,10 @@ fn device_details_read_native_ports_search_parameters_and_preserve_project() {
         assert!(report.contains("No Editor Probe"));
         assert!(report.contains("Outputs: 2 audio channels, 1 buses"));
         assert!(report.contains("#7 Level [%]"));
-        assert!(report.contains(fixture.path.to_str().unwrap()));
+        // The scanner reports canonical bundle paths. On Windows that resolves
+        // the runner's 8.3 temp directory and adds the verbatim prefix.
+        let bundle = fixture.path.canonicalize().unwrap();
+        assert!(report.contains(&bundle.display().to_string()), "{report}");
         app.click("Technical details");
         assert!(visible(&app.inspect(), "Parameters"));
         app.click("Parameters");
