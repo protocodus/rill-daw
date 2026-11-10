@@ -334,6 +334,22 @@ fn sustain_pedal_holds_a_note_released_while_it_steals_a_voice() {
 }
 
 #[test]
+fn lowering_the_voice_count_releases_the_voices_beyond_it() {
+    let values = [sine_values(), vec![(AENV_RELEASE, 50.0)]].concat();
+    let mut device = synth(&values);
+    let chord: Vec<_> = (0..8)
+        .map(|index| (0, note_on(0, index, 60.0 + index as f32, 1.0).kind))
+        .collect();
+    render(&mut *device, 0.2, &chord);
+    let telemetry = device.telemetry();
+    assert_eq!(telemetry.value(TELEMETRY_VOICES), 8.0);
+    let spec = mini::DESCRIPTOR.parameter(VOICES).unwrap();
+    device.set_parameter(VOICES, spec.to_normalized(1.0));
+    render(&mut *device, 1.0, &[]);
+    assert_eq!(telemetry.value(TELEMETRY_VOICES), 1.0);
+}
+
+#[test]
 fn drawn_response_follows_cutoff_and_resonance() {
     let settings = |cutoff: f32, resonance: f32| {
         Settings::from_normalized(|id| {

@@ -1072,6 +1072,13 @@ impl Mini {
             }
             self.held_count = 0;
         }
+        // Voices beyond a lowered limit release; one fading for a steal
+        // drops its note when the fade ends.
+        for voice in &mut self.voices[settings.voices..] {
+            voice.held = false;
+            voice.sustained = false;
+            voice.release();
+        }
         if settings.filter_model != self.settings.filter_model {
             for voice in &mut self.voices {
                 voice.filter.reset();
@@ -1429,6 +1436,10 @@ impl Mini {
                 voice.fade = 1.0;
                 voice.amp.reset();
                 voice.filter_envelope.reset();
+                if index >= self.settings.voices {
+                    // Polyphony was lowered during the fade: the note is dropped.
+                    continue;
+                }
                 self.start(index, pending.note, pending.glide_from);
                 if !pending.held {
                     // Released during the fade: the same pedal rules as a sounding note.

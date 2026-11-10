@@ -235,6 +235,9 @@ pub struct Oscillator {
     tolerance: f32,
     random: Random,
     corrector: Corrector,
+    /// Pulse edge (phase) at the previous sample, so a moving width's
+    /// crossings are corrected too; `None` after another waveform.
+    last_edge: Option<f32>,
 }
 
 impl Oscillator {
@@ -253,6 +256,7 @@ impl Oscillator {
             tolerance: 0.0,
             random: Random::new(seed),
             corrector: Corrector::default(),
+            last_edge: None,
         };
         oscillator.reset();
         oscillator
@@ -278,6 +282,7 @@ impl Oscillator {
         self.level_step = 0.0;
         self.drift.reset();
         self.corrector.reset();
+        self.last_edge = None;
     }
 
     pub fn set_model(&mut self, model: OscillatorModel) {
@@ -382,9 +387,12 @@ impl Oscillator {
         at_sample: f32,
         increment: f32,
     ) {
+        if waveform == Waveform::Pulse {
+            self.correct_pulse(width, from, to, at_sample, increment);
+            return;
+        }
         let edge = match waveform {
-            Waveform::Saw => None,
-            Waveform::Pulse => Some(self.phase_at(width)),
+            Waveform::Saw | Waveform::Pulse => None,
             Waveform::Triangle | Waveform::Sine => Some(self.phase_at(0.5)),
         };
         for point in [Some(1.0), edge, edge.map(|e| e + 1.0)]
@@ -403,8 +411,6 @@ impl Oscillator {
             );
             let right = self.shape(waveform, wrapped + 1e-6, width);
             let (jump, kink) = match waveform {
-                // The edge is exact; the shape evaluated beside it is not.
-                Waveform::Pulse => (if wrapped == 0.0 { 2.0 } else { -2.0 }, 0.0),
                 Waveform::Saw => (-2.0 * self.level, right.1 - left.1),
                 _ => (0.0, right.1 - left.1),
             };
@@ -413,6 +419,32 @@ impl Oscillator {
             }
             if kink != 0.0 {
                 self.corrector.ramp(before, kink * increment);
+            }
+        }
+    }
+
+    /// Pulse steps between `from` and `to`: the reset rises, and the
+    /// comparator flips where the phase and the edge, which moves linearly
+    /// over the span when the width is modulated, pass each other in either
+    /// direction.
+    #[inline]
+    fn correct_pulse(&mut self, width: f32, from: f32, to: f32, at_sample: f32, increment: f32) {
+        let edge = self.phase_at(width);
+        let edge_from = self.last_edge.unwrap_or(edge);
+        let mut step = |point: f32, jump: f32| {
+            let before = ((at_sample - point) / increment).clamp(0.0, 1.0);
+            self.corrector.step(before, jump);
+        };
+        if from < 1.0 && 1.0 <= to {
+            step(1.0, 2.0);
+        }
+        for cycle in [0.0, 1.0] {
+            // Phase minus edge at both ends of the span.
+            let start = from - (edge_from + cycle);
+            let end = to - (edge + cycle);
+            if (start < 0.0) != (end < 0.0) {
+                let point = from + (to - from) * start / (start - end);
+                step(point, if end >= 0.0 { -2.0 } else { 2.0 });
             }
         }
     }
@@ -456,6 +488,7 @@ impl Oscillator {
             }
             self.phase = end % 1.0;
         }
+        self.last_edge = (waveform == Waveform::Pulse).then(|| self.phase_at(width));
         let naive = self.shape(waveform, self.phase, width).0;
         (self.corrector.push(naive), wrapped)
     }
@@ -569,6 +602,30 @@ mod tests {
                 );
                 assert!(mean.abs() < 0.08, "{model:?} {waveform:?} mean {mean}");
             }
+        }
+    }
+
+    #[test]
+    fn modulated_pulse_width_edges_are_band_limited() {
+        // A low note with fast, deep PWM: the edge sweeps past a slow phase,
+        // so most comparator flips come from the moving width.
+        for model in [OscillatorModel::Vco, OscillatorModel::Dco] {
+            let mut oscillator = Oscillator::new(5);
+            oscillator.set_model(model);
+            oscillator.prepare(RATE, RATE);
+            oscillator.set_frequency(16.35, 1);
+            let mut previous = 0.0_f32;
+            let mut largest = 0.0_f32;
+            for frame in 0..RATE as usize {
+                let lfo = (frame as f32 * 20.0 / RATE).fract();
+                let width = 0.05 + 0.9 * (1.0 - (2.0 * lfo - 1.0).abs());
+                let (sample, _) = oscillator.process(Waveform::Pulse, width, None);
+                largest = largest.max((sample - previous).abs());
+                previous = sample;
+            }
+            // A corrected step of 2 spreads over four samples, at most 4/6
+            // of it in one; an uncorrected one lands whole.
+            assert!(largest < 1.5, "{model:?}: {largest}");
         }
     }
 
