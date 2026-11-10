@@ -126,14 +126,14 @@ fn r1_filter_shapes_audio_loads_presets_and_automates_from_its_panel() {
         &mut app,
         "set_device_parameters",
         json!({"session_id":id,"expected_revision":revision,"track_id":track,"insert_id":insert,
-            "parameters":[{"parameter":"cutoff","value":"200 Hz"},{"parameter":"model","value":"sp diode"}]}),
+            "parameters":[{"parameter":"cutoff","value":"200 Hz"},{"parameter":"model","value":"diode pair"}]}),
     );
     let stored = &set["tool_result"]["result"]["parameters"];
     assert!(
         (stored[0]["value"].as_f64().unwrap() - 200.0).abs() < 0.5,
         "{set}"
     );
-    assert_eq!(stored[1]["value"], "SP Diode");
+    assert_eq!(stored[1]["value"], "Diode Pair");
     let filtered = high_band_db(&mut app);
     assert!(
         filtered < darker - 12.0,
@@ -178,7 +178,7 @@ fn r1_filter_shapes_audio_loads_presets_and_automates_from_its_panel() {
     assert!(
         std::fs::read_to_string(&saved)
             .unwrap()
-            .contains("\"M Ladder\"")
+            .contains("\"Transistor Ladder\"")
     );
 
     // The panel: right-click the Cutoff knob and choose Automate.

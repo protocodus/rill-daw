@@ -123,7 +123,10 @@ fn filter_hides_controls_that_do_not_apply() {
         (layout.options)(filter::TYPE, &sallen_key).unwrap().len(),
         2
     );
-    let pole_mix = model(3.0);
-    assert!((layout.visible)(filter::SLOPE, &pole_mix));
-    assert_eq!((layout.options)(filter::TYPE, &pole_mix).unwrap().len(), 4);
+    let ota_cascade = model(3.0);
+    assert!((layout.visible)(filter::SLOPE, &ota_cascade));
+    assert_eq!(
+        (layout.options)(filter::TYPE, &ota_cascade).unwrap().len(),
+        4
+    );
 }

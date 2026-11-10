@@ -205,7 +205,7 @@ fn dry_path_is_aligned_with_the_reported_latency() {
 
 #[test]
 fn every_model_low_passes_high_frequencies() {
-    // Clean, M, K, X, V, SP and State Variable.
+    // Every model up to State Variable.
     for model in [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0] {
         let values = [(filter::MODEL, model), (filter::CUTOFF, 500.0)];
         let low = measured_gain_db(&values, 100.0, 48_000.0);
@@ -216,7 +216,7 @@ fn every_model_low_passes_high_frequencies() {
 
 #[test]
 fn resonant_models_self_oscillate_and_stay_bounded() {
-    // M, K, X and SP.
+    // Ladder, Sallen-Key, OTA Cascade and Diode Pair.
     for model in [1.0, 2.0, 3.0, 5.0] {
         let peak = ring_out(&[
             (filter::MODEL, model),

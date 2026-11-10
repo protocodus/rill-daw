@@ -33,14 +33,14 @@ pub const TELEMETRY_CUTOFF_LEFT: usize = 0;
 pub const TELEMETRY_CUTOFF_RIGHT: usize = 1;
 pub const TELEMETRY_LFO_PHASE: usize = 2;
 
-/// Circuit-modelled families carry a letter instead of a manufacturer's name.
+/// Named after the circuit technology, never a manufacturer.
 pub const MODELS: &[&str] = &[
     "Clean",
-    "M Ladder",
-    "K Sallen-Key",
-    "X Pole-Mix",
-    "V Digital",
-    "SP Diode",
+    "Transistor Ladder",
+    "Sallen-Key",
+    "OTA Cascade",
+    "Digital Multimode",
+    "Diode Pair",
     "State Variable",
     "Comb",
     "Vowel",
@@ -288,15 +288,15 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Model {
     Clean,
-    /// M: transistor ladder.
+    /// Transistor ladder.
     Ladder,
-    /// K: Sallen-Key with clipped positive feedback.
+    /// Sallen-Key with clipped positive feedback.
     SallenKey,
-    /// X: OTA four-pole cascade, multimode by mixing the pole outputs.
-    PoleMix,
-    /// V: digital multimode, resonance on every stage, saturation between.
+    /// OTA four-pole cascade, multimode by mixing the pole outputs.
+    OtaCascade,
+    /// Digital multimode: resonance on every stage, saturation between.
     Digital,
-    /// SP: diode-clipped two-pole multimode.
+    /// Two-pole multimode with a diode-pair clipped resonance path.
     Diode,
     StateVariable,
     Comb,
@@ -348,7 +348,7 @@ impl Settings {
         let model = match index(MODEL) {
             1 => Model::Ladder,
             2 => Model::SallenKey,
-            3 => Model::PoleMix,
+            3 => Model::OtaCascade,
             4 => Model::Digital,
             5 => Model::Diode,
             6 => Model::StateVariable,
@@ -395,7 +395,7 @@ pub fn applies(id: u32, settings: &Settings) -> bool {
         TYPE => !type_options(settings.model).is_empty(),
         SLOPE => matches!(
             settings.model,
-            Model::Clean | Model::PoleMix | Model::Digital
+            Model::Clean | Model::OtaCascade | Model::Digital
         ),
         MORPH => matches!(
             settings.model,
@@ -409,7 +409,7 @@ pub fn applies(id: u32, settings: &Settings) -> bool {
 /// Type options that a model offers, for the panel's selector.
 pub fn type_options(model: Model) -> &'static [&'static str] {
     match model {
-        Model::Clean | Model::PoleMix | Model::Digital => TYPES,
+        Model::Clean | Model::OtaCascade | Model::Digital => TYPES,
         Model::SallenKey => &TYPES[..2],
         Model::Diode => &TYPES[..3],
         _ => &[],
@@ -451,8 +451,8 @@ fn pole_mix(filter_type: FilterType, steep: bool) -> [f32; 5] {
 }
 
 /// The low-pass loses bass as resonance rises; this restores half of it in
-/// dB, as the M ladder does.
-fn pole_mix_gain(filter_type: FilterType, k: f32) -> f32 {
+/// dB, as the transistor ladder does.
+fn ota_gain(filter_type: FilterType, k: f32) -> f32 {
     if filter_type == FilterType::LowPass {
         (1.0 + k).sqrt()
     } else {
@@ -527,7 +527,7 @@ fn soft_drive(input: f32, drive_db: f32) -> f32 {
 fn drive_gain(model: Model, drive_db: f32) -> f32 {
     let gain = db_to_gain(drive_db);
     match model {
-        Model::Ladder | Model::SallenKey | Model::PoleMix | Model::Diode => gain.sqrt(),
+        Model::Ladder | Model::SallenKey | Model::OtaCascade | Model::Diode => gain.sqrt(),
         _ => 1.0 + drive_db / 24.0 * (gain.sqrt() - 1.0),
     }
 }
@@ -592,7 +592,7 @@ impl Channel {
     fn process(&mut self, input: f32, s: &Settings, state: &Frame, sample_rate: f32) -> f32 {
         let cutoff = state.cutoff;
         let wet = match s.model {
-            Model::Ladder | Model::SallenKey | Model::PoleMix | Model::Diode => {
+            Model::Ladder | Model::SallenKey | Model::OtaCascade | Model::Diode => {
                 let gain = db_to_gain(s.drive_db);
                 let g = prewarp(cutoff, 2.0 * sample_rate);
                 let upsampled = self.oversampler.upsample(input * gain);
@@ -601,7 +601,7 @@ impl Channel {
                         let k = ladder_k(state.resonance);
                         self.ladder.process(x, g, k) * (1.0 + k).sqrt()
                     }
-                    (Model::PoleMix, _) => {
+                    (Model::OtaCascade, _) => {
                         let k = ladder_k(state.resonance);
                         let taps = self.ladder.process_taps(x, g, k, f32::tanh);
                         let mixed: f32 = pole_mix(s.filter_type, s.steep)
@@ -609,7 +609,7 @@ impl Channel {
                             .zip(taps)
                             .map(|(weight, tap)| weight * tap)
                             .sum();
-                        mixed * pole_mix_gain(s.filter_type, k)
+                        mixed * ota_gain(s.filter_type, k)
                     }
                     (Model::Diode, _) => {
                         let k = diode_damping(state.resonance);
@@ -975,7 +975,7 @@ pub fn response_db(
                 };
                 numerator / denominator
             }
-            Model::PoleMix => {
+            Model::OtaCascade => {
                 let x = analog(2.0 * sample_rate, cutoff);
                 let k = ladder_k(s.resonance);
                 let t = Complex::ONE + x;
@@ -987,7 +987,7 @@ pub fn response_db(
                         sum + power.scale(f64::from(*weight))
                     });
                 (numerator / (powers[0] + Complex::real(f64::from(k))))
-                    .scale(f64::from(pole_mix_gain(s.filter_type, k)))
+                    .scale(f64::from(ota_gain(s.filter_type, k)))
             }
             Model::Digital => {
                 let x = analog(sample_rate, cutoff);
