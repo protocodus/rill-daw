@@ -114,7 +114,7 @@ fn exposed_piano_tools_preserve_mouse_and_key_access_and_wrap_within_the_editor(
                 "Cursor",
                 "Generate…",
                 "Notes",
-                "Snap 1/16",
+                "Snap grid",
                 "Length last",
                 "Key C · Natural minor",
                 "Tool help",

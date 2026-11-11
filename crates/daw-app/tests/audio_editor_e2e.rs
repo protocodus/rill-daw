@@ -44,6 +44,7 @@ fn open(length: f64, drums: bool) -> Harness {
     let project_path = app.directory.path().join("audio.daw.json");
     project.save(&project_path).unwrap();
     app.command(json!({"command":"open","path":project_path}));
+    app.sixteenth_snap();
     app.click("Audio gestures");
     app.click("Window");
     app.click("Clip Editor");

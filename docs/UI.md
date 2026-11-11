@@ -316,7 +316,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Track color | `color_edit`, `color_strip_at` |
 | Track header sections | `TrackHeaderLayout`, `TrackHeaderIdentity`, `paint_track_header_identity`, `track_header_link_at`, `track_header_details_at`, `track_mix_controls_at`, `TrackMixResponse` |
 | Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `editor_tools_with_context`, `editor_tool_shortcuts`, `timeline_zoom_controls`, `timeline_fit_button`, `paint_timeline_ruler`, `paint_timeline_cursor` |
-| Snap step shared by every timeline | `snap_choice`, `snap_label` (Off, 1 bar, 1/4 … 1/32; editor-specific targets below a separator) |
+| Snap step shared by every timeline | `snap_choice`, `snap_label` (Grid, Off, 1 bar, 1/4 … 1/32; editor-specific targets below a separator). **Grid** (`SNAP_GRID`, the default) follows the lines drawn at the current zoom; resolve it with `snap_step(snap, pixels_per_beat, beats_per_bar)`. `grid_step` gives that zoom's line spacing: 1/32 to 1/4 notes, then whole bars, at least 10 points apart (1/16 at the default arranger and piano-roll zooms) |
 | Piano keys, notes, and velocity | `PianoRows`, `piano_key` (keyboard: `raised` white keys, inset dark black keys, lines only at B/C and E/F), `piano_velocity_marker`, `piano_velocity_sibling_marker` (hollow chord sibling), `paint_velocity_lane`; `Palette::piano_row`, `piano_note_fill`, `piano_note_stroke` |
 | Beat grid behind piano roll, audio waveform and curves | `paint_beat_grid(painter, rect, view, snap, beats_per_bar)`, `beat_grid_level`: bar `grid_bar`, beat halfway to it, snap subdivision `grid_minor`; one physical pixel on pixel centers |
 | MIDI drawing duration and boundary | `DrawNoteLength`, `drawing_note_length` (current-value chooser **Length 1/16** beside Snap), `paint_clip_end_label` |
@@ -735,7 +735,7 @@ names. Assignment and that rename share one Undo step. Closing and reopening a
 chooser does not confer naming permission: existing, loaded and user-edited
 names remain intact, including an intentionally named **New instrument**.
 
-Arrangement **Add pattern** creates a four-beat pattern at the cursor on the selected MIDI track, or creates a MIDI track when necessary. Empty MIDI lanes show **Double-click to add a pattern** and expose the same action in their context menu. An unassigned MIDI clip's Clip Editor header offers **Choose instrument…** without changing its notes. Assigned tracks retain an **Instrument** action in the same place, opening the existing overview. Mouse close and Escape restore the same clip, note selection, and viewport.
+Arrangement **Add pattern** creates a pattern as long as the last selected clip at the cursor on the selected MIDI track, or creates a MIDI track when necessary. Empty MIDI lanes show **Double-click to add a pattern** and expose the same action in their context menu. An unassigned MIDI clip's Clip Editor header offers **Choose instrument…** without changing its notes. Assigned tracks retain an **Instrument** action in the same place, opening the existing overview. Mouse close and Escape restore the same clip, note selection, and viewport.
 
 New tracks start neutral gray, including menu additions, imports, instruments and sends. Users choose identity colors; existing colors remain unchanged, and Undo/Redo and saved projects retain each assignment.
 
@@ -1196,10 +1196,13 @@ Shapes belong to the segment leaving that point, with older sessions inheriting
 the lane's default interpolation. The on-demand Automation editor offers these
 same point shape choices.
 
-Right-click empty lane space for **Create automation clip**, deriving a
-four-beat pattern from the underlying arranger curve at that position. Edit its
-points directly in its body. Drag its header to move, or either header edge to
-trim; Shift bypasses snap. The header menu offers Copy pattern, Paste automation
+Right-click empty lane space for **Create automation clip**, or double-click it
+with Select, to derive a pattern from the underlying arranger curve at that
+position, as long as the last selected clip. Patterns behave like audio and MIDI
+clips: a click anywhere selects, Select drags move it or trim either edge,
+Stretch rescales its points in time (a stretched ghost becomes independent), and
+Cut, Duplicate, Ghost copy, Erase and Cursor act on it. Only **Pencil** adds and
+edits points, in patterns and on the lane itself. Shift bypasses snap. The menu offers Copy pattern, Paste automation
 clip (on lane space), Duplicate pattern, Ghost pattern, Make pattern independent,
 and Delete pattern. Independent copies can be derived without changing their
 source; ghost patterns share point edits while retaining their placement and

@@ -2,7 +2,7 @@
 //! them only inside their own bounds. All canvas controls live in daw-ui.
 use crate::app::DawApp;
 use daw_core::{AutomationClip, AutomationLane, Interpolation, MAX_BEAT};
-use daw_ui::{AutomationCanvas, CurveEdit, CurvePoint, TimelineViewport};
+use daw_ui::{AutomationCanvas, AutomationCanvasResponse, CurveEdit, CurvePoint, TimelineViewport};
 use eframe::egui::{self, Pos2, Rect, Vec2};
 
 pub(crate) enum AutomationEdit {
@@ -10,6 +10,8 @@ pub(crate) enum AutomationEdit {
     Curve(Option<u64>, CurveEdit),
     Create(f64, f64),
     Bounds(u64, f64, f64, f64),
+    Stretch(AutomationClip, f64),
+    Split(u64, f64),
     Copy(u64, f64, bool),
     Paste(AutomationClip, f64),
     Delete(u64),
@@ -21,7 +23,11 @@ pub(crate) struct LaneView {
     pub track: u64,
     pub rect: Rect,
     pub viewport: TimelineViewport,
+    /// Resolved snap step in beats; zero is off.
     pub snap: f64,
+    pub tool: daw_ui::EditorTool,
+    /// Length for a pattern from the context menu: the last selected clip's.
+    pub new_length: f64,
     pub color: egui::Color32,
     pub navigating: bool,
     pub pointer_blocked: bool,
@@ -30,6 +36,10 @@ pub(crate) struct LaneView {
 pub(crate) struct LaneResponse {
     pub edits: Vec<AutomationEdit>,
     pub interacted: bool,
+    /// A Cursor-tool click on a pattern places the playhead here.
+    pub cursor: Option<f64>,
+    /// A plain click on the lane background; two make a new pattern.
+    pub background_click: Option<Pos2>,
     pub diagnostic: serde_json::Value,
 }
 
@@ -86,9 +96,14 @@ pub(crate) fn automation_lane(
     let mut result = LaneResponse {
         edits: Vec::new(),
         interacted: false,
+        cursor: None,
+        background_click: None,
         diagnostic: serde_json::Value::Null,
     };
     let id = egui::Id::new(("arranger_automation", view.track));
+    // Like MIDI and audio clips, patterns are selected, moved and trimmed with
+    // the other tools; only Pencil draws points.
+    let drawing = view.tool == daw_ui::EditorTool::Pencil && !view.navigating;
     let clip_rect = |clip: &AutomationClip| {
         Rect::from_min_max(
             Pos2::new(view.viewport.x_at(view.rect, clip.start), view.rect.top()),
@@ -115,7 +130,7 @@ pub(crate) fn automation_lane(
             viewport: view.viewport,
             snap: view.snap,
             color: view.color,
-            editable: !view.navigating && !over_clip,
+            editable: drawing && !over_clip,
         },
         |beat| lane.arrangement_value_at(beat).unwrap_or(0.5),
     );
@@ -123,7 +138,22 @@ pub(crate) fn automation_lane(
         result.edits.push(AutomationEdit::Curve(None, edit));
         *selected = None;
     }
-    if response.response.clicked() || response.response.dragged() {
+    // Without Pencil the lane background still deselects, opens its menu and
+    // creates a pattern on double-click, like an empty MIDI lane.
+    let background = if drawing {
+        response.response.clone()
+    } else {
+        ui.interact(
+            view.rect,
+            id.with("background"),
+            if view.navigating {
+                egui::Sense::hover()
+            } else {
+                egui::Sense::click()
+            },
+        )
+    };
+    if background.clicked() || response.response.dragged() {
         result.interacted = true;
         *selected = None;
     }
@@ -135,6 +165,13 @@ pub(crate) fn automation_lane(
             beat
         })
         .clamp(0.0, MAX_BEAT)
+    };
+    if !drawing && background.clicked() {
+        result.background_click = background.interact_pointer_pos();
+    }
+    let response = AutomationCanvasResponse {
+        response: background,
+        ..response
     };
     if response.response.secondary_clicked()
         && let Some(point) = response.response.interact_pointer_pos()
@@ -154,12 +191,13 @@ pub(crate) fn automation_lane(
                     .data(|data| data.get_temp::<f64>(id.with("menu_beat")))
                     .unwrap_or(view.viewport.start_beat);
                 if daw_ui::automation_button(ui, "Create automation clip")
-                    .on_hover_text("Derive a four-beat pattern from the arrangement curve here")
+                    .on_hover_text("Derive a pattern from the arrangement curve here, as long as the last selected clip")
                     .clicked()
                 {
-                    result
-                        .edits
-                        .push(AutomationEdit::Create(beat, 4.0_f64.min(MAX_BEAT - beat)));
+                    result.edits.push(AutomationEdit::Create(
+                        beat,
+                        view.new_length.min(MAX_BEAT - beat),
+                    ));
                     ui.close();
                 }
                 if daw_ui::automation_button(ui, "Clear arranger points")
@@ -207,15 +245,51 @@ pub(crate) fn automation_lane(
             },
             !view.navigating,
         );
+        let header = header.on_hover_cursor(match view.tool {
+            daw_ui::EditorTool::Select => egui::CursorIcon::Grab,
+            tool => tool.cursor_icon(),
+        });
         if header.clicked() || header.drag_started() {
             *selected = Some(clip.id);
             result.interacted = true;
         }
-        if header.drag_started() {
+        let pointer_beat = |position: Pos2| view.viewport.beat_at(view.rect, position.x);
+        if header.clicked()
+            && let Some(position) = header.interact_pointer_pos()
+        {
+            match view.tool {
+                daw_ui::EditorTool::Cut => {
+                    let beat = snap(pointer_beat(position));
+                    if beat > clip.start && beat < clip.end() {
+                        result.edits.push(AutomationEdit::Split(clip.id, beat));
+                    }
+                }
+                daw_ui::EditorTool::Duplicate => {
+                    result
+                        .edits
+                        .push(AutomationEdit::Copy(clip.id, clip.end(), false));
+                }
+                daw_ui::EditorTool::Ghost => {
+                    result
+                        .edits
+                        .push(AutomationEdit::Copy(clip.id, clip.end(), true));
+                }
+                daw_ui::EditorTool::Erase => result.edits.push(AutomationEdit::Delete(clip.id)),
+                daw_ui::EditorTool::Cursor => result.cursor = Some(snap(pointer_beat(position))),
+                _ => {}
+            }
+        }
+        let dragging = matches!(
+            view.tool,
+            daw_ui::EditorTool::Select | daw_ui::EditorTool::Stretch
+        );
+        if dragging && header.drag_started() {
             let position = ui
                 .input(|input| input.pointer.press_origin())
                 .unwrap_or(rect.center());
-            let edge = if position.x < rect.left() + 8.0 {
+            let edge = if view.tool == daw_ui::EditorTool::Stretch {
+                2
+            } else if position.x < rect.left() + 8.0 {
                 -1
             } else if position.x > rect.right() - 8.0 {
                 1
@@ -232,7 +306,8 @@ pub(crate) fn automation_lane(
                 )
             });
         }
-        if header.dragged()
+        if dragging
+            && header.dragged()
             && let Some(drag) = ui
                 .ctx()
                 .data(|data| data.get_temp::<PatternDrag>(clip_id.with("drag")))
@@ -240,35 +315,45 @@ pub(crate) fn automation_lane(
             let delta = header.total_drag_delta().unwrap_or_default().x as f64
                 / view.viewport.pixels_per_beat as f64;
             let original = drag.original;
-            let (start, length, offset) = match drag.edge {
-                -1 => {
-                    let start = snap(original.start + delta).clamp(
-                        (original.start - original.offset).max(0.0),
-                        original.end() - original.length.min(0.0625),
-                    );
-                    (
-                        start,
-                        original.end() - start,
-                        original.offset + start - original.start,
-                    )
+            if drag.edge == 2 {
+                // The same 4x range as stretching MIDI and audio clips.
+                let length = (snap(original.end() + delta) - original.start)
+                    .clamp(original.length / 4.0, original.length * 4.0)
+                    .min(MAX_BEAT - original.start);
+                if length != clip.length {
+                    result.edits.push(AutomationEdit::Stretch(original, length));
                 }
-                1 => (
-                    original.start,
-                    (snap(original.end() + delta) - original.start)
-                        .max(0.0625)
-                        .min(MAX_BEAT - original.start),
-                    original.offset,
-                ),
-                _ => (
-                    snap(original.start + delta).min(MAX_BEAT - original.length),
-                    original.length,
-                    original.offset,
-                ),
-            };
-            if (start, length, offset) != (clip.start, clip.length, clip.offset) {
-                result
-                    .edits
-                    .push(AutomationEdit::Bounds(clip.id, start, length, offset));
+            } else {
+                let (start, length, offset) = match drag.edge {
+                    -1 => {
+                        let start = snap(original.start + delta).clamp(
+                            (original.start - original.offset).max(0.0),
+                            original.end() - original.length.min(0.0625),
+                        );
+                        (
+                            start,
+                            original.end() - start,
+                            original.offset + start - original.start,
+                        )
+                    }
+                    1 => (
+                        original.start,
+                        (snap(original.end() + delta) - original.start)
+                            .max(0.0625)
+                            .min(MAX_BEAT - original.start),
+                        original.offset,
+                    ),
+                    _ => (
+                        snap(original.start + delta).min(MAX_BEAT - original.length),
+                        original.length,
+                        original.offset,
+                    ),
+                };
+                if (start, length, offset) != (clip.start, clip.length, clip.offset) {
+                    result
+                        .edits
+                        .push(AutomationEdit::Bounds(clip.id, start, length, offset));
+                }
             }
         }
         if !view.navigating {
@@ -324,7 +409,7 @@ pub(crate) fn automation_lane(
                 },
                 snap: view.snap,
                 color: view.color,
-                editable: !view.navigating,
+                editable: drawing,
             },
             |beat| clip.curve_value_at(beat).unwrap_or(0.5),
         );
@@ -347,6 +432,7 @@ pub(crate) fn automation_lane(
                     _,
                     CurveEdit::Add { .. } | CurveEdit::Move { .. } | CurveEdit::Bend { .. }
                 ) | AutomationEdit::Bounds(..)
+                    | AutomationEdit::Stretch(..)
             )
         });
         result.interacted = result
@@ -428,6 +514,15 @@ impl DawApp {
                     self.selected_track = Some(track);
                     self.selected_clip = Some(id);
                 }),
+            AutomationEdit::Stretch(original, length) => self
+                .project
+                .stretch_automation_clip(track, &original, length),
+            AutomationEdit::Split(id, beat) => {
+                self.edit_label = Some("Split automation clip".into());
+                self.project
+                    .split_automation_clip(track, id, beat)
+                    .map(|_| ())
+            }
             AutomationEdit::Bounds(id, start, length, offset) => self
                 .project
                 .set_automation_clip_bounds(track, id, start, length, offset),

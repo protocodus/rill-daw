@@ -743,7 +743,7 @@ impl DawApp {
         };
         self.arranger_start_group_drag(handle, false);
         let delta = daw_ui::NudgeUnit::load(ctx).beats(
-            self.snap,
+            self.snap_step(self.zoom),
             self.project.tempo,
             self.settings.sample_rate,
         ) * f64::from(direction);

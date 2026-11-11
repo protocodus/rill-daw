@@ -733,7 +733,7 @@ impl DawApp {
                 .add(
                     daw_ui::musical_position_field(&mut beat, &meter, "Position ")
                         .range(0.0..=daw_core::MAX_BEAT)
-                        .speed(self.snap.max(0.01)),
+                        .speed(self.snap_step(state.viewport.pixels_per_beat).max(0.01)),
                 )
                 .on_hover_text("Bar.beat.sixteenth · drag or double-click to type, e.g. 12.1");
             point_beat_rect = Some(beat_response.rect);

@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use std::path::PathBuf;
 
 fn fixture(app: &mut Harness, off_grid: bool) -> PathBuf {
+    app.sixteenth_snap();
     let source = app.directory.path().join("precise-trim.wav");
     AudioData {
         sample_rate: 48_000,

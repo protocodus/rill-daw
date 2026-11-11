@@ -617,8 +617,13 @@ impl DawApp {
         let Some((track, clip)) = self.selected_track.zip(self.selected().cloned()) else {
             return;
         };
+        let pixels_per_beat = ctx
+            .data(|data| data.get_temp::<AudioView>(egui::Id::new("audio_editor_state")))
+            .unwrap_or_default()
+            .view
+            .pixels_per_beat;
         let step = daw_ui::NudgeUnit::load(ctx).beats(
-            self.snap,
+            self.snap_step(pixels_per_beat),
             self.project.tempo,
             self.settings.sample_rate,
         );
@@ -999,9 +1004,10 @@ impl DawApp {
                         .on_hover_text("Move the clip end to the nearest grid division")
                         .clicked()
                     {
+                        let pixels_per_beat = state.view.pixels_per_beat;
                         let end = self
-                            .snapped(clip.end())
-                            .max(clip.start + self.snap.max(0.001));
+                            .snapped_at(clip.end(), pixels_per_beat)
+                            .max(clip.start + self.snap_step(pixels_per_beat).max(0.001));
                         edit = Some(Edit::Trim(clip.start, end - clip.start));
                         ui.close();
                     }
@@ -1033,7 +1039,8 @@ impl DawApp {
                         state.grid_slice_open = true;
                         state.transients_open = false;
                         state.quantize_open = false;
-                        state.slice_grid = if self.snap > 0.0 { self.snap } else { 0.25 };
+                        let step = self.snap_step(state.view.pixels_per_beat);
+                        state.slice_grid = if step > 0.0 { step } else { 0.25 };
                         ui.close();
                     }
                     if ui
@@ -1402,7 +1409,8 @@ impl DawApp {
             state.quantize_open = true;
             state.transients_open = false;
             state.grid_slice_open = false;
-            state.quantize.grid = if self.snap > 0.0 { self.snap } else { 1.0 };
+            let step = self.snap_step(state.view.pixels_per_beat);
+            state.quantize.grid = if step > 0.0 { step } else { 1.0 };
             state.quantize.max_move = state.quantize.grid * 0.5;
         }
         let meter = self.project.meter_map();
@@ -1959,8 +1967,8 @@ impl DawApp {
                 targets.extend(marker_source.iter().map(|beat| marker_start + beat));
             }
         }
-        let grid = self.snap;
         let pixels_per_beat = state.view.pixels_per_beat;
+        let grid = self.snap_step(pixels_per_beat);
         let tempo = self.project.tempo;
         let source_beats = self.audio_source_beats(&clip);
         let snap = |raw| {
@@ -2624,7 +2632,7 @@ impl DawApp {
                     color: None,
                 })
                 .collect();
-            let grid = self.snap;
+            let grid = self.snap_step(state.view.pixels_per_beat);
             let snap = |beat: f64, bypass: bool| {
                 if bypass {
                     beat
@@ -2687,8 +2695,11 @@ impl DawApp {
                 && let Some(position) = response.lane.interact_pointer_pos()
             {
                 self.seek(
-                    self.snapped(state.view.beat_at(loop_lane, position.x))
-                        .max(0.0),
+                    self.snapped_at(
+                        state.view.beat_at(loop_lane, position.x),
+                        state.view.pixels_per_beat,
+                    )
+                    .max(0.0),
                 );
             }
             warp_flags = response

@@ -46,6 +46,7 @@ fn fixture() -> (Harness, u64, u64, u64, Vec<u8>) {
     let path = app.directory.path().join("cues.rill");
     project.save(&path).unwrap();
     app.command(json!({"command":"open","path":path}));
+    app.sixteenth_snap();
     app.click("First cue");
     app.click("Window");
     app.click("Clip Editor");

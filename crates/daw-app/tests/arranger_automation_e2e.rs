@@ -75,6 +75,8 @@ fn pattern_copy_paste_derivation_and_both_trim_edges_preserve_source_points() {
     click(&mut app, pattern_header(&ghost, 1), "secondary");
     let independent = app.click("Make pattern independent");
     assert!(lane(&independent)["clips"][1]["link_group"].is_null());
+    // Points are drawn with Pencil, as notes are in the piano roll.
+    app.click("Pencil");
     let plot = &diagram(&independent)["clips"][1]["plot"];
     let x = (plot["min"][0].as_f64().unwrap() + plot["max"][0].as_f64().unwrap()) / 2.0;
     let y = plot["max"][1].as_f64().unwrap()
@@ -110,6 +112,7 @@ fn pattern_copy_paste_derivation_and_both_trim_edges_preserve_source_points() {
     let copied = app.click("Duplicate pattern");
     let duplicate = lane(&copied)["clips"][3]["id"].as_u64().unwrap();
     assert_ne!(duplicate, original);
+    app.click("Select");
     let header = pattern_header(&copied, 2);
     let ppb = copied["timeline"]["pixels_per_beat"].as_f64().unwrap();
     let moved=app.command(json!({"command":"pointer","phase":"drag","x":header.0,"y":header.1,"to_x":header.0+3.0*ppb,"to_y":header.1}));
@@ -191,6 +194,12 @@ fn points_patterns_ghosts_placement_precedence_undo_and_archive_work_in_arranger
         vec![channel, automation, other]
     );
     let at = point(&before, 1.0, 0.6);
+    let selecting = click(&mut app, at, "primary");
+    assert_eq!(
+        selecting["project"], before["project"],
+        "only Pencil draws arranger points"
+    );
+    app.click("Pencil");
     let added = click(&mut app, at, "primary");
     assert_eq!(lane(&added)["points"].as_array().unwrap().len(), 3);
     let undo = app.command(json!({"command":"key","key":"Z","cmd":true}));
@@ -234,8 +243,10 @@ fn points_patterns_ghosts_placement_precedence_undo_and_archive_work_in_arranger
     );
     let at = pattern_header(&copied, 1);
     let ppb = copied["timeline"]["pixels_per_beat"].as_f64().unwrap();
+    app.click("Select");
     let moved=app.command(json!({"command":"pointer","phase":"drag","x":at.0,"y":at.1,"to_x":at.0+2.0*ppb,"to_y":at.1}));
     assert_eq!(lane(&moved)["clips"][1]["start"], 8.0);
+    app.click("Pencil");
     let at = center(&diagram(&moved)["clips"][0]["points"][1]["rect"]);
     let unchanged = click(&mut app, at, "primary");
     assert_eq!(

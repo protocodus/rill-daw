@@ -959,7 +959,7 @@ impl DawApp {
                                 Some(NoteTransform::Quantize(state.quantize_settings));
                             ui.close();
                         }
-                        let grid_step = self.snap.max(0.0625);
+                        let grid_step = self.snap_step(self.note_zoom).max(0.0625);
                         let bar_step = f64::from(clip_meter.initial());
                         daw_ui::menu_button(ui, "Nudge", |ui| {
                         for (label, hint, beats) in [
@@ -1590,7 +1590,7 @@ impl DawApp {
                             * if shift {
                                 f64::from(clip_meter.initial())
                             } else {
-                                self.snap.max(0.0625)
+                                self.snap_step(self.note_zoom).max(0.0625)
                             };
                         match move_midi_notes(
                             &source_notes,
@@ -1972,7 +1972,7 @@ impl DawApp {
         let press_shift = press_modifiers.shift;
         let press_copy = press_shift || press_modifiers.ctrl || press_modifiers.command;
         let pitch_at = |pos: Pos2| rows.pitch_at(view.row_at(plot, pos.y));
-        let snap = self.snap;
+        let snap = self.snap_step(view.pixels_per_beat);
         let snap_beat = |beat: f64| {
             if snap > 0.0 {
                 (beat / snap).round() * snap
@@ -2056,7 +2056,7 @@ impl DawApp {
             }
             key_diagnostics.push(serde_json::json!({"pitch":pitch,"row":row_index,"rect":rect_json(key),"scale":scale,"chord":chord,"black":black,"selected":state.keyboard_focus && state.keyboard_pitch == Some(pitch),"row_color":row_color.to_array(),"outside_color":row_color.blend(palette(ui.ctx()).inactive_clip_tint()).to_array()}));
         }
-        daw_ui::paint_beat_grid(&row_painter, plot, view, snap, &clip_meter);
+        daw_ui::paint_beat_grid(&row_painter, plot, view, self.snap, &clip_meter);
         key_painter.vline(
             keys.right().round_to_pixel_center(ui.pixels_per_point()),
             keys.y_range(),

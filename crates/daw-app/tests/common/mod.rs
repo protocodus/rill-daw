@@ -422,6 +422,13 @@ impl Harness {
         self.command(json!({"command": "inspect"}))
     }
 
+    /// Choose a fixed 1/16 snap instead of the zoom-dependent Grid default,
+    /// for checks written in sixteenth-note steps at any zoom.
+    pub fn sixteenth_snap(&mut self) -> Value {
+        self.click("Snap grid");
+        self.click("1/16")
+    }
+
     pub fn key(&mut self, key: &str) -> Value {
         self.command(json!({"command": "key", "key": key}))
     }
