@@ -936,3 +936,114 @@ fn playing_clip_is_the_one_playback_uses_where_clips_overlap() {
     assert_eq!(automation.playing_clip(5.0).unwrap().id, late);
     assert!(automation.playing_clip(9.0).is_none());
 }
+
+#[test]
+fn a_new_pattern_captures_the_lane_curve_it_covers() {
+    let (mut project, _, track) = fixture();
+    {
+        let lane = project.automation_lane_mut(track).unwrap();
+        for (beat, value) in [(0.0, 0.1), (3.0, 0.9), (4.0, 0.3), (9.0, 0.7)] {
+            lane.upsert_point(beat, value).unwrap();
+        }
+    }
+    let arrangement = project.automation_lane(track).unwrap().clone();
+    let id = project.create_automation_clip(track, 2.0, 4.0).unwrap();
+    let clip = project.automation_clip(track, id).unwrap();
+    // Both boundaries plus the two points inside, relative to the start.
+    assert_eq!(
+        clip.points
+            .iter()
+            .map(|point| point.beat)
+            .collect::<Vec<_>>(),
+        [0.0, 1.0, 2.0, 4.0]
+    );
+    for beat in [2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 5.999] {
+        let (captured, original) = (
+            clip.value_at(beat).unwrap(),
+            arrangement.arrangement_value_at(beat).unwrap(),
+        );
+        assert!(
+            (captured - original).abs() < 1e-6,
+            "{beat}: {captured} vs {original}"
+        );
+    }
+    assert!(
+        clip.points
+            .iter()
+            .zip(&arrangement.points)
+            .all(|(new, old)| new.id != old.id)
+    );
+    project.validate().unwrap();
+
+    for (start, length) in [
+        (-1.0, 2.0),
+        (1.0, 0.0),
+        (f64::NAN, 1.0),
+        (1.0, f64::INFINITY),
+        (MAX_BEAT - 1.0, 2.0),
+    ] {
+        assert!(
+            project
+                .create_automation_clip(track, start, length)
+                .is_err(),
+            "{start} + {length}"
+        );
+    }
+    assert!(project.create_automation_clip(9_999, 0.0, 1.0).is_err());
+}
+
+#[test]
+fn pasted_patterns_are_independent_and_removal_is_by_id() {
+    let (mut project, _, track) = fixture();
+    let source = project.create_automation_clip(track, 0.0, 2.0).unwrap();
+    let ghost = project
+        .copy_automation_clip(track, source, 4.0, true)
+        .unwrap();
+    let copied = project.automation_clip(track, ghost).unwrap().clone();
+
+    let pasted = project.paste_automation_clip(track, &copied, 8.0).unwrap();
+    let pasted_clip = project.automation_clip(track, pasted).unwrap().clone();
+    assert_eq!(pasted_clip.start, 8.0);
+    assert_eq!(pasted_clip.link_group, None);
+    assert!(
+        pasted_clip
+            .points
+            .iter()
+            .zip(&copied.points)
+            .all(|(new, old)| new.id != old.id && new.value == old.value)
+    );
+    project
+        .edit_automation_pattern(track, Some(pasted), |lane| lane.upsert_point(1.0, 0.95))
+        .unwrap();
+    assert_eq!(
+        project.automation_clip(track, source).unwrap().points.len(),
+        2
+    );
+    assert_eq!(
+        project.automation_clip(track, ghost).unwrap().points.len(),
+        2
+    );
+
+    let before = project.clone();
+    assert!(project.paste_automation_clip(track, &copied, -1.0).is_err());
+    assert!(
+        project
+            .paste_automation_clip(track, &copied, MAX_BEAT - 1.0)
+            .is_err()
+    );
+    assert!(project.paste_automation_clip(9_999, &copied, 0.0).is_err());
+    assert_eq!(project, before, "Rejected pastes leave the lane untouched");
+
+    project.remove_automation_clip(track, ghost).unwrap();
+    assert!(project.automation_clip(track, ghost).is_none());
+    assert!(project.remove_automation_clip(track, ghost).is_err());
+    let remaining: Vec<_> = project
+        .automation_lane(track)
+        .unwrap()
+        .clips
+        .iter()
+        .map(|clip| clip.id)
+        .collect();
+    assert_eq!(remaining, [source, pasted]);
+    project.validate().unwrap();
+}

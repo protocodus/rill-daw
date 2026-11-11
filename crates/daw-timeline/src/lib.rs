@@ -287,4 +287,33 @@ mod tests {
             .collect();
         assert!(validate_meter_changes(&many).is_err());
     }
+
+    #[test]
+    fn every_beat_reassembles_from_its_bar_and_offset() {
+        for map in [map(), map().local(6.0), MeterMap::uniform(5)] {
+            let mut previous = 0.0;
+            for step in 0..400 {
+                let beat = f64::from(step) * 0.25;
+                let (bar, offset) = map.position(beat);
+                assert!((map.bar_start(bar) + offset - beat).abs() < 1e-9, "{beat}");
+                assert!(offset < f64::from(map.meter_at(beat)), "{beat}");
+                // The continuous bar coordinate never runs backwards.
+                let bars = map.bars(beat);
+                assert!(bars >= previous, "{beat}: {bars} < {previous}");
+                previous = bars;
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_changes_are_tolerated_for_painting() {
+        let change = |bar, beats_per_bar| MeterChange { bar, beats_per_bar };
+        let map = MeterMap::new(0, &[change(3, 0), change(2, 5), change(3, 6)]);
+        // Zero meters become 1; out-of-order and repeated bars are skipped.
+        assert_eq!(map.initial(), 1);
+        assert_eq!(map.segments().len(), 2);
+        assert_eq!(map.bar_start(3), 2.0);
+        assert_eq!(map.meter_at(2.0), 1);
+        assert_eq!(map.bar_start(10), 9.0);
+    }
 }
