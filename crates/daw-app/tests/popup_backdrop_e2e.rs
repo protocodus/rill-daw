@@ -182,7 +182,6 @@ fn utility_backdrops_preserve_context_and_clear_after_nested_navigation() {
             ("Instrument", "Instrument of Backdrop synth"),
             ("Effects", "Effects of Backdrop synth"),
             ("Routing", "Routing of Backdrop synth"),
-            ("Automation", "Add automation"),
             ("Properties", "Properties · Backdrop phrase"),
             ("Device browser", "Device browser"),
             ("Setup", "Setup"),

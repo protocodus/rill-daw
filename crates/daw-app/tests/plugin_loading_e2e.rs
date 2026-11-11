@@ -151,7 +151,7 @@ fn native_instrument_metadata_parameter_edit_export_and_recall_never_construct_a
     let baseline = export(&mut app, &baseline_path);
 
     window(&mut app, "Instrument");
-    app.click("Automate…");
+    app.click("Parameters…");
     let parameters = wait_parameters(&mut app);
     assert_eq!(parameters["native_editor"]["selected_value"], 0.5);
     let edited = common::edit_plugin_parameter_value(&mut app, &parameters, "20");

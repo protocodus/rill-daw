@@ -198,7 +198,8 @@ fn native_instrument_action_targets_its_owner_reuses_undoes_and_recalls() {
     assert_eq!(lanes(&created)[0]["name"], "Neon keys 🎹 · Filter Cutoff");
     let lane = lanes(&created)[0]["id"].clone();
     assert_eq!(created["selected_track"], lane);
-    assert_eq!(created["popups"]["automation"], true);
+    assert_eq!(created["view"], "Arrangement");
+    assert_eq!(created["popups"]["automation"], false);
     assert_eq!(created["native_editor"]["pid"], pid);
     assert_eq!(created["native_editor"]["last_touched"], 0);
 
@@ -420,7 +421,7 @@ fn native_parameter_gestures_override_owned_automation_and_preserve_it_after_sna
     menu(&mut app, "Arranger");
     app.click("Neon phrase");
     menu(&mut app, "Instrument");
-    let browser = app.click("Automate…");
+    let browser = app.click("Parameters…");
     assert_eq!(browser["native_editor"]["automation_state"], "Overridden");
     assert!(
         browser["visible_labels"]
@@ -480,7 +481,7 @@ fn delayed_browser_parameter_acknowledgement_does_not_retake_resumed_automation(
     menu(&mut app, "Arranger");
     app.click("Neon phrase");
     menu(&mut app, "Instrument");
-    app.click("Automate…");
+    app.click("Parameters…");
 
     // A delayed native worker still acknowledges the browser's already-owned
     // edit. Keep that reply pending until after the visible Resume action.
@@ -557,7 +558,7 @@ fn picking_a_native_parameter_without_changing_it_creates_one_lane_and_reuses_it
     let created = wait(&mut app, |state| lanes(state).len() == 1);
     assert_lane(lanes(&created)[0], track, None, 0.4);
     assert_eq!(created["native_editor"]["picking"], false);
-    assert_eq!(created["popups"]["automation"], true);
+    assert_eq!(created["view"], "Arrangement");
     assert!(created["native_editor"]["last_touched"].is_null());
     let lane = lanes(&created)[0]["id"].clone();
     fixture.action(&mut app, "touch 7\n");
@@ -568,7 +569,7 @@ fn picking_a_native_parameter_without_changing_it_creates_one_lane_and_reuses_it
     menu(&mut app, "Instrument");
     app.click("Pick parameter");
     fixture.action(&mut app, "touch 0\n");
-    let reused = wait(&mut app, |state| state["popups"]["automation"] == true);
+    let reused = wait(&mut app, |state| state["selected_track"] == lane);
     assert_eq!(lanes(&reused).len(), 1);
     assert_eq!(reused["selected_track"], lane);
     assert_lane(lanes(&reused)[0], track, None, 0.4);

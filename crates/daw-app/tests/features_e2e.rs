@@ -54,8 +54,8 @@ fn menu(app: &mut Harness, menu: &str, item: &str) -> Value {
 
 fn show_plugin_parameters(app: &mut Harness) {
     if !visible(&app.inspect(), "Search parameters") {
-        common::wait_visible(app, "Automate…");
-        app.click("Automate…");
+        common::wait_visible(app, "Parameters…");
+        app.click("Parameters…");
     }
     common::wait_visible(app, "Automate parameter");
 }

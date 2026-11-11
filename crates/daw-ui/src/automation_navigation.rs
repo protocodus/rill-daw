@@ -119,6 +119,7 @@ pub fn automatable_parameter_context(
     if let Some((lane, state)) = automation {
         return automation_parameter_context(ui, response, lane, state);
     }
+    crate::paint_automation_indicator(ui, response.rect, None);
     crate::hover_text(
         response.clone(),
         "Right-click to create automation for this control",
@@ -167,6 +168,8 @@ pub fn automatable_parameter_value_context_named(
     if let Some((_, state)) = automation {
         crate::paint_automation_control(ui, response, state);
         crate::hover_text(response.clone(), state.hint());
+    } else {
+        crate::paint_automation_indicator(ui, response.rect, None);
     }
     crate::hover_text(
         response.clone(),
@@ -204,6 +207,8 @@ pub fn automatable_parameter_value_button(
             .on_hover_text(format!("Edit {name} · Exact value and mouse keypad"));
         if let Some((_, state)) = automation {
             crate::paint_automation_control(ui, &response, state);
+        } else {
+            crate::paint_automation_indicator(ui, response.rect, None);
         }
         let popup = egui::Popup::menu(&response).open_memory(if response.secondary_clicked() {
             Some(egui::SetOpenCommand::Bool(true))

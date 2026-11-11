@@ -308,7 +308,7 @@ impl DawApp {
         self.instrument_autolaunch = Some(track);
     }
 
-    pub(crate) fn open_effect_automation(&mut self, track: u64, effect: u64) {
+    pub(crate) fn open_effect_parameters(&mut self, track: u64, effect: u64) {
         self.open_popup(PopupKind::Instrument);
         self.selected_track = Some(track);
         self.effect_editor_target = Some((track, effect));
@@ -680,21 +680,6 @@ impl DawApp {
         }
     }
 
-    pub(crate) fn last_touched_plugin_parameter(
-        &self,
-        track: u64,
-        effect: Option<u64>,
-    ) -> Option<u32> {
-        let target = EditorTarget { track, effect };
-        self.instrument_ui
-            .owner
-            .as_ref()
-            .filter(|(owner, plugin)| {
-                *owner == target && self.editor_plugin(target).as_ref() == Some(plugin)
-            })
-            .and(self.instrument_ui.last_touched)
-    }
-
     fn cancel_parameter_picking(&mut self) {
         self.instrument_ui.picking = false;
         if self.instrument_ui.pick_request.take().is_some()
@@ -769,7 +754,7 @@ impl DawApp {
                 daw_ui::text::truncated(
                     ui,
                     daw_ui::text::TextRole::Subtitle,
-                    format!("Automate {device_name}"),
+                    format!("{device_name} · Parameters"),
                 );
             },
         );
@@ -1333,13 +1318,7 @@ impl DawApp {
                     }
                     Instrument::Builtin { device } => {
                         let descriptor = daw_devices::descriptor(device);
-                        if self.instrument_ui.parameters_open {
-                            let name = descriptor.map_or(device.as_str(), |d| d.name);
-                            let actions = self.plugin_parameter_browser(ui, target, name);
-                            update = actions.update;
-                            automate = actions.automate;
-                            resume = actions.resume;
-                        } else if let Some(descriptor) = descriptor {
+                        if let Some(descriptor) = descriptor {
                             let user_presets = self
                                 .instrument_ui
                                 .user_presets
@@ -1456,7 +1435,14 @@ impl DawApp {
                                 }
                                 let pick_in_list = self.parameter_picker_control(ui)
                                     && self.instrument_ui.session.is_none();
-                                if daw_ui::button(ui, "Automate…").clicked() || pick_in_list {
+                                // A plug-in's own controls cannot carry Rill's
+                                // right-click Automate; this list is their
+                                // in-Rill editor, with Automate per parameter.
+                                if daw_ui::button(ui, "Parameters…")
+                                    .on_hover_text("Edit or automate this plug-in's parameters")
+                                    .clicked()
+                                    || pick_in_list
+                                {
                                     self.instrument_ui.parameters_open = true;
                                     self.instrument_ui.browser.focus_search = true;
                                     fetch = self.instrument_ui.parameters.is_empty()
@@ -1471,13 +1457,6 @@ impl DawApp {
                         }
                         Instrument::Builtin { .. } => {
                             ui.horizontal_wrapped(|ui| {
-                                if daw_ui::button(ui, "Automate…")
-                                    .on_hover_text("Choose a parameter to automate; right-click a control for the same")
-                                    .clicked()
-                                {
-                                    self.instrument_ui.parameters_open = true;
-                                    self.instrument_ui.browser.focus_search = true;
-                                }
                                 if target.effect.is_none() {
                                     choose = daw_ui::button(ui, "Change instrument").clicked();
                                 }
@@ -1658,10 +1637,10 @@ impl DawApp {
             Ok(lane) => {
                 self.cancel_parameter_picking();
                 self.instrument_ui.browser.selected = Some(id);
-                self.open_popup(PopupKind::Automation);
-                self.selected_track = Some(lane);
-                self.selected_clip = None;
-                if existing.is_none() {
+                if existing.is_some() {
+                    self.show_automation(lane);
+                } else {
+                    self.show_new_automation(lane);
                     self.changed();
                 }
                 Some(lane)
@@ -2372,6 +2351,7 @@ mod tests {
             let mut app = pending_app(&ctx, directory.path());
             daw_ui::theme::set_appearance(&ctx, appearance);
             app.instrument_open = true;
+            let source = app.instrument_ui.owner.as_ref().unwrap().0.track;
             let draw = |app: &mut DawApp, events| {
                 ctx.run(
                     egui::RawInput {
@@ -2414,7 +2394,7 @@ mod tests {
                     .shapes
                     .iter()
                     .find_map(|shape| match &shape.shape {
-                        egui::Shape::Text(text) if text.galley.text() == "Automate…" => {
+                        egui::Shape::Text(text) if text.galley.text() == "Parameters…" => {
                             Some(text.galley.rect.translate(text.pos.to_vec2()).center())
                         }
                         _ => None,
@@ -2491,11 +2471,16 @@ mod tests {
                     id: if last_touched { 101 } else { 100 }
                 }
             );
-            assert!(app.automation_open);
-            let saved = app.project.clone();
+            // A new lane lands in Arrangement with a clip ready to draw.
+            assert!(!app.automation_open && !app.instrument_open);
+            assert_eq!(app.view, crate::app::WorkspaceView::Arrangement);
             let lane = app.selected_track;
-            app.close_popup();
-            assert!(app.instrument_open);
+            let clip = app.selected_clip.expect("new automation clip");
+            assert!(app.project.automation_clip(lane.unwrap(), clip).is_some());
+            let saved = app.project.clone();
+            app.selected_track = Some(source);
+            app.selected_clip = None;
+            app.instrument_open = true;
             let mut output = draw(&mut app, vec![]);
             for _ in 0..3 {
                 output = draw(&mut app, vec![]);
@@ -2548,7 +2533,9 @@ mod tests {
                 app.selected_track, lane,
                 "Existing action at {point:?}, viewport {size:?}, last touched={last_touched}"
             );
-            assert!(app.automation_open);
+            // A lane with a clip is edited at that clip in Arrangement.
+            assert_eq!(app.selected_clip, Some(clip));
+            assert!(!app.automation_open);
         }
     }
 

@@ -148,7 +148,7 @@ fn plugin_percent_draft_and_caret_survive_f64_and_automated_f32_round_trips() {
         app.click("Draft phrase");
         app.click("Window");
         app.click("Instrument");
-        app.click("Automate…");
+        app.click("Parameters…");
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
         let before = loop {
             let state = app.inspect();

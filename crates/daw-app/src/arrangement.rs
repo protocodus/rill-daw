@@ -419,12 +419,21 @@ impl DawApp {
             ui.available_rect_before_wrap().max - Vec2::new(12.0 + right_inset, 0.0),
         );
         if let Some((track, clip)) = self.arranger_selection.reveal.take() {
-            if let Some(clip) = self.project.clip(track, clip) {
+            let bounds = self
+                .project
+                .clip(track, clip)
+                .map(|clip| (clip.start, clip.end()))
+                .or_else(|| {
+                    self.project
+                        .automation_clip(track, clip)
+                        .map(|clip| (clip.start, clip.end()))
+                });
+            if let Some((start, end)) = bounds {
                 let width = canvas.width() as f64 / viewport.pixels_per_beat as f64;
-                if clip.start < viewport.start_beat {
-                    viewport.start_beat = clip.start;
-                } else if clip.end() > viewport.start_beat + width {
-                    viewport.start_beat = (clip.end() - width).max(0.0);
+                if start < viewport.start_beat {
+                    viewport.start_beat = start;
+                } else if end > viewport.start_beat + width {
+                    viewport.start_beat = (end - width).max(0.0);
                 }
             }
             reveal_track(
@@ -2709,22 +2718,19 @@ impl DawApp {
                     self.project.add_automation_track(name, target)
                 };
                 match result {
+                    Ok(lane) if existing.is_some() => {
+                        self.show_automation(lane);
+                    }
                     Ok(lane) => {
-                        self.open_popup(PopupKind::Automation);
-                        self.selected_track = Some(lane);
-                        self.selected_clip = None;
-                        if existing.is_none() {
-                            self.edit_label = Some("Create automation".into());
-                            self.changed();
-                        }
+                        self.show_new_automation(lane);
+                        self.edit_label = Some("Create automation".into());
+                        self.changed();
                     }
                     Err(error) => self.message(Err(error), ""),
                 }
             }
             Some(daw_ui::AutomationNavigation::Edit(lane)) => {
-                self.open_popup(PopupKind::Automation);
-                self.selected_track = Some(lane);
-                self.selected_clip = None;
+                self.show_automation(lane);
             }
             Some(daw_ui::AutomationNavigation::Resume(lane)) => self.resume_automation(lane),
             Some(daw_ui::AutomationNavigation::Override(lane)) => {
