@@ -1,0 +1,25 @@
+{
+  "format": 1,
+  "device": "r1-filter",
+  "name": "Every parameter",
+  "description": "Every parameter key of this version, so a removed or renamed key is caught.",
+  "parameters": {
+    "model": "Ladder",
+    "type": "High-pass",
+    "slope": "24 dB",
+    "cutoff": 158.9,
+    "resonance": 30.0,
+    "drive": 7.2,
+    "morph": 30.0,
+    "lfo.rate": 0.09779,
+    "lfo.sync": "4 bars",
+    "lfo.shape": "Triangle",
+    "lfo.depth": -2.0,
+    "lfo.stereo": 54.0,
+    "env.amount": -2.0,
+    "env.attack": 0.7943,
+    "env.release": 49.01,
+    "mix": 30.0,
+    "output": -9.6
+  }
+}

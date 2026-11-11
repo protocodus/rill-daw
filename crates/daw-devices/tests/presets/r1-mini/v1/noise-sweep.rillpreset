@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "device": "r1-mini",
+  "name": "Noise Sweep",
+  "author": "Rill",
+  "category": "Effect",
+  "tags": ["noise", "riser"],
+  "description": "Filtered noise with a resonant diode filter swept by a slow envelope; hold a note for a riser.",
+  "parameters": {
+    "mix.osc1": 0.0,
+    "mix.osc2": 0.0,
+    "mix.noise": 100.0,
+    "filter.model": "Diode Pair",
+    "filter.cutoff": 150.0,
+    "filter.resonance": 70.0,
+    "filter.env": 5.0,
+    "filter.keytrack": 100.0,
+    "fenv.attack": 4000.0,
+    "fenv.decay": 2000.0,
+    "fenv.sustain": 100.0,
+    "fenv.release": 1500.0,
+    "aenv.attack": 300.0,
+    "aenv.sustain": 100.0,
+    "aenv.release": 1500.0,
+    "voice.volume": -2.0
+  }
+}

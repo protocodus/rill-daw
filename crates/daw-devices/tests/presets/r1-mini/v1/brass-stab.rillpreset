@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "device": "r1-mini",
+  "name": "Brass Stab",
+  "author": "Rill",
+  "category": "Brass",
+  "tags": ["poly", "punchy"],
+  "description": "Detuned saws with a slightly slow filter attack, the classic analog brass swell.",
+  "parameters": {
+    "osc2.detune": 12.0,
+    "mix.osc2": 90.0,
+    "filter.cutoff": 700.0,
+    "filter.resonance": 12.0,
+    "filter.env": 2.6,
+    "filter.drive": 3.0,
+    "fenv.attack": 60.0,
+    "fenv.decay": 500.0,
+    "fenv.sustain": 45.0,
+    "fenv.release": 250.0,
+    "aenv.attack": 15.0,
+    "aenv.decay": 400.0,
+    "aenv.sustain": 85.0,
+    "aenv.release": 220.0,
+    "velocity.cutoff": 1.0,
+    "voice.drift": 40.0
+  }
+}

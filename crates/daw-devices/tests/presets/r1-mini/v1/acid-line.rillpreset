@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "device": "r1-mini",
+  "name": "Acid Line",
+  "author": "Rill",
+  "category": "Bass",
+  "tags": ["mono", "resonant", "glide"],
+  "description": "One saw into a screaming, overdriven ladder; overlapping notes slide.",
+  "parameters": {
+    "osc1.model": "DCO",
+    "osc1.octave": -1,
+    "mix.osc2": 0.0,
+    "filter.cutoff": 300.0,
+    "filter.resonance": 82.0,
+    "filter.env": 3.5,
+    "filter.keytrack": 40.0,
+    "filter.drive": 9.0,
+    "fenv.attack": 0.5,
+    "fenv.decay": 260.0,
+    "fenv.sustain": 0.0,
+    "fenv.release": 80.0,
+    "aenv.attack": 0.5,
+    "aenv.decay": 400.0,
+    "aenv.sustain": 70.0,
+    "aenv.release": 60.0,
+    "velocity.cutoff": 1.5,
+    "voice.mode": "Legato",
+    "voice.glide": 70.0
+  }
+}

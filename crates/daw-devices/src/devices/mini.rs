@@ -601,6 +601,7 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-mini/brass-stab.rillpreset"),
         include_str!("../../presets/r1-mini/noise-sweep.rillpreset"),
     ],
+    legacy_labels: &[],
     create: || Box::new(Mini::new()),
 };
 

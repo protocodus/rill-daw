@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "device": "r1-filter",
+  "name": "Metal Comb",
+  "author": "Rill",
+  "category": "Character",
+  "tags": ["comb", "metallic"],
+  "description": "Tuned comb that rings at 220 Hz.",
+  "parameters": {
+    "model": "Comb",
+    "cutoff": 220.0,
+    "resonance": 85.0,
+    "morph": 30.0,
+    "mix": 70.0
+  }
+}

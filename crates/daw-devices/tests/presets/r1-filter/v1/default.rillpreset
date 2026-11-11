@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "device": "r1-filter",
+  "name": "Default",
+  "author": "Rill",
+  "category": "Basic",
+  "description": "Clean 12 dB low-pass at 1 kHz.",
+  "parameters": {}
+}

@@ -159,6 +159,16 @@ Rill ships its own instruments and effects, so a new song makes sound before any
 
 The full design, including the devices still to come, is in [R1 built-in devices](docs/R1_DEVICES.md).
 
+### Preset compatibility tests
+
+Every version of Rill must load presets saved by any earlier version: each parameter a preset names keeps its value, and each parameter added since takes its default. `crates/daw-devices/tests/preset_compatibility.rs` enforces this against frozen presets in `crates/daw-devices/tests/presets/<device>/<version>/`. Every built-in instrument and effect with presets follows the same rules:
+
+- **Adding a device:** copy its factory presets into `tests/presets/<device-id>/v1/`, plus an `every-parameter.rillpreset` that names every parameter key. The test fails for any device with presets but no `v1` folder.
+- **Changing a device's parameters:** never edit or delete a frozen preset. If old presets still load, nothing else is needed. When the change alters what presets mean, freeze the presets from just before it in a new `v2`, `v3`… folder.
+- **Renaming a choice option:** presets store choices by label, so add `(key, old label, current label)` to the descriptor's `legacy_labels`. Never rename or reuse a parameter key, and never change a parameter's unit or range so that an old value means something else.
+
+Run them with `cargo test -p daw-devices --test preset_compatibility`.
+
 ## Start making music
 
 1. Launch Rill and click **Play** to hear the included drum loop, or choose **File → New** for an empty song.
