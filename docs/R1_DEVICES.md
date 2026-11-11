@@ -322,7 +322,7 @@ panels, presets or projects.
   results; the **Built-in (R1)** collection lists only them. The empty-library
   text no longer says that MIDI is silent until a plug-in is installed.
   Their card image is a panel snapshot compiled in from
-  `crates/daw-app/assets/<id>-preview.png` (768×480, cropped from
+  `crates/daw-app/assets/<id>-preview.png` (768×384, cropped from
   `rill --screenshot … --view instrument|effect-editor`); a device without
   one shows its icon. **Device details** reads ports and parameters from the
   registry instantly.

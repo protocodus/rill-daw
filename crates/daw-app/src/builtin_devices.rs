@@ -48,7 +48,12 @@ pub(crate) fn catalog() -> &'static [CatalogEntry] {
                 fingerprint: format!("{LOCATOR}{}", descriptor.id),
                 thumbnail: None,
                 thumbnail_size: None,
-                status: ThumbnailStatus::Missing,
+                // Counts in the "With preview" collection; the image is compiled in.
+                status: if PREVIEWS.iter().any(|(id, _)| *id == descriptor.id) {
+                    ThumbnailStatus::Ready
+                } else {
+                    ThumbnailStatus::Missing
+                },
                 added_unix_ms: 0,
             })
             .collect()
