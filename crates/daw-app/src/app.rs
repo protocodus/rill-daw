@@ -3982,12 +3982,13 @@ impl DawApp {
                 }
             }
             "clip" => self.view = WorkspaceView::Clip,
-            "piano" => {
+            "piano" | "audio" => {
+                let midi = view == "piano";
                 let target = self.project.tracks.iter().find_map(|track| {
                     track
                         .clips
                         .iter()
-                        .find(|clip| matches!(clip.content, ClipContent::Midi { .. }))
+                        .find(|clip| matches!(clip.content, ClipContent::Midi { .. }) == midi)
                         .map(|clip| (track.id, clip.id))
                 });
                 if let Some((track, clip)) = target {
