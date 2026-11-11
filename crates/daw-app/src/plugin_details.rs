@@ -99,6 +99,13 @@ fn status(ctx: &egui::Context, entry: &CatalogEntry) -> Option<Inspection> {
 
 fn start(ctx: &egui::Context, entry: &CatalogEntry) {
     let cache = cache(ctx);
+    if let Some(details) = crate::builtin_devices::inspection(&entry.plugin) {
+        cache.entries.lock().unwrap().insert(
+            entry.fingerprint.clone(),
+            Inspection::Ready(Arc::new(details)),
+        );
+        return;
+    }
     {
         let mut cache = cache.entries.lock().unwrap();
         if matches!(
@@ -141,7 +148,12 @@ fn summary(details: &PluginInspection) -> daw_ui::DeviceIoSummary {
 }
 
 pub(crate) fn show_summary(ui: &mut egui::Ui, entry: &CatalogEntry) {
-    let status = status(ui.ctx(), entry);
+    let mut status = status(ui.ctx(), entry);
+    // Built-in details cost nothing to read, so show them without a click.
+    if status.is_none() && crate::builtin_devices::is_builtin(&entry.plugin) {
+        start(ui.ctx(), entry);
+        status = self::status(ui.ctx(), entry);
+    }
     daw_ui::device_io_summary(
         ui,
         match &status {

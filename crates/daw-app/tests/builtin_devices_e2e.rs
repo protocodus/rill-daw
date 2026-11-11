@@ -258,3 +258,96 @@ fn r1_filter_shapes_audio_loads_presets_and_automates_from_its_panel() {
     );
     app.quit();
 }
+
+fn select_card(app: &mut Harness, name: &str) -> Value {
+    common::wait_library_device(app, name);
+    let state = app.inspect();
+    let card = state["library"]["cards"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|card| card["name"] == name)
+        .unwrap_or_else(|| panic!("Missing {name}: {}", state["library"]))
+        .clone();
+    assert_eq!(
+        card["preview"], true,
+        "{name} shows its panel image: {card}"
+    );
+    let (x, y) = (
+        (card["rect"]["min"][0].as_f64().unwrap() + card["rect"]["max"][0].as_f64().unwrap()) * 0.5,
+        (card["rect"]["min"][1].as_f64().unwrap() + card["rect"]["max"][1].as_f64().unwrap()) * 0.5,
+    );
+    app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}))
+}
+
+fn visible(state: &Value, label: &str) -> bool {
+    state["visible_labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|text| text == label)
+}
+
+/// Built-ins read ports and parameters from the registry and ship a panel
+/// image, so the browser shows both without scanning or capturing.
+fn builtin_details(app: &mut Harness, name: &str, id: &str, instrument: bool) {
+    let selected = select_card(app, name);
+    assert_eq!(selected["library"]["selected"], id);
+    let pane = common::wait_until(app, |state| visible(state, "Browse parameters"));
+    assert!(visible(&pane, "Included"), "{}", pane["visible_labels"]);
+    assert!(!visible(&pane, "Capture preview"));
+    let details = app.click("Device details");
+    assert_eq!(
+        details["plugin_details"]["status"], "ready",
+        "{}",
+        details["plugin_details"]
+    );
+    let metadata = &details["plugin_details"]["metadata"];
+    assert_eq!(metadata["midi_input"], instrument);
+    assert_eq!(metadata["outputs"][0]["channels"], 2);
+    assert_eq!(
+        metadata["inputs"].as_array().unwrap().is_empty(),
+        instrument
+    );
+    let parameters = metadata["parameters"].as_array().unwrap();
+    assert!(parameters.len() > 10, "{metadata}");
+    assert!(
+        parameters
+            .iter()
+            .all(|parameter| parameter["can_automate"] == true)
+    );
+    assert!(
+        parameters
+            .iter()
+            .any(|parameter| parameter["name"].as_str().unwrap().contains("Cutoff")),
+        "{metadata}"
+    );
+    let report = app.click("Copy details")["clipboard_text"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(report.contains("Built into Rill"), "{report}");
+    assert!(!report.contains("moduleinfo"), "{report}");
+    let closed = app.click("Close");
+    assert!(closed["plugin_details"].is_null());
+}
+
+#[test]
+fn builtin_devices_show_metadata_and_preview_in_the_device_browser() {
+    let mut app = Harness::new();
+    app.click("Track");
+    let chooser = app.click("Add MIDI track");
+    assert_eq!(chooser["popups"]["library"], true);
+    app.click("Built-in (R1)");
+    let before = app.inspect();
+    builtin_details(&mut app, "R1 Mini", "rill:r1-mini", true);
+    assert_eq!(app.inspect()["project"], before["project"]);
+    app.key("Escape");
+
+    app.click("Window");
+    app.click("Effects");
+    let inserts = app.click("+ Insert");
+    assert_eq!(inserts["library"]["order"], json!(["R1 Filter"]));
+    builtin_details(&mut app, "R1 Filter", "rill:r1-filter", false);
+    app.quit();
+}
