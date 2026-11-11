@@ -245,7 +245,10 @@ fn r1_filter_shapes_audio_loads_presets_and_automates_from_its_panel() {
         })
         .unwrap_or_else(|| panic!("No Cutoff lane: {}", state["project"]));
     assert_eq!(state["selected_track"], lane["id"]);
-    assert_eq!(state["popups"]["automation"], true);
+    // Automate lands on the new lane in Arrangement, with a clip to draw in.
+    assert_eq!(state["popups"]["automation"], false);
+    assert_eq!(state["view"], "Arrangement");
+    assert_eq!(state["selected_clip"], lane["automation"]["clips"][0]["id"]);
     assert!(
         lane["name"]
             .as_str()

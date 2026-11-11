@@ -969,11 +969,9 @@ impl DawApp {
         // unrelated edit merely because it is the most recent history item.
         let can_undo = self.assistant.scope.is_global() && self.history.can_undo();
         let can_reuse = self.assistant.prompt.is_empty() && !self.assistant.last_prompt.is_empty();
-        daw_ui::popup("Assistant", ctx)
+        daw_ui::page("Assistant")
             .open(&mut open)
-            .default_width(daw_ui::tokens::POPUP_WIDTH_MD)
-            .default_height(610.0)
-            .vscroll(false)
+            .width(daw_ui::tokens::POPUP_WIDTH_LG)
             .show(ctx, |ui| {
                 let response = daw_ui::assistant(
                     ui,

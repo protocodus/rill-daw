@@ -925,3 +925,14 @@ fn automation_clip_on_empty_vst_lane_uses_stored_parameter_value() {
     assert!((clip.points[1].value - 0.82).abs() < 1e-6);
     assert!(project.has_clip_or_automation_clip(lane, clip_id));
 }
+
+#[test]
+fn playing_clip_is_the_one_playback_uses_where_clips_overlap() {
+    let (mut project, _, lane) = fixture();
+    let early = project.create_automation_clip(lane, 0.0, 8.0).unwrap();
+    let late = project.create_automation_clip(lane, 4.0, 4.0).unwrap();
+    let automation = project.automation_lane(lane).unwrap();
+    assert_eq!(automation.playing_clip(2.0).unwrap().id, early);
+    assert_eq!(automation.playing_clip(5.0).unwrap().id, late);
+    assert!(automation.playing_clip(9.0).is_none());
+}

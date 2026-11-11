@@ -218,6 +218,7 @@ impl<'a> LabeledKnob<'a> {
         }
         let mut response = ui.add(knob);
         let dial = response.rect;
+        crate::paint_automation_indicator(ui, dial, self.automation);
         let editing_id = response.id.with("typing");
         let mut typing = ui
             .data(|data| data.get_temp::<Option<String>>(editing_id))

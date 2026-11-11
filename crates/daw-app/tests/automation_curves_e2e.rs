@@ -255,14 +255,26 @@ fn compact_curve_keeps_readable_percentages_and_mouse_access_to_point_inspectors
 
 #[test]
 fn explicit_override_resume_and_curve_edits_keep_live_engine_and_audio() {
-    let (mut app, _, automation) = fixture_in(Harness::with_virtual_audio(None, None), true, 1.0);
-    app.click("Held volume");
-    menu(&mut app, "Window", "Automation");
+    let (mut app, source, automation) =
+        fixture_in(Harness::with_virtual_audio(None, None), true, 1.0);
     app.click("Play");
     let running = wait(&mut app, |state| {
         state["engine"]["playing"] == true && state["playback_loading"] == false
     });
     pump_level(&mut app, &running, 0.3);
+    // Override and resume belong to the control, not to the curve editor.
+    let gain = |state: &Value| {
+        state["mixer"]["channels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|channel| channel["track"] == source)
+            .unwrap()["gain"]
+            .clone()
+    };
+    let mixer = app.click("Mixer");
+    let (x, y) = center(&gain(&mixer));
+    app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
     let overridden = app.click("Override automation");
     assert!(visible(&overridden, "Overridden"));
     near(
@@ -272,19 +284,8 @@ fn explicit_override_resume_and_curve_edits_keep_live_engine_and_audio() {
         0.2,
         0.00001,
     );
-    let stable_override = app.inspect();
-    let override_field = stable_override["label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|label| {
-            label["text"]
-                .as_str()
-                .is_some_and(|text| text.starts_with("Override "))
-        })
-        .expect("Visible manual override number");
-    let (x, y) = center(override_field);
-    app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    let (x, y) = center(&gain(&app.inspect()));
+    app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
     app.command(json!({"command":"key","key":"A","cmd":true}));
     app.command(json!({"command":"text","text":(20.0_f64 * 0.9_f64.log10()).to_string()}));
     let manual = app.key("Enter");
@@ -299,13 +300,17 @@ fn explicit_override_resume_and_curve_edits_keep_live_engine_and_audio() {
         state["engine"]["applied_revision"] == state["revision"]
     });
     pump_level(&mut app, &running, 0.9);
+    let (x, y) = center(&gain(&app.inspect()));
+    app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
     let resumed = app.click("Resume automation");
     assert!(lane(&resumed, automation)["override_value"].is_null());
     wait(&mut app, |state| {
         state["engine"]["applied_revision"] == state["revision"]
     });
     pump_level(&mut app, &running, 0.3);
-    let state = app.inspect();
+    app.click("Arranger");
+    app.click("Held volume");
+    let state = menu(&mut app, "Window", "Automation");
     let (x, y) = point(&state, 2.0, 0.2);
     app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
     let shaped = app.click("Exp");
@@ -420,7 +425,7 @@ fn segment_shapes_and_mouse_handles_preserve_neighbors_and_hold_song_endpoints()
 }
 
 #[test]
-fn compact_automation_keeps_slope_and_resume_controls_reachable() {
+fn compact_automation_keeps_slope_controls_reachable() {
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
         let (mut app, _, automation) = fixture(dark, density);
         app.click("Held volume");
@@ -452,17 +457,9 @@ fn compact_automation_keeps_slope_and_resume_controls_reachable() {
                 assert!(label["max"][0].as_f64().unwrap() <= f64::from(width));
                 assert!(label["max"][1].as_f64().unwrap() <= f64::from(height));
             }
-            scroll_curve_popup(&mut app, false);
-            let overridden = click_visible_inspector(&mut app, "Override automation");
-            let resume = overridden["label_rects"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .find(|label| label["text"] == "Resume automation")
-                .expect("Resume remains visible");
-            assert!(resume["max"][1].as_f64().unwrap() <= f64::from(height));
-            let resumed = app.click("Resume automation");
-            assert!(lane(&resumed, automation)["override_value"].is_null());
+            // Override belongs to the control; the curve editor offers none.
+            let state = scroll_curve_popup(&mut app, false);
+            assert!(!visible(&state, "Override automation"));
         }
         app.quit();
     }
@@ -514,10 +511,17 @@ fn manual_gain_override_is_visible_saved_and_resumable_without_changing_curve_po
 
         let (mut app, recalled) = reopen_saved(app, "overridden-automation.rill");
         assert_eq!(lane(&recalled, automation), lane(&overridden, automation));
-        app.click("Held volume");
-        let editor = menu(&mut app, "Window", "Automation");
-        assert!(visible(&editor, "Overridden"));
-        assert!(visible(&editor, "Resume automation"));
+        // Resume belongs to the control: the mixer fader's right-click menu.
+        let mixer = app.click("Mixer");
+        assert!(visible(&mixer, "Overridden"));
+        let gain = &mixer["mixer"]["channels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|channel| channel["track"] == source)
+            .unwrap()["gain"];
+        let (x, y) = center(gain);
+        app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
         let resumed = app.click("Resume automation");
         assert!(lane(&resumed, automation)["override_value"].is_null());
         assert!(visible(&resumed, "Automated"));

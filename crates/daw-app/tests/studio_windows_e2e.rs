@@ -1,4 +1,4 @@
-//! Utility windows leave wrapped transport controls reachable at every size.
+//! Utility windows and pages leave wrapped transport controls reachable at every size.
 mod common;
 
 use common::Harness;
@@ -101,11 +101,20 @@ fn utility_windows_fit_below_transport_and_close_with_the_mouse_in_both_themes()
                 assert_eq!(state["popups"][key], true, "{menu}");
                 unchanged(&state, &original);
                 let [left, top, right, bottom] = bounds(popup_bounds(&state, title));
-                assert!(
-                    left >= margin && right <= width as f64 - margin,
-                    "{title}: {left}..{right}"
-                );
-                assert!(bottom <= height as f64 - margin, "{title}: bottom {bottom}");
+                if menu == "Effects" {
+                    assert!(
+                        left >= margin && right <= width as f64 - margin,
+                        "{title}: {left}..{right}"
+                    );
+                    assert!(bottom <= height as f64 - margin, "{title}: bottom {bottom}");
+                } else {
+                    // A page fills the workspace below the transport.
+                    assert_eq!(
+                        [left, right, bottom],
+                        [0.0, width as f64, height as f64],
+                        "{title}"
+                    );
+                }
 
                 for control in ["Start", "Play", "Stop", "Record", "Click", "Loop", "Range"] {
                     // Properties can also contain Start/Loop fields. Transport
@@ -135,13 +144,9 @@ fn utility_windows_fit_below_transport_and_close_with_the_mouse_in_both_themes()
                     );
                 }
 
-                // Drive egui's actual native close target; no Escape shortcut or
-                // application-only command may substitute for mouse dismissal.
-                let [_, title_top, _, title_bottom] = bounds(label(&state, title));
-                let y = (title_top + title_bottom) * 0.5;
-                let x = right - (y - top);
-                let restored =
-                    app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}));
+                // Drive the actual close target (a popup's close button, a page's
+                // Back); no Escape shortcut may substitute for mouse dismissal.
+                let restored = common::close_utility(&mut app, &state, title);
                 assert_eq!(
                     restored["popups"][key], false,
                     "Mouse close failed for {title}"

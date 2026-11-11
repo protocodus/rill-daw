@@ -136,8 +136,11 @@ fn setup_recording_export_warning_history_and_about_keep_their_actions_in_view()
                 let export_action = label(&export, "Export…").clone();
                 let cancel_action = label(&export, "Cancel").clone();
                 let title = label(&export, "Export audio");
-                let x =
-                    (title["min"][0].as_f64().unwrap() + title["max"][0].as_f64().unwrap()) * 0.5;
+                // The page title leads the header; the summary is the column
+                // above the actions.
+                let x = (export_action["min"][0].as_f64().unwrap()
+                    + export_action["max"][0].as_f64().unwrap())
+                    * 0.5;
                 let y = (title["max"][1].as_f64().unwrap()
                     + export_action["min"][1].as_f64().unwrap())
                     * 0.5;

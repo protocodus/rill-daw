@@ -21,27 +21,7 @@ fn center(rect: &Value) -> (f64, f64) {
 }
 
 fn close_popup(app: &mut Harness, state: &Value, title: &str) -> Value {
-    let title = state["label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .rev()
-        .find(|label| label["text"] == title)
-        .expect("popup title is visible");
-    let (x, y) = center(title);
-    let bounds = state["window_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|rect| {
-            rect["min"][0].as_f64().unwrap() < x
-                && rect["max"][0].as_f64().unwrap() > x
-                && rect["min"][1].as_f64().unwrap() < y
-                && rect["max"][1].as_f64().unwrap() > y
-        })
-        .expect("popup contains its title");
-    let x = bounds["max"][0].as_f64().unwrap() - (y - bounds["min"][1].as_f64().unwrap());
-    app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}))
+    common::close_utility(app, state, title)
 }
 
 fn editing_context(state: &Value) -> Value {

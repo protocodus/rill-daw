@@ -108,9 +108,14 @@ impl DawApp {
                                     {
                                         edit_effect = Some(slot.id);
                                     }
-                                    if widgets::small_button(ui, "Automate…")
-                                        .on_hover_text("Search this effect's automation parameters")
-                                        .clicked()
+                                    // Built-in effects automate from their own
+                                    // panel's controls; plug-ins need the list.
+                                    if !matches!(slot.effect, daw_core::Effect::Builtin { .. })
+                                        && widgets::small_button(ui, "Parameters…")
+                                            .on_hover_text(
+                                                "Edit or automate this plug-in's parameters",
+                                            )
+                                            .clicked()
                                     {
                                         automate_effect = Some(slot.id);
                                     }
@@ -206,7 +211,7 @@ impl DawApp {
             self.open_effect_editor(track_id, effect);
         }
         if let Some(effect) = automate_effect {
-            self.open_effect_automation(track_id, effect);
+            self.open_effect_parameters(track_id, effect);
         }
     }
 
@@ -260,14 +265,10 @@ impl DawApp {
             .map(|track| (track.id, track.name.clone()))
             .collect();
         let mut open = true;
-        widgets::popup(format!("Routing of {track_name}"), ctx)
+        widgets::page(format!("Routing of {track_name}"))
             .id(egui::Id::new("routing"))
             .open(&mut open)
-            .default_width(widgets::tokens::POPUP_WIDTH_MD)
-            // A send row is one unwrapped parameter_row; keep it whole. The
-            // height hugs the content and the body scrolls in short windows.
-            .min_width(widgets::popup_body_size(ctx).x.min(widgets::tokens::POPUP_WIDTH_MD))
-            .vscroll(false)
+            .width(widgets::tokens::POPUP_WIDTH_MD)
             .show(ctx, |ui| {
                 let scope = daw_tools::ToolScope::Routing { track_id };
                 let label = scope.label(&self.project);

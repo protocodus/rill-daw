@@ -416,7 +416,7 @@ fn plugin_parameter_fixture() -> (Harness, u64, tempfile::TempDir, tempfile::Tem
     app.click("Mouse phrase");
     app.click("Window");
     app.click("Instrument");
-    app.click("Automate…");
+    app.click("Parameters…");
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
     let before = loop {
         let state = app.inspect();

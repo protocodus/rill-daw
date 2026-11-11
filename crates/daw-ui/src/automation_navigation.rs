@@ -119,13 +119,21 @@ pub fn automatable_parameter_context(
     if let Some((lane, state)) = automation {
         return automation_parameter_context(ui, response, lane, state);
     }
+    crate::paint_automation_indicator(ui, response.rect, None);
     crate::hover_text(
         response.clone(),
         "Right-click to create automation for this control",
     );
     let mut action = None;
-    response.context_menu(|ui| action = automatable_menu_contents(ui, control, None));
+    context_menu(response).show(|ui| action = automatable_menu_contents(ui, control, None));
     action
+}
+
+/// The default context-menu id is the one `ComboBox` uses for its own list,
+/// and a context menu closes that id on every primary click: an automatable
+/// choice would never open. A separate id lets both coexist.
+fn context_menu(response: &Response) -> egui::Popup<'_> {
+    egui::Popup::context_menu(response).id(response.id.with("automation_context_menu"))
 }
 
 /// The exact numeric editor and automation actions share one context menu.
@@ -160,13 +168,15 @@ pub fn automatable_parameter_value_context_named(
     if let Some((_, state)) = automation {
         crate::paint_automation_control(ui, response, state);
         crate::hover_text(response.clone(), state.hint());
+    } else {
+        crate::paint_automation_indicator(ui, response.rect, None);
     }
     crate::hover_text(
         response.clone(),
         "Right-click for exact value and automation",
     );
     parameter_value_popup(
-        egui::Popup::context_menu(response),
+        context_menu(response),
         response.id,
         control,
         automation,
@@ -197,6 +207,8 @@ pub fn automatable_parameter_value_button(
             .on_hover_text(format!("Edit {name} · Exact value and mouse keypad"));
         if let Some((_, state)) = automation {
             crate::paint_automation_control(ui, &response, state);
+        } else {
+            crate::paint_automation_indicator(ui, response.rect, None);
         }
         let popup = egui::Popup::menu(&response).open_memory(if response.secondary_clicked() {
             Some(egui::SetOpenCommand::Bool(true))
@@ -311,6 +323,6 @@ pub fn automation_parameter_context(
         ),
     );
     let mut action = None;
-    response.context_menu(|ui| action = automation_menu_contents(ui, lane, state));
+    context_menu(response).show(|ui| action = automation_menu_contents(ui, lane, state));
     action
 }

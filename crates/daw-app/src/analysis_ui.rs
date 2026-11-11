@@ -127,9 +127,8 @@ impl DawApp {
         } else {
             "Play to analyze this signal"
         };
-        daw_ui::popup(self.analysis_title(), ctx).id(egui::Id::new("signal_analysis_popup"))
-            .open(&mut open).default_width(daw_ui::tokens::POPUP_WIDTH_MD)
-            .default_height(470.0).min_width(360.0).vscroll(false)
+        daw_ui::page(self.analysis_title()).id(egui::Id::new("signal_analysis_popup"))
+            .open(&mut open).width(daw_ui::tokens::POPUP_WIDTH_LG)
             .show(ctx, |ui| {
                 daw_ui::signal_analyzer_tabs(ui, &mut self.analysis.view);
                 ui.add_space(daw_ui::tokens::SPACE_SM);

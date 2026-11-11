@@ -98,10 +98,13 @@ pub fn paint_automation_control(ui: &Ui, response: &Response, state: AutomationS
                 .expand(1.0 / ui.ctx().pixels_per_point())
                 .contains_rect(response.rect)
     }) {
-        // The knob itself paints the shared ownership glow around its dial.
+        // The knob itself paints the shared ownership glow around its dial;
+        // the corner dot keeps its state readable like every other control.
+        paint_automation_indicator(ui, response.rect, Some(state));
         return;
     }
     let rect = response.rect;
+    register_automation_indicator(ui.ctx(), Some(state), rect);
     let color = state.color(ui.ctx());
     paint_automation_glow(ui, rect, state);
     let marker = match state {
@@ -152,4 +155,84 @@ pub fn paint_automation_control(ui: &Ui, response: &Response, state: AutomationS
         egui::FontId::proportional(label.height().min(10.0)),
         color,
     );
+}
+
+/// Corner dot every automatable control carries: a faint ring while the
+/// control has no lane, then the state color. Paint only; it adds no hit
+/// target and never changes layout.
+pub fn paint_automation_indicator(ui: &Ui, rect: egui::Rect, state: Option<AutomationState>) {
+    register_automation_indicator(ui.ctx(), state, rect);
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
+    let radius = 2.5;
+    let center = rect.right_top() + egui::vec2(-radius - 1.0, radius + 1.0);
+    match state {
+        Some(state) => ui
+            .painter()
+            .circle_filled(center, radius, state.color(ui.ctx())),
+        None => ui.painter().circle_stroke(
+            center,
+            radius,
+            egui::Stroke::new(1.0_f32, theme::palette(ui.ctx()).muted.gamma_multiply(0.6)),
+        ),
+    };
+}
+
+#[derive(Clone, Default)]
+struct AutomationIndicators {
+    pass: u64,
+    indicators: Vec<(Option<AutomationState>, egui::Rect)>,
+}
+
+const AUTOMATION_INDICATORS: &str = "rill_automation_indicators";
+
+fn register_automation_indicator(
+    ctx: &egui::Context,
+    state: Option<AutomationState>,
+    rect: egui::Rect,
+) {
+    let pass = ctx.cumulative_pass_nr();
+    ctx.data_mut(|data| {
+        let entry = data
+            .get_temp_mut_or_default::<AutomationIndicators>(egui::Id::new(AUTOMATION_INDICATORS));
+        if entry.pass != pass {
+            entry.pass = pass;
+            entry.indicators.clear();
+        }
+        entry.indicators.push((state, rect));
+    });
+}
+
+/// Automation indicators of the latest pass, with the control each marks, for
+/// host diagnostics. `None` is an automatable control without a lane.
+pub fn automation_indicators(ctx: &egui::Context) -> Vec<(Option<AutomationState>, egui::Rect)> {
+    ctx.data(|data| {
+        data.get_temp::<AutomationIndicators>(egui::Id::new(AUTOMATION_INDICATORS))
+            .map(|entry| entry.indicators)
+            .unwrap_or_default()
+    })
+}
+
+pub fn reset_automation_indicators(ctx: &egui::Context) {
+    ctx.data_mut(|data| data.remove::<AutomationIndicators>(egui::Id::new(AUTOMATION_INDICATORS)));
+}
+
+/// Global warning shown while at least one control holds a manual value
+/// instead of its curve. Clicking it is the caller's "resume everything".
+pub fn automation_override_warning(ui: &mut Ui, count: usize) -> Response {
+    let text = if count == 1 {
+        "1 automation overridden".to_owned()
+    } else {
+        format!("{count} automations overridden")
+    };
+    let response = ui.add(
+        crate::IconButton::with_icon(crate::Icon::Warning, text)
+            .small()
+            .label_color(theme::palette(ui.ctx()).automation_override),
+    );
+    crate::hover_text(
+        response,
+        "Some controls ignore their automation. Click to resume automation everywhere; Undo restores the overrides.",
+    )
 }

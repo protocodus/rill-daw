@@ -654,3 +654,57 @@ pub fn edit_plugin_parameter_value(app: &mut Harness, state: &Value, percent: &s
     app.command(json!({"command":"text","text":percent}));
     app.click("Value")
 }
+
+/// Dismiss the utility titled `title` the way a mouse user does: **Back** in
+/// a page's header, or the close button of a floating device panel.
+pub fn close_utility(app: &mut Harness, state: &Value, title: &str) -> Value {
+    let label = state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|label| label["text"] == title)
+        .unwrap_or_else(|| {
+            panic!(
+                "Utility title {title:?} missing: {}",
+                state["visible_labels"]
+            )
+        });
+    let x = (label["min"][0].as_f64().unwrap() + label["max"][0].as_f64().unwrap()) / 2.0;
+    let y = (label["min"][1].as_f64().unwrap() + label["max"][1].as_f64().unwrap()) / 2.0;
+    let bounds = state["window_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|bounds| {
+            bounds["min"][0].as_f64().unwrap() <= x
+                && bounds["max"][0].as_f64().unwrap() >= x
+                && bounds["min"][1].as_f64().unwrap() <= y
+                && bounds["max"][1].as_f64().unwrap() >= y
+        })
+        .expect("visible utility contains its title");
+    let page = bounds["max"][0] == state["viewport"][0];
+    if page {
+        // Back leads the page header, on the title's centerline.
+        let back = state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|label| {
+                label["text"] == "Back"
+                    && ((label["min"][1].as_f64().unwrap() + label["max"][1].as_f64().unwrap())
+                        / 2.0
+                        - y)
+                        .abs()
+                        < 2.0
+                    && label["max"][0].as_f64().unwrap() < x
+            })
+            .expect("page header has Back");
+        let bx = (back["min"][0].as_f64().unwrap() + back["max"][0].as_f64().unwrap()) / 2.0;
+        return app.command(json!({"command":"pointer", "phase":"click", "x":bx, "y":y}));
+    }
+    // Native close and title share a centerline; its distance from the right
+    // edge equals that centerline's distance from the top.
+    let x = bounds["max"][0].as_f64().unwrap() - (y - bounds["min"][1].as_f64().unwrap());
+    app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}))
+}

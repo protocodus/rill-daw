@@ -420,7 +420,9 @@ fn routine_context_blurs_and_stays_inert_while_foreground_input_and_escape_work(
                 .unwrap()
                 .contains(&json!("Device browser"))
         );
-        assert_blurred(&nested);
+        // The browser is a page: it replaces the workspace, so nothing blurs.
+        assert_eq!(nested["backdrop_blur"], json!([]));
+        unchanged(&nested, &baseline);
         app.key("Escape");
         app.click("File");
         let menu = painted(&mut app);

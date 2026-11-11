@@ -772,6 +772,14 @@ fn compact_rings_keep_clearance_focus_and_automation_without_faces_ticks_or_text
                             let mut arcs = Vec::new();
                             for shape in &output.shapes {
                                 match &shape.shape {
+                                    // Only the automation indicator dot, in the
+                                    // dial's top-right corner, outside the ring.
+                                    egui::Shape::Circle(circle)
+                                        if circle.radius <= 3.0
+                                            && circle
+                                                .center
+                                                .distance(geometry.dial.right_top())
+                                                < 6.0 => {}
                                     egui::Shape::Circle(_)
                                     | egui::Shape::LineSegment { .. }
                                     | egui::Shape::Text(_) => {

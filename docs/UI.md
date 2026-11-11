@@ -49,7 +49,7 @@ related-view links, a properties popup, and an open choice menu.
 
 [Light preview](assets/ui-gallery/navigation-light.png) · [Dark preview](assets/ui-gallery/navigation-dark.png)
 
-[`workspace_header`, `toolbar`](../crates/daw-ui/src/layout.rs) · [`view_links`](../crates/daw-ui/src/navigation.rs) · [`choice_menu`](../crates/daw-ui/src/widgets.rs) · [`empty_workspace`](../crates/daw-ui/src/empty_workspace.rs)
+[`workspace_header`, `toolbar`, `flex_row`](../crates/daw-ui/src/layout.rs) · [`view_links`, `page`](../crates/daw-ui/src/navigation.rs) · [`choice_menu`](../crates/daw-ui/src/widgets.rs) · [`empty_workspace`](../crates/daw-ui/src/empty_workspace.rs)
 
 ### Musical canvas primitives
 
@@ -192,7 +192,7 @@ variants. The API reference and interaction rules continue below.
 
 ## Workspace conventions
 
-Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Recording, Automation, Library, Setup, and Properties open on demand above their caller. Routine utilities soften inactive context with a bounded GPU blur beneath a light scrim; only the foreground utility accepts editing input. Menus, parameter editors, dropdowns, and color pickers share this focus treatment. Explicit modal decisions retain stronger dimming. Tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles name the window and its subject, such as **Properties · Bass**, **Join clips · Drums** or **Crossfade · Take 2**; the subject is not repeated as a body heading, and Properties keeps the same title on every tab. Controls beside an input (stepper −/+, **123**, **Keyboard…**) and header actions inside a popup stay frameless until hover; only inputs and the selected tab carry an outline. The Assistant follows the tabbed-popup order: Conversation/Examples/Tools/Tips with **AI settings** and a quiet **More** trailing, then the scope and its live context. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text. Explicit primary-action fills remain visible inside menus so their contrasting text stays legible; ordinary menu rows stay quiet.
+Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Routing, Recording, Automation, Device browser, Setup, Properties, History, Export and the other utilities open on demand as pages (`page`) in the central workspace, in place of their caller, with **Back** in a workspace header; Back and Escape return to the caller with its selection. Only the fixed-size device panels, Instrument and Effects, stay floating `popup` windows; they soften the inactive context with a bounded GPU blur beneath a light scrim, and only the foreground panel accepts editing input. Menus, parameter editors, dropdowns, and color pickers share this focus treatment. Explicit modal decisions retain stronger dimming. Tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles name the window and its subject, such as **Properties · Bass**, **Join clips · Drums** or **Crossfade · Take 2**; the subject is not repeated as a body heading, and Properties keeps the same title on every tab. Controls beside an input (stepper −/+, **123**, **Keyboard…**) and header actions inside a popup stay frameless until hover; only inputs and the selected tab carry an outline. The Assistant follows the tabbed-popup order: Conversation/Examples/Tools/Tips with **AI settings** and a quiet **More** trailing, then the scope and its live context. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text. Explicit primary-action fills remain visible inside menus so their contrasting text stays legible; ordinary menu rows stay quiet.
 
 `empty_workspace(ui, title, description, actions)` offers the next step when a
 workspace has no content. `EmptyWorkspaceAction` supplies a stable `id`, concise
@@ -455,7 +455,10 @@ Endpoint formatting retains small ranges instead of rounding both ends to zero.
 Stored values outside an editing range are preserved, visibly marked as outside
 the range, and reported exactly in the stored-value tooltip. Slider and knob
 numeric readouts discard stale native text when a sibling rail or dial changes
-the value, while preserving an unchanged typing draft. A slider's
+the value, while preserving an unchanged typing draft. Every automatable control carries `paint_automation_indicator`, a small corner
+dot: a faint ring before a lane exists, then the state color (compact dials use
+it alongside their colored arc). `automation_indicators` reports them for host
+diagnostics. A slider's
 automation glyph sits beside its handle: **A** for Read, **!** for Overridden,
 and a muted dash for Bypassed, without covering the center index or captions.
 
@@ -1124,11 +1127,12 @@ value, and its numeric field adjusts that held value. Overrides persist with the
 project and participate in Undo/Redo. Lane/folder bypass instead uses the stored
 manual value and is labelled **Bypassed**. Changing a curve or override on an
 existing enabled lane uses the live edit path, preserving loaded plug-ins.
-While any lane retains a manual override, the menu bar exposes **Cancel
-automation override** beside AI. **Edit → Cancel all automation overrides**
+While any lane retains a manual override, the menu bar shows one coral
+`automation_override_warning` beside AI, counting the overridden controls.
+Clicking it cancels them all. **Edit → Cancel all automation overrides**
 provides the same action. It clears every retained override in one history
 transaction, resuming enabled curves at the current playhead while preserving
-points, stored manual parameters, bypass states and selection. The button
+points, stored manual parameters, bypass states and selection. The warning
 disappears when no overrides remain; the Edit action is then disabled.
 Automation has a reserved orange identity (`Palette::automation`) across curves,
 nodes, handles, parameter-browser markers, control outlines and status menus,
@@ -1147,7 +1151,7 @@ current selection, and starts at its current value. Send sliders cover their
 supported 0–16 gain range and retain precise numeric entry. Mixer send summaries
 and the selected plug-in parameter's value control offer the same context action.
 
-Automation's **Add parameter** opens a chooser with the shared parameter browser for VST instruments and effects. Back, Escape and its close button restore the original curve, selected point and zoom. Choosing a parameter that already has a lane offers **Edit automation** instead of failing on duplicate creation; switching lanes does not add undo history. Creating a new lane consumes the chooser and preserves the outer workspace return path. Parameter metadata reads restore the selected instance's saved state and overrides in its sandbox, so a new lane starts from that instance's value rather than a plugin default. Switching between instances invalidates the selection and metadata.
+Automation lanes are created only from a control's **Automate** action; there is no separate parameter chooser. A new lane lands in Arrangement with a one-bar clip at the playhead's bar, selected and revealed, in the same Undo step as the lane. An existing lane's **Edit automation** selects and reveals its clip under the playhead (else its first clip), since clips play over the lane's own curve; a lane without clips opens the Automation editor, which edits curves only: override and resume belong to the control. **Window → Automation** is available for a selected automation track.
 
 `crossfade_editor` edits two normalized cubic Bézier control points and displays
 the paired incoming and outgoing gains. Their sum is one. Drag a handle or use
@@ -1342,7 +1346,7 @@ move and either edge to trim, including an unselected note with Cursor active.
 Resize edges take priority over overlapping note bodies. Explicit Cut and Erase
 tools retain their actions; Shift bypasses snap during edge edits.
 
-Instrument opens a concise device overview with the native **Open editor** action. **Automate…** opens a large parameter browser with automatic loading and focused search. Effect rows expose **Automate…** directly, without opening a native editor first. The last-touched parameter remains a direct shortcut in the overview. Native effect editor wrappers identify both the effect and its channel. Parameter editing and automation retain their isolated plugin state and undo behavior.
+Instrument opens a concise device overview with the native **Open editor** action. For plug-ins, **Parameters…** opens a large parameter browser with automatic loading and focused search; plug-in effect rows expose **Parameters…** directly. Built-in devices have no browser: every panel control offers **Automate** on right-click. The last-touched parameter remains a direct shortcut in the overview. Native effect editor wrappers identify both the effect and its channel. Parameter editing and automation retain their isolated plugin state and undo behavior.
 
 If a plug-in explicitly cannot create a native editor before startup completes,
 the overview explains that saving and exporting remain available. Pending
@@ -1350,7 +1354,7 @@ document actions continue from the stored project state. Failed state capture
 from an editor that became active still cancels the operation and retains
 recovery, protecting unsaved native changes.
 
-In a native VST3 editor, right-click a parameter and choose **Automate in Rill** to create its automation track from the current value, or open the existing curve. Rill brings the automation editor forward and keeps the plugin editor running. The action follows that instrument or effect instance, even if another channel is selected. Creating a lane has its own Undo step; reopening one preserves its points and adds no history. This uses the optional VST3 `IComponentHandler3` context-menu hook; editors that do not expose host menu entries still use **Automate…** and the parameter browser. Read-only and non-automatable parameters do not receive the native action.
+In a native VST3 editor, right-click a parameter and choose **Automate in Rill** to create its automation track from the current value, or open the existing curve. Rill brings the automation editor forward and keeps the plugin editor running. The action follows that instrument or effect instance, even if another channel is selected. Creating a lane has its own Undo step; reopening one preserves its points and adds no history. This uses the optional VST3 `IComponentHandler3` context-menu hook; editors that do not expose host menu entries still use **Pick parameter** or **Parameters…**. Read-only and non-automatable parameters do not receive the native action.
 
 `NativeContextMenu` in the shared component library preserves action IDs, checked/disabled entries, separators, and nested submenus. The editor sandbox either handles the plugin's copied host action or sends its popup model to a short-lived menu process. macOS and Windows use native OS menus; Linux reuses the shared egui menu renderer. Holding a host-rendered menu open does not suspend editor processing, state synchronization, or heartbeats. Closing/replacing the editor or menu kills the menu worker and releases retained plugin targets. Plugin-rendered menus remain under the plugin's own event-loop behavior and the editor sandbox's timeout protection.
 

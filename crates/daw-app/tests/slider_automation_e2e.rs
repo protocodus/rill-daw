@@ -40,7 +40,9 @@ fn automation(state: &Value, target: AutomationTarget) -> (&Value, u64) {
 fn assert_created(state: &Value, target: AutomationTarget, value: f64) -> u64 {
     let (lane, id) = automation(state, target);
     assert_eq!(state["selected_track"], id);
-    assert_eq!(state["popups"]["automation"], true);
+    assert_eq!(state["view"], "Arrangement");
+    assert_eq!(state["popups"]["automation"], false);
+    assert_eq!(state["selected_clip"], lane["clips"][0]["id"]);
     assert_eq!(state["popups"]["properties"], false);
     assert_eq!(state["popups"]["routing"], false);
     for point in lane["points"].as_array().unwrap() {

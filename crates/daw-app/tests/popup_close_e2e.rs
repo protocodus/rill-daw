@@ -12,31 +12,7 @@ fn window(app: &mut Harness, title: &str) -> Value {
 
 fn close(app: &mut Harness, title: &str) -> Value {
     let state = app.inspect();
-    let title = state["label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .rev()
-        .find(|label| label["text"] == title)
-        .unwrap_or_else(|| panic!("Popup title {title:?} missing: {}", state["visible_labels"]));
-    let x = (title["min"][0].as_f64().unwrap() + title["max"][0].as_f64().unwrap()) / 2.0;
-    let y = (title["min"][1].as_f64().unwrap() + title["max"][1].as_f64().unwrap()) / 2.0;
-    let bounds = state["window_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|bounds| {
-            bounds["min"][0].as_f64().unwrap() < x
-                && bounds["max"][0].as_f64().unwrap() > x
-                && bounds["min"][1].as_f64().unwrap() < y
-                && bounds["max"][1].as_f64().unwrap() > y
-        })
-        .expect("visible popup contains its title");
-    // Native close and title share a centerline. Its distance from the right
-    // edge equals that centerline's distance from the top, including the border.
-    // Derive from rendered bounds instead of hardcoding the component's padding.
-    let x = bounds["max"][0].as_f64().unwrap() - (y - bounds["min"][1].as_f64().unwrap());
-    app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}))
+    common::close_utility(app, &state, title)
 }
 
 #[test]
@@ -83,14 +59,6 @@ fn close_buttons_and_menus_work_after_typing_and_restore_the_editor() {
             assert_eq!(restored["popups"]["properties"], false);
             assert_eq!(restored["view"], "Clip");
             assert_eq!(restored["selected_clip"], editor["selected_clip"]);
-            assert_eq!(restored["project"], edited["project"]);
-            assert_eq!(restored["history"], edited["history"]);
-
-            let automation = window(&mut app, "Automation");
-            assert_eq!(automation["popups"]["automation"], true);
-            let restored = close(&mut app, "Add automation");
-            assert_eq!(restored["popups"]["automation"], false);
-            assert_eq!(restored["view"], "Clip");
             assert_eq!(restored["project"], edited["project"]);
             assert_eq!(restored["history"], edited["history"]);
 

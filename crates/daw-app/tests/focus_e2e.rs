@@ -74,22 +74,11 @@ fn one_workspace_at_a_time_and_back_preserve_the_project_and_editor_view() {
         assert!(properties["popup_context"]["shapes"].as_u64().unwrap() > 0);
         assert_eq!(properties["popup_context"]["interactive"], false);
 
-        // The caller is painted, but its previous Back target cannot navigate
-        // beneath the utility or change the editor selection/view state.
-        let back = editor["label_rects"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|rect| rect["text"] == "Back")
-            .unwrap();
-        let clicked_background = app.command(json!({
-            "command":"pointer", "phase":"click",
-            "x":(back["min"][0].as_f64().unwrap()+back["max"][0].as_f64().unwrap())*0.5,
-            "y":(back["min"][1].as_f64().unwrap()+back["max"][1].as_f64().unwrap())*0.5,
-        }));
-        assert_eq!(clicked_background["popups"]["properties"], true);
-        assert_eq!(clicked_background["selected_clip"], selected);
-        assert_eq!(clicked_background["project"], original);
+        // The page replaces the editor: its own Back sits where the editor's
+        // was, and the editor beneath cannot be reached.
+        assert_eq!(labels(&properties, "Back"), 1);
+        assert_eq!(properties["selected_clip"], selected);
+        assert_eq!(properties["project"], original);
 
         let nested = window(&mut app, "Routing");
         assert!(

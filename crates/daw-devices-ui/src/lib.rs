@@ -51,7 +51,8 @@ pub struct PanelState {
 /// Knob diameters from the panel grammar.
 pub const KNOB_DENSE: f32 = 48.0;
 pub const KNOB_HERO: f32 = 64.0;
-const CELL_WIDTH: f32 = 84.0;
+/// The narrowest cell of one control; cards divide their width into as many.
+const CELL_WIDTH: f32 = 92.0;
 
 /// The panel's width, for the window that hosts it.
 pub fn panel_width(descriptor: &DeviceDescriptor) -> f32 {
@@ -59,7 +60,7 @@ pub fn panel_width(descriptor: &DeviceDescriptor) -> f32 {
 }
 
 /// Draws a device's panel: header with presets, the response, then the
-/// sections in signal order, side by side where they share a row.
+/// sections as cards in signal order, side by side where they share a row.
 /// Instruments end with an audition keyboard and pitch and mod wheels.
 pub fn show(
     ui: &mut Ui,
@@ -77,6 +78,8 @@ pub fn show(
     }
     let rows = layout.sections.iter().map(|section| section.row).max();
     for row in 0..=rows.unwrap_or(0) {
+        // Weighted by every control a section has, not only the visible ones,
+        // so cards keep their place when a mode hides a control.
         let sections: Vec<_> = layout
             .sections
             .iter()
@@ -88,26 +91,30 @@ pub fn show(
                     .filter_map(|id| descriptor.parameter(*id))
                     .filter(|spec| (layout.visible)(spec.id, &|id| host.value(id)))
                     .collect();
-                (!visible.is_empty()).then_some((section.title, visible))
+                (!visible.is_empty()).then_some((
+                    section.title,
+                    visible,
+                    section.parameters.len() as f32,
+                ))
             })
             .collect();
         if sections.is_empty() {
             continue;
         }
-        // Top-aligned: a centered wrap staggers knobs and menus of unequal height.
-        let wrap = egui::Layout::left_to_right(egui::Align::TOP).with_main_wrap(true);
-        ui.with_layout(wrap, |ui| {
-            ui.spacing_mut().item_spacing.x = daw_ui::tokens::SPACE_LG;
-            for (title, visible) in sections {
-                ui.vertical(|ui| {
-                    daw_ui::text::subtitle(ui, title);
-                    ui.with_layout(wrap, |ui| {
-                        ui.spacing_mut().item_spacing.x = daw_ui::tokens::SPACE_XS;
-                        for spec in visible {
-                            let hero = layout.hero == Some(spec.id);
-                            control(ui, descriptor, spec, host, hero, &layout);
-                        }
-                    });
+        let weights: Vec<f32> = sections.iter().map(|(_, _, weight)| *weight).collect();
+        daw_ui::flex_row(ui, &weights, |ui, index| {
+            let (title, visible, _) = &sections[index];
+            daw_ui::text::subtitle(ui, *title);
+            // Equal columns across the card; controls fill rows in order.
+            let columns = ((ui.available_width() / CELL_WIDTH).floor() as usize).max(1);
+            let cell = ui.available_width() / columns as f32;
+            for line in visible.chunks(columns) {
+                ui.horizontal_top(|ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    for spec in line {
+                        let hero = layout.hero == Some(spec.id);
+                        control(ui, descriptor, spec, host, hero, cell, &layout);
+                    }
                 });
             }
         });
@@ -202,13 +209,14 @@ fn response(
     }
 }
 
-/// One control chosen by the parameter's range, in a fixed-width cell.
+/// One control chosen by the parameter's range, centered in a cell `width` wide.
 fn control(
     ui: &mut Ui,
     descriptor: &DeviceDescriptor,
     spec: &ParamSpec,
     host: &mut dyn DeviceHost,
     hero: bool,
+    width: f32,
     layout: &panels::Layout,
 ) {
     let normalized = host.value(spec.id);
@@ -216,9 +224,11 @@ fn control(
     let id = egui::Id::new((descriptor.id, spec.id));
     let control = AutomationControl::DeviceParameter { id: spec.id };
     ui.allocate_ui_with_layout(
-        egui::vec2(if hero { CELL_WIDTH * 1.25 } else { CELL_WIDTH }, 0.0),
+        egui::vec2(width, 0.0),
         egui::Layout::top_down(egui::Align::Center),
         |ui| {
+            // Compact horizontal padding leaves a choice's text the room of its cell.
+            ui.spacing_mut().button_padding.x = daw_ui::tokens::SPACE_SM;
             daw_ui::text::label(ui, spec.name);
             let navigation = match spec.range {
                 ParamRange::Linear { .. } | ParamRange::Log { .. } => {
@@ -274,8 +284,11 @@ fn control(
                     };
                     let current = spec.to_plain(normalized as f32);
                     let label = spec.format(normalized as f32);
-                    let response = daw_ui::select(id, label)
-                        .width(CELL_WIDTH - daw_ui::tokens::SPACE_XS)
+                    let response = daw_ui::select(id, &label)
+                        .width(width - daw_ui::tokens::SPACE_XS)
+                        // Long names ("Transistor Ladder") must not push the
+                        // next control out of its cell; the list shows them whole.
+                        .truncate()
                         .show_ui(ui, |ui| {
                             for (plain, option) in &options {
                                 if daw_ui::selectable(ui, *plain == current, option).clicked() {
@@ -283,7 +296,8 @@ fn control(
                                 }
                             }
                         })
-                        .response;
+                        .response
+                        .on_hover_text(&label);
                     daw_ui::automatable_parameter_context(ui, &response, control, automation)
                 }
                 ParamRange::Toggle => {

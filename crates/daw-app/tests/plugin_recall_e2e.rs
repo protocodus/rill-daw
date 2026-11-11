@@ -80,7 +80,7 @@ fn show_plugin_parameters(app: &mut Harness) {
         .iter()
         .any(|label| label == "Search parameters")
     {
-        app.click("Automate…");
+        app.click("Parameters…");
     }
 }
 

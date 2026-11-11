@@ -2204,11 +2204,6 @@ impl DawApp {
                     ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
                     return;
                 }
-                if self.automation_open && crate::automation_editor::cancel_automation_creation(ctx)
-                {
-                    ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
-                    return;
-                }
                 if self.instrument_open && self.close_instrument_parameters() {
                     ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
                     return;
@@ -2920,7 +2915,7 @@ impl DawApp {
                             (
                                 "Automation",
                                 PopupKind::Automation,
-                                track.is_some_and(|track| track.kind != TrackKind::Folder),
+                                track.is_some_and(|track| track.kind == TrackKind::Automation),
                             ),
                             (
                                 "Properties",
@@ -2967,10 +2962,9 @@ impl DawApp {
                             if self.assistant.busy() && daw_ui::small_button(ui, "Stop AI").clicked() {
                                 self.assistant.stop();
                             }
-                            if self.automation_override_count() > 0
-                                && daw_ui::small_button(ui, "Cancel automation override")
-                                    .on_hover_text("Clear all manual automation overrides. Enabled curves resume at the current playhead; bypass stays unchanged. Undo restores the overrides.")
-                                    .clicked() {
+                            let overrides = self.automation_override_count();
+                            if overrides > 0
+                                && daw_ui::automation_override_warning(ui, overrides).clicked() {
                                 self.cancel_automation_overrides();
                             }
                             ui.add_space(daw_ui::tokens::SPACE_LG);
@@ -3017,11 +3011,9 @@ impl DawApp {
         }
         let mut open = true;
         let mut close = false;
-        daw_ui::popup("About RILL", ctx)
+        daw_ui::page("About RILL")
             .id(egui::Id::new("about_rill"))
-            .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
-            .resizable(false)
-            .vscroll(false)
+            .width(daw_ui::tokens::POPUP_WIDTH_SM)
             .open(&mut open)
             .show(ctx, |ui| {
                 let mut footer = daw_ui::popup_footer(ui, "about_actions");
@@ -3157,18 +3149,14 @@ impl DawApp {
     }
 
     /// Add a track chosen from [`add_track_buttons`]. A new track appears after
-    /// `after` when given, otherwise at the end; instruments and automation
-    /// continue in their chooser first.
-    pub(crate) fn add_track(&mut self, ctx: &egui::Context, choice: NewTrack, after: Option<u64>) {
+    /// `after` when given, otherwise at the end; instruments continue in
+    /// their chooser first.
+    pub(crate) fn add_track(&mut self, choice: NewTrack, after: Option<u64>) {
         let (edit_kind, track_name) = match choice {
             NewTrack::Instrument => {
                 self.open_instrument_chooser(false);
                 self.new_track_after = after;
                 return;
-            }
-            NewTrack::Automation => {
-                self.start_automation_creation(ctx);
-                return self.open_popup(PopupKind::Automation);
             }
             NewTrack::Midi => (EditableTrackKind::Midi, "New instrument".to_owned()),
             NewTrack::Audio => (EditableTrackKind::Audio, "New audio".to_owned()),
@@ -3235,7 +3223,7 @@ impl DawApp {
     fn track_menu(&mut self, ui: &mut egui::Ui) {
         daw_ui::command_menu_button(ui, "Track", |ui| {
             if let Some(choice) = add_track_buttons(ui) {
-                self.add_track(ui.ctx(), choice, None);
+                self.add_track(choice, None);
             }
             ui.separator();
             let track = self.selected_track.and_then(|id| self.project.track(id));
@@ -3329,7 +3317,7 @@ impl DawApp {
         // One form column plus the quiet action that trails a few rows.
         let width =
             daw_ui::tokens::FORM_WIDTH + daw_ui::tokens::SPACE_SM + daw_ui::tokens::SELECT_WIDTH;
-        daw_ui::popup("Setup", ctx).open(&mut open).default_width(width).vscroll(false).show(ctx, |ui| {
+        daw_ui::page("Setup").open(&mut open).width(width).show(ctx, |ui| {
             daw_ui::popup_tabs(ui, &mut self.setup_page, &[
                 (SetupPage::Audio, "Audio"),
                 (SetupPage::Appearance, "Appearance"),
@@ -3891,7 +3879,9 @@ impl DawApp {
         } else {
             daw_ui::ViewBackdrop::capture(ctx, scene_bounds)
         };
-        daw_ui::paint_popup_backdrop(ctx, utility_open);
+        // Pages fill the workspace and leave the transport as it is; only a
+        // floating device panel softens what lies beneath it.
+        daw_ui::paint_popup_backdrop(ctx, self.instrument_open || self.effects_open);
         self.update_note_audition(ctx);
         // Utility windows own their close button and Apply/Cancel flags. Restore
         // their caller only on dismissal, never on a transition to another tool.
@@ -4248,7 +4238,6 @@ pub(crate) enum NewTrack {
     Audio,
     Bus,
     Folder,
-    Automation,
 }
 
 /// The track creation commands shared by the Track menu and the arranger.
@@ -4260,7 +4249,6 @@ pub(crate) fn add_track_buttons(ui: &mut egui::Ui) -> Option<NewTrack> {
         ("Add audio track", NewTrack::Audio),
         ("Add bus", NewTrack::Bus),
         ("Add folder", NewTrack::Folder),
-        ("Add automation track…", NewTrack::Automation),
     ] {
         if daw_ui::button(ui, label).clicked() {
             choice = Some(track);

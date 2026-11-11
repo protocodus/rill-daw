@@ -13,14 +13,6 @@ fn menu(app: &mut Harness, parent: &str, child: &str) -> Value {
     app.click(child)
 }
 
-fn visible(state: &Value, label: &str) -> bool {
-    state["visible_labels"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|value| value == label)
-}
-
 fn channel(state: &Value, id: u64) -> &Value {
     state["mixer"]["channels"]
         .as_array()
@@ -66,6 +58,17 @@ fn cleared_project(before: &Value) -> Value {
     expected
 }
 
+/// The menu bar's single warning, worded with how many controls are held.
+fn override_warning(state: &Value) -> Option<String> {
+    state["visible_labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .find(|label| label.ends_with(" overridden"))
+        .map(str::to_owned)
+}
+
 fn assert_selection(state: &Value, before: &Value) {
     for key in ["selected_track", "selected_clip"] {
         assert_eq!(
@@ -87,8 +90,8 @@ fn assert_single_cancel(state: &Value, before: &Value) {
     );
     assert_eq!(state["history"]["undo"][0], "Cancel automation override");
     assert!(
-        !visible(state, "Cancel automation override"),
-        "Global button hides after cancellation"
+        override_warning(state).is_none(),
+        "Global warning hides after cancellation"
     );
     assert_selection(state, before);
 }
@@ -213,8 +216,9 @@ fn global_mouse_action_and_edit_menu_clear_all_targets_in_one_undoable_step() {
         track(&held, gain)["automation"]["points"],
         track(&before_drag, gain)["automation"]["points"]
     );
-    assert!(visible(&held, "Cancel automation override"));
-    let cleared = app.click("Cancel automation override");
+    let warning = override_warning(&held).expect("global override warning");
+    assert_eq!(warning, "5 automations overridden");
+    let cleared = app.click(&warning);
     assert_single_cancel(&cleared, &held);
     assert_eq!(
         track(&cleared, bypassed)["mute"],
@@ -246,7 +250,7 @@ fn global_mouse_action_and_edit_menu_clear_all_targets_in_one_undoable_step() {
 
     let undone = menu(&mut app, "Edit", "Undo");
     assert_eq!(undone["project"], held["project"]);
-    assert!(visible(&undone, "Cancel automation override"));
+    assert!(override_warning(&undone).is_some());
     let redone = menu(&mut app, "Edit", "Redo");
     assert_eq!(redone["project"], cleared["project"]);
     assert_selection(&redone, &held);
@@ -329,7 +333,7 @@ fn global_cancellation_resumes_gain_pan_and_send_curves_in_the_running_render_wo
     app.click("Play");
     rendered_tail(&mut app, [0.0, 0.6]);
     let before = app.inspect();
-    let cleared = app.click("Cancel automation override");
+    let cleared = app.click(&override_warning(&before).expect("global override warning"));
     assert_single_cancel(&cleared, &before);
     rendered_tail(&mut app, [0.225, 0.1125]);
     let undone = menu(&mut app, "Edit", "Undo");
