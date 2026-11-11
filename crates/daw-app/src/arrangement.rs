@@ -285,9 +285,6 @@ impl DawApp {
             data.get_temp::<daw_ui::WaveformAmplitudeScale>(amplitude_id)
                 .unwrap_or_default()
         });
-        // Full padding needs about 1520 points for the tools, View and help on
-        // one row; tighter padding keeps them together on laptop-width windows.
-        let compact_toolbar = ui.available_width() < 1520.0;
         // Zoom lives beside the ruler, which is drawn after this frame's view
         // changes are applied, so its click arrives one frame later.
         let corner_zoom_id = egui::Id::new("arrangement_corner_zoom");
@@ -306,10 +303,7 @@ impl DawApp {
         // Workflow order: modes, then the precision that governs them, then
         // creation; the caption fills the gap before the view controls.
         daw_ui::toolbar(ui, |ui| {
-            if compact_toolbar {
-                ui.spacing_mut().button_padding.x = daw_ui::tokens::SPACE_SM;
-                ui.spacing_mut().item_spacing.x = daw_ui::tokens::SPACE_XS;
-            }
+            daw_ui::compact_toolbar_spacing(ui);
             let tools = daw_ui::editor_tools_with_context(
                 ui,
                 &mut self.tool,

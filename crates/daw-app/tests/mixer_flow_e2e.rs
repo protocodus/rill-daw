@@ -319,7 +319,9 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
             .iter()
             .find(|channel| channel["track"] == bus_b)
             .unwrap();
-        app.command(json!({"command":"pointer","phase":"move","x":(room["pan"]["min"][0].as_f64().unwrap()+room["pan"]["max"][0].as_f64().unwrap())*0.5,"y":(top(&room["pan"])+bottom(&room["pan"]))*0.5}));
+        // The short window scrolls the pan under the transport; hover the
+        // visible part of the strip.
+        app.command(json!({"command":"pointer","phase":"move","x":(room["pan"]["min"][0].as_f64().unwrap()+room["pan"]["max"][0].as_f64().unwrap())*0.5,"y":top(&scrolled["mixer"]["reorder_viewport"]) + 20.0}));
         let small = paint(&mut app);
         let routes = small["mixer"]["routes"].as_array().unwrap();
         assert_eq!(routes.len(), 1);

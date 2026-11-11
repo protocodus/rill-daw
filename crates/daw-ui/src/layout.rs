@@ -9,6 +9,15 @@ pub fn toolbar<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResp
     toolbar_with_row_height(ui, tokens::CONTROL_HEIGHT, contents)
 }
 
+/// Tighten a toolbar's padding on laptop-width windows, so labelled tools
+/// with icons stay on one row. Call first inside the toolbar.
+pub fn compact_toolbar_spacing(ui: &mut Ui) {
+    if ui.ctx().content_rect().width() < 1520.0 {
+        ui.spacing_mut().button_padding.x = tokens::SPACE_XS;
+        ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+    }
+}
+
 /// A toolbar containing calibrated sliders. Reserve the whole row before any
 /// controls are painted so preceding labels, choices and buttons share its axis.
 pub fn parameter_toolbar<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResponse<R> {

@@ -2410,11 +2410,11 @@ impl DawApp {
                             FocusedView::Workspace(view) => Some(view),
                             _ => None,
                         }).filter(|_| matches!(self.focused_view(), FocusedView::Popup(_))).unwrap_or(self.view);
-                        for (view, label) in [
-                            (WorkspaceView::Arrangement, "Arranger"),
-                            (WorkspaceView::Mixer, "Mixer"),
+                        for (view, label, icon) in [
+                            (WorkspaceView::Arrangement, "Arranger", daw_ui::Icon::Arranger),
+                            (WorkspaceView::Mixer, "Mixer", daw_ui::Icon::Mixer),
                         ] {
-                            if daw_ui::tab_choice(ui, active == view, label).clicked() {
+                            if ui.add(daw_ui::IconButton::tab(active == view, label).icon(icon)).clicked() {
                                 self.open_workspace(view);
                             }
                         }

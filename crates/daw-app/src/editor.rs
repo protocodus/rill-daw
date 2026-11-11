@@ -1007,7 +1007,9 @@ impl DawApp {
                             None, egui::style::ScrollAnimation::none());
                     }
                     if ui.is_enabled() && !panning && !egui::Popup::is_any_open(ui.ctx())
-                        && ui.input(|input| input.pointer.hover_pos()).is_some_and(|pos| strip.response.rect.contains(pos))
+                        // A strip scrolled under the transport must not preview from there.
+                        && ui.input(|input| input.pointer.hover_pos())
+                        .is_some_and(|pos| strip.response.rect.intersect(reorder_rect).contains(pos))
                     { flow_source = Some(track.id); }
                     let mut channel_diagnostics = strip.inner;
                     channel_diagnostics["strip"] = rect_json(strip.response.rect);
