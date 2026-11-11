@@ -797,6 +797,7 @@ impl DawApp {
         }
         if state.transform.is_none() {
             daw_ui::toolbar(ui, |ui| {
+                daw_ui::compact_toolbar_spacing(ui);
                 if state.generate.is_some() {
                     ui.disable();
                 }

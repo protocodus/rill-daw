@@ -125,21 +125,16 @@ pub fn dialog_actions<A, S>(
     )
 }
 
-/// A text-only dialog action. Footer labels never gain label-derived icons;
-/// use `IconButton::with_icon` where a footer action really wants one.
+/// A dialog footer action, with the icon its label maps to.
 pub fn dialog_button_widget(label: impl Into<WidgetText>) -> crate::IconButton {
-    // The tab constructor is the only icon-free one; the action role and an
-    // always-visible frame turn it back into an ordinary command.
-    crate::IconButton::tab(false, label)
-        .action()
-        .frame_when_inactive(true)
+    crate::IconButton::new(label).action()
 }
 
 pub fn dialog_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
     ui.add(dialog_button_widget(label))
 }
 
-/// The single primary action of a dialog footer: solid action fill, text only.
+/// The single primary action of a dialog footer: solid action fill.
 pub fn dialog_primary_widget(ui: &Ui, label: impl Into<WidgetText>) -> crate::IconButton {
     let action = theme::palette(ui.ctx()).action;
     dialog_button_widget(label)
