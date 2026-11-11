@@ -46,6 +46,17 @@ fn rect(value: &serde_json::Value) -> Option<egui::Rect> {
 const MIN_WIDTH: f32 = 144.0;
 
 impl DawApp {
+    /// The name of an arranger clip of any kind; take sources are not named here.
+    fn clip_name(&self, track: u64, clip: u64) -> Option<&String> {
+        match self.project.clip(track, clip) {
+            Some(item) => (!item.is_take_source()).then_some(&item.name),
+            None => self
+                .project
+                .automation_clip(track, clip)
+                .map(|pattern| &pattern.name),
+        }
+    }
+
     pub(crate) fn apply_precise_clip_timing(
         &mut self,
         edit: daw_ui::ClipTimingEdit,
@@ -135,7 +146,10 @@ impl DawApp {
 
     fn commit_inline_name(&mut self, mut draft: RenameDraft) {
         if draft.text.trim().is_empty() {
-            if matches!(draft.target, RenameTarget::Clip(..)) {
+            // Audio and MIDI clips may be unnamed; automation patterns may not.
+            if let RenameTarget::Clip(track, clip) = draft.target
+                && self.project.clip(track, clip).is_some()
+            {
                 draft.text.clear();
             } else {
                 return;
@@ -145,9 +159,8 @@ impl DawApp {
         let unchanged = match draft.target {
             RenameTarget::Project => self.project.name == draft.text,
             RenameTarget::Clip(track, clip) => self
-                .project
-                .clip(track, clip)
-                .is_none_or(|clip| clip.name == draft.text),
+                .clip_name(track, clip)
+                .is_none_or(|name| *name == draft.text),
             RenameTarget::Track(track) => self
                 .project
                 .track(track)
@@ -171,11 +184,20 @@ impl DawApp {
                 (Ok(()), "Rename project")
             }
             RenameTarget::Clip(track, clip) => {
-                candidate.clip_mut(track, clip).unwrap().name = draft.text;
-                (
-                    candidate.synchronize_linked_clip(track, clip),
-                    "Rename clip",
-                )
+                if let Some(item) = candidate.clip_mut(track, clip) {
+                    item.name = draft.text;
+                    (
+                        candidate.synchronize_linked_clip(track, clip),
+                        "Rename clip",
+                    )
+                } else {
+                    let pattern = candidate
+                        .automation_lane_mut(track)
+                        .and_then(|lane| lane.clips.iter_mut().find(|item| item.id == clip))
+                        .unwrap();
+                    pattern.name = draft.text;
+                    (Ok(()), "Rename clip")
+                }
             }
             RenameTarget::Track(track) => {
                 candidate.track_mut(track).unwrap().name = draft.text;
@@ -210,10 +232,8 @@ impl DawApp {
             self.selected_track
                 .zip(self.selected_clip)
                 .and_then(|(track, clip)| {
-                    self.project
-                        .clip(track, clip)
-                        .filter(|clip| !clip.is_take_source())
-                        .map(|clip| (RenameTarget::Clip(track, clip.id), clip.name.clone()))
+                    self.clip_name(track, clip)
+                        .map(|name| (RenameTarget::Clip(track, clip), name.clone()))
                 })
         } else {
             None
@@ -281,10 +301,8 @@ impl DawApp {
             self.selected_track
                 .zip(self.selected_clip)
                 .and_then(|(track, clip)| {
-                    self.project
-                        .clip(track, clip)
-                        .filter(|clip| !clip.is_take_source())
-                        .map(|item| (RenameTarget::Clip(track, clip), item.name.clone()))
+                    self.clip_name(track, clip)
+                        .map(|name| (RenameTarget::Clip(track, clip), name.clone()))
                 })
         } else {
             self.selected_track.and_then(|track| {
@@ -329,9 +347,7 @@ impl DawApp {
         }
         let name = match draft.target {
             RenameTarget::Project => Some(&self.project.name),
-            RenameTarget::Clip(track, clip) => {
-                self.project.clip(track, clip).map(|clip| &clip.name)
-            }
+            RenameTarget::Clip(track, clip) => self.clip_name(track, clip),
             RenameTarget::Track(track) => self.project.track(track).map(|track| &track.name),
             RenameTarget::Marker(id) => self.project.marker(id).map(|marker| &marker.name),
         };
@@ -350,8 +366,17 @@ impl DawApp {
                     RenameTarget::Clip(_, id) => timeline["clips"]
                         .as_array()?
                         .iter()
+                        .chain(
+                            timeline["automation"]
+                                .as_array()?
+                                .iter()
+                                .filter_map(|lane| lane["clips"].as_array())
+                                .flatten(),
+                        )
                         .find(|clip| clip["id"] == id)
-                        .and_then(|clip| rect(&clip["visible_rect"]))
+                        .and_then(|clip| {
+                            rect(&clip["visible_rect"]).or_else(|| rect(&clip["rect"]))
+                        })
                         .map(|rect| {
                             egui::Rect::from_min_size(
                                 rect.min + egui::vec2(4.0, 0.0),

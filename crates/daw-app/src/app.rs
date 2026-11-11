@@ -2076,9 +2076,11 @@ impl DawApp {
         let (label, result) =
             if let Some(automation_clip) = self.project.automation_clip(track, clip).cloned() {
                 match command {
-                    ClipCommand::Split(_) => (
-                        "Split clip",
-                        Err(anyhow::anyhow!("Automation clips cannot be split")),
+                    ClipCommand::Split(beat) => (
+                        "Split automation clip",
+                        self.project
+                            .split_automation_clip(track, clip, beat)
+                            .map(Some),
                     ),
                     ClipCommand::Duplicate => (
                         "Duplicate automation clip",
@@ -2718,6 +2720,7 @@ impl DawApp {
                             for (label, shortcut, action) in clipboard {
                                 let enabled = if matches!(action, crate::audio_editor::AudioClipboardAction::Paste) {
                                     self.has_arranger_clipboard() || crate::audio_editor::has_audio_clipboard(ui.ctx())
+                                        || crate::arranger_automation::automation_clipboard(ui.ctx()).is_some()
                                 } else { has_clip };
                                 if daw_ui::menu_item_enabled(ui, enabled, label, Some(shortcut)).clicked() {
                                     if !self.arranger_clipboard_action(ui.ctx(), action) {
@@ -2816,7 +2819,7 @@ impl DawApp {
                             ui.close();
                         }
                         if ui
-                            .add_enabled(has_clip, daw_ui::button_widget("Join clips…"))
+                            .add_enabled(has_clip && self.selected().is_some(), daw_ui::button_widget("Join clips…"))
                             .clicked()
                         {
                             self.open_popup(PopupKind::Join);

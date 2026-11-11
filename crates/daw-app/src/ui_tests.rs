@@ -607,7 +607,7 @@ fn duplicating_the_final_note_extends_the_clip_and_renders_both_notes() {
 }
 
 #[test]
-fn double_clicking_a_clip_opens_the_focused_editor_without_changing_the_project() {
+fn double_clicking_a_clip_starts_renaming_it_without_changing_the_project() {
     let mut harness = Harness::new(0.0);
     let before = harness.app.project.clone();
     let output = harness.settle_full();
@@ -617,10 +617,9 @@ fn double_clicking_a_clip_opens_the_focused_editor_without_changing_the_project(
         harness.full_pointer(clip, PointerButton::Primary, true);
         harness.full_pointer(clip, PointerButton::Primary, false);
     }
-    let output = harness.settle_full();
-    assert_eq!(harness.app.view, WorkspaceView::Clip);
-    assert!(has_text(&output, "C4"));
-    assert!(has_text(&output, "Clip Editor · Pattern"));
+    harness.settle_full();
+    assert_eq!(harness.app.view, WorkspaceView::Arrangement);
+    assert!(harness.app.rename_active(&harness.ctx));
     assert_eq!(harness.app.project, before);
 }
 

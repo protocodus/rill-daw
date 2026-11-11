@@ -413,7 +413,47 @@ impl DawApp {
         if self.view != WorkspaceView::Arrangement {
             return false;
         }
+        let automation = self
+            .selected_track
+            .zip(self.selected_clip)
+            .and_then(|(track, clip)| {
+                Some((track, self.project.automation_clip(track, clip)?.clone()))
+            });
         match action {
+            // A selected pattern copies to the automation clipboard, which
+            // pastes onto the selected automation lane at the cursor.
+            AudioClipboardAction::Copy | AudioClipboardAction::Cut if automation.is_some() => {
+                let (track, clip) = automation.unwrap();
+                crate::arranger_automation::copy_automation_clip(ctx, &clip);
+                self.arranger_selection.clipboard = None;
+                if matches!(action, AudioClipboardAction::Cut) {
+                    self.apply_clip_command(track, clip.id, crate::app::ClipCommand::Delete);
+                }
+                true
+            }
+            AudioClipboardAction::Paste
+                if self.arranger_selection.clipboard.is_none()
+                    && let Some(clip) = crate::arranger_automation::automation_clipboard(ctx) =>
+            {
+                if let Some(track) = self
+                    .selected_track
+                    .filter(|track| self.project.automation_lane(*track).is_some())
+                {
+                    self.begin_edit();
+                    match self
+                        .project
+                        .paste_automation_clip(track, &clip, self.cursor)
+                    {
+                        Ok(id) => {
+                            self.selected_clip = Some(id);
+                            self.edit_label = Some("Paste automation clip".into());
+                            self.changed();
+                        }
+                        Err(error) => self.message(Err(error), ""),
+                    }
+                }
+                true
+            }
             AudioClipboardAction::Copy | AudioClipboardAction::Cut => {
                 self.arranger_selection.clipboard = self.arranger_clipboard();
                 if self.arranger_selection.clipboard.is_some() {

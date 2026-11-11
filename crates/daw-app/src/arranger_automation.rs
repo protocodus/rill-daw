@@ -19,6 +19,22 @@ pub(crate) enum AutomationEdit {
     Loop(f64, f64),
 }
 
+/// Pattern actions the arranger performs outside the automation edit itself.
+pub(crate) enum LaneCommand {
+    EditAutomation(u64),
+    Rename(u64),
+    Stretch(u64),
+}
+
+/// Patterns copy to their own clipboard: they paste onto automation lanes only.
+pub(crate) fn copy_automation_clip(ctx: &egui::Context, clip: &AutomationClip) {
+    ctx.data_mut(|data| data.insert_temp(egui::Id::new("automation_clipboard"), clip.clone()));
+}
+
+pub(crate) fn automation_clipboard(ctx: &egui::Context) -> Option<AutomationClip> {
+    ctx.data(|data| data.get_temp::<AutomationClip>(egui::Id::new("automation_clipboard")))
+}
+
 pub(crate) struct LaneView {
     pub track: u64,
     pub rect: Rect,
@@ -28,6 +44,8 @@ pub(crate) struct LaneView {
     pub tool: daw_ui::EditorTool,
     /// Length for a pattern from the context menu: the last selected clip's.
     pub new_length: f64,
+    /// The playhead, for Split at cursor.
+    pub cursor: f64,
     pub color: egui::Color32,
     pub navigating: bool,
     pub pointer_blocked: bool,
@@ -40,6 +58,9 @@ pub(crate) struct LaneResponse {
     pub cursor: Option<f64>,
     /// A plain click on the lane background; two make a new pattern.
     pub background_click: Option<Pos2>,
+    /// A click on a pattern; two rename it.
+    pub clip_click: Option<(u64, Pos2)>,
+    pub command: Option<LaneCommand>,
     pub diagnostic: serde_json::Value,
 }
 
@@ -98,6 +119,8 @@ pub(crate) fn automation_lane(
         interacted: false,
         cursor: None,
         background_click: None,
+        clip_click: None,
+        command: None,
         diagnostic: serde_json::Value::Null,
     };
     let id = egui::Id::new(("arranger_automation", view.track));
@@ -207,9 +230,7 @@ pub(crate) fn automation_lane(
                     result.edits.push(AutomationEdit::Clear);
                     ui.close();
                 }
-                let clipboard = ui.ctx().data(|data| {
-                    data.get_temp::<AutomationClip>(egui::Id::new("automation_clipboard"))
-                });
+                let clipboard = automation_clipboard(ui.ctx());
                 if ui
                     .add_enabled(
                         clipboard.is_some(),
@@ -252,6 +273,11 @@ pub(crate) fn automation_lane(
         if header.clicked() || header.drag_started() {
             *selected = Some(clip.id);
             result.interacted = true;
+        }
+        if header.clicked()
+            && let Some(position) = header.interact_pointer_pos()
+        {
+            result.clip_click = Some((clip.id, position));
         }
         let pointer_beat = |position: Pos2| view.viewport.beat_at(view.rect, position.x);
         if header.clicked()
@@ -357,35 +383,76 @@ pub(crate) fn automation_lane(
             }
         }
         if !view.navigating {
+            // The same actions, labels and order as audio and MIDI clips,
+            // without those that do not apply to automation.
             header.context_menu(|ui| {
                 daw_ui::command_menu_contents(ui, |ui| {
-                    if daw_ui::automation_button(ui, "Loop this clip").clicked() {
+                    if daw_ui::button(ui, "Edit automation").clicked() {
+                        result.command = Some(LaneCommand::EditAutomation(clip.id));
+                        ui.close();
+                    }
+                    if daw_ui::button(ui, "Loop this clip")
+                        .on_hover_text(
+                            "Set the loop to this clip's exact bounds and enable looping",
+                        )
+                        .clicked()
+                    {
                         result
                             .edits
                             .push(AutomationEdit::Loop(clip.start, clip.end()));
                         ui.close();
                     }
-                    if daw_ui::automation_button(ui, "Copy pattern").clicked() {
-                        ui.ctx().data_mut(|data| {
-                            data.insert_temp(egui::Id::new("automation_clipboard"), clip.clone())
-                        });
+                    ui.separator();
+                    if daw_ui::button(ui, "Copy").clicked() {
+                        copy_automation_clip(ui.ctx(), clip);
                         ui.close();
                     }
-                    for (label, linked) in [("Duplicate pattern", false), ("Ghost pattern", true)] {
-                        if daw_ui::automation_button(ui, label).clicked() {
-                            result
-                                .edits
-                                .push(AutomationEdit::Copy(clip.id, clip.end(), linked));
-                            ui.close();
-                        }
+                    if daw_ui::button(ui, "Duplicate").clicked() {
+                        result
+                            .edits
+                            .push(AutomationEdit::Copy(clip.id, clip.end(), false));
+                        ui.close();
+                    }
+                    if daw_ui::button(ui, "Rename…").clicked() {
+                        result.command = Some(LaneCommand::Rename(clip.id));
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui
+                        .add_enabled(
+                            view.cursor > clip.start && view.cursor < clip.end(),
+                            daw_ui::button_widget("Split at cursor"),
+                        )
+                        .clicked()
+                    {
+                        result
+                            .edits
+                            .push(AutomationEdit::Split(clip.id, view.cursor));
+                        ui.close();
+                    }
+                    if daw_ui::button(ui, "Stretch").clicked() {
+                        result.command = Some(LaneCommand::Stretch(clip.id));
+                        ui.close();
+                    }
+                    if daw_ui::button(ui, "Ghost copy")
+                        .on_hover_text("Create another clip sharing its points")
+                        .clicked()
+                    {
+                        result
+                            .edits
+                            .push(AutomationEdit::Copy(clip.id, clip.end(), true));
+                        ui.close();
                     }
                     if clip.link_group.is_some()
-                        && daw_ui::automation_button(ui, "Make pattern independent").clicked()
+                        && daw_ui::button(ui, "Make independent")
+                            .on_hover_text("Disconnect this ghost while keeping its current points")
+                            .clicked()
                     {
                         result.edits.push(AutomationEdit::Independent(clip.id));
                         ui.close();
                     }
-                    if daw_ui::automation_button(ui, "Delete pattern").clicked() {
+                    ui.separator();
+                    if daw_ui::button(ui, "Delete").clicked() {
                         result.edits.push(AutomationEdit::Delete(clip.id));
                         ui.close();
                     }

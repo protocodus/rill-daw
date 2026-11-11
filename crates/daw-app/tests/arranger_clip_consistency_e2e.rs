@@ -301,3 +301,67 @@ fn tracks_are_added_from_the_arranger_footer_and_context_menu() {
     assert_eq!(undone["project"], footer["project"], "one undo step");
     app.quit();
 }
+
+fn rename_by_double_click(app: &mut Harness, at: (f64, f64), name: &str) -> Value {
+    let editing = pointer(app, "double_click", at, "primary");
+    assert_eq!(
+        editing["view"], "Arrangement",
+        "double-click never opens an editor"
+    );
+    assert!(
+        editing["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label == "Apply name")
+    );
+    app.command(json!({"command":"key","key":"A","cmd":true}));
+    app.key("Backspace");
+    app.command(json!({"command":"text","text":name}));
+    app.click("Apply name")
+}
+
+#[test]
+fn double_click_renames_every_clip_kind_and_edit_actions_apply_to_patterns() {
+    let mut app = Harness::new();
+    let (opened, midi, lane) = fixture(&mut app);
+    let named =
+        rename_by_double_click(&mut app, (x_at(&opened, 1.0), row_y(&opened, midi)), "Riff");
+    assert_eq!(track(&named, midi)["clips"][0]["name"], "Riff");
+    let body = inside(pattern_rect(&named, 0), 0.5, 0.7);
+    let named = rename_by_double_click(&mut app, body, "Swell");
+    assert_eq!(patterns(&named, lane)[0]["name"], "Swell");
+    assert_eq!(track(&named, midi)["clips"].as_array().unwrap().len(), 1);
+
+    // Edit → Split at cursor splits the selected pattern at the playhead.
+    let state = app.command(json!({"command":"pointer","phase":"click","x":x_at(&named, 6.0),"y":named["timeline"]["ruler"]["min"][1].as_f64().unwrap() + 10.0}));
+    let cursor = state["timeline"]["cursor"].as_f64().unwrap();
+    assert!(cursor > 4.0 && cursor < 8.0, "playhead at {cursor}");
+    pointer(&mut app, "click", body, "primary");
+    app.click("Edit");
+    let split = app.click("Split at cursor");
+    assert_eq!(patterns(&split, lane).len(), 2);
+
+    // Edit → Copy and Paste put a pattern on the selected lane at the playhead.
+    pointer(
+        &mut app,
+        "click",
+        inside(pattern_rect(&split, 0), 0.5, 0.7),
+        "primary",
+    );
+    app.click("Edit");
+    app.click("Copy");
+    app.command(json!({"command":"pointer","phase":"click","x":x_at(&split, 20.0),"y":split["timeline"]["ruler"]["min"][1].as_f64().unwrap() + 10.0}));
+    pointer(
+        &mut app,
+        "click",
+        inside(pattern_rect(&split, 0), 0.5, 0.7),
+        "primary",
+    );
+    app.click("Edit");
+    let pasted = app.click("Paste");
+    let clips = patterns(&pasted, lane);
+    assert_eq!(clips.len(), 3);
+    assert!(clips.iter().any(|clip| clip["start"] == 20.0));
+    app.quit();
+}

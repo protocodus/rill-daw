@@ -71,9 +71,9 @@ fn pattern_copy_paste_derivation_and_both_trim_edges_preserve_source_points() {
     project.save(&path).unwrap();
     let initial = app.command(json!({"command":"open","path":path}));
     click(&mut app, pattern_header(&initial, 0), "secondary");
-    let ghost = app.click("Ghost pattern");
+    let ghost = app.click("Ghost copy");
     click(&mut app, pattern_header(&ghost, 1), "secondary");
-    let independent = app.click("Make pattern independent");
+    let independent = app.click("Make independent");
     assert!(lane(&independent)["clips"][1]["link_group"].is_null());
     // Points are drawn with Pencil, as notes are in the piano roll.
     app.click("Pencil");
@@ -101,7 +101,7 @@ fn pattern_copy_paste_derivation_and_both_trim_edges_preserve_source_points() {
         "Smooth"
     );
     click(&mut app, pattern_header(&smooth, 0), "secondary");
-    app.click("Copy pattern");
+    app.click("Copy");
     let state = app.inspect();
     let at = point(&state, 8.0, 0.7);
     click(&mut app, at, "secondary");
@@ -109,7 +109,7 @@ fn pattern_copy_paste_derivation_and_both_trim_edges_preserve_source_points() {
     assert_eq!(lane(&pasted)["clips"][2]["start"], 8.0);
     assert!(lane(&pasted)["clips"][2]["link_group"].is_null());
     click(&mut app, pattern_header(&pasted, 0), "secondary");
-    let copied = app.click("Duplicate pattern");
+    let copied = app.click("Duplicate");
     let duplicate = lane(&copied)["clips"][3]["id"].as_u64().unwrap();
     assert_ne!(duplicate, original);
     app.click("Select");
@@ -140,7 +140,7 @@ fn pattern_copy_paste_derivation_and_both_trim_edges_preserve_source_points() {
     assert_eq!(undone["project"], trimmed["project"]);
     let state = app.inspect();
     click(&mut app, pattern_header(&state, 2), "secondary");
-    let removed = app.click("Delete pattern");
+    let removed = app.click("Delete");
     assert_eq!(lane(&removed)["clips"].as_array().unwrap().len(), 3);
     app.quit();
 }
@@ -235,7 +235,7 @@ fn points_patterns_ghosts_placement_precedence_undo_and_archive_work_in_arranger
     sample(&rendered, 3.5, 0.48);
     sample(&rendered, 6.5, 0.12);
     click(&mut app, pattern_header(&stepped, 0), "secondary");
-    let copied = app.click("Ghost pattern");
+    let copied = app.click("Ghost copy");
     assert_eq!(lane(&copied)["clips"].as_array().unwrap().len(), 2);
     assert_eq!(
         lane(&copied)["clips"][0]["link_group"],

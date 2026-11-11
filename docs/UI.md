@@ -1202,9 +1202,14 @@ position, as long as the last selected clip. Patterns behave like audio and MIDI
 clips: a click anywhere selects, Select drags move it or trim either edge,
 Stretch rescales its points in time (a stretched ghost becomes independent), and
 Cut, Duplicate, Ghost copy, Erase and Cursor act on it. Only **Pencil** adds and
-edits points, in patterns and on the lane itself. Shift bypasses snap. The menu offers Copy pattern, Paste automation
-clip (on lane space), Duplicate pattern, Ghost pattern, Make pattern independent,
-and Delete pattern. Independent copies can be derived without changing their
+edits points, in patterns and on the lane itself. Shift bypasses snap. A pattern's
+context menu uses the clip labels and order: Edit automation, Loop this clip,
+Copy, Duplicate, Rename…, Split at cursor, Stretch, Ghost copy, Make
+independent and Delete; the lane menu adds Paste automation clip. Edit menu
+Cut/Copy/Paste, Duplicate, Delete, Rename…, Split at cursor and Ghost copy act
+on a selected pattern too; Edit → Paste puts a copied pattern on the selected
+automation lane at the playhead. Double-click renames a pattern, as it does audio
+and MIDI clips. Independent copies can be derived without changing their
 source; ghost patterns share point edits while retaining their placement and
 trim. Clip automation takes precedence inside its bounds, then arranger points,
 then the manual parameter value. Overlapping patterns use the latest start and

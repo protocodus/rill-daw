@@ -1269,7 +1269,7 @@ impl DawApp {
                         let rect = Rect::from_min_max(Pos2::new(grid_left, row.top() + 8.0), Pos2::new(canvas.right(), row.bottom() - 8.0));
                         empty_action_rects.push(row);
                         let response = crate::arranger_automation::automation_lane(ui, crate::arranger_automation::LaneView {
-                            track: track.id, rect, viewport: view, snap: self.snap_step(view.pixels_per_beat), tool: self.tool, new_length: self.last_clip_length, pointer_blocked: edge_popup_was_open, color: if automation.get(&lane.target).is_some_and(|(_, state, _)| *state != daw_ui::AutomationState::Read) { palette(ui.ctx()).muted } else { palette(ui.ctx()).automation }, navigating: navigation.navigating,
+                            track: track.id, rect, viewport: view, snap: self.snap_step(view.pixels_per_beat), tool: self.tool, new_length: self.last_clip_length, cursor: self.cursor, pointer_blocked: edge_popup_was_open, color: if automation.get(&lane.target).is_some_and(|(_, state, _)| *state != daw_ui::AutomationState::Read) { palette(ui.ctx()).muted } else { palette(ui.ctx()).automation }, navigating: navigation.navigating,
                         }, lane, &mut self.selected_clip);
                         if response.interacted {
                             self.selected_track = Some(track.id);
@@ -1278,6 +1278,28 @@ impl DawApp {
                         }
                         if response.cursor.is_some() { new_cursor = response.cursor; }
                         clicked_background |= response.background_click.is_some();
+                        clicked_clip |= response.clip_click.is_some();
+                        if let Some((clip, pos)) = response.clip_click
+                            && self.arranger_selection.click_tracker.register(clip, pos, ui.input(|input| input.time),
+                                ui.input(|input| input.modifiers == egui::Modifiers::NONE)
+                                    && matches!(self.tool, daw_ui::EditorTool::Select | daw_ui::EditorTool::Pencil))
+                        {
+                            edits.push(Edit::Rename(track.id, clip));
+                        }
+                        match response.command {
+                            Some(crate::arranger_automation::LaneCommand::EditAutomation(clip)) => {
+                                self.selected_track = Some(track.id);
+                                self.selected_clip = Some(clip);
+                                popup = Some(PopupKind::Automation);
+                            }
+                            Some(crate::arranger_automation::LaneCommand::Rename(clip)) => edits.push(Edit::Rename(track.id, clip)),
+                            Some(crate::arranger_automation::LaneCommand::Stretch(clip)) => {
+                                self.selected_track = Some(track.id);
+                                self.selected_clip = Some(clip);
+                                self.tool = daw_ui::EditorTool::Stretch;
+                            }
+                            None => {}
+                        }
                         if let Some(pos) = response.background_click
                             && self.arranger_selection.background_click_tracker.register(track.id, pos,
                                 ui.input(|input| input.time), self.tool == daw_ui::EditorTool::Select && !ui.input(|input| input.modifiers.shift))
@@ -1573,19 +1595,10 @@ impl DawApp {
                                 plain_click || self.tool == daw_ui::EditorTool::Pencil && !press_shift
                                     && ui.input(|input| input.modifiers == egui::Modifiers::NONE))
                         });
+                        // Double-click renames an existing clip of any kind; its
+                        // editor opens from the context menu or Window menu.
                         if double {
-                            self.selected_track = Some(track.id);
-                            self.selected_clip = Some(clip.id);
-                            let restore_name = clip.name.trim().is_empty()
-                                && response.interact_pointer_pos().is_some_and(|pos| {
-                                    surface.name_hit.contains(pos)
-                                        && !fades.as_ref().is_some_and(|fades| fades.handles.iter().flatten().any(|handle| handle.contains(pos)))
-                                });
-                            if restore_name {
-                                edits.push(Edit::Rename(track.id, clip.id));
-                            } else {
-                                open_editor = true;
-                            }
+                            edits.push(Edit::Rename(track.id, clip.id));
                         }
                         if response.hovered()
                             && !editing_fade
@@ -2355,7 +2368,13 @@ impl DawApp {
                 }
 
                 Edit::Rename(track, clip) => {
-                    self.arranger_select_clips([(track, clip)], None);
+                    if self.project.automation_clip(track, clip).is_some() {
+                        self.arranger_select_clips([], None);
+                        self.selected_track = Some(track);
+                        self.selected_clip = Some(clip);
+                    } else {
+                        self.arranger_select_clips([(track, clip)], None);
+                    }
                     self.start_inline_rename(ui.ctx());
                     continue;
                 }
