@@ -1540,8 +1540,25 @@ pub fn fader(
     // The cap's center travels between the rail's ends.
     let travel = (rect.height() - cap.y).max(1.0);
     if ui.is_enabled() {
-        if response.dragged_by(egui::PointerButton::Primary) {
-            *value += f64::from(-response.drag_delta().y / travel) * fine;
+        // The pointer's last applied height, kept here because egui reports
+        // no drag delta on the release frame: motion between the last held
+        // frame and the release must still count.
+        let drag_id = response.id.with("fader_drag");
+        let pointer = response.interact_pointer_pos().map(|position| position.y);
+        if response.drag_started_by(egui::PointerButton::Primary) {
+            let start = pointer.map(|y| y - response.total_drag_delta().unwrap_or_default().y);
+            ui.data_mut(|data| data.insert_temp(drag_id, start));
+        }
+        if response.dragged_by(egui::PointerButton::Primary)
+            || response.drag_stopped_by(egui::PointerButton::Primary)
+        {
+            let last = ui
+                .data(|data| data.get_temp::<Option<f32>>(drag_id))
+                .flatten();
+            if let Some((y, last)) = pointer.zip(last) {
+                *value += f64::from((last - y) / travel) * fine;
+            }
+            ui.data_mut(|data| data.insert_temp(drag_id, pointer));
         }
         if response.clicked() {
             response.request_focus();

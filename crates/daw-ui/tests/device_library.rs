@@ -186,6 +186,35 @@ fn fader_and_mini_knob_take_the_size_they_are_given() {
 }
 
 #[test]
+fn fader_release_applies_the_motion_since_the_last_held_frame() {
+    // Height 111 less the 11-point cap: 100 points of travel.
+    let size = vec2(ui::FADER_CAP_WIDTH, 111.0);
+    for sampled in [8.0, 24.0] {
+        let ctx = themed();
+        let mut value = 0.5;
+        let mut frame = |events: Vec<Event>, value: &mut f64| {
+            run(&ctx, events, |ui| {
+                ui::fader(ui, value, "Attack", size, None);
+            })
+        };
+        let at = frame(vec![], &mut value).center();
+        frame(vec![Event::PointerMoved(at)], &mut value);
+        frame(button(at, true), &mut value);
+        frame(
+            vec![Event::PointerMoved(at - vec2(0.0, sampled))],
+            &mut value,
+        );
+        frame(button(at - vec2(0.0, 30.0), false), &mut value);
+        assert!((value - 0.8).abs() < 1e-6, "{sampled}: {value}");
+        frame(vec![Event::PointerMoved(at - vec2(0.0, 50.0))], &mut value);
+        assert!(
+            (value - 0.8).abs() < 1e-6,
+            "released motion is not replayed"
+        );
+    }
+}
+
+#[test]
 fn toggle_led_flips() {
     let ctx = themed();
     let mut on = false;
