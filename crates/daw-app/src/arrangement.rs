@@ -1321,10 +1321,11 @@ impl DawApp {
                             edits.push(Edit::Rename(track.id, clip));
                         }
                         match response.command {
+                            // Patterns are drawn in place; the Automation editor only edits the lane's own curve.
                             Some(crate::arranger_automation::LaneCommand::EditAutomation(clip)) => {
                                 self.selected_track = Some(track.id);
                                 self.selected_clip = Some(clip);
-                                popup = Some(PopupKind::Automation);
+                                self.tool = daw_ui::EditorTool::Pencil;
                             }
                             Some(crate::arranger_automation::LaneCommand::Rename(clip)) => edits.push(Edit::Rename(track.id, clip)),
                             Some(crate::arranger_automation::LaneCommand::Copy(clip)) => edits.push(Edit::CopyPattern(track.id, clip)),

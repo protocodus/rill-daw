@@ -224,13 +224,19 @@ fn mixed_group_transfer_and_double_click_keep_the_intended_target() {
     assert_eq!(menu(&mut app, "Edit", "Undo")["project"], before["project"]);
     let grouped = menu(&mut app, "Edit", "Select all clips");
     let at = point(&grouped, ids[1]);
-    let opened =
+    let renaming =
         app.command(json!({"command":"pointer", "phase":"double_click", "x":at.0, "y":at.1}));
-    assert_eq!(opened["view"], "Clip");
-    assert_eq!(opened["selected_clip"], ids[1]);
-    assert_eq!(selected(&opened), vec![ids[1]]);
-    let back = app.click("Back");
-    assert_eq!(back["view"], "Arrangement");
+    assert_eq!(renaming["view"], "Arrangement");
+    assert!(
+        renaming["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label == "Apply name")
+    );
+    assert_eq!(renaming["selected_clip"], ids[1]);
+    assert_eq!(selected(&renaming), vec![ids[1]]);
+    let back = app.key("Escape");
     assert_eq!(selected(&back), vec![ids[1]]);
     app.quit();
 }
@@ -259,12 +265,20 @@ fn initially_unfocused_and_batched_clicks_select_and_open_audio_and_midi() {
 
                 let grouped = menu(&mut app, "Edit", "Select all clips");
                 let at = point(&grouped, ids[member]);
-                let opened = pointer(&mut app, "double_click_batched", at);
-                assert_eq!(opened["view"], "Clip", "focused={focused}");
-                assert_eq!(opened["selected_clip"], ids[member]);
-                assert_eq!(selected(&opened), vec![ids[member]]);
-                unchanged_document(&opened, &before);
-                app.click("Back");
+                let renaming = pointer(&mut app, "double_click_batched", at);
+                assert_eq!(renaming["view"], "Arrangement", "focused={focused}");
+                assert!(
+                    renaming["visible_labels"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|label| label == "Apply name"),
+                    "focused={focused}"
+                );
+                assert_eq!(renaming["selected_clip"], ids[member]);
+                assert_eq!(selected(&renaming), vec![ids[member]]);
+                unchanged_document(&renaming, &before);
+                app.key("Escape");
 
                 // Unfocused delivery also keeps normal separated-frame clicks
                 // and selected-group dragging functional.

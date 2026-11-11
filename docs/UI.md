@@ -1211,7 +1211,7 @@ context menu uses the clip labels and order: Edit automation, Loop this clip,
 Copy, Duplicate, Rename…, Split at cursor, Stretch, Ghost copy, Make
 independent and Delete; the lane menu adds Paste automation clip. Edit menu
 Cut/Copy/Paste, Duplicate, Delete, Rename…, Split at cursor and Ghost copy act
-on a selected pattern too; Edit → Paste puts a copied pattern on the selected
+on a selected pattern too; a pattern's Edit automation selects it with the Pencil; Edit → Paste puts a copied pattern on the selected
 automation lane at the playhead. Double-click renames a pattern, as it does audio
 and MIDI clips. Independent copies can be derived without changing their
 source; ghost patterns share point edits while retaining their placement and

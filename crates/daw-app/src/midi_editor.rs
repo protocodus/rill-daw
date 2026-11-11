@@ -959,7 +959,7 @@ impl DawApp {
                                 Some(NoteTransform::Quantize(state.quantize_settings));
                             ui.close();
                         }
-                        let grid_step = self.snap_step(self.note_zoom).max(0.0625);
+                        let grid_step = daw_ui::snap_step(self.snap, self.note_zoom, clip_meter.initial()).max(0.0625);
                         let bar_step = f64::from(clip_meter.initial());
                         daw_ui::menu_button(ui, "Nudge", |ui| {
                         for (label, hint, beats) in [
@@ -1590,7 +1590,8 @@ impl DawApp {
                             * if shift {
                                 f64::from(clip_meter.initial())
                             } else {
-                                self.snap_step(self.note_zoom).max(0.0625)
+                                daw_ui::snap_step(self.snap, self.note_zoom, clip_meter.initial())
+                                    .max(0.0625)
                             };
                         match move_midi_notes(
                             &source_notes,
@@ -1972,7 +1973,7 @@ impl DawApp {
         let press_shift = press_modifiers.shift;
         let press_copy = press_shift || press_modifiers.ctrl || press_modifiers.command;
         let pitch_at = |pos: Pos2| rows.pitch_at(view.row_at(plot, pos.y));
-        let snap = self.snap_step(view.pixels_per_beat);
+        let snap = daw_ui::snap_step(self.snap, view.pixels_per_beat, clip_meter.initial());
         let snap_beat = |beat: f64| {
             if snap > 0.0 {
                 (beat / snap).round() * snap

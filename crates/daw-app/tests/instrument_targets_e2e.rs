@@ -179,11 +179,19 @@ fn pencil_double_click_and_context_actions_open_existing_clips_without_drawing()
     for _ in 0..16 {
         app.inspect();
     }
-    let opened = app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
-    assert_eq!(opened["view"], "Clip");
-    assert_eq!(opened["selected_clip"], midi_id);
-    assert_eq!(opened["project"], original);
-    app.click("Back");
+    // Double-click renames a clip with any tool; editors open from its menu.
+    let renaming = app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
+    assert_eq!(renaming["view"], "Arrangement");
+    assert_eq!(renaming["selected_clip"], midi_id);
+    assert_eq!(renaming["project"], original);
+    assert!(
+        renaming["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label == "Apply name")
+    );
+    app.key("Escape");
 
     for (id, label) in [(midi_id, "Edit notes"), (audio_id, "Edit audio")] {
         let state = app.inspect();

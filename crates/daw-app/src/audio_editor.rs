@@ -2633,9 +2633,13 @@ impl DawApp {
                 })
                 .collect();
             let grid = self.snap_step(state.view.pixels_per_beat);
+            // Grid follows the drawn lines; only an explicit bar snap follows meter changes.
+            let grid_snap = self.snap == daw_ui::SNAP_GRID;
             let snap = |beat: f64, bypass: bool| {
-                if bypass {
+                if bypass || grid <= 0.0 {
                     beat
+                } else if grid_snap {
+                    (beat / grid).round() * grid
                 } else {
                     snap_to_grid(&meter, grid, beat)
                 }

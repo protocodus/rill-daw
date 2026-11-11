@@ -388,7 +388,10 @@ pub(crate) fn automation_lane(
             // without those that do not apply to automation.
             header.context_menu(|ui| {
                 daw_ui::command_menu_contents(ui, |ui| {
-                    if daw_ui::button(ui, "Edit automation").clicked() {
+                    if daw_ui::button(ui, "Edit automation")
+                        .on_hover_text("Select this clip and the Pencil to draw its points")
+                        .clicked()
+                    {
                         result.command = Some(LaneCommand::EditAutomation(clip.id));
                         ui.close();
                     }

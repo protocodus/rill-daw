@@ -437,3 +437,18 @@ fn a_pattern_copied_from_its_menu_pastes_with_the_keyboard_over_older_media_copi
     assert_eq!(track(&pasted, midi)["clips"].as_array().unwrap().len(), 1);
     app.quit();
 }
+
+#[test]
+fn a_patterns_edit_automation_selects_it_for_drawing_in_place() {
+    let mut app = Harness::new();
+    let (opened, _, lane) = fixture(&mut app);
+    let pattern = patterns(&opened, lane)[0]["id"].clone();
+    let body = inside(pattern_rect(&opened, 0), 0.5, 0.7);
+    pointer(&mut app, "click", body, "secondary");
+    let editing = app.click("Edit automation");
+    assert_eq!(editing["selected_clip"], pattern);
+    assert_eq!(editing["timeline"]["tool"], "Pencil");
+    assert_eq!(editing["view"], "Arrangement");
+    assert_eq!(editing["project"], opened["project"]);
+    app.quit();
+}

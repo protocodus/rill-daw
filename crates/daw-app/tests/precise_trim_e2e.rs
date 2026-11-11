@@ -329,10 +329,18 @@ fn fade_handles_win_over_edges_and_body_selection_move_copy_and_double_click_sti
     let clicked = pointer(&mut app, "click", from, false);
     assert_eq!(clicked["selected_clips"].as_array().unwrap().len(), 1);
     assert_eq!(clicked["project"], before["project"]);
-    let opened = pointer(&mut app, "double_click", from, false);
-    assert_eq!(opened["view"], "Clip");
-    assert_eq!(opened["selected_clip"], clip(&before, 1)["id"]);
-    assert_eq!(opened["project"], before["project"]);
+    // Double-click on the body starts renaming that clip; no handle takes it.
+    let renaming = pointer(&mut app, "double_click", from, false);
+    assert_eq!(renaming["view"], "Arrangement");
+    assert!(
+        renaming["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label == "Apply name")
+    );
+    assert_eq!(renaming["selected_clip"], clip(&before, 1)["id"]);
+    assert_eq!(renaming["project"], before["project"]);
     app.quit();
 }
 
