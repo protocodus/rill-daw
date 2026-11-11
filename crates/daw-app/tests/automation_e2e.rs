@@ -311,6 +311,22 @@ fn right_click_automate_lands_on_a_new_lane_with_a_clip_at_the_cursor_bar() {
     assert_eq!(created["selected_clip"], clips[0]["id"]);
     assert_eq!(created["view"], "Arrangement");
     assert_eq!(created["popups"]["automation"], false);
+    // Edit automation returns to that clip, which is what plays there.
+    menu(&mut app, "Window", "Mixer");
+    let mixer = app.inspect();
+    let gain = &mixer["mixer"]["channels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|channel| channel["track"] == source)
+        .unwrap()["gain"];
+    let x = (gain["min"][0].as_f64().unwrap() + gain["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (gain["min"][1].as_f64().unwrap() + gain["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
+    let editing = app.click("Edit automation");
+    assert_eq!(editing["view"], "Arrangement");
+    assert_eq!(editing["selected_clip"], clips[0]["id"]);
+    assert_eq!(editing["history"], created["history"]);
     // The lane and its clip are one Undo step.
     let undone = menu(&mut app, "Edit", "Undo");
     assert_eq!(undone["project"], before["project"]);

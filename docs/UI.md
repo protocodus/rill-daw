@@ -1151,7 +1151,7 @@ current selection, and starts at its current value. Send sliders cover their
 supported 0–16 gain range and retain precise numeric entry. Mixer send summaries
 and the selected plug-in parameter's value control offer the same context action.
 
-Automation lanes are created only from a control's **Automate** action; there is no separate parameter chooser. A new lane lands in Arrangement with a one-bar clip at the playhead's bar, selected and revealed, in the same Undo step as the lane. An existing lane's **Edit automation** opens the Automation editor, which edits curves only: override and resume belong to the control. **Window → Automation** is available for a selected automation track.
+Automation lanes are created only from a control's **Automate** action; there is no separate parameter chooser. A new lane lands in Arrangement with a one-bar clip at the playhead's bar, selected and revealed, in the same Undo step as the lane. An existing lane's **Edit automation** selects and reveals its clip under the playhead (else its first clip), since clips play over the lane's own curve; a lane without clips opens the Automation editor, which edits curves only: override and resume belong to the control. **Window → Automation** is available for a selected automation track.
 
 `crossfade_editor` edits two normalized cubic Bézier control points and displays
 the paired incoming and outgoing gains. Their sum is one. Drag a handle or use

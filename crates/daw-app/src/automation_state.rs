@@ -190,6 +190,32 @@ impl DawApp {
         }
     }
 
+    /// **Edit automation** from a control. Clips override the lane's own
+    /// curve where they play, so a lane with clips is edited in Arrangement
+    /// at the clip under the playhead (else its first clip); only a lane
+    /// without clips opens the focused curve editor.
+    pub(crate) fn show_automation(&mut self, lane: u64) {
+        let clip = self.project.automation_lane(lane).and_then(|automation| {
+            let clips = &automation.clips;
+            clips
+                .iter()
+                .find(|clip| self.cursor >= clip.start && self.cursor < clip.end())
+                .or_else(|| clips.iter().min_by(|a, b| a.start.total_cmp(&b.start)))
+                .map(|clip| clip.id)
+        });
+        if clip.is_none() {
+            self.open_popup(crate::app::PopupKind::Automation);
+            self.selected_track = Some(lane);
+            self.selected_clip = None;
+            return;
+        }
+        self.open_workspace(crate::app::WorkspaceView::Arrangement);
+        self.selected_track = Some(lane);
+        self.selected_clip = clip;
+        self.queue_arranger_channel_reveal(lane);
+        self.sync_arranger_selection();
+    }
+
     pub(crate) fn resume_automation(&mut self, lane: u64) {
         if self
             .project

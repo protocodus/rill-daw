@@ -1638,9 +1638,7 @@ impl DawApp {
                 self.cancel_parameter_picking();
                 self.instrument_ui.browser.selected = Some(id);
                 if existing.is_some() {
-                    self.open_popup(PopupKind::Automation);
-                    self.selected_track = Some(lane);
-                    self.selected_clip = None;
+                    self.show_automation(lane);
                 } else {
                     self.show_new_automation(lane);
                     self.changed();
@@ -2535,7 +2533,9 @@ mod tests {
                 app.selected_track, lane,
                 "Existing action at {point:?}, viewport {size:?}, last touched={last_touched}"
             );
-            assert!(app.automation_open);
+            // A lane with a clip is edited at that clip in Arrangement.
+            assert_eq!(app.selected_clip, Some(clip));
+            assert!(!app.automation_open);
         }
     }
 

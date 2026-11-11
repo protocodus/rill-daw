@@ -569,7 +569,7 @@ fn picking_a_native_parameter_without_changing_it_creates_one_lane_and_reuses_it
     menu(&mut app, "Instrument");
     app.click("Pick parameter");
     fixture.action(&mut app, "touch 0\n");
-    let reused = wait(&mut app, |state| state["popups"]["automation"] == true);
+    let reused = wait(&mut app, |state| state["selected_track"] == lane);
     assert_eq!(lanes(&reused).len(), 1);
     assert_eq!(reused["selected_track"], lane);
     assert_lane(lanes(&reused)[0], track, None, 0.4);
