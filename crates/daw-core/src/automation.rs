@@ -263,13 +263,20 @@ impl AutomationLane {
     /// Empty lanes do not override the manual parameter. Otherwise endpoints
     /// hold indefinitely. Evaluation uses binary search and never allocates.
     pub fn value_at(&self, beat: f64) -> Option<f32> {
+        self.playing_clip(beat)
+            .and_then(|clip| clip.value_at(beat))
+            .or_else(|| self.arrangement_value_at(beat))
+    }
+
+    /// The clip that controls playback at `beat`: among overlapping clips with
+    /// points, the latest start wins, then the later one in storage order.
+    pub fn playing_clip(&self, beat: f64) -> Option<&AutomationClip> {
         self.clips
             .iter()
             .enumerate()
             .filter(|(_, clip)| beat >= clip.start && beat < clip.end() && !clip.points.is_empty())
             .max_by(|(ai, a), (bi, b)| a.start.total_cmp(&b.start).then(ai.cmp(bi)))
-            .and_then(|(_, clip)| clip.value_at(beat))
-            .or_else(|| self.arrangement_value_at(beat))
+            .map(|(_, clip)| clip)
     }
 
     pub fn arrangement_value_at(&self, beat: f64) -> Option<f32> {
