@@ -173,6 +173,7 @@ impl DawApp {
         let mut channel_target = None;
         let mut arranger_target = None;
         let mut device_target = None;
+        let mut instrument_target = None;
         let mut insert_target = None;
         let mut device_diagnostics = Vec::new();
         let mut toggle_selection = None;
@@ -784,17 +785,20 @@ impl DawApp {
                                     if response.clicked() { device_target = Some((track.id, None)); }
                                     device_diagnostics.push(serde_json::json!({"track":track.id,"effect":null,"name":instrument,"model":model,"rect":rect_json(response.rect)}));
                                     response
+                                } else if track.kind == TrackKind::Midi {
+                                    let response = daw_ui::mixer_row(ui, width, control, "MIDI · Choose…",
+                                        daw_ui::MixerRowText::Caption, None, None)
+                                        .on_hover_text("No instrument · Click to choose one");
+                                    if response.clicked() { instrument_target = Some(track.id); }
+                                    response
                                 } else {
                                     let text = match (track.kind, track.audio_input) {
-                                        (TrackKind::Midi, _) => "MIDI · None".to_owned(),
                                         (_, Some(AudioInputChannels::Mono { channel })) => format!("Audio · In {}", channel + 1),
                                         (_, Some(AudioInputChannels::Stereo { left, right })) => format!("Audio · In {}/{}", left + 1, right + 1),
                                         (_, None) => "Audio".to_owned(),
                                     };
-                                    daw_ui::mixer_source_caption(ui, &text, width).on_hover_text(match track.kind {
-                                        TrackKind::Audio => "Audio clips and monitored input, including their source processing",
-                                        _ => "No instrument · choose one in the channel's Instrument window",
-                                    })
+                                    daw_ui::mixer_source_caption(ui, &text, width)
+                                        .on_hover_text("Audio clips and monitored input, including their source processing")
                                 }
                             }).inner;
                             (menu.response.rect, kind.rect)
@@ -1290,6 +1294,10 @@ impl DawApp {
         if let Some(track) = insert_target {
             self.selected_track = Some(track);
             self.open_effect_library(track, false);
+        }
+        if let Some(track) = instrument_target {
+            self.selected_track = Some(track);
+            self.open_instrument_chooser(true);
         }
         ui.ctx().data_mut(|data| {
             data.insert_temp(

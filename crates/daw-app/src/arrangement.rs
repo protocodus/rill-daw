@@ -625,6 +625,7 @@ impl DawApp {
         let mut track_colors = Vec::new();
         let mut instrument_target = None;
         let mut instrument_editor = None;
+        let mut effects_target = None;
         let mut recording_target = None;
         let mut recording_controls = Vec::new();
         let mut arm_toggles = Vec::new();
@@ -900,6 +901,8 @@ impl DawApp {
                     }
                     if !channels.contains_key(&track.id) {
                         header_layout = header_layout.without_channel_sections();
+                    } else {
+                        header_layout = header_layout.with_effects();
                     }
                     header_layout = header_layout.with_depth(depth);
                     let mut track_color = track.color;
@@ -957,6 +960,7 @@ impl DawApp {
                             "mix":header_layout.mix.map(rect_json),"meter":header_layout.meter.map(rect_json),
                             "routing":header_layout.routing.map(rect_json),"device":header_layout.device.map(rect_json),
                             "details":header_layout.details.map(rect_json),"record_arm":header_layout.record_arm.map(rect_json),
+                            "effects":header_layout.effects.map(rect_json),
                         }}));
                     row_response.clone().on_hover_text(if depth == 0 { track.name.clone() }
                         else { format!("{}\nFolder depth {depth}", track.name) });
@@ -969,6 +973,17 @@ impl DawApp {
                                 self.selected_clip = None;
                                 popup = Some(PopupKind::Inspector);
                             }
+                        }
+                    }
+                    if let Some(rect) = header_layout.effects {
+                        let (tint, hint) = match track.inserts.as_slice() {
+                            [] => (palette(ui.ctx()).muted, "Add an effect".to_owned()),
+                            [only] => (palette(ui.ctx()).accent, format!("Edit {}", only.name)),
+                            inserts => (palette(ui.ctx()).accent, format!("{} effects", inserts.len())),
+                        };
+                        if daw_ui::track_header_action_at(ui, rect, (track.id, "effects"),
+                            daw_ui::Icon::Effect, "Effects", tint).on_hover_text(hint).clicked() {
+                            effects_target = Some(track.id);
                         }
                     }
                     if let Some(arm_rect) = header_layout.record_arm {
@@ -2336,6 +2351,9 @@ impl DawApp {
             self.selected_clip = None;
             self.selected_notes.clear();
             self.open_popup(PopupKind::Instrument);
+        }
+        if let Some(track) = effects_target {
+            self.open_track_effects(track);
         }
         if let Some(track) = instrument_target {
             self.selected_track = Some(track);
