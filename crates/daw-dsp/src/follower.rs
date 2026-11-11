@@ -32,3 +32,47 @@ impl EnvelopeFollower {
         self.level
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const RATE: f32 = 48_000.0;
+
+    #[test]
+    fn attack_and_release_take_one_time_constant_each() {
+        let mut follower = EnvelopeFollower::default();
+        follower.set_times(10.0, 100.0, RATE);
+        let mut level = 0.0;
+        for _ in 0..480 {
+            level = follower.process(1.0);
+        }
+        // One time constant: 1 − 1/e of the way.
+        assert!((level - 0.632).abs() < 0.01, "{level}");
+        for _ in 0..48_000 {
+            follower.process(-1.0);
+        }
+        let full = follower.process(0.0);
+        for _ in 0..4799 {
+            level = follower.process(0.0);
+        }
+        assert!((level / full - 0.368).abs() < 0.01, "{level} of {full}");
+    }
+
+    #[test]
+    fn level_stays_within_full_scale_and_reset_clears_it() {
+        let mut follower = EnvelopeFollower::default();
+        follower.set_times(0.0, 0.0, RATE);
+        // Zero times clamp to one sample instead of dividing by zero, and
+        // input beyond full scale counts as full scale.
+        let first = follower.process(-4.0);
+        assert!((first - 0.632).abs() < 0.001, "{first}");
+        let mut level = first;
+        for _ in 0..32 {
+            level = follower.process(4.0);
+        }
+        assert_eq!(level, 1.0);
+        follower.reset();
+        assert_eq!(follower.process(0.0), 0.0);
+    }
+}

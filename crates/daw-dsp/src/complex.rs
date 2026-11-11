@@ -66,3 +66,36 @@ impl Div for Complex {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn close(a: Complex, b: Complex) -> bool {
+        (a - b).norm() < 1e-12
+    }
+
+    #[test]
+    fn arithmetic_follows_the_field_rules() {
+        let a = Complex::new(3.0, -2.0);
+        let b = Complex::new(-0.5, 4.0);
+        assert!(close(a * b, Complex::new(6.5, 13.0)));
+        assert!(close((a * b) / b, a));
+        assert!(close(a + b - b, a));
+        assert!(close(
+            Complex::ONE / Complex::new(0.0, 1.0),
+            Complex::new(0.0, -1.0)
+        ));
+        assert_eq!(Complex::new(3.0, 4.0).norm(), 5.0);
+        assert!(close(a.scale(2.0), a + a));
+    }
+
+    #[test]
+    fn unit_is_on_the_circle() {
+        for theta in [0.0, 0.3, std::f64::consts::FRAC_PI_2, 2.5, -1.0] {
+            let z = Complex::unit(theta);
+            assert!((z.norm() - 1.0).abs() < 1e-12);
+            assert!(close(z * Complex::unit(-theta), Complex::ONE));
+        }
+    }
+}

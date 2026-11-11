@@ -305,7 +305,9 @@ impl FilterKernel {
             }
             FilterModel::Comb => {
                 let feedback = comb_feedback(resonance);
-                let delayed = self.comb.read(sample_rate / cutoff);
+                // The read comes before this sample's write, so the line is
+                // already one sample longer than the delay asked of it.
+                let delayed = self.comb.read(sample_rate / cutoff - 1.0);
                 self.comb_damping += comb_damping(morph) * (delayed - self.comb_damping);
                 let y = x + feedback * self.comb_damping;
                 self.comb.write(y);
@@ -530,4 +532,191 @@ fn svf_response(s: Complex, filter_type: FilterType, k: f32, band_gain: f32) -> 
         FilterType::Notch => s * s + Complex::ONE,
     };
     numerator / denominator
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const RATE: f32 = 48_000.0;
+    const MODELS: [FilterModel; 9] = [
+        FilterModel::Clean,
+        FilterModel::TransistorLadder,
+        FilterModel::SallenKey,
+        FilterModel::OtaCascade,
+        FilterModel::OtaMultimode,
+        FilterModel::DiodePair,
+        FilterModel::StateVariable,
+        FilterModel::Comb,
+        FilterModel::Vowel,
+    ];
+
+    fn shape(model: FilterModel) -> FilterShape {
+        FilterShape {
+            model,
+            filter_type: FilterType::LowPass,
+            steep: false,
+            drive_db: 0.0,
+        }
+    }
+
+    /// Measured gain in dB of a settled small sine through a fresh kernel.
+    fn measured_db(shape: &FilterShape, cutoff: f32, resonance: f32, morph: f32, f: f32) -> f64 {
+        let mut kernel = FilterKernel::default();
+        kernel.prepare(RATE);
+        let amplitude = 0.05;
+        let total = RATE as usize;
+        let (mut i, mut q) = (0.0_f64, 0.0_f64);
+        for n in 0..total {
+            let phase = std::f64::consts::TAU * f64::from(f) * n as f64 / f64::from(RATE);
+            let x = phase.sin() as f32 * amplitude;
+            let y = kernel.process(x, shape, cutoff, resonance, morph, RATE);
+            if n >= total / 2 {
+                i += f64::from(y) * phase.sin();
+                q += f64::from(y) * phase.cos();
+            }
+        }
+        let gain = 2.0 * i.hypot(q) / (total / 2) as f64 / f64::from(amplitude);
+        20.0 * gain.log10()
+    }
+
+    // The R1 Filter tests compare the drawn curve of every other model with
+    // its sound; these two are the morphing models they leave out.
+    #[test]
+    fn comb_and_vowel_sound_like_their_drawn_response() {
+        for (model, cutoff, resonance, morph) in [
+            (FilterModel::Comb, 500.0, 0.5, 0.0),
+            (FilterModel::Comb, 1200.0, 0.8, 0.6),
+            (FilterModel::Vowel, 1000.0, 0.3, 0.0),
+            (FilterModel::Vowel, 1500.0, 0.7, 0.55),
+        ] {
+            let shape = shape(model);
+            for f in [100.0, 330.0, 500.0, 750.0, 1000.0, 2400.0, 5000.0] {
+                let drawn = 20.0
+                    * response(&shape, cutoff, resonance, morph, RATE, f)
+                        .norm()
+                        .log10();
+                if drawn < -50.0 {
+                    continue;
+                }
+                let measured = measured_db(&shape, cutoff, resonance, morph, f);
+                assert!(
+                    (measured - drawn).abs() < 0.5,
+                    "{model:?} {cutoff} Hz res {resonance} morph {morph} at {f} Hz: \
+                     measured {measured:.2}, drawn {drawn:.2}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn comb_echoes_exactly_one_period_apart() {
+        let shape = shape(FilterModel::Comb);
+        let mut kernel = FilterKernel::default();
+        kernel.prepare(RATE);
+        let echoes: Vec<usize> = (0..300)
+            .filter(|&n| {
+                let x = if n == 0 { 1.0 } else { 0.0 };
+                kernel.process(x, &shape, 500.0, 0.5, 0.0, RATE).abs() > 1e-3
+            })
+            .collect();
+        let latency = FilterKernel::LATENCY as usize;
+        assert_eq!(echoes, [latency, latency + 96, latency + 192]);
+    }
+
+    #[test]
+    fn comb_peaks_on_the_harmonics_of_its_cutoff() {
+        let shape = shape(FilterModel::Comb);
+        let at = |f| measured_db(&shape, 400.0, 0.9, 0.0, f);
+        for harmonic in [400.0, 800.0, 1200.0] {
+            assert!(at(harmonic) > at(harmonic + 200.0) + 20.0, "{harmonic}");
+        }
+    }
+
+    #[test]
+    fn every_model_has_the_same_latency_as_the_dry_path() {
+        for model in MODELS {
+            let mut kernel = FilterKernel::default();
+            kernel.prepare(RATE);
+            let mut dry = LatencyDelay::default();
+            // Wide open, so the kernel is close to a pure delay. Comb and
+            // Vowel have no open setting; the comb's first echo is checked
+            // in its own test.
+            if matches!(model, FilterModel::Comb | FilterModel::Vowel) {
+                continue;
+            }
+            let shape = shape(model);
+            let mut wet_peak = (0, 0.0_f32);
+            for n in 0..64 {
+                let x = if n == 0 { 0.1 } else { 0.0 };
+                let y = kernel.process(x, &shape, 20_000.0, 0.0, 0.0, RATE);
+                if y.abs() > wet_peak.1 {
+                    wet_peak = (n, y.abs());
+                }
+                if dry.process(x) != 0.0 {
+                    assert_eq!(n, FilterKernel::LATENCY as usize);
+                }
+            }
+            assert!(
+                wet_peak.0.abs_diff(FilterKernel::LATENCY as usize) <= 1,
+                "{model:?} peaks at {}",
+                wet_peak.0
+            );
+        }
+    }
+
+    #[test]
+    fn extreme_settings_stay_finite_and_reset_silences_every_model() {
+        let mut kernel = FilterKernel::default();
+        kernel.prepare(RATE);
+        for model in MODELS {
+            for filter_type in [
+                FilterType::LowPass,
+                FilterType::HighPass,
+                FilterType::BandPass,
+                FilterType::Notch,
+            ] {
+                for steep in [false, true] {
+                    let shape = FilterShape {
+                        model,
+                        filter_type,
+                        steep,
+                        drive_db: 24.0,
+                    };
+                    kernel.reset();
+                    for n in 0..4800 {
+                        // Cutoff, resonance and morph swept per sample, past
+                        // their ranges, into a full-scale square.
+                        let t = n as f32 / 4800.0;
+                        let cutoff = 10.0 + 30_000.0 * t;
+                        let x = if n % 37 < 18 { 1.0 } else { -1.0 };
+                        let y = kernel.process(x, &shape, cutoff, 1.0, 1.2 * t - 0.1, RATE);
+                        assert!(y.is_finite() && y.abs() < 20.0, "{shape:?} at {n}: {y}");
+                    }
+                    kernel.reset();
+                    let after = kernel.process(0.0, &shape, 1000.0, 0.5, 0.5, RATE);
+                    assert_eq!(after, 0.0, "{shape:?} keeps state after reset");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn type_slope_and_morph_capabilities_match_the_kernel() {
+        for model in MODELS {
+            // A model without types ignores the type; one with types reacts.
+            let low = shape(model);
+            let high = FilterShape {
+                filter_type: FilterType::HighPass,
+                ..low
+            };
+            let a = measured_db(&low, 1000.0, 0.2, 0.3, 100.0);
+            let b = measured_db(&high, 1000.0, 0.2, 0.3, 100.0);
+            assert_eq!(
+                model.type_count() >= 2,
+                (a - b).abs() > 6.0,
+                "{model:?}: low-pass {a:.1} dB, high-pass {b:.1} dB"
+            );
+        }
+    }
 }
