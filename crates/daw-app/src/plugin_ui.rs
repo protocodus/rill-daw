@@ -1153,7 +1153,13 @@ impl DawApp {
             .default_width(if parameter_page {
                 920.0
             } else if let Some(descriptor) = builtin {
-                daw_devices_ui::panel_width(descriptor) + 2.0 * daw_ui::tokens::POPUP_MARGIN
+                // The window's own margin already surrounds its contents; the
+                // gutter keeps a scroll bar off the cards' right edge.
+                let scroll = ctx.style().spacing.scroll;
+                daw_devices_ui::panel_width(descriptor)
+                    + scroll.bar_width
+                    + scroll.bar_inner_margin
+                    + scroll.bar_outer_margin
             } else {
                 600.0
             })
@@ -1165,7 +1171,7 @@ impl DawApp {
                 1600.0
             } else if builtin.is_some() {
                 // A device panel shows its response and every control at once.
-                760.0
+                840.0
             } else {
                 400.0
             })

@@ -777,7 +777,9 @@ classic subtractive layout:
   (Pitch, Cutoff, Width, Mod wheel); then Mode, Voices, Glide, Bend, Drift
   and Volume, the output, last.
 
-Knobs are dense (34 points) except the hero Cutoff. The sketch below is the
+Knobs are dense (34 points) except the hero Cutoff. Unlike the effect, the
+synth draws no filter response: the controls start right under the header.
+The sketch below is the
 original target:
 
 ```text

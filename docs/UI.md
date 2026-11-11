@@ -1409,6 +1409,10 @@ arrow keys), and canvas handles use the 21-point `HIT_TARGET`.
 dense Mix/Output (effects) or Volume (instruments) knobs; width is
 `DevicePanelWidth::Medium` (610) or `Large` (987), and a panel never scrolls.
 `device_section` titles a group with a word and spacing instead of an outline.
+Its heading, `device_section_title`, sets the name in tracked capitals with a
+rule to the section's edge; `control_caption` names one control in smaller,
+sentence-case text, so the two levels never read alike. Built-in device cards
+use the same pair.
 `preset_browser` provides search, category and tag filters, Factory/User,
 favorites, **Save as…** and **Reset to default**. `generic_device_panel`
 builds a whole panel from `ParamRow`s (normalized values, `format`/`parse`

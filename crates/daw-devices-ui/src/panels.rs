@@ -147,12 +147,6 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
         layout.hero = Some(CUTOFF);
         layout.knob = daw_ui::KnobSize::Dense;
         layout.visible = |id, values| applies(id, &mini_settings(values));
-        layout.response = Some(ResponseView {
-            curve: |values, frequencies, out| {
-                response_db(&mini_settings(values), RESPONSE_RATE, frequencies, out);
-            },
-            node: CUTOFF,
-        });
     }
     layout
 }

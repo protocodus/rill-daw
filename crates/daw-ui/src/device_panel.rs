@@ -472,10 +472,59 @@ impl<'a> DevicePanel<'a> {
 pub fn device_section<R>(ui: &mut Ui, title: &str, contents: impl FnOnce(&mut Ui) -> R) -> R {
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = tokens::SPACE_SM;
-        crate::text::label(ui, title);
+        device_section_title(ui, title);
         contents(ui)
     })
     .inner
+}
+
+/// The heading of a device section: its name in tracked capitals and a rule
+/// to the section's right edge. Distinct from the sentence-case
+/// [`control_caption`]s under it, so the panel's two levels never read alike.
+pub fn device_section_title(ui: &mut Ui, title: &str) -> Response {
+    let colors = crate::theme::palette(ui.ctx());
+    let mut job = egui::text::LayoutJob::default();
+    job.append(
+        &title.to_uppercase(),
+        0.0,
+        egui::TextFormat {
+            font_id: crate::text::TextRole::Label.font(),
+            color: colors.text,
+            extra_letter_spacing: 1.0,
+            ..Default::default()
+        },
+    );
+    let galley = ui.painter().layout_job(job);
+    let width = ui.available_width();
+    let (rect, response) =
+        ui.allocate_exact_size(vec2(width, galley.size().y), egui::Sense::hover());
+    let rule = rect.left() + galley.size().x + tokens::SPACE_SM;
+    ui.painter().galley(rect.left_top(), galley, colors.text);
+    if rule < rect.right() {
+        ui.painter().hline(
+            rule..=rect.right(),
+            rect.center().y,
+            egui::Stroke::new(tokens::BORDER_WIDTH, colors.line),
+        );
+    }
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, title));
+    response
+}
+
+/// The font of a [`control_caption`], for callers that size cells to it.
+pub fn control_caption_font() -> egui::FontId {
+    crate::text::TextRole::Note.font()
+}
+
+/// The name above one control of a device section: smaller and lighter than
+/// the section's title, in the text color so it stays readable.
+pub fn control_caption(ui: &mut Ui, text: &str) -> Response {
+    let color = crate::theme::palette(ui.ctx()).text;
+    ui.add(egui::Label::new(
+        egui::RichText::new(text)
+            .font(control_caption_font())
+            .color(color),
+    ))
 }
 
 /// How the host stores and edits parameter values for a generated panel.

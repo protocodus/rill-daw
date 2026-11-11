@@ -102,7 +102,7 @@ pub fn show(
         let weights: Vec<f32> = cards.iter().map(|card| card.weight).collect();
         daw_ui::flex_row(ui, &weights, |ui, index| {
             let card = &cards[index];
-            daw_ui::text::subtitle(ui, card.title);
+            daw_ui::device_section_title(ui, card.title);
             let available = ui.available_width();
             let lines = wrap(&card.lines, available);
             let columns = columns(&lines, available);
@@ -275,8 +275,7 @@ fn cell_width(ui: &Ui, spec: &ParamSpec, layout: &panels::Layout) -> f32 {
             .size()
             .x
     };
-    let label = daw_ui::text::TextRole::Label.font();
-    let caption = text(caption(spec, layout), label.clone());
+    let caption = text(caption(spec, layout), daw_ui::control_caption_font());
     let button = egui::TextStyle::Button.resolve(ui.style());
     let widest = |values: &mut dyn Iterator<Item = String>| {
         values
@@ -341,7 +340,7 @@ fn performance(ui: &mut Ui, host: &mut dyn DeviceHost, state: &mut PanelState) {
 
 const RESPONSE_POINTS: usize = 128;
 const RESPONSE_RANGE_DB: f32 = 24.0;
-const RESPONSE_HEIGHT: f32 = 120.0;
+const RESPONSE_HEIGHT: f32 = 160.0;
 
 /// The device's response with a node on its frequency parameter. Dragging the
 /// node is one gesture on that parameter, like turning its knob.
@@ -417,7 +416,7 @@ fn control(
         |ui| {
             // Compact horizontal padding leaves a choice's text the room of its cell.
             ui.spacing_mut().button_padding.x = daw_ui::tokens::SPACE_SM;
-            daw_ui::text::label(ui, caption(spec, layout));
+            daw_ui::control_caption(ui, caption(spec, layout));
             let offset = (height - control_height(spec, layout)) * 0.5;
             if offset > 0.0 {
                 ui.add_space(offset);
