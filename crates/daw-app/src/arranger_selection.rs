@@ -433,24 +433,22 @@ impl DawApp {
             }
             AudioClipboardAction::Paste
                 if self.arranger_selection.clipboard.is_none()
+                    && let Some(track) = self
+                        .selected_track
+                        .filter(|track| self.project.automation_lane(*track).is_some())
                     && let Some(clip) = crate::arranger_automation::automation_clipboard(ctx) =>
             {
-                if let Some(track) = self
-                    .selected_track
-                    .filter(|track| self.project.automation_lane(*track).is_some())
+                self.begin_edit();
+                match self
+                    .project
+                    .paste_automation_clip(track, &clip, self.cursor)
                 {
-                    self.begin_edit();
-                    match self
-                        .project
-                        .paste_automation_clip(track, &clip, self.cursor)
-                    {
-                        Ok(id) => {
-                            self.selected_clip = Some(id);
-                            self.edit_label = Some("Paste automation clip".into());
-                            self.changed();
-                        }
-                        Err(error) => self.message(Err(error), ""),
+                    Ok(id) => {
+                        self.selected_clip = Some(id);
+                        self.edit_label = Some("Paste automation clip".into());
+                        self.changed();
                     }
+                    Err(error) => self.message(Err(error), ""),
                 }
                 true
             }

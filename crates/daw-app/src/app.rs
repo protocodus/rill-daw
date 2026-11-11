@@ -247,6 +247,9 @@ pub struct DawApp {
     pub snap: f64,
     /// Length of the last selected arranger clip; new clips take this size.
     pub last_clip_length: f64,
+    /// Where an instrument track chosen from "Add track" is placed once its
+    /// chooser completes; `None` appends it.
+    pub new_track_after: Option<u64>,
     pub root: u8,
     pub scale: Scale,
     pub tool: Tool,
@@ -414,6 +417,7 @@ impl DawApp {
             midi_editor: Default::default(),
             snap: daw_ui::SNAP_GRID,
             last_clip_length: 4.0,
+            new_track_after: None,
             root: 0,
             scale: Scale::Minor,
             tool: Tool::Select,
@@ -2137,8 +2141,11 @@ impl DawApp {
             Ok(selected) => {
                 self.selected_track = Some(track);
                 self.selected_clip = selected;
+                // Automation halves stay selected as the primary clip; the
+                // multi-selection helper only holds media clips.
                 if matches!(command, ClipCommand::Split(_))
                     && let Some(right) = selected
+                    && self.project.clip(track, right).is_some()
                 {
                     self.arranger_select_clips([(track, clip), (track, right)], None);
                 }
@@ -3150,7 +3157,11 @@ impl DawApp {
     /// continue in their chooser first.
     pub(crate) fn add_track(&mut self, ctx: &egui::Context, choice: NewTrack, after: Option<u64>) {
         let (edit_kind, track_name) = match choice {
-            NewTrack::Instrument => return self.open_instrument_chooser(false),
+            NewTrack::Instrument => {
+                self.open_instrument_chooser(false);
+                self.new_track_after = after;
+                return;
+            }
             NewTrack::Automation => {
                 self.start_automation_creation(ctx);
                 return self.open_popup(PopupKind::Automation);

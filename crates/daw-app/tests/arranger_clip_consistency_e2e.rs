@@ -32,7 +32,7 @@ fn row_y(state: &Value, track: u64) -> f64 {
         .unwrap()["header"];
     (header["min"][1].as_f64().unwrap() + header["max"][1].as_f64().unwrap()) / 2.0
 }
-fn track<'a>(state: &'a Value, id: u64) -> &'a Value {
+fn track(state: &Value, id: u64) -> &Value {
     state["project"]["tracks"]
         .as_array()
         .unwrap()
@@ -299,6 +299,32 @@ fn tracks_are_added_from_the_arranger_footer_and_context_menu() {
     );
     let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(undone["project"], footer["project"], "one undo step");
+
+    // An instrument track keeps its place through the instrument chooser.
+    pointer(
+        &mut app,
+        "click",
+        (x_at(&undone, 20.0), row_y(&undone, midi)),
+        "secondary",
+    );
+    app.click("Add track");
+    app.click("Add instrument track…");
+    // Choosing the instrument opens its device panel, so read the order from
+    // the project rather than the arranger rows.
+    let added = app.click("Add instrument track");
+    let order: Vec<_> = added["project"]["tracks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|track| track["id"].clone())
+        .collect();
+    let instrument = added["selected_track"].clone();
+    assert_eq!(track(&added, instrument.as_u64().unwrap())["kind"], "Midi");
+    let at = order.iter().position(|id| *id == instrument).unwrap();
+    assert!(
+        order[at - 1] == midi || order[at - 1] == lane,
+        "the instrument follows the right-clicked track: {order:?}"
+    );
     app.quit();
 }
 
@@ -341,6 +367,11 @@ fn double_click_renames_every_clip_kind_and_edit_actions_apply_to_patterns() {
     app.click("Edit");
     let split = app.click("Split at cursor");
     assert_eq!(patterns(&split, lane).len(), 2);
+    assert_eq!(
+        split["selected_clip"],
+        patterns(&split, lane)[1]["id"],
+        "the right half stays selected"
+    );
 
     // Edit → Copy and Paste put a pattern on the selected lane at the playhead.
     pointer(
@@ -363,5 +394,21 @@ fn double_click_renames_every_clip_kind_and_edit_actions_apply_to_patterns() {
     let clips = patterns(&pasted, lane);
     assert_eq!(clips.len(), 3);
     assert!(clips.iter().any(|clip| clip["start"] == 20.0));
+    app.quit();
+}
+
+#[test]
+fn renaming_a_ghost_pattern_renames_its_linked_copies() {
+    let mut app = Harness::new();
+    let (opened, _, lane) = fixture(&mut app);
+    let body = inside(pattern_rect(&opened, 0), 0.5, 0.7);
+    pointer(&mut app, "click", body, "secondary");
+    let ghost = app.click("Ghost copy");
+    assert_eq!(patterns(&ghost, lane).len(), 2);
+    let renamed =
+        rename_by_double_click(&mut app, inside(pattern_rect(&ghost, 1), 0.5, 0.7), "Echo");
+    let clips = patterns(&renamed, lane);
+    assert_eq!(clips[0]["name"], "Echo");
+    assert_eq!(clips[1]["name"], "Echo");
     app.quit();
 }

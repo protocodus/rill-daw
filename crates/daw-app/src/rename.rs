@@ -191,11 +191,19 @@ impl DawApp {
                         "Rename clip",
                     )
                 } else {
-                    let pattern = candidate
-                        .automation_lane_mut(track)
-                        .and_then(|lane| lane.clips.iter_mut().find(|item| item.id == clip))
-                        .unwrap();
-                    pattern.name = draft.text;
+                    // Linked patterns must share a name, so rename the group.
+                    let lane = candidate.automation_lane_mut(track).unwrap();
+                    let group = lane
+                        .clips
+                        .iter()
+                        .find(|item| item.id == clip)
+                        .unwrap()
+                        .link_group;
+                    for pattern in &mut lane.clips {
+                        if pattern.id == clip || (group.is_some() && pattern.link_group == group) {
+                            pattern.name.clone_from(&draft.text);
+                        }
+                    }
                     (Ok(()), "Rename clip")
                 }
             }
