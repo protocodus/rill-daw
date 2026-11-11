@@ -152,7 +152,8 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
         // controls; the filter and the two envelopes; modulation and the
         // voices. Every row breaks after its eighth cell. Both oscillators
         // share their columns, so the second one's extra controls stand
-        // out; an envelope is four faders, read as its shape.
+        // out; an envelope is four faders, read as its shape, and a fifth
+        // for how much velocity drives it.
         use Slot::{Blank, Control as C, Faders};
         layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
         layout.cells = true;
@@ -218,7 +219,7 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
                 4,
                 &[&[
                     Faders(&[FENV_ATTACK, FENV_DECAY, FENV_SUSTAIN, FENV_RELEASE], 3),
-                    C(VELOCITY_CUTOFF, 1),
+                    Faders(&[VELOCITY_CUTOFF], 1),
                 ]],
             ),
             cells(
@@ -227,7 +228,7 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
                 4,
                 &[&[
                     Faders(&[AENV_ATTACK, AENV_DECAY, AENV_SUSTAIN, AENV_RELEASE], 3),
-                    C(VELOCITY_AMP, 1),
+                    Faders(&[VELOCITY_AMP], 1),
                 ]],
             ),
             cells(

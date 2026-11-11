@@ -1596,7 +1596,8 @@ pub fn fader(
             );
         };
         rail(top, bottom, colors.line);
-        rail(y, bottom, active);
+        // As soft as the value arc of a `Knob::pointer`.
+        rail(y, bottom, active.gamma_multiply(0.7));
         let cap = Rect::from_center_size(egui::pos2(x, y), cap);
         painter.rect(
             cap,

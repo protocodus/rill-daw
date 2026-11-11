@@ -764,7 +764,13 @@ impl<'a> Knob<'a> {
                     } else {
                         2.5
                     },
-                    active,
+                    if self.pointer {
+                        // Softer than the marker crossing it, which stays
+                        // the one sharp reading of the value.
+                        active.gamma_multiply(0.7)
+                    } else {
+                        active
+                    },
                 ),
             ));
             if let Some(depth) = &self.modulation {
@@ -799,11 +805,28 @@ impl<'a> Knob<'a> {
                 ui.painter()
                     .circle_stroke(unity, 3.0, Stroke::new(1.5_f32, colors.text));
             }
+            if let (true, Some(step)) = (self.pointer, self.step) {
+                // A dot per detent while they are few enough to count.
+                let detents = ((self.range.end() - self.range.start()).abs() / step).round();
+                if (1.0..=12.0).contains(&detents) {
+                    for detent in 0..=detents as usize {
+                        let at = START_ANGLE + ARC_ANGLE * detent as f32 / detents as f32;
+                        ui.painter().circle_filled(
+                            center + Vec2::angled(at) * (radius + arc_width * 0.5 + 3.0),
+                            1.0,
+                            colors.muted,
+                        );
+                    }
+                }
+            }
             if self.pointer {
                 // An engraved marker on the outer half of the body that
-                // joins the arc; the centre stays quiet.
+                // crosses the arc to its outer edge; the centre stays quiet.
                 ui.painter().line_segment(
-                    [center + index_direction * radius * 0.45, geometry.index],
+                    [
+                        center + index_direction * radius * 0.45,
+                        center + index_direction * (radius + arc_width * 0.5),
+                    ],
                     Stroke::new(
                         if self.diameter >= 48.0 {
                             3.0_f32

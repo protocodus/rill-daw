@@ -53,6 +53,10 @@ pub const KNOB_HERO: f32 = 64.0;
 /// Space between neighbouring controls of one card, so captions never touch.
 const CELL_GAP: f32 = daw_ui::tokens::SPACE_SM;
 
+/// Extra space between the lines of a cell-grid card, so a value reads with
+/// the knob above it and not with the caption below.
+const LINE_GAP: f32 = daw_ui::tokens::SPACE_SM;
+
 /// The panel's width, for the window that hosts it.
 pub fn panel_width(descriptor: &DeviceDescriptor) -> f32 {
     panels::layout(descriptor).width
@@ -199,7 +203,7 @@ fn cell_row(
     // What a line adds to its control: the caption above, the value below
     // and the spacing around them. A fader spans the lines it stands beside.
     let text = ui.fonts_mut(|fonts| fonts.row_height(&daw_ui::control_caption_font()));
-    let between = 2.0 * text + 3.0 * ui.spacing().item_spacing.y;
+    let between = 2.0 * text + 3.0 * ui.spacing().item_spacing.y + LINE_GAP;
     let tall = heights.iter().sum::<f32>() + between * lines.saturating_sub(1) as f32;
     let spans: Vec<u8> = sections.iter().map(|section| section.span).collect();
     daw_ui::grid_row(ui, &spans, |ui, index| {
@@ -208,6 +212,9 @@ fn cell_row(
         ui.add_space(daw_ui::tokens::SPACE_XS);
         let width = ui.available_width() / f32::from(section.span);
         for (line, slots) in section.lines.iter().enumerate() {
+            if line > 0 {
+                ui.add_space(LINE_GAP);
+            }
             // In a card of one line beside taller ones, faders span every
             // line and a knob stands on the last, level with its neighbours.
             let alone = section.lines.len() == 1;
@@ -366,30 +373,39 @@ fn caption(spec: &ParamSpec, layout: &panels::Layout) -> &'static str {
         .map_or(spec.name, |(_, caption)| caption)
 }
 
+/// A parameter's value as the panel prints it: the device's own text, less
+/// the plus sign where the range has no negative side to tell it from.
+fn value_text(spec: &ParamSpec, normalized: f32) -> String {
+    let text = spec.format(normalized);
+    match text.strip_prefix('+') {
+        Some(unsigned) if spec.plain_min() >= 0.0 => unsigned.to_owned(),
+        _ => text,
+    }
+}
+
 /// The value at one end of a knob's range, short enough to print under the
 /// arc: "20", "20k", "+24". The unit stays only where the two ends differ
-/// in it ("2ms", "10s"); the full value is under the knob.
+/// in more than its prefix ("1ms", "2s"); the full value is under the knob.
 fn end_label(spec: &ParamSpec, normalized: f32) -> String {
-    let unit = |normalized: f32| {
-        spec.format(normalized)
-            .split_once(' ')
-            .map(|(_, unit)| unit.to_owned())
-            .unwrap_or_default()
+    let split = |normalized: f32| {
+        let text = value_text(spec, normalized);
+        let (number, unit) = text.split_once(' ').unwrap_or((&text, ""));
+        let number = if number.contains('.') {
+            number.trim_end_matches('0').trim_end_matches('.')
+        } else {
+            number
+        };
+        let number = if number == "+0" { "0" } else { number };
+        (number.to_owned(), unit.to_owned())
     };
-    let text = spec.format(normalized);
-    let (number, own) = text.split_once(' ').unwrap_or((&text, ""));
-    let number = if number.contains('.') {
-        number.trim_end_matches('0').trim_end_matches('.')
-    } else {
+    let ((number, unit), (_, low), (_, high)) = (split(normalized), split(0.0), split(1.0));
+    if low == high {
         number
-    };
-    let number = if number == "+0" { "0" } else { number };
-    if unit(0.0) == unit(1.0) {
-        number.to_owned()
-    } else if own.starts_with('k') {
-        format!("{number}k")
+    } else if high.strip_prefix('k') == Some(low.as_str()) {
+        // "20" to "20k": the kilo prefix alone tells the ends apart.
+        format!("{number}{}", if unit == high { "k" } else { "" })
     } else {
-        format!("{number}{own}")
+        format!("{number}{unit}")
     }
 }
 
@@ -447,7 +463,7 @@ fn cell_width(ui: &Ui, spec: &ParamSpec, layout: &panels::Layout) -> f32 {
         ParamRange::Linear { .. } | ParamRange::Log { .. } | ParamRange::Integer { .. } => {
             [0.0, 1.0]
                 .into_iter()
-                .map(|end| text(&spec.format(end), daw_ui::text::TextRole::Note.font()))
+                .map(|end| text(&value_text(spec, end), daw_ui::text::TextRole::Note.font()))
                 .fold(knob_diameter(spec, layout), f32::max)
         }
         ParamRange::Choice(labels) if toggles(spec) => {
@@ -617,13 +633,17 @@ fn control(
                             .text(caption(spec, layout))
                             .endpoint_labels(end_label(spec, 0.0), end_label(spec, 1.0))
                             .automation(state);
+                        if spec.plain_min() == -spec.plain_max() {
+                            // A range around zero fills from its center.
+                            knob = knob.bipolar();
+                        }
                         if let ParamRange::Integer { min, max } = spec.range {
                             // One detent per whole value.
                             knob = knob.step_by(1.0 / f64::from((max - min).max(1)));
                         }
                         ui.add(knob)
                     };
-                    let text = spec.format(normalized as f32);
+                    let text = value_text(spec, normalized as f32);
                     // Values share one baseline across the line.
                     ui.add_space(offset);
                     daw_ui::text::note(ui, &text);

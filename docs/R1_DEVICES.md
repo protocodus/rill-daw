@@ -786,14 +786,17 @@ row breaks after its eighth cell:
   Glide, Bend and Drift.
 - **Filter, Filter envelope, Amp envelope.** Filter Model beside the hero
   Cutoff, then Resonance, Drive, Envelope amount and Key track. Each
-  envelope is four faders, A D S R, and its Velocity amount.
+  envelope is four faders, A D S R, and a fifth for its Velocity amount.
 - **LFO, Voices.** The source (Shape, Rate, Sync) and its destinations
   (Pitch, Cutoff, Width, Mod wheel); Mode (toggle buttons) and Voices.
 
 A control that does nothing in the current mode (pulse Width on another
 wave, LFO Rate when synced, Voices outside Poly) stays in place, disabled, so
 the cards never reflow. Knobs are standard (48 points) except the hero
-Cutoff; Octave, Semitones, Bend and Voices click through whole values. Unlike the effect, the
+Cutoff; Octave, Semitones, Bend and Voices click through whole values, with
+a dot per detent where they are few. A range around zero (Octave, Detune,
+Envelope) fills its arc from the center. Values print without a plus sign
+where the range has no negative side. Unlike the effect, the
 synth draws no filter response: the controls start right under the header.
 The sketch below is the
 original target:
