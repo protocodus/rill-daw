@@ -3982,12 +3982,13 @@ impl DawApp {
                 }
             }
             "clip" => self.view = WorkspaceView::Clip,
-            "piano" => {
+            "piano" | "audio" => {
+                let midi = view == "piano";
                 let target = self.project.tracks.iter().find_map(|track| {
                     track
                         .clips
                         .iter()
-                        .find(|clip| matches!(clip.content, ClipContent::Midi { .. }))
+                        .find(|clip| matches!(clip.content, ClipContent::Midi { .. }) == midi)
                         .map(|clip| (track.id, clip.id))
                 });
                 if let Some((track, clip)) = target {
@@ -4031,7 +4032,18 @@ impl DawApp {
                     _ => SetupPage::Ai,
                 };
             }
-            "automation" => self.open_popup(PopupKind::Automation),
+            "automation" => {
+                // The editor closes itself unless an automation lane is selected.
+                if let Some(track) = self
+                    .project
+                    .tracks
+                    .iter()
+                    .find(|track| track.kind == TrackKind::Automation)
+                {
+                    self.selected_track = Some(track.id);
+                }
+                self.open_popup(PopupKind::Automation);
+            }
             "crossfade" => self.open_popup(PopupKind::Crossfade),
             "join" => self.open_popup(PopupKind::Join),
             "routing" => self.open_popup(PopupKind::Routing),
