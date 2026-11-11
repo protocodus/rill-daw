@@ -52,7 +52,7 @@ cargo test --locked -p daw-app --test mixer_order_e2e --test mixer_inline_routin
 restart persistence, favourites in the pinned footer, and combined name/category/
 producer search. `plugin_details_e2e` covers isolated I/O and parameter inspection,
 search, failure/retry, and returning to the library without changing the project.
-`native_parameter_automation_e2e` includes the one-shot **Pick parameter** flow,
+`native_parameter_automation_e2e` includes the one-shot **Automate** flow,
 cancellation and stale replies, existing lanes, and precise effect ownership.
 
 ```sh
