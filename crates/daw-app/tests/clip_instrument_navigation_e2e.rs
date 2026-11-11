@@ -21,27 +21,7 @@ fn center(rect: &Value) -> (f64, f64) {
 }
 
 fn close_popup(app: &mut Harness, state: &Value, title: &str) -> Value {
-    let title = state["label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .rev()
-        .find(|label| label["text"] == title)
-        .expect("popup title is visible");
-    let (x, y) = center(title);
-    let bounds = state["window_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|rect| {
-            rect["min"][0].as_f64().unwrap() < x
-                && rect["max"][0].as_f64().unwrap() > x
-                && rect["min"][1].as_f64().unwrap() < y
-                && rect["max"][1].as_f64().unwrap() > y
-        })
-        .expect("popup contains its title");
-    let x = bounds["max"][0].as_f64().unwrap() - (y - bounds["min"][1].as_f64().unwrap());
-    app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}))
+    common::close_utility(app, state, title)
 }
 
 fn editing_context(state: &Value) -> Value {
@@ -123,11 +103,13 @@ fn clip_instrument_action_survives_assignment_and_restores_notes_and_view_on_ret
 
         let chooser = app.click("Choose instrument…");
         assert_eq!(chooser["popups"]["library"], true);
-        let cancelled = close_popup(&mut app, &chooser, "Library");
+        let cancelled = close_popup(&mut app, &chooser, "Device browser");
         unchanged(&cancelled, &before);
 
         app.click("Choose instrument…");
         common::wait_library_device(&mut app, "Rill Fixture A");
+        // The built-in R1 Mini is listed first; pick the plug-in.
+        app.click("Rill Fixture A");
         let assigned = app.click("Assign instrument");
         assert_eq!(editing_context(&assigned), editing_context(&before));
         assert_eq!(

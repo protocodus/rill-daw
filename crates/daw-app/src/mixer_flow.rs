@@ -138,9 +138,11 @@ impl DawApp {
             .filter(|id| *id != daw_core::MASTER_CHANNEL_ID)
             && ui
                 .add(if ui.ctx().content_rect().width() < 1200.0 {
-                    daw_ui::IconButton::icon_only(daw_ui::Icon::Editor, "Show in Arranger").quiet()
+                    daw_ui::IconButton::icon_only(daw_ui::Icon::Arranger, "Show in Arranger")
+                        .quiet()
                 } else {
-                    daw_ui::IconButton::with_icon(daw_ui::Icon::Editor, "Show in Arranger").quiet()
+                    daw_ui::IconButton::with_icon(daw_ui::Icon::Arranger, "Show in Arranger")
+                        .quiet()
                 })
                 .on_hover_text("Reveal this channel's track in Arrangement")
                 .clicked()

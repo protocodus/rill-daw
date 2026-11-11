@@ -80,6 +80,17 @@ pub enum PopupKind {
     MidiExpression,
 }
 
+impl PopupKind {
+    /// Large views take over the workspace with Back; action dialogs and
+    /// device panels float above it.
+    fn full_screen(self) -> bool {
+        matches!(
+            self,
+            Self::Assistant | Self::Library | Self::AudioTakes | Self::Analysis | Self::Automation
+        )
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FocusedView {
     Workspace(WorkspaceView),
@@ -158,6 +169,10 @@ pub struct DawApp {
     pub(crate) virtual_audio: bool,
     pub(crate) automatic_plugin_previews: bool,
     pub(crate) audition_request: Option<(u64, u8, u8)>,
+    /// A note held on an instrument panel's keyboard: track, pitch, velocity.
+    pub(crate) panel_audition: Option<(u64, u8, u8)>,
+    /// An instrument panel's pitch and mod wheels: track, pitch, modulation.
+    pub(crate) panel_wheels: Option<(u64, f32, f32)>,
     pub loading: Option<std::sync::mpsc::Receiver<(u64, anyhow::Result<AudioEngine>)>>,
     loading_cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     settings_rollback: Option<Settings>,
@@ -241,6 +256,11 @@ pub struct DawApp {
     pub note_zoom: f32,
     pub midi_editor: crate::midi_editor::MidiEditorState,
     pub snap: f64,
+    /// Length of the last selected arranger clip; new clips take this size.
+    pub last_clip_length: f64,
+    /// Where an instrument track chosen from "Add track" is placed once its
+    /// chooser completes; `None` appends it.
+    pub new_track_after: Option<u64>,
     pub root: u8,
     pub scale: Scale,
     pub tool: Tool,
@@ -322,6 +342,8 @@ impl DawApp {
             virtual_audio: false,
             automatic_plugin_previews: !cfg!(test),
             audition_request: None,
+            panel_audition: None,
+            panel_wheels: None,
             loading: None,
             loading_cancel: None,
             settings_rollback: None,
@@ -404,7 +426,9 @@ impl DawApp {
             zoom: 48.0,
             note_zoom: 78.0,
             midi_editor: Default::default(),
-            snap: 0.25,
+            snap: daw_ui::SNAP_GRID,
+            last_clip_length: 4.0,
+            new_track_after: None,
             root: 0,
             scale: Scale::Minor,
             tool: Tool::Select,
@@ -703,7 +727,7 @@ impl DawApp {
                     PopupKind::Instrument => "Instrument",
                     PopupKind::Effects => "Effects",
                     PopupKind::Routing => "Routing",
-                    PopupKind::Library => "Library",
+                    PopupKind::Library => "Device browser",
                     PopupKind::Setup => "Setup",
                     PopupKind::Automation => "Automation",
                     PopupKind::History => "History",
@@ -999,16 +1023,33 @@ impl DawApp {
             .clip_mut(self.selected_track?, self.selected_clip?)
             .filter(|clip| !clip.is_take_source())
     }
+    /// Snap on the arranger timeline, whose zoom resolves the Grid step.
     pub fn snapped(&self, beat: f64) -> f64 {
-        if self.snap <= 0.0 {
+        self.snapped_at(beat, self.zoom)
+    }
+    pub fn snapped_at(&self, beat: f64, pixels_per_beat: f32) -> f64 {
+        let meter = self.project.meter_map();
+        let step = self.snap_step(pixels_per_beat);
+        if step <= 0.0 {
             return beat;
         }
-        // "1 bar" follows real bar lines once the meter changes along the song.
-        let meter = self.project.meter_map();
-        if !meter.is_uniform() && self.snap == f64::from(meter.initial()) {
+        // A chosen bar step follows real bar lines once the meter changes along
+        // the song. Grid stays on the drawn grid, which is plain multiples.
+        if self.snap != daw_ui::SNAP_GRID
+            && !meter.is_uniform()
+            && step == f64::from(meter.initial())
+        {
             return meter.nearest_bar_line(beat);
         }
-        (beat / self.snap).round() * self.snap
+        (beat / step).round() * step
+    }
+    /// The snap step in beats for a timeline drawn at this zoom; zero is off.
+    pub fn snap_step(&self, pixels_per_beat: f32) -> f64 {
+        daw_ui::snap_step(
+            self.snap,
+            pixels_per_beat,
+            self.project.meter_map().initial(),
+        )
     }
     pub fn playing(&self) -> bool {
         self.engine.as_ref().is_some_and(|e| e.snapshot().playing)
@@ -1077,26 +1118,49 @@ impl DawApp {
     }
 
     fn update_note_audition(&mut self, ctx: &egui::Context) {
-        let note = self.midi_audition(ctx).filter(|(track, _, _)| {
-            self.project
-                .track(*track)
-                .is_some_and(|track| matches!(track.instrument, Instrument::Vst3 { .. }))
-                && self.document_guard.is_none()
-                && self.error_details.is_none()
-                && !self.assistant.open
-                && !self.library_open
-                && !self.instrument_open
-                && !self.effects_open
-                && !self.setup_open
-                && !self.routing_open
-                && !self.inspector_open
-                && !self.automation_open
-                && !self.history_open
-                && !self.export_open
-                && !self.midi_export_open
-                && !self.analysis.open
-                && !self.about_open
-        });
+        let has_instrument = |app: &Self, track: u64| {
+            app.project
+                .track(track)
+                .is_some_and(|track| track.instrument.is_processor())
+        };
+        // The open instrument panel's keyboard and wheels; nothing once the
+        // window closes, so a key held while closing cannot stick.
+        let panel_track = self
+            .instrument_open
+            .then(|| self.instrument_panel_track())
+            .flatten();
+        if self.panel_audition.map(|(track, _, _)| track) != panel_track {
+            self.panel_audition = None;
+        }
+        if self.panel_wheels.map(|(track, _, _)| track) != panel_track {
+            self.panel_wheels = None;
+            // A hidden wheel cannot spring back on release; the engine centres
+            // the bend, and the panel shows it centred when it returns.
+            self.instrument_ui.device_panel.pitch_wheel = 0.0;
+        }
+        let note = self
+            .midi_audition(ctx)
+            .filter(|(track, _, _)| {
+                has_instrument(self, *track)
+                    && self.document_guard.is_none()
+                    && self.error_details.is_none()
+                    && !self.assistant.open
+                    && !self.library_open
+                    && !self.instrument_open
+                    && !self.effects_open
+                    && !self.setup_open
+                    && !self.routing_open
+                    && !self.inspector_open
+                    && !self.automation_open
+                    && !self.history_open
+                    && !self.export_open
+                    && !self.midi_export_open
+                    && !self.analysis.open
+                    && !self.about_open
+            })
+            .or(self
+                .panel_audition
+                .filter(|(track, _, _)| has_instrument(self, *track)));
         if note != self.audition_request {
             self.audition_request = note;
             if note.is_some()
@@ -1108,7 +1172,9 @@ impl DawApp {
             }
         }
         if let Some(engine) = &self.engine
-            && let Err(error) = engine.audition_note(note)
+            && let Err(error) = engine
+                .audition_note(note)
+                .and_then(|()| engine.audition_wheels(self.panel_wheels))
         {
             self.message(Err(error), "");
         }
@@ -2029,9 +2095,11 @@ impl DawApp {
         let (label, result) =
             if let Some(automation_clip) = self.project.automation_clip(track, clip).cloned() {
                 match command {
-                    ClipCommand::Split(_) => (
-                        "Split clip",
-                        Err(anyhow::anyhow!("Automation clips cannot be split")),
+                    ClipCommand::Split(beat) => (
+                        "Split automation clip",
+                        self.project
+                            .split_automation_clip(track, clip, beat)
+                            .map(Some),
                     ),
                     ClipCommand::Duplicate => (
                         "Duplicate automation clip",
@@ -2088,8 +2156,11 @@ impl DawApp {
             Ok(selected) => {
                 self.selected_track = Some(track);
                 self.selected_clip = selected;
+                // Automation halves stay selected as the primary clip; the
+                // multi-selection helper only holds media clips.
                 if matches!(command, ClipCommand::Split(_))
                     && let Some(right) = selected
+                    && self.project.clip(track, right).is_some()
                 {
                     self.arranger_select_clips([(track, clip), (track, right)], None);
                 }
@@ -2141,11 +2212,6 @@ impl DawApp {
             // Leave the containing workspace intact until that inner popup closes.
             if !egui::Popup::is_any_open(ctx) {
                 if self.midi_editor.cancel_generate() || self.midi_editor.cancel_note_transform() {
-                    ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
-                    return;
-                }
-                if self.automation_open && crate::automation_editor::cancel_automation_creation(ctx)
-                {
                     ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
                     return;
                 }
@@ -2344,11 +2410,11 @@ impl DawApp {
                             FocusedView::Workspace(view) => Some(view),
                             _ => None,
                         }).filter(|_| matches!(self.focused_view(), FocusedView::Popup(_))).unwrap_or(self.view);
-                        for (view, label) in [
-                            (WorkspaceView::Arrangement, "Arranger"),
-                            (WorkspaceView::Mixer, "Mixer"),
+                        for (view, label, icon) in [
+                            (WorkspaceView::Arrangement, "Arranger", daw_ui::Icon::Arranger),
+                            (WorkspaceView::Mixer, "Mixer", daw_ui::Icon::Mixer),
                         ] {
-                            if daw_ui::tab_choice(ui, active == view, label).clicked() {
+                            if ui.add(daw_ui::IconButton::tab(active == view, label).icon(icon)).clicked() {
                                 self.open_workspace(view);
                             }
                         }
@@ -2671,6 +2737,7 @@ impl DawApp {
                             for (label, shortcut, action) in clipboard {
                                 let enabled = if matches!(action, crate::audio_editor::AudioClipboardAction::Paste) {
                                     self.has_arranger_clipboard() || crate::audio_editor::has_audio_clipboard(ui.ctx())
+                                        || crate::arranger_automation::automation_clipboard(ui.ctx()).is_some()
                                 } else { has_clip };
                                 if daw_ui::menu_item_enabled(ui, enabled, label, Some(shortcut)).clicked() {
                                     if !self.arranger_clipboard_action(ui.ctx(), action) {
@@ -2769,7 +2836,7 @@ impl DawApp {
                             ui.close();
                         }
                         if ui
-                            .add_enabled(has_clip, daw_ui::button_widget("Join clips…"))
+                            .add_enabled(has_clip && self.selected().is_some(), daw_ui::button_widget("Join clips…"))
                             .clicked()
                         {
                             self.open_popup(PopupKind::Join);
@@ -2859,7 +2926,7 @@ impl DawApp {
                             (
                                 "Automation",
                                 PopupKind::Automation,
-                                track.is_some_and(|track| track.kind != TrackKind::Folder),
+                                track.is_some_and(|track| track.kind == TrackKind::Automation),
                             ),
                             (
                                 "Properties",
@@ -2876,7 +2943,7 @@ impl DawApp {
                             }
                         }
                         ui.separator();
-                        if daw_ui::button(ui, "Library").clicked() {
+                        if daw_ui::button(ui, "Device browser").clicked() {
                             self.open_popup(PopupKind::Library);
                             ui.close();
                         }
@@ -2906,10 +2973,9 @@ impl DawApp {
                             if self.assistant.busy() && daw_ui::small_button(ui, "Stop AI").clicked() {
                                 self.assistant.stop();
                             }
-                            if self.automation_override_count() > 0
-                                && daw_ui::small_button(ui, "Cancel automation override")
-                                    .on_hover_text("Clear all manual automation overrides. Enabled curves resume at the current playhead; bypass stays unchanged. Undo restores the overrides.")
-                                    .clicked() {
+                            let overrides = self.automation_override_count();
+                            if overrides > 0
+                                && daw_ui::automation_override_warning(ui, overrides).clicked() {
                                 self.cancel_automation_overrides();
                             }
                             ui.add_space(daw_ui::tokens::SPACE_LG);
@@ -2959,7 +3025,6 @@ impl DawApp {
         daw_ui::popup("About RILL", ctx)
             .id(egui::Id::new("about_rill"))
             .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
-            .resizable(false)
             .vscroll(false)
             .open(&mut open)
             .show(ctx, |ui| {
@@ -3095,83 +3160,82 @@ impl DawApp {
         }
     }
 
-    fn track_menu(&mut self, ui: &mut egui::Ui) {
-        daw_ui::command_menu_button(ui, "Track", |ui| {
-            if daw_ui::button(ui, "Add instrument track…").clicked() {
+    /// Add a track chosen from [`add_track_buttons`]. A new track appears after
+    /// `after` when given, otherwise at the end; instruments continue in
+    /// their chooser first.
+    pub(crate) fn add_track(&mut self, choice: NewTrack, after: Option<u64>) {
+        let (edit_kind, track_name) = match choice {
+            NewTrack::Instrument => {
                 self.open_instrument_chooser(false);
-                ui.close();
+                self.new_track_after = after;
+                return;
             }
-            for (name, kind) in [
-                ("Add MIDI track", TrackKind::Midi),
-                ("Add audio track", TrackKind::Audio),
-                ("Add bus", TrackKind::Bus),
-                ("Add folder", TrackKind::Folder),
-            ] {
-                if daw_ui::button(ui, name).clicked() {
-                    let (edit_kind, track_name) = match kind {
-                        TrackKind::Midi => (EditableTrackKind::Midi, "New instrument".to_owned()),
-                        TrackKind::Audio => (EditableTrackKind::Audio, "New audio".to_owned()),
-                        TrackKind::Bus => (EditableTrackKind::Bus, self.available_bus_name()),
-                        TrackKind::Folder => (EditableTrackKind::Folder, "New folder".to_owned()),
-                        TrackKind::Automation => {
-                            unreachable!("Automation requires a parameter target")
-                        }
-                    };
-                    let mut edits = vec![SongEdit::AddTrack {
-                        kind: edit_kind,
-                        name: track_name,
-                        key: Some("new_track".into()),
-                    }];
-                    if kind == TrackKind::Midi {
-                        edits.push(SongEdit::AddMidiClip {
-                            track: EntityRef::Key("new_track".into()),
-                            name: "New pattern".into(),
-                            start: self.snapped(self.cursor).max(0.0),
-                            length: 4.0,
-                            notes: Vec::new(),
-                            key: Some("new_clip".into()),
-                        });
-                    }
-                    let batch = EditBatch {
-                        label: "Add track".into(),
-                        edits,
-                    };
-                    match daw_tools::SongToolHost::apply_edits(self, batch) {
-                        Ok(result) => {
-                            self.selected_track = result
-                                .created
-                                .iter()
-                                .find(|entity| entity.key.as_deref() == Some("new_track"))
-                                .map(|entity| entity.id);
-                            self.selected_clip = result
-                                .created
-                                .iter()
-                                .find(|entity| entity.key.as_deref() == Some("new_clip"))
-                                .map(|entity| entity.id);
-                            self.selected_notes.clear();
-                            self.midi_editor.clear_hidden_selection();
-                            self.close_popups();
-                            self.sync_arranger_selection();
-                            let state = self.history.state_id();
-                            let selection = self.capture_selection();
-                            self.selection_history.record(
-                                (state, selection.clone()),
-                                (state, selection),
-                                self.history.retained_state_ids(),
-                            );
-                            if kind == TrackKind::Midi {
-                                self.open_new_instrument_chooser();
-                            }
-                        }
-                        Err(error) => self.message(Err(anyhow::anyhow!(error)), ""),
-                    }
-                    ui.close();
+            NewTrack::Midi => (EditableTrackKind::Midi, "New instrument".to_owned()),
+            NewTrack::Audio => (EditableTrackKind::Audio, "New audio".to_owned()),
+            NewTrack::Bus => (EditableTrackKind::Bus, self.available_bus_name()),
+            NewTrack::Folder => (EditableTrackKind::Folder, "New folder".to_owned()),
+        };
+        let mut edits = vec![SongEdit::AddTrack {
+            kind: edit_kind,
+            name: track_name,
+            key: Some("new_track".into()),
+        }];
+        if let Some(target) = after {
+            edits.push(SongEdit::MoveTrack {
+                track: EntityRef::Key("new_track".into()),
+                target: EntityRef::Id(target),
+                placement: TrackPlacement::After,
+            });
+        }
+        if choice == NewTrack::Midi {
+            edits.push(SongEdit::AddMidiClip {
+                track: EntityRef::Key("new_track".into()),
+                name: "New pattern".into(),
+                start: self.snapped(self.cursor).max(0.0),
+                length: 4.0,
+                notes: Vec::new(),
+                key: Some("new_clip".into()),
+            });
+        }
+        let batch = EditBatch {
+            label: "Add track".into(),
+            edits,
+        };
+        match daw_tools::SongToolHost::apply_edits(self, batch) {
+            Ok(result) => {
+                self.selected_track = result
+                    .created
+                    .iter()
+                    .find(|entity| entity.key.as_deref() == Some("new_track"))
+                    .map(|entity| entity.id);
+                self.selected_clip = result
+                    .created
+                    .iter()
+                    .find(|entity| entity.key.as_deref() == Some("new_clip"))
+                    .map(|entity| entity.id);
+                self.selected_notes.clear();
+                self.midi_editor.clear_hidden_selection();
+                self.close_popups();
+                self.sync_arranger_selection();
+                let state = self.history.state_id();
+                let selection = self.capture_selection();
+                self.selection_history.record(
+                    (state, selection.clone()),
+                    (state, selection),
+                    self.history.retained_state_ids(),
+                );
+                if choice == NewTrack::Midi {
+                    self.open_new_instrument_chooser();
                 }
             }
-            if daw_ui::button(ui, "Add automation track…").clicked() {
-                self.start_automation_creation(ui.ctx());
-                self.open_popup(PopupKind::Automation);
-                ui.close();
+            Err(error) => self.message(Err(anyhow::anyhow!(error)), ""),
+        }
+    }
+
+    fn track_menu(&mut self, ui: &mut egui::Ui) {
+        daw_ui::command_menu_button(ui, "Track", |ui| {
+            if let Some(choice) = add_track_buttons(ui) {
+                self.add_track(choice, None);
             }
             ui.separator();
             let track = self.selected_track.and_then(|id| self.project.track(id));
@@ -3827,7 +3891,12 @@ impl DawApp {
         } else {
             daw_ui::ViewBackdrop::capture(ctx, scene_bounds)
         };
-        daw_ui::paint_popup_backdrop(ctx, utility_open);
+        // Full screens replace the workspace and leave the transport as it
+        // is; a dialog or device panel softens what lies beneath it.
+        daw_ui::paint_popup_backdrop(
+            ctx,
+            matches!(self.focused_view(), FocusedView::Popup(kind) if !kind.full_screen()),
+        );
         self.update_note_audition(ctx);
         // Utility windows own their close button and Apply/Cancel flags. Restore
         // their caller only on dismissal, never on a transition to another tool.
@@ -3913,12 +3982,13 @@ impl DawApp {
                 }
             }
             "clip" => self.view = WorkspaceView::Clip,
-            "piano" => {
+            "piano" | "audio" => {
+                let midi = view == "piano";
                 let target = self.project.tracks.iter().find_map(|track| {
                     track
                         .clips
                         .iter()
-                        .find(|clip| matches!(clip.content, ClipContent::Midi { .. }))
+                        .find(|clip| matches!(clip.content, ClipContent::Midi { .. }) == midi)
                         .map(|clip| (track.id, clip.id))
                 });
                 if let Some((track, clip)) = target {
@@ -3962,7 +4032,18 @@ impl DawApp {
                     _ => SetupPage::Ai,
                 };
             }
-            "automation" => self.open_popup(PopupKind::Automation),
+            "automation" => {
+                // The editor closes itself unless an automation lane is selected.
+                if let Some(track) = self
+                    .project
+                    .tracks
+                    .iter()
+                    .find(|track| track.kind == TrackKind::Automation)
+                {
+                    self.selected_track = Some(track.id);
+                }
+                self.open_popup(PopupKind::Automation);
+            }
             "crossfade" => self.open_popup(PopupKind::Crossfade),
             "join" => self.open_popup(PopupKind::Join),
             "routing" => self.open_popup(PopupKind::Routing),
@@ -3974,6 +4055,16 @@ impl DawApp {
             }
             "instrument" => self.open_popup(PopupKind::Instrument),
             "rack" | "effects" => self.open_popup(PopupKind::Effects),
+            "effect-editor" => {
+                let target =
+                    self.project.tracks.iter().find_map(|track| {
+                        track.inserts.first().map(|insert| (track.id, insert.id))
+                    });
+                if let Some((track, effect)) = target {
+                    self.selected_track = Some(track);
+                    self.open_effect_editor(track, effect);
+                }
+            }
             _ => {}
         }
     }
@@ -4167,4 +4258,31 @@ mod export_feedback_tests {
         assert_eq!(app.status, "Audio device disconnected");
         assert_eq!(app.exported_file, Some(path));
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum NewTrack {
+    Instrument,
+    Midi,
+    Audio,
+    Bus,
+    Folder,
+}
+
+/// The track creation commands shared by the Track menu and the arranger.
+pub(crate) fn add_track_buttons(ui: &mut egui::Ui) -> Option<NewTrack> {
+    let mut choice = None;
+    for (label, track) in [
+        ("Add instrument track…", NewTrack::Instrument),
+        ("Add MIDI track", NewTrack::Midi),
+        ("Add audio track", NewTrack::Audio),
+        ("Add bus", NewTrack::Bus),
+        ("Add folder", NewTrack::Folder),
+    ] {
+        if daw_ui::button(ui, label).clicked() {
+            choice = Some(track);
+            ui.close();
+        }
+    }
+    choice
 }

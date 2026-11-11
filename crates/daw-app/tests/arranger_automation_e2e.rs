@@ -71,10 +71,12 @@ fn pattern_copy_paste_derivation_and_both_trim_edges_preserve_source_points() {
     project.save(&path).unwrap();
     let initial = app.command(json!({"command":"open","path":path}));
     click(&mut app, pattern_header(&initial, 0), "secondary");
-    let ghost = app.click("Ghost pattern");
+    let ghost = app.click("Ghost copy");
     click(&mut app, pattern_header(&ghost, 1), "secondary");
-    let independent = app.click("Make pattern independent");
+    let independent = app.click("Make independent");
     assert!(lane(&independent)["clips"][1]["link_group"].is_null());
+    // Points are drawn with Pencil, as notes are in the piano roll.
+    app.click("Pencil");
     let plot = &diagram(&independent)["clips"][1]["plot"];
     let x = (plot["min"][0].as_f64().unwrap() + plot["max"][0].as_f64().unwrap()) / 2.0;
     let y = plot["max"][1].as_f64().unwrap()
@@ -99,7 +101,7 @@ fn pattern_copy_paste_derivation_and_both_trim_edges_preserve_source_points() {
         "Smooth"
     );
     click(&mut app, pattern_header(&smooth, 0), "secondary");
-    app.click("Copy pattern");
+    app.click("Copy");
     let state = app.inspect();
     let at = point(&state, 8.0, 0.7);
     click(&mut app, at, "secondary");
@@ -107,9 +109,10 @@ fn pattern_copy_paste_derivation_and_both_trim_edges_preserve_source_points() {
     assert_eq!(lane(&pasted)["clips"][2]["start"], 8.0);
     assert!(lane(&pasted)["clips"][2]["link_group"].is_null());
     click(&mut app, pattern_header(&pasted, 0), "secondary");
-    let copied = app.click("Duplicate pattern");
+    let copied = app.click("Duplicate");
     let duplicate = lane(&copied)["clips"][3]["id"].as_u64().unwrap();
     assert_ne!(duplicate, original);
+    app.click("Select");
     let header = pattern_header(&copied, 2);
     let ppb = copied["timeline"]["pixels_per_beat"].as_f64().unwrap();
     let moved=app.command(json!({"command":"pointer","phase":"drag","x":header.0,"y":header.1,"to_x":header.0+3.0*ppb,"to_y":header.1}));
@@ -137,7 +140,7 @@ fn pattern_copy_paste_derivation_and_both_trim_edges_preserve_source_points() {
     assert_eq!(undone["project"], trimmed["project"]);
     let state = app.inspect();
     click(&mut app, pattern_header(&state, 2), "secondary");
-    let removed = app.click("Delete pattern");
+    let removed = app.click("Delete");
     assert_eq!(lane(&removed)["clips"].as_array().unwrap().len(), 3);
     app.quit();
 }
@@ -191,6 +194,12 @@ fn points_patterns_ghosts_placement_precedence_undo_and_archive_work_in_arranger
         vec![channel, automation, other]
     );
     let at = point(&before, 1.0, 0.6);
+    let selecting = click(&mut app, at, "primary");
+    assert_eq!(
+        selecting["project"], before["project"],
+        "only Pencil draws arranger points"
+    );
+    app.click("Pencil");
     let added = click(&mut app, at, "primary");
     assert_eq!(lane(&added)["points"].as_array().unwrap().len(), 3);
     let undo = app.command(json!({"command":"key","key":"Z","cmd":true}));
@@ -226,7 +235,7 @@ fn points_patterns_ghosts_placement_precedence_undo_and_archive_work_in_arranger
     sample(&rendered, 3.5, 0.48);
     sample(&rendered, 6.5, 0.12);
     click(&mut app, pattern_header(&stepped, 0), "secondary");
-    let copied = app.click("Ghost pattern");
+    let copied = app.click("Ghost copy");
     assert_eq!(lane(&copied)["clips"].as_array().unwrap().len(), 2);
     assert_eq!(
         lane(&copied)["clips"][0]["link_group"],
@@ -234,8 +243,10 @@ fn points_patterns_ghosts_placement_precedence_undo_and_archive_work_in_arranger
     );
     let at = pattern_header(&copied, 1);
     let ppb = copied["timeline"]["pixels_per_beat"].as_f64().unwrap();
+    app.click("Select");
     let moved=app.command(json!({"command":"pointer","phase":"drag","x":at.0,"y":at.1,"to_x":at.0+2.0*ppb,"to_y":at.1}));
     assert_eq!(lane(&moved)["clips"][1]["start"], 8.0);
+    app.click("Pencil");
     let at = center(&diagram(&moved)["clips"][0]["points"][1]["rect"]);
     let unchanged = click(&mut app, at, "primary");
     assert_eq!(

@@ -7,7 +7,7 @@
 
 Rill is a free, open-source desktop music workstation for **macOS, Linux, and Windows**. Record audio and MIDI, develop a phrase with the integrated AI assistant, and bring your song together with your favorite VST3, CLAP, (on Linux) LV2 and (on macOS) Audio Unit instruments and effects. Focused workspaces keep arranging, editing, and mixing close to the music.
 
-[Download](#download) · [Features](#make-it-your-song) · [AI assistant](#make-music-with-ai) · [Screenshots](#screenshots) · [User guide](docs/USER_GUIDE.md) · [Website](https://protocodus.cz/product/rill/)
+[Download](#download) · [Features](#make-it-your-song) · [AI assistant](#make-music-with-ai) · [Screenshots](#screenshots) · [All screens](#every-screen-and-dialog) · [User guide](docs/USER_GUIDE.md) · [Website](https://protocodus.cz/product/rill/)
 
 ![Rill Arrangement with audio and MIDI parts, colored tracks, and a song timeline](artifacts/readme-arrangement.png)
 
@@ -25,7 +25,7 @@ Independent instrument and effect chains can run across multiple CPU cores. Shar
 
 ## Download
 
-Get a development build for your platform. These links serve the latest successful `main` build through [nightly.link](https://nightly.link/protocodus/rill-daw/workflows/ci/main), without a GitHub login.
+Get a development build for your platform. These links serve the latest successful nightly build of `main` through [nightly.link](https://nightly.link/protocodus/rill-daw/workflows/ci/main), without a GitHub login.
 
 | Platform | Download | Launch |
 | --- | --- | --- |
@@ -37,7 +37,7 @@ Get a development build for your platform. These links serve the latest successf
 
 **Installing:** extract the download ZIP, then the platform archive inside it. Keep the application and `daw-plugin-host` helper together; keep the macOS app bundle intact. Each package includes a SHA-256 checksum and installation notes. Builds are unsigned and macOS builds are not notarized. macOS requires version 11 or newer; Linux requires glibc 2.35 or newer. See [platform requirements and installation](docs/RELEASING.md).
 
-**Bring your own instruments:** VST3, CLAP, LV2 and AU instruments and effects are installed separately. Rill includes an original audio drum loop to try immediately.
+**Sound out of the box:** Rill includes its own [R1 synth and filter](#built-in-devices) and an original audio drum loop to try immediately. Add VST3, CLAP, LV2 and AU instruments and effects whenever you like.
 
 Build artifacts expire after 14 days. If a link is unavailable, visit the [successful main builds](https://github.com/protocodus/rill-daw/actions/workflows/ci.yml?query=branch%3Amain+is%3Asuccess) and open a run's **Artifacts** section; GitHub sign-in is required for that route. A newer build can be in progress while the links serve an earlier successful version.
 
@@ -90,10 +90,79 @@ Draw volume changes, bend individual curve segments, and enter precise point val
 
 ![Rill Automation editor showing the Atmosphere track's volume curve, editable points and segment controls](artifacts/readme-automation.png)
 
+## Every screen and dialog
+
+Rendered from the current `main` by CI on every build ([`scripts/capture-screens.sh`](scripts/capture-screens.sh)), light theme first and dark beside it. Click an image for full size.
+
+<table>
+<tr><th width="50%">Light</th><th width="50%">Dark</th></tr>
+<tr><td colspan="2"><b>Arranger</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/arrangement.png"><img alt="Rill Arranger, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/arrangement.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/arrangement.png"><img alt="Rill Arranger, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/arrangement.png"></a></td></tr>
+<tr><td colspan="2"><b>Mixer</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/mixer.png"><img alt="Rill Mixer, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/mixer.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/mixer.png"><img alt="Rill Mixer, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/mixer.png"></a></td></tr>
+<tr><td colspan="2"><b>Piano roll</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/piano.png"><img alt="Rill Piano roll, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/piano.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/piano.png"><img alt="Rill Piano roll, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/piano.png"></a></td></tr>
+<tr><td colspan="2"><b>Audio clip editor</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/audio.png"><img alt="Rill Audio clip editor, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/audio.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/audio.png"><img alt="Rill Audio clip editor, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/audio.png"></a></td></tr>
+<tr><td colspan="2"><b>Automation editor</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/automation.png"><img alt="Rill Automation editor, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/automation.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/automation.png"><img alt="Rill Automation editor, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/automation.png"></a></td></tr>
+<tr><td colspan="2"><b>Note expression</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/expression.png"><img alt="Rill Note expression, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/expression.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/expression.png"><img alt="Rill Note expression, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/expression.png"></a></td></tr>
+<tr><td colspan="2"><b>Device browser</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/library.png"><img alt="Rill Device browser, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/library.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/library.png"><img alt="Rill Device browser, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/library.png"></a></td></tr>
+<tr><td colspan="2"><b>AI assistant</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/assistant.png"><img alt="Rill AI assistant, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/assistant.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/assistant.png"><img alt="Rill AI assistant, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/assistant.png"></a></td></tr>
+<tr><td colspan="2"><b>Signal analysis</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/analysis.png"><img alt="Rill Signal analysis, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/analysis.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/analysis.png"><img alt="Rill Signal analysis, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/analysis.png"></a></td></tr>
+<tr><td colspan="2"><b>Instrument panel (R1 Mini)</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/instrument.png"><img alt="Rill Instrument panel (R1 Mini), light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/instrument.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/instrument.png"><img alt="Rill Instrument panel (R1 Mini), dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/instrument.png"></a></td></tr>
+<tr><td colspan="2"><b>Effects</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/effects.png"><img alt="Rill Effects, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/effects.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/effects.png"><img alt="Rill Effects, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/effects.png"></a></td></tr>
+<tr><td colspan="2"><b>Effect panel (R1 Filter)</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/effect-editor.png"><img alt="Rill Effect panel (R1 Filter), light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/effect-editor.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/effect-editor.png"><img alt="Rill Effect panel (R1 Filter), dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/effect-editor.png"></a></td></tr>
+<tr><td colspan="2"><b>Routing</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/routing.png"><img alt="Rill Routing, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/routing.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/routing.png"><img alt="Rill Routing, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/routing.png"></a></td></tr>
+<tr><td colspan="2"><b>Clip properties</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/properties.png"><img alt="Rill Clip properties, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/properties.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/properties.png"><img alt="Rill Clip properties, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/properties.png"></a></td></tr>
+<tr><td colspan="2"><b>Channel properties</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/channel.png"><img alt="Rill Channel properties, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/channel.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/channel.png"><img alt="Rill Channel properties, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/channel.png"></a></td></tr>
+<tr><td colspan="2"><b>Recording</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/recording.png"><img alt="Rill Recording, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/recording.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/recording.png"><img alt="Rill Recording, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/recording.png"></a></td></tr>
+<tr><td colspan="2"><b>Export audio</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/export.png"><img alt="Rill Export audio, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/export.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/export.png"><img alt="Rill Export audio, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/export.png"></a></td></tr>
+<tr><td colspan="2"><b>History</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/history.png"><img alt="Rill History, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/history.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/history.png"><img alt="Rill History, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/history.png"></a></td></tr>
+<tr><td colspan="2"><b>Setup · Audio</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/setup.png"><img alt="Rill Setup · Audio, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/setup.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/setup.png"><img alt="Rill Setup · Audio, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/setup.png"></a></td></tr>
+<tr><td colspan="2"><b>Setup · Appearance</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/setup-appearance.png"><img alt="Rill Setup · Appearance, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/setup-appearance.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/setup-appearance.png"><img alt="Rill Setup · Appearance, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/setup-appearance.png"></a></td></tr>
+<tr><td colspan="2"><b>Setup · Storage</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/setup-storage.png"><img alt="Rill Setup · Storage, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/setup-storage.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/setup-storage.png"><img alt="Rill Setup · Storage, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/setup-storage.png"></a></td></tr>
+<tr><td colspan="2"><b>Setup · Plug-ins</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/setup-plugins.png"><img alt="Rill Setup · Plug-ins, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/setup-plugins.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/setup-plugins.png"><img alt="Rill Setup · Plug-ins, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/setup-plugins.png"></a></td></tr>
+<tr><td colspan="2"><b>Setup · AI</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/setup-ai.png"><img alt="Rill Setup · AI, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/setup-ai.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/setup-ai.png"><img alt="Rill Setup · AI, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/setup-ai.png"></a></td></tr>
+<tr><td colspan="2"><b>Save changes?</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/unsaved-changes.png"><img alt="Rill Save changes?, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/unsaved-changes.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/unsaved-changes.png"><img alt="Rill Save changes?, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/unsaved-changes.png"></a></td></tr>
+<tr><td colspan="2"><b>About</b></td></tr>
+<tr><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/about.png"><img alt="Rill About, light theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/light/about.png"></a></td><td width="50%"><a href="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/about.png"><img alt="Rill About, dark theme" src="https://raw.githubusercontent.com/protocodus/rill-daw/screens/dark/about.png"></a></td></tr>
+</table>
+
+## Built-in devices
+
+Rill ships its own instruments and effects, so a new song makes sound before any plug-in is installed. Find them in **Window → Device browser** under **Built-in (R1)**. Each has factory presets, automation on every control, and tools the AI assistant can use in plain units.
+
+| Device | What it does |
+| --- | --- |
+| ![R1 Mini panel](artifacts/readme-r1-mini.png) **R1 Mini** · instrument | A two-oscillator subtractive synth and the default instrument of new MIDI tracks. Circuit-modelled VCO and DCO oscillators, a sub and noise source, a choice of five analog filter circuits, two envelopes, an LFO, and poly, mono and legato voicing. Play it from the panel keyboard with pitch and mod wheels. |
+| ![R1 Filter panel](artifacts/readme-r1-filter.png) **R1 Filter** · effect | A filter for inserts and sends. Pick the transparent Clean model or one of eight characters (transistor ladder, Sallen-Key, two OTA designs, diode pair, state variable, comb and vowel), then move it with the built-in LFO and envelope follower. |
+
+The full design, including the devices still to come, is in [R1 built-in devices](docs/R1_DEVICES.md).
+
 ## Start making music
 
 1. Launch Rill and click **Play** to hear the included drum loop, or choose **File → New** for an empty song.
-2. Drop WAV, MP3, FLAC or OGG files onto an audio track or empty arranger space, or choose **File → Import audio…** to create a track at the cursor. For MIDI, choose **Track → Add MIDI track** and assign a VST3, CLAP, LV2 or AU instrument.
+2. Drop WAV, MP3, FLAC or OGG files onto an audio track or empty arranger space, or choose **File → Import audio…** to create a track at the cursor. For MIDI, choose **Track → Add MIDI track**: it plays R1 Mini at once, or pick a VST3, CLAP, LV2 or AU instrument instead.
 3. Double-click a clip to edit its audio or notes. Open **Window → Mixer** to balance the tracks.
 4. Save a portable `.rill` project, then use **File → Export WAV…** to share a mix.
 
@@ -103,7 +172,7 @@ Use the menus and on-screen tools, or speed up familiar actions with keyboard sh
 
 Audio runs through the platform driver (ALSA, WASAPI or CoreAudio) or, from Setup → Audio → Driver, JACK on Linux. Windows builds also offer ASIO, built with Steinberg's ASIO SDK under its GPLv3 option, so the Windows executable is distributed under the GPLv3 while Rill's source stays MIT (see [releasing](docs/RELEASING.md)). ASIO has not been tested on hardware.
 
-Rill is in active development and focuses on audio/MIDI music production. It hosts **VST3** and **CLAP** on every platform, **LV2** on Linux (through the system lilv library) and **Audio Units** (AUv2, and AUv3 through Apple's bridge) on macOS; instruments and effects are installed separately. LV2 plug-ins use Rill's generic parameter browser instead of their own editor windows. Songs can change meter at bar lines and carry named markers; audio clips can be warped with markers and quantized to the grid. Tempo maps, surround mixing, VST2/AAX/ARA, and video/scoring-to-picture workflows are not supported. See the [current capabilities and limits](docs/PRODUCT_DIRECTION.md).
+Rill is in active development and focuses on audio/MIDI music production. It hosts **VST3** and **CLAP** on every platform, **LV2** on Linux (through the system lilv library) and **Audio Units** (AUv2, and AUv3 through Apple's bridge) on macOS, alongside its own [built-in devices](#built-in-devices). LV2 plug-ins use Rill's generic parameter browser instead of their own editor windows. Songs can change meter at bar lines and carry named markers; audio clips can be warped with markers and quantized to the grid. Tempo maps, surround mixing, VST2/AAX/ARA, and video/scoring-to-picture workflows are not supported. See the [current capabilities and limits](docs/PRODUCT_DIRECTION.md).
 
 `.rill` projects preserve high-resolution MIDI note/controller data. Native UMP input targets macOS 11 and newer; Linux and Windows use MIDI 1.0 input. Audible expression depends on the instrument's supported mappings (VST3 note expressions, CLAP note expressions, MIDI for LV2); per-note pitch-bend packets are retained but not currently played. Exporting richer performances as `.mid` requires an explicit MIDI 1.0 copy. This is not universal MIDI 2.0 device or plug-in compatibility; see [MIDI recording and expression](docs/USER_GUIDE.md#midi-recording-and-pre-count).
 

@@ -173,6 +173,7 @@ impl DawApp {
         let mut channel_target = None;
         let mut arranger_target = None;
         let mut device_target = None;
+        let mut instrument_target = None;
         let mut insert_target = None;
         let mut device_diagnostics = Vec::new();
         let mut toggle_selection = None;
@@ -779,8 +780,7 @@ impl DawApp {
                                     daw_ui::mixer_bus_input_summary(ui, width,
                                         incoming.get(&track.id).map(Vec::as_slice).unwrap_or(&[]).iter()
                                             .map(|(id, pre)| (names.get(id).map(String::as_str).unwrap_or("Unavailable channel"), *pre)))
-                                } else if let Instrument::Vst3 { path, class_id } = &track.instrument {
-                                    let model = crate::library::plugin_model(&self.vst_catalog, path, class_id);
+                                } else if let Some(model) = crate::library::instrument_model(&self.vst_catalog, &track.instrument) {
                                     let instrument = if track.instrument_name.is_empty() { model.split(" · ").last().unwrap_or(&model) } else { &track.instrument_name };
                                     let response = daw_ui::mixer_row(ui, width, control, &format!("MIDI · {instrument}"),
                                         daw_ui::MixerRowText::Caption, None, None)
@@ -788,17 +788,20 @@ impl DawApp {
                                     if response.clicked() { device_target = Some((track.id, None)); }
                                     device_diagnostics.push(serde_json::json!({"track":track.id,"effect":null,"name":instrument,"model":model,"rect":rect_json(response.rect)}));
                                     response
+                                } else if track.kind == TrackKind::Midi {
+                                    let response = daw_ui::mixer_row(ui, width, control, "MIDI · Choose…",
+                                        daw_ui::MixerRowText::Caption, None, None)
+                                        .on_hover_text("No instrument · Click to choose one");
+                                    if response.clicked() { instrument_target = Some(track.id); }
+                                    response
                                 } else {
                                     let text = match (track.kind, track.audio_input) {
-                                        (TrackKind::Midi, _) => "MIDI · None".to_owned(),
                                         (_, Some(AudioInputChannels::Mono { channel })) => format!("Audio · In {}", channel + 1),
                                         (_, Some(AudioInputChannels::Stereo { left, right })) => format!("Audio · In {}/{}", left + 1, right + 1),
                                         (_, None) => "Audio".to_owned(),
                                     };
-                                    daw_ui::mixer_source_caption(ui, &text, width).on_hover_text(match track.kind {
-                                        TrackKind::Audio => "Audio clips and monitored input, including their source processing",
-                                        _ => "No instrument · choose one in the channel's Instrument window",
-                                    })
+                                    daw_ui::mixer_source_caption(ui, &text, width)
+                                        .on_hover_text("Audio clips and monitored input, including their source processing")
                                 }
                             }).inner;
                             (menu.response.rect, kind.rect)
@@ -842,8 +845,7 @@ impl DawApp {
                             } else {
                                 egui::ScrollArea::vertical().id_salt(("mixer_devices", track.id)).min_scrolled_height(0.0).max_height(device_height).auto_shrink([false, false]).show(ui, |ui| {
                                     for slot in &track.inserts {
-                                        let Effect::Vst3 { path, class_id } = &slot.effect;
-                                        let model = crate::library::plugin_model(&self.vst_catalog, path, class_id);
+                                        let model = crate::library::effect_model(&self.vst_catalog, &slot.effect);
                                         let response = daw_ui::device_identity_button(ui, egui::Id::new(("mixer_insert", track.id, slot.id)), content_width, daw_ui::DeviceIdentity { name: &slot.name, model: &model, preview: None, enabled: slot.enabled });
                                         if response.clicked() { device_target = Some((track.id, Some(slot.id))); }
                                         device_diagnostics.push(serde_json::json!({"track":track.id,"effect":slot.id,"name":slot.name,"model":model,"rect":rect_json(response.rect)}));
@@ -1018,7 +1020,9 @@ impl DawApp {
                             None, egui::style::ScrollAnimation::none());
                     }
                     if ui.is_enabled() && !panning && !egui::Popup::is_any_open(ui.ctx())
-                        && ui.input(|input| input.pointer.hover_pos()).is_some_and(|pos| strip.response.rect.contains(pos))
+                        // A strip scrolled under the transport must not preview from there.
+                        && ui.input(|input| input.pointer.hover_pos())
+                        .is_some_and(|pos| strip.response.rect.intersect(reorder_rect).contains(pos))
                     { flow_source = Some(track.id); }
                     let mut channel_diagnostics = strip.inner;
                     channel_diagnostics["strip"] = rect_json(strip.response.rect);
@@ -1102,8 +1106,7 @@ impl DawApp {
                             } else {
                                 egui::ScrollArea::vertical().id_salt(("mixer_devices", master_id)).min_scrolled_height(0.0).max_height(device_height).auto_shrink([false, false]).show(ui, |ui| {
                                     for slot in &master_track.inserts {
-                                        let Effect::Vst3 { path, class_id } = &slot.effect;
-                                        let model = crate::library::plugin_model(&self.vst_catalog, path, class_id);
+                                        let model = crate::library::effect_model(&self.vst_catalog, &slot.effect);
                                         let response = daw_ui::device_identity_button(ui, egui::Id::new(("mixer_insert", master_id, slot.id)), content_width, daw_ui::DeviceIdentity { name: &slot.name, model: &model, preview: None, enabled: slot.enabled });
                                         if response.clicked() { device_target = Some((master_id, Some(slot.id))); }
                                         device_diagnostics.push(serde_json::json!({"track":master_id,"effect":slot.id,"name":slot.name,"model":model,"rect":rect_json(response.rect)}));
@@ -1304,6 +1307,10 @@ impl DawApp {
         if let Some(track) = insert_target {
             self.selected_track = Some(track);
             self.open_effect_library(track, false);
+        }
+        if let Some(track) = instrument_target {
+            self.selected_track = Some(track);
+            self.open_instrument_chooser(true);
         }
         ui.ctx().data_mut(|data| {
             data.insert_temp(

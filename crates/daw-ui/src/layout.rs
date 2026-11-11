@@ -9,6 +9,15 @@ pub fn toolbar<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResp
     toolbar_with_row_height(ui, tokens::CONTROL_HEIGHT, contents)
 }
 
+/// Tighten a toolbar's padding on laptop-width windows, so labelled tools
+/// with icons stay on one row. Call first inside the toolbar.
+pub fn compact_toolbar_spacing(ui: &mut Ui) {
+    if ui.ctx().content_rect().width() < 1520.0 {
+        ui.spacing_mut().button_padding.x = tokens::SPACE_XS;
+        ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+    }
+}
+
 /// A toolbar containing calibrated sliders. Reserve the whole row before any
 /// controls are painted so preceding labels, choices and buttons share its axis.
 pub fn parameter_toolbar<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResponse<R> {
@@ -73,6 +82,63 @@ fn toolbar_with_row_height<R>(
         egui::Stroke::new(1.0_f32, colors.line),
     );
     row
+}
+
+/// One row of a two-dimensional panel, like a CSS flex row with `flex-grow`:
+/// each cell is a card whose width is its share of `weights`, and every card
+/// takes the height of the tallest, so stacked rows read as the aligned
+/// sections of a hardware front panel. `cell` draws the contents of cell `index`.
+pub fn flex_row<R>(
+    ui: &mut Ui,
+    weights: &[f32],
+    mut cell: impl FnMut(&mut Ui, usize) -> R,
+) -> Vec<R> {
+    let frame = crate::card(ui.ctx());
+    let margin = frame.total_margin();
+    let gap = tokens::SPACE_SM;
+    let origin = ui.cursor().min;
+    let width = ui.available_width();
+    let total: f32 = weights.iter().sum();
+    let free = (width - gap * weights.len().saturating_sub(1) as f32).max(0.0);
+    let mut x = origin.x;
+    let mut results = Vec::with_capacity(weights.len());
+    let mut cards = Vec::with_capacity(weights.len());
+    let mut height: f32 = 0.0;
+    for (index, weight) in weights.iter().enumerate() {
+        let outer = if total > 0.0 {
+            free * weight / total
+        } else {
+            0.0
+        };
+        let content = egui::Rect::from_min_size(
+            egui::pos2(x + margin.left, origin.y + margin.top),
+            egui::vec2(
+                (outer - margin.sum().x).max(0.0),
+                ui.available_height().max(0.0),
+            ),
+        );
+        // Painted once the row's height is known, beneath the contents.
+        let background = ui.painter().add(egui::Shape::Noop);
+        let mut child = ui.new_child(
+            egui::UiBuilder::new()
+                .id_salt(("flex_cell", index))
+                .max_rect(content)
+                .layout(egui::Layout::top_down(egui::Align::Min)),
+        );
+        results.push(cell(&mut child, index));
+        height = height.max(child.min_rect().height());
+        cards.push((background, content.min, content.width()));
+        x += outer + gap;
+    }
+    for (background, min, width) in cards {
+        let content = egui::Rect::from_min_size(min, egui::vec2(width, height));
+        ui.painter().set(background, frame.paint(content));
+    }
+    ui.advance_cursor_after_rect(egui::Rect::from_min_size(
+        origin,
+        egui::vec2(width, height + margin.sum().y),
+    ));
+    results
 }
 
 /// A compact visual family of tools. The measured width lets a wrapping toolbar

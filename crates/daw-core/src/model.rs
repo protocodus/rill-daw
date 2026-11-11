@@ -262,6 +262,18 @@ pub enum Effect {
         #[serde(default)]
         class_id: Option<String>,
     },
+    /// A built-in R1 device by registry ID (`r1-filter`). An ID this version
+    /// does not know loads, stays unchanged and renders silence.
+    Builtin { device: String },
+}
+
+impl Effect {
+    pub fn builtin_device(&self) -> Option<&str> {
+        match self {
+            Self::Builtin { device } => Some(device),
+            Self::Vst3 { .. } => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -281,6 +293,46 @@ pub enum Instrument {
         #[serde(default)]
         class_id: Option<String>,
     },
+    /// A built-in R1 instrument; see [`Effect::Builtin`].
+    Builtin { device: String },
+}
+
+/// The built-in instrument a new MIDI track starts with, so a part is
+/// audible without installing a plug-in. Loaded projects keep what they have.
+pub const DEFAULT_INSTRUMENT_DEVICE: &str = "r1-mini";
+
+impl Instrument {
+    /// What a new MIDI track starts with: R1 Mini at its default preset.
+    pub fn new_track_default() -> Self {
+        Self::Builtin {
+            device: DEFAULT_INSTRUMENT_DEVICE.into(),
+        }
+    }
+
+    pub fn builtin_device(&self) -> Option<&str> {
+        match self {
+            Self::Builtin { device } => Some(device),
+            _ => None,
+        }
+    }
+
+    /// A hosted plug-in or a built-in device: something with parameters.
+    pub fn is_processor(&self) -> bool {
+        !matches!(self, Self::None)
+    }
+}
+
+/// Built-in device IDs are 1–32 characters of `a-z`, `0-9` and `-`. Whether
+/// the ID is known is the engine's business; the model only bounds its form.
+pub fn validate_device_id(device: &str) -> Result<()> {
+    ensure!(
+        (1..=32).contains(&device.len())
+            && device
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-'),
+        "Built-in device ID must be 1-32 characters of a-z, 0-9 and -"
+    );
+    Ok(())
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -603,8 +655,17 @@ impl Project {
         self.insert_new_track(Track::new(name, TrackKind::Audio))
     }
 
+    /// A MIDI track without an instrument, for imports and internal use.
+    /// Tracks a person or a tool creates use [`Self::add_instrument_track`].
     pub fn add_midi_track(&mut self, name: impl Into<String>) -> u64 {
         self.insert_new_track(Track::new(name, TrackKind::Midi))
+    }
+
+    /// A new MIDI track with the default instrument, audible at once.
+    pub fn add_instrument_track(&mut self, name: impl Into<String>) -> u64 {
+        let mut track = Track::new(name, TrackKind::Midi);
+        track.instrument = Instrument::new_track_default();
+        self.insert_new_track(track)
     }
 
     pub fn track(&self, id: u64) -> Option<&Track> {
@@ -1243,21 +1304,34 @@ impl Project {
                 track.pan.is_finite() && (-1.0..=1.0).contains(&track.pan),
                 "Invalid track pan"
             );
-            if let Instrument::Vst3 { path, class_id } = &track.instrument {
-                ensure!(!path.is_empty(), "Missing plug-in path");
-                validate_plugin_class_id(path, class_id.as_deref())?;
+            match &track.instrument {
+                Instrument::Vst3 { path, class_id } => {
+                    ensure!(!path.is_empty(), "Missing plug-in path");
+                    validate_plugin_class_id(path, class_id.as_deref())?;
+                }
+                Instrument::Builtin { device } => {
+                    validate_device_id(device)?;
+                    ensure!(
+                        track.instrument_state.is_empty(),
+                        "Built-in instruments keep their state in parameters"
+                    );
+                }
+                Instrument::None => {}
             }
             validate_plugin_state(&track.instrument_state, &track.instrument_parameters)
                 .context("Invalid instrument state")?;
             ensure!(
                 (track.instrument_state.is_empty() && track.instrument_parameters.is_empty())
-                    || (track.kind == TrackKind::Midi
-                        && matches!(track.instrument, Instrument::Vst3 { .. })),
-                "Only VST3 MIDI instruments may contain saved state or parameter overrides"
+                    || (track.kind == TrackKind::Midi && track.instrument.is_processor()),
+                "Only MIDI instruments may contain saved state or parameter overrides"
             );
             for slot in &track.inserts {
                 check_id(slot.id)?;
                 slot.effect.validate()?;
+                ensure!(
+                    slot.effect.builtin_device().is_none() || slot.state.is_empty(),
+                    "Built-in effects keep their state in parameters"
+                );
                 validate_plugin_state(&slot.state, &slot.parameters)
                     .with_context(|| format!("Invalid insert state: {}", slot.name))?;
             }
@@ -1630,8 +1704,7 @@ impl Project {
             }
             for slot in &mut track.inserts {
                 max_id = max_id.max(slot.id);
-                let Effect::Vst3 { path, .. } = &mut slot.effect;
-                if resolve_plugin_paths {
+                if resolve_plugin_paths && let Effect::Vst3 { path, .. } = &mut slot.effect {
                     absolutize(path, base);
                 }
             }

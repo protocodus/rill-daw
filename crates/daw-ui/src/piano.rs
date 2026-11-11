@@ -199,7 +199,13 @@ pub fn paint_beat_grid(
     let colors = theme::palette(painter.ctx());
     let beat_color = colors.grid_minor.lerp_to_gamma(colors.grid_bar, 0.5);
     let minimum = f64::from(tokens::SPACE_SM / view.pixels_per_beat);
-    let mut step = if snap > 0.0 { snap.min(1.0) } else { 1.0 };
+    let mut step = if snap == crate::SNAP_GRID {
+        crate::grid_step(view.pixels_per_beat, meter.initial())
+    } else if snap > 0.0 {
+        snap.min(1.0)
+    } else {
+        1.0
+    };
     while step < minimum {
         step *= 2.0;
     }

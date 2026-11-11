@@ -25,6 +25,7 @@ pub struct TrackHeaderLayout {
     pub disclosure: Option<Rect>,
     pub bus_badge: Option<Rect>,
     pub record_arm: Option<Rect>,
+    pub effects: Option<Rect>,
     pub state_toggles: Option<Rect>,
     pub mix: Option<Rect>,
     pub meter: Option<Rect>,
@@ -141,6 +142,7 @@ impl TrackHeaderLayout {
             disclosure: None,
             bus_badge: None,
             record_arm: None,
+            effects: None,
             state_toggles: None,
             mix,
             meter,
@@ -159,6 +161,14 @@ impl TrackHeaderLayout {
     pub fn with_record_arm(mut self) -> Self {
         if self.identity.height() >= tokens::COMPACT_HEIGHT {
             self.record_arm = self.reserve_name_end(tokens::COMPACT_HEIGHT);
+        }
+        self
+    }
+
+    /// Channels keep their effects one click away at every row height.
+    pub fn with_effects(mut self) -> Self {
+        if self.identity.height() >= tokens::COMPACT_HEIGHT {
+            self.effects = self.reserve_name_end(tokens::COMPACT_HEIGHT);
         }
         self
     }
@@ -372,13 +382,23 @@ pub fn track_header_link_at(
 /// Compact rows keep a visible route to the complete channel controls instead
 /// of packing routing and device names into the remaining title space.
 pub fn track_header_details_at(ui: &mut Ui, rect: Rect, id_salt: impl Hash) -> Response {
+    let muted = theme::palette(ui.ctx()).muted;
+    track_header_action_at(ui, rect, id_salt, Icon::Settings, "Channel controls", muted)
+        .on_hover_text("Open channel controls, routing and device")
+}
+
+/// An icon-only action in a slot reserved on the identity line.
+pub fn track_header_action_at(
+    ui: &mut Ui,
+    rect: Rect,
+    id_salt: impl Hash,
+    icon: Icon,
+    label: &str,
+    tint: Color32,
+) -> Response {
     let response = ui.interact(rect, ui.make_persistent_id(id_salt), Sense::click());
     response.widget_info(|| {
-        egui::WidgetInfo::labeled(
-            egui::WidgetType::Button,
-            ui.is_enabled(),
-            "Channel controls",
-        )
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
     });
     if ui.is_rect_visible(rect) {
         let painter = ui.painter_at(rect);
@@ -401,13 +421,9 @@ pub fn track_header_details_at(ui: &mut Ui, rect: Rect, id_salt: impl Hash) -> R
                 },
             ));
         }
-        Icon::Settings.paint(
-            &painter,
-            centered_icon(rect, tokens::SPACE_MD),
-            colors.muted,
-        );
+        icon.paint(&painter, centered_icon(rect, tokens::SPACE_MD), tint);
     }
-    response.on_hover_text("Open channel controls, routing and device")
+    response
 }
 
 fn centered_icon(rect: Rect, size: f32) -> Rect {

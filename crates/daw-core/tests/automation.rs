@@ -105,6 +105,59 @@ fn ghost_patterns_share_points_but_copies_and_placements_are_independent() {
     assert_eq!(recalled, project);
 }
 
+#[test]
+fn stretching_and_splitting_patterns_keep_the_audible_curve_in_place() {
+    let (mut project, _, track) = fixture();
+    let id = project.create_automation_clip(track, 2.0, 4.0).unwrap();
+    project
+        .edit_automation_pattern(track, Some(id), |lane| lane.upsert_point(1.0, 0.9))
+        .unwrap();
+    let ghost = project.copy_automation_clip(track, id, 10.0, true).unwrap();
+    let original = project.automation_clip(track, id).unwrap().clone();
+    let before = original.value_at(3.0);
+
+    project
+        .stretch_automation_clip(track, &original, 8.0)
+        .unwrap();
+    let stretched = project.automation_clip(track, id).unwrap().clone();
+    assert_eq!((stretched.start, stretched.length), (2.0, 8.0));
+    assert_eq!(
+        stretched.value_at(4.0),
+        before,
+        "Twice as long, twice as far"
+    );
+    assert_eq!(
+        stretched.link_group, None,
+        "A stretched ghost becomes independent"
+    );
+    assert!(
+        project
+            .automation_clip(track, ghost)
+            .unwrap()
+            .link_group
+            .is_some()
+    );
+    assert!(
+        project
+            .stretch_automation_clip(track, &original, 0.0)
+            .is_err()
+    );
+
+    let right = project.split_automation_clip(track, id, 5.0).unwrap();
+    let left = project.automation_clip(track, id).unwrap().clone();
+    let right = project.automation_clip(track, right).unwrap().clone();
+    assert_eq!((left.start, left.length), (2.0, 3.0));
+    assert_eq!((right.start, right.length, right.offset), (5.0, 5.0, 3.0));
+    for beat in [2.5, 4.0, 4.99] {
+        assert_eq!(left.value_at(beat), stretched.value_at(beat));
+    }
+    for beat in [5.0, 7.5, 9.9] {
+        assert_eq!(right.value_at(beat), stretched.value_at(beat));
+    }
+    assert!(project.split_automation_clip(track, id, 2.0).is_err());
+    project.validate().unwrap();
+}
+
 fn fixture() -> (Project, u64, u64) {
     let mut project = Project::new();
     let track = project.add_midi_track("Synth");
@@ -871,4 +924,15 @@ fn automation_clip_on_empty_vst_lane_uses_stored_parameter_value() {
     assert!((clip.points[0].value - 0.82).abs() < 1e-6);
     assert!((clip.points[1].value - 0.82).abs() < 1e-6);
     assert!(project.has_clip_or_automation_clip(lane, clip_id));
+}
+
+#[test]
+fn playing_clip_is_the_one_playback_uses_where_clips_overlap() {
+    let (mut project, _, lane) = fixture();
+    let early = project.create_automation_clip(lane, 0.0, 8.0).unwrap();
+    let late = project.create_automation_clip(lane, 4.0, 4.0).unwrap();
+    let automation = project.automation_lane(lane).unwrap();
+    assert_eq!(automation.playing_clip(2.0).unwrap().id, early);
+    assert_eq!(automation.playing_clip(5.0).unwrap().id, late);
+    assert!(automation.playing_clip(9.0).is_none());
 }

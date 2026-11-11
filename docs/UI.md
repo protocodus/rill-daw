@@ -49,7 +49,7 @@ related-view links, a properties popup, and an open choice menu.
 
 [Light preview](assets/ui-gallery/navigation-light.png) · [Dark preview](assets/ui-gallery/navigation-dark.png)
 
-[`workspace_header`, `toolbar`](../crates/daw-ui/src/layout.rs) · [`view_links`](../crates/daw-ui/src/navigation.rs) · [`choice_menu`](../crates/daw-ui/src/widgets.rs) · [`empty_workspace`](../crates/daw-ui/src/empty_workspace.rs)
+[`workspace_header`, `toolbar`, `flex_row`](../crates/daw-ui/src/layout.rs) · [`view_links`, `page`](../crates/daw-ui/src/navigation.rs) · [`choice_menu`](../crates/daw-ui/src/widgets.rs) · [`empty_workspace`](../crates/daw-ui/src/empty_workspace.rs)
 
 ### Musical canvas primitives
 
@@ -192,7 +192,7 @@ variants. The API reference and interaction rules continue below.
 
 ## Workspace conventions
 
-Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Instrument, Effects, Routing, Recording, Automation, Library, Setup, and Properties open on demand above their caller. Routine utilities soften inactive context with a bounded GPU blur beneath a light scrim; only the foreground utility accepts editing input. Menus, parameter editors, dropdowns, and color pickers share this focus treatment. Explicit modal decisions retain stronger dimming. Tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles name the window and its subject, such as **Properties · Bass**, **Join clips · Drums** or **Crossfade · Take 2**; the subject is not repeated as a body heading, and Properties keeps the same title on every tab. Controls beside an input (stepper −/+, **123**, **Keyboard…**) and header actions inside a popup stay frameless until hover; only inputs and the selected tab carry an outline. The Assistant follows the tabbed-popup order: Conversation/Examples/Tools/Tips with **AI settings** and a quiet **More** trailing, then the scope and its live context. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text. Explicit primary-action fills remain visible inside menus so their contrasting text stays legible; ordinary menu rows stay quiet.
+Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Large views (the Automation editor, Device browser, Assistant, Signal analysis and Audio takes) open on demand as full screens (`page`) in the central workspace, in place of their caller, with **Back** in a workspace header; Back and Escape return to the caller with its selection. Single actions and forms (Export, Join, Crossfade, Properties, Routing, Recording, History, Setup, Note expression, About) and the device panels, Instrument and Effects, are `popup` dialogs: fixed in size, sized by their content and bounded by the window. They soften the inactive context with a bounded GPU blur beneath a light scrim, and only the foreground dialog accepts editing input. Menus, parameter editors, dropdowns, and color pickers share this focus treatment. Explicit modal decisions retain stronger dimming. Tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles name the window and its subject, such as **Properties · Bass**, **Join clips · Drums** or **Crossfade · Take 2**; the subject is not repeated as a body heading, and Properties keeps the same title on every tab. Controls beside an input (stepper −/+, **123**, **Keyboard…**) and header actions inside a popup stay frameless until hover; only inputs and the selected tab carry an outline. The Assistant follows the tabbed-popup order: Conversation/Examples/Tools/Tips with **AI settings** and a quiet **More** trailing, then the scope and its live context. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text. Explicit primary-action fills remain visible inside menus so their contrasting text stays legible; ordinary menu rows stay quiet.
 
 `empty_workspace(ui, title, description, actions)` offers the next step when a
 workspace has no content. `EmptyWorkspaceAction` supplies a stable `id`, concise
@@ -314,9 +314,9 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Toolbar groups that wrap intact | `measured_toolbar_group`, `measured_command_group`, `toolbar_family_rule` |
 | Rotary parameter controls | `knob`, `Knob`, `KnobGeometry`, `knob_geometry` |
 | Track color | `color_edit`, `color_strip_at` |
-| Track header sections | `TrackHeaderLayout`, `TrackHeaderIdentity`, `paint_track_header_identity`, `track_header_link_at`, `track_header_details_at`, `track_mix_controls_at`, `TrackMixResponse` |
+| Track header sections | `TrackHeaderLayout`, `TrackHeaderIdentity`, `paint_track_header_identity`, `track_header_link_at`, `track_header_details_at`, `track_header_action_at`, `track_mix_controls_at`, `TrackMixResponse` |
 | Timeline navigation and tools | `TimelineViewport`, `TimelineBounds`, `TimelinePane`, `EditorTool`, `editor_tools`, `editor_tools_with_context`, `editor_tool_shortcuts`, `timeline_zoom_controls`, `timeline_fit_button`, `paint_timeline_ruler`, `paint_timeline_cursor` |
-| Snap step shared by every timeline | `snap_choice`, `snap_label` (Off, 1 bar, 1/4 … 1/32; editor-specific targets below a separator) |
+| Snap step shared by every timeline | `snap_choice`, `snap_label` (Grid, Off, 1 bar, 1/4 … 1/32; editor-specific targets below a separator). **Grid** (`SNAP_GRID`, the default) follows the lines drawn at the current zoom; resolve it with `snap_step(snap, pixels_per_beat, beats_per_bar)`. `grid_step` gives that zoom's line spacing: 1/32 to 1/4 notes, then whole bars, at least 10 points apart (1/16 at the default arranger and piano-roll zooms) |
 | Piano keys, notes, and velocity | `PianoRows`, `piano_key` (keyboard: `raised` white keys, inset dark black keys, lines only at B/C and E/F), `piano_velocity_marker`, `piano_velocity_sibling_marker` (hollow chord sibling), `paint_velocity_lane`; `Palette::piano_row`, `piano_note_fill`, `piano_note_stroke` |
 | Beat grid behind piano roll, audio waveform and curves | `paint_beat_grid(painter, rect, view, snap, beats_per_bar)`, `beat_grid_level`: bar `grid_bar`, beat halfway to it, snap subdivision `grid_minor`; one physical pixel on pixel centers |
 | MIDI drawing duration and boundary | `DrawNoteLength`, `drawing_note_length` (current-value chooser **Length 1/16** beside Snap), `paint_clip_end_label` |
@@ -455,7 +455,10 @@ Endpoint formatting retains small ranges instead of rounding both ends to zero.
 Stored values outside an editing range are preserved, visibly marked as outside
 the range, and reported exactly in the stored-value tooltip. Slider and knob
 numeric readouts discard stale native text when a sibling rail or dial changes
-the value, while preserving an unchanged typing draft. A slider's
+the value, while preserving an unchanged typing draft. Every automatable control carries `paint_automation_indicator`, a small corner
+dot: a faint ring before a lane exists, then the state color (compact dials use
+it alongside their colored arc). `automation_indicators` reports them for host
+diagnostics. A slider's
 automation glyph sits beside its handle: **A** for Read, **!** for Overridden,
 and a muted dash for Bypassed, without covering the center index or captions.
 
@@ -718,7 +721,12 @@ channel edit path.
 
 Shorter headers omit connection rows as a unit instead of
 squeezing them beside the title. `track_header_details_at` opens the complete
-Channel view. Mix controls remain when usable bounds exist; very small fitted
+Channel view. Every channel header keeps an effects slot on its identity line
+(`TrackHeaderLayout::with_effects`, `track_header_action_at`): one click opens
+the only insert's editor, the rack when there are several, or the Device browser
+for an empty chain. A MIDI track's icon opens its instrument the same way, and
+in the Mixer the instrument row, each insert row and **MIDI · Choose…** open
+their device directly. Mix controls remain when usable bounds exist; very small fitted
 rows retain identity and the existing context actions. The meter has its own
 column and reads actual post-insert, post-fader, post-pan stereo engine peaks,
 including buses and routed audio. Peaks attack immediately, release at 24 dB/s,
@@ -735,7 +743,7 @@ names. Assignment and that rename share one Undo step. Closing and reopening a
 chooser does not confer naming permission: existing, loaded and user-edited
 names remain intact, including an intentionally named **New instrument**.
 
-Arrangement **Add pattern** creates a four-beat pattern at the cursor on the selected MIDI track, or creates a MIDI track when necessary. Empty MIDI lanes show **Double-click to add a pattern** and expose the same action in their context menu. An unassigned MIDI clip's Clip Editor header offers **Choose instrument…** without changing its notes. Assigned tracks retain an **Instrument** action in the same place, opening the existing overview. Mouse close and Escape restore the same clip, note selection, and viewport.
+Arrangement **Add pattern** creates a pattern as long as the last selected clip at the cursor on the selected MIDI track, or creates a MIDI track when necessary. Empty MIDI lanes show **Double-click to add a pattern** and expose the same action in their context menu. An unassigned MIDI clip's Clip Editor header offers **Choose instrument…** without changing its notes. Assigned tracks retain an **Instrument** action in the same place, opening the existing overview. Mouse close and Escape restore the same clip, note selection, and viewport.
 
 New tracks start neutral gray, including menu additions, imports, instruments and sends. Users choose identity colors; existing colors remain unchanged, and Undo/Redo and saved projects retain each assignment.
 
@@ -1057,7 +1065,7 @@ State stays with the caller. Boolean and choice components mark `Response::chang
 
 Viewing a control must not normalize valid stored values to a narrower editing range. Use `SliderClamping::Edits` or `.clamp_existing_to_range(false)` where the project model allows values beyond the control range. Arrangement, Mixer, Routing, Clip Editor, and Properties preserve those values until an intentional edit.
 
-The original Rill outline icon pack uses a 24-unit vector grid and a consistent stroke weight. Icons render through egui at the current display scale, independently of Unicode symbol fonts. Buttons keep their text, native accessible name, keyboard behavior, disabled state, and tooltip. Shared `IconButton` uses native `Button`/`AtomLayout` to reserve icon space; `IconButton::icon_only` requires an accessible action label. Reorder handles use the vector `Grip`, and native editor actions use `Editor`. Call `Icon::paint` for canvas-owned controls. Add new icons here instead of inserting ad hoc emoji into toolbar labels.
+The original Rill outline icon pack uses a 24-unit vector grid and a consistent stroke weight. Icons render through egui at the current display scale, independently of Unicode symbol fonts. Buttons keep their text, native accessible name, keyboard behavior, disabled state, and tooltip. Shared `IconButton` uses native `Button`/`AtomLayout` to reserve icon space; `IconButton::icon_only` requires an accessible action label. Reorder handles use the vector `Grip`, and native editor actions use `Editor`. Call `Icon::paint` for canvas-owned controls. Add new icons here instead of inserting ad hoc emoji into toolbar labels. `Icon::for_label` resolves an exact label first and then the label's leading verb (Add, Delete, Apply, Export, …), so buttons and dialog footer actions carry an icon without naming one; `IconButton::icon` overrides it. Arranger is always five horizontal lines (`Icon::Arranger`) and Mixer five vertical lines (`Icon::Mixer`), on the transport tabs and on every action that leads to either view. Choice drop-downs stay text with a chevron. `compact_toolbar_spacing` tightens an editor toolbar's padding on laptop-width windows so its labelled tools stay on one row.
 
 **Edit → History** shows named undo and redo actions. Clicking an entry moves through the intervening steps in one engine update. Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z work in editing views, utility popups, and focused slider rails, dials and compact channel values; exact-entry and native numeric text fields retain their own text undo. Shared parameter controls register their non-text focus for the current frame; hosts use `parameter_owns_document_history` when dispatching document history shortcuts. Ctrl/Cmd+Y also redoes. Continuous drags are one step, and text/native parameter bursts on the same control coalesce for up to 600 ms. Navigation, zooming, and tool selection never enter history. Saving establishes a checkpoint; returning to it removes the unsaved marker. A successful new edit discards redo; a failed, stale or unchanged AI/tool batch leaves it intact. History is session-local, defaults to 128 actions, and uses the persisted **Setup → Storage → Undo actions** count (1–4,096) for manual, tool and AI edits together. Apply trims older history immediately without making a document edit; Cancel leaves it unchanged. Growing the count cannot restore discarded steps. The independent estimated 128 MiB snapshot cap, including opaque plugin state, may retain fewer actions. An oversized snapshot becomes a history boundary; allocator overhead and the active project are outside this budget.
 
@@ -1124,11 +1132,12 @@ value, and its numeric field adjusts that held value. Overrides persist with the
 project and participate in Undo/Redo. Lane/folder bypass instead uses the stored
 manual value and is labelled **Bypassed**. Changing a curve or override on an
 existing enabled lane uses the live edit path, preserving loaded plug-ins.
-While any lane retains a manual override, the menu bar exposes **Cancel
-automation override** beside AI. **Edit → Cancel all automation overrides**
+While any lane retains a manual override, the menu bar shows one coral
+`automation_override_warning` beside AI, counting the overridden controls.
+Clicking it cancels them all. **Edit → Cancel all automation overrides**
 provides the same action. It clears every retained override in one history
 transaction, resuming enabled curves at the current playhead while preserving
-points, stored manual parameters, bypass states and selection. The button
+points, stored manual parameters, bypass states and selection. The warning
 disappears when no overrides remain; the Edit action is then disabled.
 Automation has a reserved orange identity (`Palette::automation`) across curves,
 nodes, handles, parameter-browser markers, control outlines and status menus,
@@ -1147,7 +1156,7 @@ current selection, and starts at its current value. Send sliders cover their
 supported 0–16 gain range and retain precise numeric entry. Mixer send summaries
 and the selected plug-in parameter's value control offer the same context action.
 
-Automation's **Add parameter** opens a chooser with the shared parameter browser for VST instruments and effects. Back, Escape and its close button restore the original curve, selected point and zoom. Choosing a parameter that already has a lane offers **Edit automation** instead of failing on duplicate creation; switching lanes does not add undo history. Creating a new lane consumes the chooser and preserves the outer workspace return path. Parameter metadata reads restore the selected instance's saved state and overrides in its sandbox, so a new lane starts from that instance's value rather than a plugin default. Switching between instances invalidates the selection and metadata.
+Automation lanes are created only from a control's **Automate** action; there is no separate parameter chooser. A new lane lands in Arrangement with a one-bar clip at the playhead's bar, selected and revealed, in the same Undo step as the lane. An existing lane's **Edit automation** selects and reveals its clip under the playhead (else its first clip), since clips play over the lane's own curve; a lane without clips opens the Automation editor, which edits curves only: override and resume belong to the control. **Window → Automation** is available for a selected automation track.
 
 `crossfade_editor` edits two normalized cubic Bézier control points and displays
 the paired incoming and outgoing gains. Their sum is one. Drag a handle or use
@@ -1196,12 +1205,20 @@ Shapes belong to the segment leaving that point, with older sessions inheriting
 the lane's default interpolation. The on-demand Automation editor offers these
 same point shape choices.
 
-Right-click empty lane space for **Create automation clip**, deriving a
-four-beat pattern from the underlying arranger curve at that position. Edit its
-points directly in its body. Drag its header to move, or either header edge to
-trim; Shift bypasses snap. The header menu offers Copy pattern, Paste automation
-clip (on lane space), Duplicate pattern, Ghost pattern, Make pattern independent,
-and Delete pattern. Independent copies can be derived without changing their
+Right-click empty lane space for **Create automation clip**, or double-click it
+with Select, to derive a pattern from the underlying arranger curve at that
+position, as long as the last selected clip. Patterns behave like audio and MIDI
+clips: a click anywhere selects, Select drags move it or trim either edge,
+Stretch rescales its points in time (a stretched ghost becomes independent), and
+Cut, Duplicate, Ghost copy, Erase and Cursor act on it. Only **Pencil** adds and
+edits points, in patterns and on the lane itself. Shift bypasses snap. A pattern's
+context menu uses the clip labels and order: Edit automation, Loop this clip,
+Copy, Duplicate, Rename…, Split at cursor, Stretch, Ghost copy, Make
+independent and Delete; the lane menu adds Paste automation clip. Edit menu
+Cut/Copy/Paste, Duplicate, Delete, Rename…, Split at cursor and Ghost copy act
+on a selected pattern too; a pattern's Edit automation selects it with the Pencil; Edit → Paste puts a copied pattern on the selected
+automation lane at the playhead. Double-click renames a pattern, as it does audio
+and MIDI clips. Independent copies can be derived without changing their
 source; ghost patterns share point edits while retaining their placement and
 trim. Clip automation takes precedence inside its bounds, then arranger points,
 then the manual parameter value. Overlapping patterns use the latest start and
@@ -1233,8 +1250,10 @@ primary notice, and the last-WAV re-export command keeps its own destination.
 
 ## Device library and effect chains
 
-**Window → Library** opens a movable card grid with Instruments,
-Effects, and Unverified tabs. Drag any edge or lower corner to resize both its
+**Window → Device browser** opens a movable card grid with Instruments,
+Effects, and Unverified tabs. Choosing an instrument opens it on Instruments;
+adding an insert or send effect opens it on Effects. The **Built-in (R1)**
+collection lists Rill's own devices. Drag any edge or lower corner to resize both its
 width and height, including when choosing an instrument or effect. Its catalogue,
 collections and details share the resized body height while actions remain
 reachable below them; each pane scrolls independently. Instrument and effect lists require a declared
@@ -1332,7 +1351,7 @@ move and either edge to trim, including an unselected note with Cursor active.
 Resize edges take priority over overlapping note bodies. Explicit Cut and Erase
 tools retain their actions; Shift bypasses snap during edge edits.
 
-Instrument opens a concise device overview with the native **Open editor** action. **Automate…** opens a large parameter browser with automatic loading and focused search. Effect rows expose **Automate…** directly, without opening a native editor first. The last-touched parameter remains a direct shortcut in the overview. Native effect editor wrappers identify both the effect and its channel. Parameter editing and automation retain their isolated plugin state and undo behavior.
+Instrument opens a concise device overview with the native **Open editor** action. For plug-ins, **Parameters…** opens a large parameter browser with automatic loading and focused search; plug-in effect rows expose **Parameters…** directly. Built-in devices have no browser: every panel control offers **Automate** on right-click. The last-touched parameter remains a direct shortcut in the overview. Native effect editor wrappers identify both the effect and its channel. Parameter editing and automation retain their isolated plugin state and undo behavior.
 
 If a plug-in explicitly cannot create a native editor before startup completes,
 the overview explains that saving and exporting remain available. Pending
@@ -1340,13 +1359,13 @@ document actions continue from the stored project state. Failed state capture
 from an editor that became active still cancels the operation and retains
 recovery, protecting unsaved native changes.
 
-In a native VST3 editor, right-click a parameter and choose **Automate in Rill** to create its automation track from the current value, or open the existing curve. Rill brings the automation editor forward and keeps the plugin editor running. The action follows that instrument or effect instance, even if another channel is selected. Creating a lane has its own Undo step; reopening one preserves its points and adds no history. This uses the optional VST3 `IComponentHandler3` context-menu hook; editors that do not expose host menu entries still use **Automate…** and the parameter browser. Read-only and non-automatable parameters do not receive the native action.
+In a native VST3 editor, right-click a parameter and choose **Automate in Rill** to create its automation track from the current value, or open the existing curve. Rill brings the automation editor forward and keeps the plugin editor running. The action follows that instrument or effect instance, even if another channel is selected. Creating a lane has its own Undo step; reopening one preserves its points and adds no history. This uses the optional VST3 `IComponentHandler3` context-menu hook; editors that do not expose host menu entries still use **Automate** or **Parameters…**. Read-only and non-automatable parameters do not receive the native action.
 
 `NativeContextMenu` in the shared component library preserves action IDs, checked/disabled entries, separators, and nested submenus. The editor sandbox either handles the plugin's copied host action or sends its popup model to a short-lived menu process. macOS and Windows use native OS menus; Linux reuses the shared egui menu renderer. Holding a host-rendered menu open does not suspend editor processing, state synchronization, or heartbeats. Closing/replacing the editor or menu kills the menu worker and releases retained plugin targets. Plugin-rendered menus remain under the plugin's own event-loop behavior and the editor sandbox's timeout protection.
 
 The menu worker announces readiness before receiving its model. On macOS this lets the editor yield activation to the registered worker before it opens the menu; cancellation returns activation only when the menu still owns focus. Request serialization and pipe writes run outside the editor loop. The parent keeps stdin open as a lifetime signal, and a crashed parent closes the worker automatically. Linux converts physical X11 coordinates using the actual display scale before revealing the menu.
 
-**Pick parameter** arms a one-shot automation picker in the Instrument or Effect view. With the native editor open, click or adjust an automatable control there; otherwise choose a row in the searchable parameter list with one click. Rill creates that parameter's lane at its current value or opens the existing lane. **Cancel picking**, Escape, and navigating away cancel the pending pick. Native replies carry a request ID so late replies cannot complete a cancelled pick; selecting a list row reports `ParameterBrowserResponse::clicked` independently of ordinary activation and automatic selection.
+**Automate** arms a one-shot automation picker in the Instrument or Effect view. It also opens the searchable parameter list: click or adjust an automatable control in the native editor, or find the parameter by name and choose its row with one click. Rill creates that parameter's lane at its current value or opens the existing lane. **Cancel picking**, Escape, and navigating away cancel the pending pick. Native replies carry a request ID so late replies cannot complete a cancelled pick; selecting a list row reports `ParameterBrowserResponse::clicked` independently of ordinary activation and automatic selection.
 
 `parameter_browser(ui, id, state, items, height, details)` shares the device library's list-and-details layout. Search matches words across names and units, ranks exact/prefix matches first, and handles Unicode. **All**, **Automated**, and **Last touched** narrow the results. Cards show normalized percentages, unit metadata, automation/touch markers, and compact value bars. Up/Down chooses a result; Enter or double-click creates its lane or reopens the existing one. Cmd/Ctrl+F returns focus to search; Clear restores results. An empty result list clears selection, so Enter cannot automate a stale parameter. Browsing does not alter plugin values. The caller supplies detail controls; the list virtualizes large parameter sets and both panes stay bounded and scroll independently.
 
@@ -1354,6 +1373,49 @@ Set `ParameterBrowserState::reset_details` when a nested editor should return to
 the top of its detail pane. The browser consumes this flag once; it preserves
 the parameter list, search, and ordinary detail scrolling.
 
+
+## Device controls, visualizations and panels
+
+Built-in devices (see [R1_DEVICES.md](R1_DEVICES.md)) and the application use
+these shared components. Gallery pages: `device-controls`, `device-plots`,
+`device-panels` (`cargo run -p daw-ui --example component_gallery`; the
+`--capture` PNGs for these pages are regenerated with the rest of the gallery).
+The palette gains a **modulation** accent (`Palette::modulation`, violet),
+used only for modulation sources, depth arcs and matrix rows.
+
+Every draggable element has a non-drag path (typed value, context menu or
+arrow keys), and canvas handles use the 21-point `HIT_TARGET`.
+
+### Controls ([`device_controls.rs`](../crates/daw-ui/src/device_controls.rs))
+
+| Component | Use |
+| --- | --- |
+| `Knob` additions | `.bipolar()`, `.taper(Taper::Log)`, `.default_value(v)` (double-click and context-menu **Reset**), `.modulation(range)`, `.format(fn)` and `.parse(fn)`. Diameters down to 34. |
+| `labeled_knob` | Caption, dial and value in a fixed cell (`KnobSize::Dense` 34, `Standard` 48, `Hero` 64). Clicking the value types a number. The context menu offers **Reset**, **Type value…**, **Automate** (or **Show automation lane**) and, with `.mod_sources`, **Modulate with …**. `show` returns `automate` and `modulate_with`; the host creates the lane or routing. |
+| `segmented`, `stepped_selector`, `toggle_led` | Two to five options (falls back to a drop-down), longer lists, and section enables. |
+| `xy_pad` | Two normalized parameters; a press jumps, further motion is relative, Shift is fine, arrow keys nudge. |
+| `envelope_editor` | ADSR with hold and per-segment curves from plain `EnvelopeShape`; returns `EnvelopeEdit`s. |
+| `pad_grid`, `keyboard_strip` | 4×4 audition pads (click height sets velocity; `SampleDrop` payloads can be dropped on them) and a keyboard. |
+| `wheel` | Pitch (`bipolar`, springs back to center) and mod wheels. Every instrument panel carries both. |
+| `mod_source_chip`, `mod_slot_row` | Draggable modulation source and one row of the matrix. |
+
+### Visualizations ([`device_plots.rs`](../crates/daw-ui/src/device_plots.rs))
+
+`frequency_plot` (curves on the shared log grid `log_grid_frequency`, optional spectrum backdrop and draggable nodes), `spectrum`, `transfer_plot`, `gain_reduction_history`, `reduction_meter`, `scope`, `wavetable_view`, `lfo_view`, `sample_view` (draggable start, end and loop markers), `delay_view` and `harmonics_view`. They take plain data and own no audio state.
+
+### Panels ([`device_panel.rs`](../crates/daw-ui/src/device_panel.rs))
+
+`device_panel` is the one frame: name, `preset_bar`, bypass, meters and the
+dense Mix/Output (effects) or Volume (instruments) knobs; width is
+`DevicePanelWidth::Medium` (610) or `Large` (987), and a panel never scrolls.
+`device_section` titles a group with a word and spacing instead of an outline.
+`preset_browser` provides search, category and tag filters, Factory/User,
+favorites, **Save as…** and **Reset to default**. `generic_device_panel`
+builds a whole panel from `ParamRow`s (normalized values, `format`/`parse`
+closures) and edits through `ParameterEdits` (`begin_edit`, `set_value`,
+`end_edit`, `automation`, `automate`), so `daw-ui` does not depend on the
+device crates. Panel grammar: picture first, sections in signal order, one
+value-arc color, orange only for automation, violet only for modulation.
 
 ## Typography and international names
 

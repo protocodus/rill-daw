@@ -450,6 +450,7 @@ impl Harness {
         let menu_labels = &mut self.menu_labels;
         let window_labels = &mut self.window_labels;
         daw_ui::reset_icon_only_labels(&self.ctx);
+        daw_ui::reset_automation_indicators(&self.ctx);
         let output = self.ctx.run(input, |ctx| {
             app.ui_frame(ctx);
             // A menu can repeat a persistent toolbar destination. Resolve the
@@ -1669,6 +1670,15 @@ impl Harness {
                 "text": label.trim(), "min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y],
             })).collect::<Vec<_>>(),
         });
+        state["automation_indicators"] = daw_ui::automation_indicators(&self.ctx)
+            .iter()
+            .map(|(automation, rect)| {
+                json!({
+                    "state": automation.map(daw_ui::AutomationState::label),
+                    "min": [rect.min.x, rect.min.y], "max": [rect.max.x, rect.max.y],
+                })
+            })
+            .collect();
         for (field, diagnostic) in [
             ("midi_editor", "midi_editor_diagnostics"),
             ("midi_expression", "midi_expression_diagnostics"),

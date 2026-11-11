@@ -66,11 +66,11 @@ fn unavailable_images_keep_details_retry_and_the_original_assignment_identity() 
     // Missing and failed images belong to a neutral collection, not a list of
     // broken instruments. An empty image collection is not an empty inventory.
     let without = app.click("Without preview");
+    // The two fixtures; the built-in R1 Mini ships its own image.
     assert_eq!(without["library"]["total"], 2);
     preserved(&without, &baseline);
     let with = app.click("With preview");
-    assert_eq!(with["library"]["total"], 0);
-    assert!(visible(&with, "No matching instruments"));
+    assert_eq!(with["library"]["order"], json!(["R1 Mini"]));
     assert!(!visible(&with, "No VST3 instruments found"));
     preserved(&with, &baseline);
     app.click("All plug-ins");

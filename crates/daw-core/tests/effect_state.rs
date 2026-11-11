@@ -24,7 +24,9 @@ fn fixture() -> (Project, u64, u64) {
 fn effect_state_roundtrips_and_legacy_slots_default_empty() {
     let (mut project, _, _) = fixture();
     let temp = tempfile::tempdir().unwrap();
-    let Effect::Vst3 { path, .. } = &mut project.tracks[0].inserts[0].effect;
+    let Effect::Vst3 { path, .. } = &mut project.tracks[0].inserts[0].effect else {
+        panic!("expected a hosted plug-in")
+    };
     *path = temp
         .path()
         .join("fixture.vst3")

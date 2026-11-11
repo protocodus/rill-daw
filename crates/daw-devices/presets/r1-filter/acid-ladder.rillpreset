@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-filter",
+  "name": "Acid Ladder",
+  "author": "Rill",
+  "category": "Resonant",
+  "tags": ["ladder", "bass"],
+  "description": "Squelchy transistor ladder that follows the input level.",
+  "parameters": {
+    "model": "Transistor Ladder",
+    "cutoff": 400.0,
+    "resonance": 80.0,
+    "drive": 9.0,
+    "env.amount": 2.5,
+    "env.attack": 2.0,
+    "env.release": 180.0
+  }
+}

@@ -111,7 +111,7 @@ fn native_instrument_metadata_parameter_edit_export_and_recall_never_construct_a
     // Native instrument setup is allowed to exceed the audio-block IPC deadline.
     let fixture = EditorProbeFixture::build_with_lifecycle_delay(Duration::from_millis(200));
     let mut app = Harness::with_plugin_host(fixture.path.parent().unwrap(), &production_helper());
-    window(&mut app, "Library");
+    window(&mut app, "Device browser");
     app.click("Search instruments");
     app.command(json!({"command":"text", "text":"No Editor Probe"}));
     common::wait_library_device(&mut app, "No Editor Probe");
@@ -151,7 +151,7 @@ fn native_instrument_metadata_parameter_edit_export_and_recall_never_construct_a
     let baseline = export(&mut app, &baseline_path);
 
     window(&mut app, "Instrument");
-    app.click("Automate…");
+    app.click("Parameters…");
     let parameters = wait_parameters(&mut app);
     assert_eq!(parameters["native_editor"]["selected_value"], 0.5);
     let edited = common::edit_plugin_parameter_value(&mut app, &parameters, "20");

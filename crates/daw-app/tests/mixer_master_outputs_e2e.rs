@@ -213,7 +213,8 @@ fn routing_inspection_enables_real_native_output_pairs_and_connects_a_master_sid
             .len(),
         2
     );
-    app.command(json!({"command":"click","label":"Add source…","occurrence":0}));
+    reveal_routing_action(&mut app, "Add source…", true);
+    app.click("Add source…");
     let connected = app.click("Sidechain driver");
     let routes = connected["project"]["master"]["inserts"][0]["inputs"]
         .as_array()

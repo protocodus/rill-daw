@@ -250,8 +250,10 @@ pub struct AutomationPatternHeader<'a> {
     pub color: Color32,
 }
 
-/// The header moves/trims a reusable automation clip; its body remains a point
-/// editor. A linked identity uses the same title treatment as audio and MIDI.
+/// Paints a reusable automation clip and returns its whole-clip response for
+/// selection, moving and trimming, like audio and MIDI clips. A point editor
+/// added afterwards over the body takes precedence only while it is editable.
+/// A linked identity uses the same title treatment as audio and MIDI.
 pub fn automation_pattern_header(
     ui: &mut Ui,
     id: Id,
@@ -262,10 +264,6 @@ pub fn automation_pattern_header(
     // The same surface, title band and selection treatment as audio and MIDI clips.
     let painter = ui.painter_at(rect.expand(tokens::SPACE_SM));
     let surface = crate::clip_surface(&painter, rect, pattern.color, pattern.selected);
-    let header = surface
-        .title
-        .with_min_x(rect.left())
-        .with_max_x(rect.right());
     crate::clip_title(
         &painter,
         surface.title,
@@ -274,6 +272,6 @@ pub fn automation_pattern_header(
         pattern.name,
         pattern.linked,
     );
-    ui.interact(header.intersect(ui.clip_rect()), id, if editable { Sense::click_and_drag() } else { Sense::hover() })
-        .on_hover_text("Automation pattern · Drag header to move or its edges to trim · Right-click for Copy, Duplicate or Ghost copy")
+    ui.interact(rect.intersect(ui.clip_rect()), id, if editable { Sense::click_and_drag() } else { Sense::hover() })
+        .on_hover_text("Automation pattern · Click to select · Drag to move or its edges to trim · Pencil draws points · Right-click for Copy, Duplicate or Ghost copy")
 }

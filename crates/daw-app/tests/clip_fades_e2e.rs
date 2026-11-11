@@ -7,7 +7,8 @@ use serde_json::{Value, json};
 fn open(app: &mut Harness, project: &Project) -> Value {
     let path = app.directory.path().join("fades.daw.json");
     project.save(&path).unwrap();
-    app.command(json!({"command":"open","path":path}))
+    app.command(json!({"command":"open","path":path}));
+    app.sixteenth_snap()
 }
 fn source(app: &Harness, name: &str, amplitude: f32) -> std::path::PathBuf {
     let path = app.directory.path().join(name);

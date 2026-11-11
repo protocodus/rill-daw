@@ -422,6 +422,13 @@ impl Harness {
         self.command(json!({"command": "inspect"}))
     }
 
+    /// Choose a fixed 1/16 snap instead of the zoom-dependent Grid default,
+    /// for checks written in sixteenth-note steps at any zoom.
+    pub fn sixteenth_snap(&mut self) -> Value {
+        self.click("Snap grid");
+        self.click("1/16")
+    }
+
     pub fn key(&mut self, key: &str) -> Value {
         self.command(json!({"command": "key", "key": key}))
     }
@@ -482,7 +489,7 @@ pub fn plugin_fixture() -> TempDir {
 
 pub fn fixture_library(app: &mut Harness) {
     app.click("Window");
-    app.click("Library");
+    app.click("Device browser");
     app.click("Instruments");
     let state = app.inspect();
     if state["visible_labels"]
@@ -620,7 +627,7 @@ pub fn wait_until(app: &mut Harness, condition: impl Fn(&Value) -> bool) -> Valu
 pub fn refresh_library(app: &mut Harness) -> Value {
     wait_until(app, |state| state["plugin_scanning"] == false);
     app.click("Window");
-    app.click("Library");
+    app.click("Device browser");
     app.click("Refresh");
     wait_until(app, |state| state["plugin_scanning"] == false)
 }
@@ -646,4 +653,58 @@ pub fn edit_plugin_parameter_value(app: &mut Harness, state: &Value, percent: &s
     app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
     app.command(json!({"command":"text","text":percent}));
     app.click("Value")
+}
+
+/// Dismiss the utility titled `title` the way a mouse user does: **Back** in
+/// a page's header, or the close button of a floating device panel.
+pub fn close_utility(app: &mut Harness, state: &Value, title: &str) -> Value {
+    let label = state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|label| label["text"] == title)
+        .unwrap_or_else(|| {
+            panic!(
+                "Utility title {title:?} missing: {}",
+                state["visible_labels"]
+            )
+        });
+    let x = (label["min"][0].as_f64().unwrap() + label["max"][0].as_f64().unwrap()) / 2.0;
+    let y = (label["min"][1].as_f64().unwrap() + label["max"][1].as_f64().unwrap()) / 2.0;
+    let bounds = state["window_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|bounds| {
+            bounds["min"][0].as_f64().unwrap() <= x
+                && bounds["max"][0].as_f64().unwrap() >= x
+                && bounds["min"][1].as_f64().unwrap() <= y
+                && bounds["max"][1].as_f64().unwrap() >= y
+        })
+        .expect("visible utility contains its title");
+    let page = bounds["max"][0] == state["viewport"][0];
+    if page {
+        // Back leads the page header, on the title's centerline.
+        let back = state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|label| {
+                label["text"] == "Back"
+                    && ((label["min"][1].as_f64().unwrap() + label["max"][1].as_f64().unwrap())
+                        / 2.0
+                        - y)
+                        .abs()
+                        < 2.0
+                    && label["max"][0].as_f64().unwrap() < x
+            })
+            .expect("page header has Back");
+        let bx = (back["min"][0].as_f64().unwrap() + back["max"][0].as_f64().unwrap()) / 2.0;
+        return app.command(json!({"command":"pointer", "phase":"click", "x":bx, "y":y}));
+    }
+    // Native close and title share a centerline; its distance from the right
+    // edge equals that centerline's distance from the top.
+    let x = bounds["max"][0].as_f64().unwrap() - (y - bounds["min"][1].as_f64().unwrap());
+    app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}))
 }

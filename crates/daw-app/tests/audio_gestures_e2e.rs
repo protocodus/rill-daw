@@ -285,7 +285,7 @@ fn audio_edge_magnets_and_view_options_are_independent_of_grid_and_document() {
     assert_eq!(hidden["audio_editor"]["show_neighbours"], false);
     assert_eq!(hidden["audio_editor"]["show_markers"], false);
     assert_eq!(hidden["project"], original);
-    app.click("Snap 1/16");
+    app.click("Snap grid");
     app.click("Off");
     let state = app.key("Q");
     assert_eq!(

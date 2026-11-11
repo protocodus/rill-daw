@@ -44,28 +44,7 @@ fn window(app: &mut Harness, label: &str) -> Value {
 
 fn close(app: &mut Harness, title: &str) -> Value {
     let state = app.inspect();
-    let title = state["label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .rev()
-        .find(|label| label["text"] == title)
-        .expect("visible popup title");
-    let x = (title["min"][0].as_f64().unwrap() + title["max"][0].as_f64().unwrap()) / 2.0;
-    let y = (title["min"][1].as_f64().unwrap() + title["max"][1].as_f64().unwrap()) / 2.0;
-    let bounds = state["window_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|bounds| {
-            bounds["min"][0].as_f64().unwrap() < x
-                && bounds["max"][0].as_f64().unwrap() > x
-                && bounds["min"][1].as_f64().unwrap() < y
-                && bounds["max"][1].as_f64().unwrap() > y
-        })
-        .expect("popup bounds");
-    let x = bounds["max"][0].as_f64().unwrap() - (y - bounds["min"][1].as_f64().unwrap());
-    app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}))
+    common::close_utility(app, &state, title)
 }
 
 fn unchanged(state: &Value, before: &Value) {
@@ -157,8 +136,14 @@ fn arranger_midi_and_audio_keep_distinct_tools_through_navigation_and_popups() {
 
         let notes = app.inspect();
         assert_eq!(app.click("Properties")["popups"]["properties"], true);
-        assert_eq!(window(&mut app, "Library")["popups"]["library"], true);
-        assert_eq!(close(&mut app, "Library")["popups"]["properties"], true);
+        assert_eq!(
+            window(&mut app, "Device browser")["popups"]["library"],
+            true
+        );
+        assert_eq!(
+            close(&mut app, "Device browser")["popups"]["properties"],
+            true
+        );
         let returned = close(&mut app, "Properties · Tool memory phrase");
         assert_eq!(returned["view"], "Clip");
         assert_eq!(returned["midi_editor"]["tool"], "Pencil");

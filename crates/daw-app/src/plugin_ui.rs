@@ -123,6 +123,91 @@ pub(crate) struct InstrumentUi {
     last_saved_request: Option<u64>,
     error: Option<String>,
     pending: Option<PendingState>,
+    pub(crate) device_panel: daw_devices_ui::PanelState,
+    /// Read once per editor owner and after a save, not every frame.
+    user_presets: Option<Vec<daw_devices::Preset>>,
+}
+
+/// Lets a built-in device panel read the project and collects what it asks
+/// for; the editor applies those requests after drawing.
+struct PanelHost<'a> {
+    app: &'a DawApp,
+    target: EditorTarget,
+    descriptor: &'static daw_devices::DeviceDescriptor,
+    user_presets: &'a [daw_devices::Preset],
+    updates: Vec<(u32, f64)>,
+    batch: Option<Vec<(u32, f64)>>,
+    navigation: Option<daw_ui::AutomationNavigation>,
+    saved: Option<daw_devices::Preset>,
+    /// `Some(None)` releases the panel keyboard's note.
+    audition: Option<Option<(u8, f32)>>,
+    wheels: Option<(f32, f32)>,
+}
+
+impl PanelHost<'_> {
+    fn automation_target(&self, id: u32) -> AutomationTarget {
+        AutomationTarget {
+            track: self.target.track,
+            parameter: AutomationParameter::VstParameter {
+                effect: self.target.effect,
+                id,
+            },
+        }
+    }
+}
+
+impl daw_devices_ui::DeviceHost for PanelHost<'_> {
+    fn value(&self, id: u32) -> f64 {
+        if let Some((_, value)) = self.updates.iter().rev().find(|(update, _)| *update == id) {
+            return *value;
+        }
+        if let Some(value) = self
+            .batch
+            .as_ref()
+            .and_then(|batch| batch.iter().find(|(update, _)| *update == id))
+        {
+            return value.1;
+        }
+        // An automated parameter shows what is sounding at the cursor.
+        if let Some((_, state, value)) = self
+            .app
+            .automation_control_state(self.automation_target(id))
+            && state != daw_ui::AutomationState::Bypassed
+        {
+            return f64::from(value);
+        }
+        let overrides = self
+            .app
+            .editor_state(self.target)
+            .map_or(&[][..], |(_, overrides)| overrides);
+        crate::builtin_devices::value(self.descriptor, overrides, id)
+    }
+    fn set_value(&mut self, id: u32, normalized: f64) {
+        self.updates.push((id, normalized));
+    }
+    fn set_values(&mut self, values: &[(u32, f64)]) {
+        self.batch = Some(values.to_vec());
+    }
+    fn automation(&self, id: u32) -> Option<(u64, daw_ui::AutomationState)> {
+        self.app
+            .automation_control_state(self.automation_target(id))
+            .map(|(lane, state, _)| (lane, state))
+    }
+    fn navigate(&mut self, action: daw_ui::AutomationNavigation) {
+        self.navigation = Some(action);
+    }
+    fn user_presets(&self) -> Vec<daw_devices::Preset> {
+        self.user_presets.to_vec()
+    }
+    fn save_preset(&mut self, preset: daw_devices::Preset) {
+        self.saved = Some(preset);
+    }
+    fn audition(&mut self, note: Option<(u8, f32)>) {
+        self.audition = Some(note);
+    }
+    fn wheels(&mut self, pitch: f32, modulation: f32) {
+        self.wheels = Some((pitch, modulation));
+    }
 }
 
 #[derive(Default)]
@@ -134,6 +219,15 @@ struct ParameterActions {
 }
 
 impl DawApp {
+    /// The track whose instrument (not insert) the editor window shows.
+    pub(crate) fn instrument_panel_track(&self) -> Option<u64> {
+        self.instrument_ui
+            .owner
+            .as_ref()
+            .filter(|(target, _)| target.effect.is_none())
+            .map(|(target, _)| target.track)
+    }
+
     fn plugin_error_details_button(&mut self, ui: &mut egui::Ui, target: EditorTarget, name: &str) {
         if daw_ui::button(ui, "Details").clicked() {
             let Some(error) = self.instrument_ui.error.clone() else {
@@ -166,10 +260,15 @@ impl DawApp {
         let track = self.project.track(target.track)?;
         if let Some(id) = target.effect {
             let slot = track.inserts.iter().find(|slot| slot.id == id)?;
-            let daw_core::Effect::Vst3 { path, class_id } = &slot.effect;
-            Some(Instrument::Vst3 {
-                path: path.clone(),
-                class_id: class_id.clone(),
+            // The editor shows an insert the same way as an instrument.
+            Some(match &slot.effect {
+                daw_core::Effect::Vst3 { path, class_id } => Instrument::Vst3 {
+                    path: path.clone(),
+                    class_id: class_id.clone(),
+                },
+                daw_core::Effect::Builtin { device } => Instrument::Builtin {
+                    device: device.clone(),
+                },
             })
         } else {
             Some(track.instrument.clone())
@@ -209,7 +308,23 @@ impl DawApp {
         self.instrument_autolaunch = Some(track);
     }
 
-    pub(crate) fn open_effect_automation(&mut self, track: u64, effect: u64) {
+    /// One click from a track to its effects: the only insert opens directly,
+    /// several open the rack, and an empty chain opens the device browser.
+    pub(crate) fn open_track_effects(&mut self, track: u64) {
+        let Some(inserts) = self.project.track(track).map(|track| &track.inserts) else {
+            return;
+        };
+        match inserts.as_slice() {
+            [] => self.open_effect_library(track, false),
+            [only] => self.open_effect_editor(track, only.id),
+            _ => {
+                self.selected_track = Some(track);
+                self.open_popup(PopupKind::Effects);
+            }
+        }
+    }
+
+    pub(crate) fn open_effect_parameters(&mut self, track: u64, effect: u64) {
         self.open_popup(PopupKind::Instrument);
         self.selected_track = Some(track);
         self.effect_editor_target = Some((track, effect));
@@ -352,6 +467,10 @@ impl DawApp {
                 .filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
                 .map_or(parameter.value, |(_, _, value)| f64::from(value))),
             "automation_state": automation.map(|(_, state, _)| state.label()),
+            "performance": self.instrument_ui.device_panel.performance_rects.map(|[pitch, modulation, keyboard]| serde_json::json!({
+                "pitch_wheel": rect(pitch), "mod_wheel": rect(modulation), "keyboard": rect(keyboard),
+                "wheels": self.panel_wheels,
+            })),
         })
     }
 
@@ -577,21 +696,6 @@ impl DawApp {
         }
     }
 
-    pub(crate) fn last_touched_plugin_parameter(
-        &self,
-        track: u64,
-        effect: Option<u64>,
-    ) -> Option<u32> {
-        let target = EditorTarget { track, effect };
-        self.instrument_ui
-            .owner
-            .as_ref()
-            .filter(|(owner, plugin)| {
-                *owner == target && self.editor_plugin(target).as_ref() == Some(plugin)
-            })
-            .and(self.instrument_ui.last_touched)
-    }
-
     fn cancel_parameter_picking(&mut self) {
         self.instrument_ui.picking = false;
         if self.instrument_ui.pick_request.take().is_some()
@@ -608,11 +712,11 @@ impl DawApp {
         if !ui
             .add_enabled(
                 self.parameter_editing_enabled(),
-                daw_ui::button_widget(if picking { "Cancel picking" } else { "Pick parameter" })
+                daw_ui::button_widget(if picking { "Cancel picking" } else { "Automate" })
                     .automation()
                     .selected(picking),
             )
-            .on_hover_text("Create or open automation for the next parameter you click. Use the native editor, or choose a row in the parameter list. Escape cancels.")
+            .on_hover_text("Create or open automation for the next parameter you click in the plug-in editor, or search for it by name in the list. Escape cancels.")
             .clicked()
         {
             return false;
@@ -666,12 +770,15 @@ impl DawApp {
                 daw_ui::text::truncated(
                     ui,
                     daw_ui::text::TextRole::Subtitle,
-                    format!("Automate {device_name}"),
+                    format!("{device_name} · Parameters"),
                 );
             },
         );
         if self.instrument_ui.picking {
-            daw_ui::text::note(ui, "Click a parameter in the list or native editor.");
+            daw_ui::text::note(
+                ui,
+                "Click a control in the plug-in editor, or choose a parameter here.",
+            );
         }
         if let Some(error) = &self.instrument_ui.error {
             daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, error, 2)
@@ -1018,6 +1125,16 @@ impl DawApp {
         let mut update = None;
         let mut automate = None;
         let mut resume = None;
+        let mut device_requests = None;
+        // Panel keyboard note and wheels, applied after drawing.
+        let mut panel_note: Option<Option<(u8, f32)>> = None;
+        let mut panel_wheels: Option<(f32, f32)> = None;
+        if let Instrument::Builtin { device } = &instrument {
+            // Registry metadata is cheap and must follow Undo, so it is never cached.
+            let (_, overrides) = self.editor_state(target).unwrap();
+            self.instrument_ui.parameters =
+                crate::builtin_devices::parameters(device, overrides).unwrap_or_default();
+        }
         if self.instrument_ui.browse_target.take() == Some(target) {
             self.instrument_ui.parameters_open = true;
             self.instrument_ui.browser.focus_search = true;
@@ -1027,11 +1144,31 @@ impl DawApp {
                 && self.instrument_ui.opening.is_none();
         }
         let parameter_page = self.instrument_ui.parameters_open;
+        let builtin = instrument
+            .builtin_device()
+            .and_then(daw_devices::descriptor);
         daw_ui::popup(&title, ctx)
             .id(egui::Id::new(("instrument_editor", parameter_page)))
             .open(&mut open)
-            .default_width(if parameter_page { 920.0 } else { 600.0 })
-            .default_height(if parameter_page { 520.0 } else { 400.0 })
+            .default_width(if parameter_page {
+                920.0
+            } else if let Some(descriptor) = builtin {
+                daw_devices_ui::panel_width(descriptor) + 2.0 * daw_ui::tokens::POPUP_MARGIN
+            } else {
+                600.0
+            })
+            .default_height(if parameter_page {
+                520.0
+            } else if builtin.is_some_and(|d| d.kind == daw_devices::DeviceKind::Instrument) {
+                // The response, every control and the keyboard at once where
+                // the screen allows; the window keeps it on screen otherwise.
+                1600.0
+            } else if builtin.is_some() {
+                // A device panel shows its response and every control at once.
+                760.0
+            } else {
+                400.0
+            })
             .vscroll(false)
             .show(ctx, |ui| {
                 let scope = match target.effect {
@@ -1198,6 +1335,63 @@ impl DawApp {
                                 .on_hover_text(error);
                         }
                     }
+                    Instrument::Builtin { device } => {
+                        let descriptor = daw_devices::descriptor(device);
+                        if let Some(descriptor) = descriptor {
+                            let user_presets = self
+                                .instrument_ui
+                                .user_presets
+                                .get_or_insert_with(|| crate::builtin_devices::user_presets(device))
+                                .clone();
+                            let mut panel = std::mem::take(&mut self.instrument_ui.device_panel);
+                            let mut host = PanelHost {
+                                app: &*self,
+                                target,
+                                descriptor,
+                                user_presets: &user_presets,
+                                updates: Vec::new(),
+                                batch: None,
+                                navigation: None,
+                                saved: None,
+                                audition: None,
+                                wheels: None,
+                            };
+                            daw_devices_ui::show(ui, descriptor, &mut host, &mut panel);
+                            if let Some(note) = host.audition {
+                                panel_note = Some(note);
+                            }
+                            // Every frame, not only on a change: reopening the
+                            // panel must reattach the wheels it still shows.
+                            panel_wheels = Some(
+                                host.wheels.unwrap_or((panel.pitch_wheel, panel.mod_wheel)),
+                            );
+                            device_requests =
+                                Some((host.updates, host.batch, host.navigation, host.saved));
+                            self.instrument_ui.device_panel = panel;
+                            if let Some(error) = &self.instrument_ui.error {
+                                daw_ui::text::bounded_block(
+                                    ui,
+                                    daw_ui::text::TextRole::Note,
+                                    error,
+                                    2,
+                                )
+                                .on_hover_text(error);
+                            }
+                        } else {
+                            daw_ui::text::subtitle(ui, "Device not available");
+                            daw_ui::text::note(
+                                ui,
+                                format!(
+                                    "This project uses the built-in device \"{device}\", which this version of Rill does not include. {}",
+                                    if target.effect.is_some() {
+                                        "Audio passes through it unchanged."
+                                    } else {
+                                        "The track stays silent."
+                                    }
+                                ),
+                            );
+                        }
+                    }
                 };
                 if let Some(footer) = &mut footer {
                     daw_ui::scroll_body(footer.body(), "device_overview", body);
@@ -1212,7 +1406,7 @@ impl DawApp {
                         Instrument::Vst3 { .. } => {
                             let device_name = title.clone();
                             if self.instrument_ui.picking {
-                                daw_ui::text::note(ui, "Click a parameter in the native editor, or open the parameter list.");
+                                daw_ui::text::note(ui, "Click a control in the plug-in editor, or search for it by name.");
                             }
                             if let Some(parameter) =
                                 self.instrument_ui.last_touched.and_then(|id| {
@@ -1258,9 +1452,15 @@ impl DawApp {
                                     self.instrument_ui.closing = true;
                                     self.cancel_parameter_picking();
                                 }
-                                let pick_in_list = self.parameter_picker_control(ui)
-                                    && self.instrument_ui.session.is_none();
-                                if daw_ui::button(ui, "Automate…").clicked() || pick_in_list {
+                                // A plug-in's own controls cannot carry Rill's
+                                // right-click Automate: arm the next touched
+                                // control and offer the same choice by name.
+                                let automate_by_name = self.parameter_picker_control(ui);
+                                if daw_ui::button(ui, "Parameters…")
+                                    .on_hover_text("Edit this plug-in's parameters by name")
+                                    .clicked()
+                                    || automate_by_name
+                                {
                                     self.instrument_ui.parameters_open = true;
                                     self.instrument_ui.browser.focus_search = true;
                                     fetch = self.instrument_ui.parameters.is_empty()
@@ -1268,6 +1468,13 @@ impl DawApp {
                                         && self.instrument_ui.session.is_none()
                                         && self.instrument_ui.opening.is_none();
                                 }
+                                if target.effect.is_none() {
+                                    choose = daw_ui::button(ui, "Change instrument").clicked();
+                                }
+                            });
+                        }
+                        Instrument::Builtin { .. } => {
+                            ui.horizontal_wrapped(|ui| {
                                 if target.effect.is_none() {
                                     choose = daw_ui::button(ui, "Change instrument").clicked();
                                 }
@@ -1365,6 +1572,20 @@ impl DawApp {
                 self.apply_instrument_parameters(&[(id, value)]);
             }
         }
+        if let Some((updates, batch, navigation, saved)) = device_requests {
+            self.apply_device_panel(target, updates, batch, navigation, saved);
+        }
+        if target.effect.is_none() {
+            if let Some(note) = panel_note {
+                self.panel_audition = note.map(|(pitch, velocity)| {
+                    let velocity = (velocity * 127.0).round().clamp(1.0, 127.0) as u8;
+                    (target.track, pitch, velocity)
+                });
+            }
+            if let Some((pitch, modulation)) = panel_wheels {
+                self.panel_wheels = Some((target.track, pitch, modulation));
+            }
+        }
         if let Some((id, value)) = automate {
             self.automate_plugin_parameter(target, id, value);
         }
@@ -1390,7 +1611,7 @@ impl DawApp {
         }
         let (owner, plugin) = self.instrument_ui.owner.as_ref()?;
         if *owner != target
-            || !matches!(plugin, Instrument::Vst3 { .. })
+            || !plugin.is_processor()
             || self.editor_plugin(target).as_ref() != Some(plugin)
         {
             return None;
@@ -1434,10 +1655,10 @@ impl DawApp {
             Ok(lane) => {
                 self.cancel_parameter_picking();
                 self.instrument_ui.browser.selected = Some(id);
-                self.open_popup(PopupKind::Automation);
-                self.selected_track = Some(lane);
-                self.selected_clip = None;
-                if existing.is_none() {
+                if existing.is_some() {
+                    self.show_automation(lane);
+                } else {
+                    self.show_new_automation(lane);
                     self.changed();
                 }
                 Some(lane)
@@ -1793,7 +2014,53 @@ impl DawApp {
         self.changed();
     }
 
+    fn apply_device_panel(
+        &mut self,
+        target: EditorTarget,
+        updates: Vec<(u32, f64)>,
+        batch: Option<Vec<(u32, f64)>>,
+        navigation: Option<daw_ui::AutomationNavigation>,
+        saved: Option<daw_devices::Preset>,
+    ) {
+        if self.parameter_editing_enabled() {
+            self.apply_instrument_parameters(&updates);
+            if let Some(batch) = batch {
+                self.apply_instrument_parameter_step(&batch, Some("Device preset"));
+            }
+        }
+        match navigation {
+            Some(daw_ui::AutomationNavigation::Create(
+                daw_ui::AutomationControl::DeviceParameter { id },
+            )) => {
+                let value = self
+                    .instrument_ui
+                    .parameters
+                    .iter()
+                    .find(|parameter| parameter.id == id)
+                    .map(|parameter| parameter.value);
+                if let Some(value) = value {
+                    self.automate_plugin_parameter(target, id, value);
+                }
+            }
+            navigation => self.apply_automation_navigation(navigation),
+        }
+        if let Some(preset) = saved {
+            match crate::builtin_devices::save_user_preset(&preset) {
+                Ok(_) => self.instrument_ui.user_presets = None,
+                Err(error) => {
+                    self.instrument_ui.error = Some(format!("Preset not saved: {error:#}"))
+                }
+            }
+        }
+    }
+
     fn apply_instrument_parameters(&mut self, updates: &[(u32, f64)]) {
+        self.apply_instrument_parameter_step(updates, None);
+    }
+
+    /// `step` names a separate Undo step; without it, consecutive gestures on
+    /// the same controls coalesce.
+    fn apply_instrument_parameter_step(&mut self, updates: &[(u32, f64)], step: Option<&str>) {
         let Some((target, instrument)) = self.instrument_ui.owner.clone() else {
             return;
         };
@@ -1854,11 +2121,15 @@ impl DawApp {
             let mut ids: Vec<_> = updates.iter().map(|(id, _)| *id).collect();
             ids.sort_unstable();
             ids.dedup();
-            self.history.commit_grouped(
-                &before,
-                label,
-                format!("plugin:{}:{:?}:{ids:?}", target.track, target.effect),
-            );
+            if let Some(step) = step {
+                self.history.commit_named(&before, step);
+            } else {
+                self.history.commit_grouped(
+                    &before,
+                    label,
+                    format!("plugin:{}:{:?}:{ids:?}", target.track, target.effect),
+                );
+            }
             self.song_session.bump();
             self.modified = true;
             self.revision = self.revision.wrapping_add(1);
@@ -2098,6 +2369,7 @@ mod tests {
             let mut app = pending_app(&ctx, directory.path());
             daw_ui::theme::set_appearance(&ctx, appearance);
             app.instrument_open = true;
+            let source = app.instrument_ui.owner.as_ref().unwrap().0.track;
             let draw = |app: &mut DawApp, events| {
                 ctx.run(
                     egui::RawInput {
@@ -2140,7 +2412,7 @@ mod tests {
                     .shapes
                     .iter()
                     .find_map(|shape| match &shape.shape {
-                        egui::Shape::Text(text) if text.galley.text() == "Automate…" => {
+                        egui::Shape::Text(text) if text.galley.text() == "Parameters…" => {
                             Some(text.galley.rect.translate(text.pos.to_vec2()).center())
                         }
                         _ => None,
@@ -2217,11 +2489,16 @@ mod tests {
                     id: if last_touched { 101 } else { 100 }
                 }
             );
-            assert!(app.automation_open);
-            let saved = app.project.clone();
+            // A new lane lands in Arrangement with a clip ready to draw.
+            assert!(!app.automation_open && !app.instrument_open);
+            assert_eq!(app.view, crate::app::WorkspaceView::Arrangement);
             let lane = app.selected_track;
-            app.close_popup();
-            assert!(app.instrument_open);
+            let clip = app.selected_clip.expect("new automation clip");
+            assert!(app.project.automation_clip(lane.unwrap(), clip).is_some());
+            let saved = app.project.clone();
+            app.selected_track = Some(source);
+            app.selected_clip = None;
+            app.instrument_open = true;
             let mut output = draw(&mut app, vec![]);
             for _ in 0..3 {
                 output = draw(&mut app, vec![]);
@@ -2274,7 +2551,9 @@ mod tests {
                 app.selected_track, lane,
                 "Existing action at {point:?}, viewport {size:?}, last touched={last_touched}"
             );
-            assert!(app.automation_open);
+            // A lane with a clip is edited at that clip in Arrangement.
+            assert_eq!(app.selected_clip, Some(clip));
+            assert!(!app.automation_open);
         }
     }
 

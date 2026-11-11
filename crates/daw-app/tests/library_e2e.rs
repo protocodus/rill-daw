@@ -64,7 +64,7 @@ fn library_filters_names_categories_and_developers_and_creates_or_assigns_instru
         "Classes":[{"CID":"44444444444444444444444444444444","Category":"Audio Module Class","Name":"Other Keys","Sub Categories":["Instrument","Piano"],"Version":"1","SDKVersion":"VST3.7.9","Cardinality":2147483647}]
     }).to_string()).unwrap();
     let mut app = Harness::with_vst_path(fixture.path());
-    menu(&mut app, "Window", "Library");
+    menu(&mut app, "Window", "Device browser");
     app.click("Search instruments");
     app.command(json!({"command":"text","text":"Other"}));
     common::wait_visible(&mut app, "Other Keys");
@@ -75,7 +75,7 @@ fn library_filters_names_categories_and_developers_and_creates_or_assigns_instru
         "Enter in a category popup must not instantiate a device"
     );
     app.key("Escape");
-    menu(&mut app, "Window", "Library");
+    menu(&mut app, "Window", "Device browser");
     // The sidebar row precedes the card's producer text.
     app.click("AAA Rill developer");
     let state = app.inspect();
@@ -110,7 +110,7 @@ fn library_filters_names_categories_and_developers_and_creates_or_assigns_instru
     assert_eq!(created["project"]["tracks"][0]["name"], "Other Keys");
     assert_eq!(created["project"]["tracks"][0]["kind"], "Midi");
     assert_eq!(created["popups"]["instrument"], true);
-    menu(&mut app, "Window", "Library");
+    menu(&mut app, "Window", "Device browser");
     app.click("All developers");
     app.click("Piano");
     app.command(json!({"command":"key","key":"A","cmd":true}));
@@ -327,7 +327,7 @@ fn send_browser_has_one_contextual_action_and_library_management_is_on_demand() 
         added["project"]["tracks"][0]["sends"][0]["target_bus"],
         added["project"]["tracks"][1]["id"]
     );
-    menu(&mut app, "Window", "Library");
+    menu(&mut app, "Window", "Device browser");
     let setup = app.click("Plug-in folders…");
     assert_eq!(setup["popups"]["setup"], true);
     assert_eq!(setup["popups"]["library"], false);

@@ -822,7 +822,7 @@ fn apply_one(
             text(name)?;
             let id = match kind {
                 EditableTrackKind::Audio => p.add_audio_track(name),
-                EditableTrackKind::Midi => p.add_midi_track(name),
+                EditableTrackKind::Midi => p.add_instrument_track(name),
                 EditableTrackKind::Bus => p.add_bus(name),
                 EditableTrackKind::Folder => p.add_folder(name),
             };
@@ -1531,10 +1531,7 @@ fn apply_one(
                     .context("Insert not found")?
                     .parameters
             } else {
-                ensure!(
-                    matches!(track.instrument, Instrument::Vst3 { .. }),
-                    "Track has no plug-in instrument"
-                );
+                ensure!(track.instrument.is_processor(), "Track has no instrument");
                 &mut track.instrument_parameters
             };
             for parameter in parameters {

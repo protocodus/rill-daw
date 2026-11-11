@@ -893,11 +893,12 @@ impl DawApp {
                     );
                 }
                 for slot in channel.inserts.iter().filter(|slot| slot.enabled) {
-                    let daw_core::Effect::Vst3 { path, .. } = &slot.effect;
-                    ensure!(
-                        Path::new(path).exists(),
-                        "An original insert is unavailable; restore it before returning to originals"
-                    );
+                    if let daw_core::Effect::Vst3 { path, .. } = &slot.effect {
+                        ensure!(
+                            Path::new(path).exists(),
+                            "An original insert is unavailable; restore it before returning to originals"
+                        );
+                    }
                 }
             }
             let mut candidate = self.project.clone();

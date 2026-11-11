@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "device": "r1-mini",
+  "name": "Default",
+  "author": "Rill",
+  "category": "Basic",
+  "description": "Two slightly detuned VCO saws into the transistor ladder, with a gentle filter envelope.",
+  "parameters": {}
+}

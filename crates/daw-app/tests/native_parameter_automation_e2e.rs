@@ -198,7 +198,8 @@ fn native_instrument_action_targets_its_owner_reuses_undoes_and_recalls() {
     assert_eq!(lanes(&created)[0]["name"], "Neon keys 🎹 · Filter Cutoff");
     let lane = lanes(&created)[0]["id"].clone();
     assert_eq!(created["selected_track"], lane);
-    assert_eq!(created["popups"]["automation"], true);
+    assert_eq!(created["view"], "Arrangement");
+    assert_eq!(created["popups"]["automation"], false);
     assert_eq!(created["native_editor"]["pid"], pid);
     assert_eq!(created["native_editor"]["last_touched"], 0);
 
@@ -420,7 +421,7 @@ fn native_parameter_gestures_override_owned_automation_and_preserve_it_after_sna
     menu(&mut app, "Arranger");
     app.click("Neon phrase");
     menu(&mut app, "Instrument");
-    let browser = app.click("Automate…");
+    let browser = app.click("Parameters…");
     assert_eq!(browser["native_editor"]["automation_state"], "Overridden");
     assert!(
         browser["visible_labels"]
@@ -480,7 +481,7 @@ fn delayed_browser_parameter_acknowledgement_does_not_retake_resumed_automation(
     menu(&mut app, "Arranger");
     app.click("Neon phrase");
     menu(&mut app, "Instrument");
-    app.click("Automate…");
+    app.click("Parameters…");
 
     // A delayed native worker still acknowledges the browser's already-owned
     // edit. Keep that reply pending until after the visible Resume action.
@@ -547,8 +548,19 @@ fn picking_a_native_parameter_without_changing_it_creates_one_lane_and_reuses_it
     let fixture = Fixture::new();
     let (mut app, track, _, _) = fixture.app();
     open_instrument(&mut app);
-    let armed = app.click("Pick parameter");
+    let armed = app.click("Automate");
     assert_eq!(armed["native_editor"]["picking"], true);
+    // The same click offers the parameter by name, beside the native editor.
+    assert!(
+        armed["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label
+                == "Click a control in the plug-in editor, or choose a parameter here."),
+        "{}",
+        armed["visible_labels"]
+    );
     assert!(lanes(&armed).is_empty());
     // A meter and an unknown control must not consume the picker.
     fixture.action(&mut app, "touch 43\ntouch 999\n");
@@ -557,7 +569,7 @@ fn picking_a_native_parameter_without_changing_it_creates_one_lane_and_reuses_it
     let created = wait(&mut app, |state| lanes(state).len() == 1);
     assert_lane(lanes(&created)[0], track, None, 0.4);
     assert_eq!(created["native_editor"]["picking"], false);
-    assert_eq!(created["popups"]["automation"], true);
+    assert_eq!(created["view"], "Arrangement");
     assert!(created["native_editor"]["last_touched"].is_null());
     let lane = lanes(&created)[0]["id"].clone();
     fixture.action(&mut app, "touch 7\n");
@@ -566,9 +578,9 @@ fn picking_a_native_parameter_without_changing_it_creates_one_lane_and_reuses_it
     menu(&mut app, "Arranger");
     app.click("Neon phrase");
     menu(&mut app, "Instrument");
-    app.click("Pick parameter");
+    app.click("Automate");
     fixture.action(&mut app, "touch 0\n");
-    let reused = wait(&mut app, |state| state["popups"]["automation"] == true);
+    let reused = wait(&mut app, |state| state["selected_track"] == lane);
     assert_eq!(lanes(&reused).len(), 1);
     assert_eq!(reused["selected_track"], lane);
     assert_lane(lanes(&reused)[0], track, None, 0.4);
@@ -582,7 +594,7 @@ fn cancelled_picks_ignore_late_native_replies_and_workspace_navigation_cancels()
     let fixture = Fixture::new();
     let (mut app, _, _, _) = fixture.app();
     open_instrument(&mut app);
-    app.click("Pick parameter");
+    app.click("Automate");
     let cancelled = app.click("Cancel picking");
     assert_eq!(cancelled["native_editor"]["picking"], false);
     fixture.action(&mut app, "late_pick 0\nchange 7 0.66\n");
@@ -591,7 +603,7 @@ fn cancelled_picks_ignore_late_native_replies_and_workspace_navigation_cancels()
     });
     assert!(lanes(&ignored).is_empty());
 
-    app.click("Pick parameter");
+    app.click("Automate");
     let escaped = app.command(json!({"command":"key", "key":"Escape"}));
     assert_eq!(escaped["native_editor"]["picking"], false);
     assert_eq!(escaped["popups"]["instrument"], true);
@@ -605,7 +617,7 @@ fn cancelled_picks_ignore_late_native_replies_and_workspace_navigation_cancels()
     });
     assert!(lanes(&ignored).is_empty());
 
-    app.click("Pick parameter");
+    app.click("Automate");
     let left = menu(&mut app, "Arranger");
     assert_eq!(left["native_editor"]["picking"], false);
     fixture.action(&mut app, "late_pick 0\nchange 7 0.68\n");
@@ -626,7 +638,7 @@ fn parameter_list_picker_uses_a_single_click_and_does_not_automate_search_select
     let (mut app, track, _, _) = fixture.app();
     // No native editor is needed: Pick opens the searchable parameter browser.
     menu(&mut app, "Instrument");
-    app.click("Pick parameter");
+    app.click("Automate");
     wait(&mut app, |state| {
         state["native_editor"]["parameter_count"].as_u64().unwrap() > 0
     });
@@ -656,7 +668,7 @@ fn native_parameter_picker_targets_the_selected_effect_instance() {
     wait(&mut app, |state| {
         state["native_editor"]["open"] == true && state["native_editor"]["effect"] == effects[1]
     });
-    app.click("Pick parameter");
+    app.click("Automate");
     fixture.action(&mut app, "touch 0\n");
     let created = wait(&mut app, |state| lanes(state).len() == 1);
     assert_lane(lanes(&created)[0], track, Some(effects[1]), 0.3);

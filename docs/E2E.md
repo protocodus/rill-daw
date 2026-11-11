@@ -52,7 +52,7 @@ cargo test --locked -p daw-app --test mixer_order_e2e --test mixer_inline_routin
 restart persistence, favourites in the pinned footer, and combined name/category/
 producer search. `plugin_details_e2e` covers isolated I/O and parameter inspection,
 search, failure/retry, and returning to the library without changing the project.
-`native_parameter_automation_e2e` includes the one-shot **Pick parameter** flow,
+`native_parameter_automation_e2e` includes the one-shot **Automate** flow,
 cancellation and stale replies, existing lanes, and precise effect ownership.
 
 ```sh
@@ -700,7 +700,7 @@ keyboard behavior still requires macOS verification.
 
 Headless `open` and `save` continue to wait for native state acknowledgements and file completion by default. Add `"wait":false` to return after dispatch; `{"command":"wait_project","timeout_ms":120000}` waits for queued document actions and native barriers. `project_pending`, `recovery_pending` (a recovery checkpoint is being written or queued; Save waits for it), `modified`, `project_path`, `waveform_count`, and `waveform_warning` expose completion and recovery state. Failed operations cancel queued destructive transitions and leave the current document open. The driver accepts a bounded project wait of at most 120 seconds; a timed-out wait does not cancel filesystem work.
 
-The `history_e2e` target checks named multi-step History jumps, saved checkpoints, redo branching, new-project reset, one-step multi-frame note drags, and actual clicks on labelled vector-icon tools in both arranger and piano roll. CI runs every application test target automatically, including tests added in future changes.
+The `history_e2e` target checks named multi-step History jumps, saved checkpoints, redo branching, new-project reset, one-step multi-frame note drags, and actual clicks on labelled vector-icon tools in both arranger and piano roll. The nightly and release workflows run every application test target automatically, including tests added in future changes. Pull requests run the `e2e` and `master_meter_e2e` smoke targets.
 
 
 `typography_e2e` edits a Unicode/emoji track name, checks readable visible text
@@ -1476,3 +1476,11 @@ cargo test --locked -p daw-engine midi2 -- --test-threads=1
 cargo test --locked -p daw-plugins --test multi_bus -- --test-threads=1
 cargo test --locked -p daw-ui --test midi_expression --test midi_note_lengths --test meter_statistics --test signal_analyzer
 ```
+
+`arranger_clip_consistency_e2e` checks that automation patterns select on click
+and only draw points with Pencil, move/stretch/split/erase with the clip tools,
+that double-clicks create MIDI clips and automation patterns at the pointer with
+the last selected clip's length, that the default **Snap grid** follows the
+zoom-dependent arranger grid, and that **Add track…** below the tracks and **Add
+track** in a track's context menu add tracks (the latter right after that track).
+Run with `cargo test --locked -p daw-app --test arranger_clip_consistency_e2e`.

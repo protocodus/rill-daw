@@ -1,4 +1,4 @@
-//! Mouse-driven vertical resizing of the actual instrument-assignment browser.
+//! The instrument-assignment browser page follows the workspace height.
 mod common;
 
 use common::Harness;
@@ -22,13 +22,8 @@ fn settle(app: &mut Harness) -> Value {
     app.inspect()
 }
 
-fn resize_height(app: &mut Harness, delta: f64) -> Value {
-    let state = app.inspect();
-    let window = &state["library"]["window"];
-    let x = (window["min"][0].as_f64().unwrap() + window["max"][0].as_f64().unwrap()) * 0.5;
-    let y = window["max"][1].as_f64().unwrap() - 1.0;
-    app.command(json!({"command":"pointer", "phase":"drag", "x":x, "y":y,
-        "to_x":x, "to_y":y + delta}));
+fn viewport_height(app: &mut Harness, height: f64) -> Value {
+    app.command(json!({"command":"viewport", "width":1600, "height":height}));
     settle(app)
 }
 
@@ -61,7 +56,7 @@ fn assert_bounded(state: &Value) {
 }
 
 #[test]
-fn instrument_browser_resizes_vertically_and_keeps_panes_and_actions_inside() {
+fn instrument_browser_follows_the_workspace_height_and_keeps_panes_and_actions_inside() {
     let fixture = common::plugin_fixture();
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
         let mut app = Harness::with_vst_path(fixture.path());
@@ -74,10 +69,11 @@ fn instrument_browser_resizes_vertically_and_keeps_panes_and_actions_inside() {
         app.click("Rill Fixture A");
         let initial = settle(&mut app);
         assert_bounded(&initial);
-        let smaller = resize_height(&mut app, -140.0);
+        // A page fills the workspace, so the window itself sizes the browser.
+        let smaller = viewport_height(&mut app, 1060.0);
         assert!(
             height(&smaller["library"]["window"]) < height(&initial["library"]["window"]) - 100.0,
-            "The browser must honor a vertical shrink: {} -> {}",
+            "The browser must follow a vertical shrink: {} -> {}",
             initial["library"],
             smaller["library"]
         );
@@ -85,10 +81,10 @@ fn instrument_browser_resizes_vertically_and_keeps_panes_and_actions_inside() {
             height(&smaller["library"]["catalog"]) < height(&initial["library"]["catalog"]) - 70.0
         );
         assert_bounded(&smaller);
-        let larger = resize_height(&mut app, 100.0);
+        let larger = viewport_height(&mut app, 1160.0);
         assert!(
             height(&larger["library"]["window"]) > height(&smaller["library"]["window"]) + 70.0,
-            "The browser must honor a vertical grow: {} -> {}",
+            "The browser must follow a vertical grow: {} -> {}",
             smaller["library"],
             larger["library"]
         );
@@ -102,18 +98,10 @@ fn instrument_browser_resizes_vertically_and_keeps_panes_and_actions_inside() {
         app.command(json!({"command":"viewport", "width":800, "height":600}));
         let compact = settle(&mut app);
         assert_bounded(&compact);
-        let smaller = resize_height(&mut app, -40.0);
-        assert!(
-            height(&smaller["library"]["window"]) < height(&compact["library"]["window"]) - 20.0,
-            "Compact browser must still resize vertically: {} -> {}",
-            compact["library"],
-            smaller["library"]
-        );
-        assert_bounded(&smaller);
         let menu = app.click("More");
         assert_eq!(
             menu["native_menu"]["open"], true,
-            "The resized footer must accept mouse clicks"
+            "The compact footer must accept mouse clicks"
         );
         app.key("Escape");
         app.key("Escape");

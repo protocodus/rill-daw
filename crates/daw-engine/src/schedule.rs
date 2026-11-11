@@ -11,7 +11,7 @@ pub(super) fn parallelism(tracks: &[RenderTrack], level_width: usize) -> (bool, 
         tracks.len(),
         |index| {
             tracks[index].enabled.then_some(
-                matches!(tracks[index].processor, Processor::Vst(_))
+                !matches!(tracks[index].processor, Processor::None)
                     || !tracks[index].inserts.is_empty(),
             )
         },
@@ -119,7 +119,7 @@ impl Schedule {
     pub fn initialize_costs(&self, tracks: &[RenderTrack], timings: &mut [TrackRenderPerformance]) {
         for &index in &self.order {
             // Initial preference only; observations replace this estimate.
-            let plugins = usize::from(matches!(tracks[index].processor, Processor::Vst(_)))
+            let plugins = usize::from(!matches!(tracks[index].processor, Processor::None))
                 + tracks[index].inserts.len();
             timings[index].estimated_process_ns = 1_000 + plugins as u64 * 100_000;
         }
@@ -174,7 +174,7 @@ pub(super) fn mix_route(route: &Route, destination: &mut RenderTrack, count: usi
     let (left, right) = match route.kind {
         RouteKind::PluginInput { effect, input } => {
             let buffer = if let Some(effect) = effect {
-                let Insert::Vst { inputs, .. } = &mut destination.inserts[effect];
+                let Insert { inputs, .. } = &mut destination.inserts[effect];
                 &mut inputs[input]
             } else {
                 &mut destination.instrument_inputs[input]

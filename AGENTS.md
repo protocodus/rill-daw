@@ -6,7 +6,7 @@ Add every new UI component to `crates/daw-ui` first, then reuse it from applicat
 
 Center horizontal control rows vertically by default: labels, icons, fields and actions share a common center line. Reserve row height before painting mixed controls. Use shared `parameter_row` or `parameter_toolbar` for rows containing captioned sliders so scale captions do not offset their rails from adjacent controls.
 
-Keep the interface simple and focused on one workspace at a time. Clip Editor, Instrument, Effects, Mixer, Routing, Library, Setup, and Properties open on demand from the menu bar. Keep persistent labels and explanatory text concise.
+Keep the interface simple and focused on one workspace at a time. Clip Editor, Instrument, Effects, Mixer, Routing, Device browser, Setup, and Properties open on demand from the menu bar. Arranger and Mixer are the two home views. Large views (clip and automation editors, Device browser, Assistant, Signal analysis, Audio takes) open full screen as a `page` in the main area with Back to their caller. Single actions and forms (Export, Join, Crossfade, Properties, Routing, Recording, History, Setup, About) and the device panels (Instrument and Effects) are fixed-size `popup` dialogs above the blurred workspace. Keep persistent labels and explanatory text concise.
 
 Every operation must be possible using only the mouse. Keyboard shortcuts accelerate the same operations; provide a visible control or context-menu action for each operation, including selection changes.
 

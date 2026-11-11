@@ -80,8 +80,8 @@ fn lv2_instrument_and_effect_scan_insert_render_save_reopen_and_undo() {
 
     // LV2 has no embedded native editor here; its controls use the generic browser.
     menu(&mut app, "Window", "Instrument");
-    common::wait_visible(&mut app, "Automate…");
-    app.click("Automate…");
+    common::wait_visible(&mut app, "Parameters…");
+    app.click("Parameters…");
     let browser = common::wait_until(&mut app, |state| {
         state["native_editor"]["parameter_count"] == 2
     });

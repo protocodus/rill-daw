@@ -161,13 +161,19 @@ fn audio_and_midi_names_can_be_hidden_restored_and_recalled_without_losing_clip_
             }
             let empty = app.inspect();
             let body = point(&region(&empty, id)["content_rect"], 0.5, 0.7);
-            let opened = pointer(&mut app, "double_click", body, false);
-            assert_eq!(
-                opened["view"], "Clip",
-                "Body double-click still opens the editor"
+            // Double-click anywhere on a clip names it; the editor opens from
+            // the context menu.
+            let renaming = pointer(&mut app, "double_click", body, false);
+            assert_eq!(renaming["view"], "Arrangement");
+            assert_eq!(renaming["selected_clip"], id);
+            assert!(
+                renaming["visible_labels"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|label| label == "Apply name")
             );
-            assert_eq!(opened["selected_clip"], id);
-            app.click("Arranger");
+            app.key("Escape");
 
             let before = app.inspect();
             let body = point(&region(&before, id)["content_rect"], 0.5, 0.85);

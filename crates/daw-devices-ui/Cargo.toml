@@ -1,0 +1,12 @@
+[package]
+name = "daw-devices-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Panels for Rill's built-in devices, built from daw-ui components"
+
+[dependencies]
+daw-devices.workspace = true
+daw-ui.workspace = true
+egui = "=0.33.3"

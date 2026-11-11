@@ -44,6 +44,14 @@ fn menu(app: &mut Harness, menu: &str, label: &str) -> Value {
     panic!("Missing {label} after scrolling: {}", app.inspect());
 }
 
+fn visible(state: &Value, label: &str) -> bool {
+    state["visible_labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|text| text == label)
+}
+
 fn position(state: &Value, beat: f64, value: f64) -> (f64, f64) {
     let rect = &state["automation_plot_rect"];
     let left = rect["min"][0].as_f64().expect("curve must be visible");
@@ -140,15 +148,7 @@ fn automation_navigation_fit_and_musical_beat_editing_share_editor_controls() {
         fit_contains(&fitted);
         bounded_actions(
             &fitted,
-            &[
-                "Step",
-                "Linear",
-                "Smooth",
-                "Enabled",
-                "Fit",
-                "Add parameter",
-                "Delete point",
-            ],
+            &["Step", "Linear", "Smooth", "Enabled", "Fit", "Delete point"],
         );
         for (button, alt, ctrl) in [
             ("middle", false, false),
@@ -223,7 +223,9 @@ fn automation_navigation_fit_and_musical_beat_editing_share_editor_controls() {
     }
     let state = app.inspect();
     let rect = &state["automation_editor"]["point_beat_rect"];
-    let x = (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5;
+    // The first click turns the field into a narrower text box; the second
+    // must land inside that box too, so aim near the left edge.
+    let x = rect["min"][0].as_f64().unwrap() + 16.0;
     let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
     app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
     app.command(json!({"command":"key","key":"A","cmd":true}));
@@ -261,128 +263,75 @@ fn automation_navigation_fit_and_musical_beat_editing_share_editor_controls() {
     menu(&mut app, "Edit", "Undo");
     menu(&mut app, "Edit", "Undo");
     assert_eq!(app.inspect()["project"], baseline["project"]);
-    let creation = app.click("Add parameter");
-    bounded_actions(
-        &creation,
-        &["Track", "Parameter", "Volume", "Edit automation"],
-    );
-    app.key("Escape");
+    assert!(!visible(&app.inspect(), "Add parameter"));
     app.quit();
 }
 
 #[test]
-fn parameter_chooser_returns_to_its_curve_without_losing_selection_or_zoom() {
-    use daw_core::{AutomationParameter, AutomationPoint, AutomationTarget};
+fn right_click_automate_lands_on_a_new_lane_with_a_clip_at_the_cursor_bar() {
     let mut app = Harness::new();
     let mut project = Project::new();
     let source = project.add_audio_track("Synth source");
-    let lane = project
-        .add_automation_track(
-            "Synth volume",
-            AutomationTarget {
-                track: source,
-                parameter: AutomationParameter::TrackGain,
-            },
-        )
-        .unwrap();
-    project
-        .track_mut(lane)
-        .unwrap()
-        .automation
-        .as_mut()
-        .unwrap()
-        .points = vec![
-        AutomationPoint::new(32.0, 0.25),
-        AutomationPoint::new(40.0, 0.5),
-        AutomationPoint::new(64.0, 0.75),
-    ];
-    let path = app.directory.path().join("chooser.rill");
+    let path = app.directory.path().join("automate.rill");
     project.save(&path).unwrap();
     app.command(json!({"command":"open","path":path}));
     app.command(json!({"command":"viewport","width":1100,"height":720}));
-    app.click("Synth volume");
-    menu(&mut app, "Window", "Properties");
-    let fitted = menu(&mut app, "Window", "Automation");
-    let (x, y) = position(&fitted, 40.0, 0.5);
-    app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
-    let before = app.key("Equals");
-    assert_eq!(before["automation_editor"]["point_beat"], 41.0);
-    for use_menu in [false, true] {
-        for escape in [false, true] {
-            let chooser = if use_menu {
-                menu(&mut app, "Track", "Add automation track…")
-            } else {
-                app.click("Add parameter")
-            };
-            bounded_actions(&chooser, &["Track", "Parameter", "Edit automation", "Back"]);
-            let footer = |label| {
-                chooser["label_rects"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .find(|rect| rect["text"] == label)
-                    .unwrap()
-            };
-            let edit = footer("Edit automation");
-            let back = footer("Back");
-            assert!(
-                (edit["min"][1].as_f64().unwrap() - back["min"][1].as_f64().unwrap()).abs() < 1.0
-            );
-            assert!(back["max"][0].as_f64().unwrap() < edit["min"][0].as_f64().unwrap());
-            assert_eq!(chooser["selected_track"], lane);
-            assert!(chooser["automation_editor"].is_null());
-            let returned = if escape {
-                app.key("Escape")
-            } else {
-                app.click("Back")
-            };
-            assert_eq!(returned["popups"]["automation"], true);
-            assert_eq!(returned["selected_track"], lane);
-            assert_eq!(returned["project"], before["project"]);
-            assert_eq!(returned["history"], before["history"]);
-            for field in ["start_beat", "pixels_per_beat", "point_beat"] {
-                assert_eq!(
-                    returned["automation_editor"][field],
-                    before["automation_editor"][field]
-                );
-            }
-        }
-    }
-    app.click("Add parameter");
-    let existing = app.click("Edit automation");
-    assert_eq!(existing["selected_track"], lane);
-    assert_eq!(existing["project"], before["project"]);
-    assert_eq!(existing["history"], before["history"]);
-    assert_eq!(existing["automation_editor"]["point_beat"], 41.0);
-    assert_eq!(
-        existing["automation_editor"]["start_beat"],
-        before["automation_editor"]["start_beat"]
+    let track_menu = {
+        app.click("Track");
+        app.inspect()
+    };
+    assert!(!visible(&track_menu, "Add automation track…"));
+    app.key("Escape");
+    // Bar 2 in 4/4: the clip starts on its downbeat and lasts one bar.
+    app.command(
+        json!({"command":"song_tool","name":"transport","arguments":{"action":"seek","beat":5.5}}),
     );
-    app.click("Add parameter");
-    app.click("Volume");
-    app.click("Pan");
-    let created = app.click("Add automation track");
-    assert_eq!(created["project"]["tracks"].as_array().unwrap().len(), 3);
-    assert_eq!(
-        created["project"]["tracks"][2]["automation"]["target"]["parameter"],
-        "TrackPan"
-    );
-    assert_eq!(
-        created["selected_track"],
-        created["project"]["tracks"][2]["id"]
-    );
-    assert!(!created["automation_editor"].is_null());
-    let caller = app.key("Escape");
-    assert_eq!(caller["popups"]["properties"], true);
-    assert_eq!(caller["selected_track"], lane);
-    assert_eq!(app.key("Escape")["popups"]["automation"], false);
-    app.click("Synth source");
-    let chooser = menu(&mut app, "Window", "Automation");
-    bounded_actions(&chooser, &["Edit automation", "Cancel"]);
-    let canceled = app.click("Cancel");
-    assert_eq!(canceled["popups"]["automation"], false);
-    assert_eq!(canceled["selected_track"], source);
-    assert_eq!(canceled["history"], created["history"]);
+    let before = app.inspect();
+    let gain = before["timeline"]["channels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|channel| channel["track"] == source)
+        .unwrap()["gain"]
+        .clone();
+    let x = (gain["min"][0].as_f64().unwrap() + gain["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (gain["min"][1].as_f64().unwrap() + gain["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
+    let created = app.click("Automate");
+    let lane = created["project"]["tracks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|track| track["kind"] == "Automation")
+        .unwrap_or_else(|| panic!("No lane: {}", created["project"]));
+    assert_eq!(lane["automation"]["target"]["parameter"], "TrackGain");
+    let clips = lane["automation"]["clips"].as_array().unwrap();
+    assert_eq!(clips.len(), 1);
+    assert_eq!(clips[0]["start"], 4.0);
+    assert_eq!(clips[0]["length"], 4.0);
+    assert_eq!(created["selected_track"], lane["id"]);
+    assert_eq!(created["selected_clip"], clips[0]["id"]);
+    assert_eq!(created["view"], "Arrangement");
+    assert_eq!(created["popups"]["automation"], false);
+    // Edit automation returns to that clip, which is what plays there.
+    menu(&mut app, "Window", "Mixer");
+    let mixer = app.inspect();
+    let gain = &mixer["mixer"]["channels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|channel| channel["track"] == source)
+        .unwrap()["gain"];
+    let x = (gain["min"][0].as_f64().unwrap() + gain["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (gain["min"][1].as_f64().unwrap() + gain["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
+    let editing = app.click("Edit automation");
+    assert_eq!(editing["view"], "Arrangement");
+    assert_eq!(editing["selected_clip"], clips[0]["id"]);
+    assert_eq!(editing["history"], created["history"]);
+    // The lane and its clip are one Undo step.
+    let undone = menu(&mut app, "Edit", "Undo");
+    assert_eq!(undone["project"], before["project"]);
     app.quit();
 }
 
@@ -463,11 +412,25 @@ fn reopening_same_lane_id_refits_changed_points_and_restores_a_valid_selection()
 
 #[test]
 fn automation_points_interpolation_undo_and_session_recovery() {
+    use daw_core::{AutomationParameter, AutomationTarget};
     let mut app = Harness::new();
-    menu(&mut app, "Track", "Add MIDI track");
-    let state = menu(&mut app, "Track", "Add automation track…");
+    let mut project = Project::new();
+    let source = project.add_midi_track("Lead");
+    project
+        .add_automation_track(
+            "Lead volume",
+            AutomationTarget {
+                track: source,
+                parameter: AutomationParameter::TrackGain,
+            },
+        )
+        .unwrap();
+    let path = app.directory.path().join("points.rill");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open","path":path}));
+    app.click("Lead volume");
+    let state = menu(&mut app, "Window", "Automation");
     assert_eq!(state["popups"]["automation"], true);
-    let state = app.click("Add automation track");
     assert_eq!(state["project"]["tracks"][1]["kind"], "Automation");
     let state = add(&mut app, 2.0, 0.2);
     assert_eq!(
@@ -531,9 +494,23 @@ fn automated_volume_changes_export_and_bypass_restores_manual_level() {
     }
     .write_wav(&source)
     .unwrap();
-    app.command(json!({"command":"drop","paths":[source]}));
-    menu(&mut app, "Track", "Add automation track…");
-    let state = app.click("Add automation track");
+    let dropped = app.command(json!({"command":"drop","paths":[source]}));
+    let track = dropped["project"]["tracks"][0]["id"].clone();
+    let gain = dropped["timeline"]["channels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|channel| channel["track"] == track)
+        .unwrap()["gain"]
+        .clone();
+    let x = (gain["min"][0].as_f64().unwrap() + gain["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (gain["min"][1].as_f64().unwrap() + gain["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
+    app.click("Automate");
+    // Edit the lane's arrangement curve here, without the new clip's pattern.
+    app.key("Delete");
+    let state = menu(&mut app, "Window", "Automation");
+    assert!(state["project"]["tracks"][1]["automation"]["clips"].is_null());
     let initial = state["project"]["tracks"][1]["automation"]["points"][0]["value"]
         .as_f64()
         .unwrap();
@@ -562,61 +539,63 @@ fn automated_volume_changes_export_and_bypass_restores_manual_level() {
 }
 
 #[test]
-fn parameter_picker_creates_independent_lanes_and_removal_prunes_only_affected_targets() {
+fn removing_an_insert_or_send_prunes_only_its_own_automation_lanes() {
+    use daw_core::{AutomationParameter, AutomationTarget, Effect, EffectSlot};
     let fixture = common::plugin_fixture();
     let mut app = Harness::with_vst_path(fixture.path());
-    common::fixture_library(&mut app);
-    app.key("Escape");
-    menu(&mut app, "Track", "Add MIDI track");
-    menu(&mut app, "Track", "Add bus");
-    app.click("New instrument");
-    menu(&mut app, "Window", "Effects");
-    menu(&mut app, "+ Insert", "Rill Fixture FX");
-    app.click("Add to effect chain");
-    menu(&mut app, "Window", "Routing");
-    menu(&mut app, "Add send…", "Bus 1");
-    let state = app.inspect();
-    let target = state["project"]["tracks"][0]["id"].clone();
-    let effect = state["project"]["tracks"][0]["inserts"][0]["id"].clone();
-    let bus = state["project"]["tracks"][1]["id"].clone();
-    let choices = [
-        ("Volume", json!("TrackGain")),
-        ("Pan", json!("TrackPan")),
-        ("Send · Bus 1", json!({"SendGain":{"bus":bus}})),
-        (
-            "01 · Rill Fixture FX · Parameter",
-            json!({"VstParameter":{"effect":effect,"id":0}}),
-        ),
-    ];
-    for (index, (label, parameter)) in choices.into_iter().enumerate() {
-        if index == 0 {
-            menu(&mut app, "Track", "Add automation track…");
-        } else {
-            app.click("Add parameter");
-        }
-        if label != "Volume" {
-            menu(&mut app, "Volume", label);
-        }
-        if index == 3 {
-            menu(&mut app, "Manual ID", "Use manual ID");
-            app.click("Manual ID");
-        }
-        let state = app.click("Add automation track");
-        assert_eq!(
-            state["project"]["tracks"].as_array().unwrap().len(),
-            index + 3,
-            "Creating {label}: status={}, labels={}",
-            state["status"],
-            state["visible_labels"]
-        );
-        let lane = &state["project"]["tracks"][index + 2]["automation"];
-        assert_eq!(lane["target"]["track"], target);
-        assert_eq!(lane["target"]["parameter"], parameter);
+    let mut project = Project::new();
+    let target = project.add_midi_track("New instrument");
+    let bus = project.add_bus("Bus 1");
+    project.add_send(target, bus, 0.5, false).unwrap();
+    project
+        .track_mut(target)
+        .unwrap()
+        .inserts
+        .push(EffectSlot::new(
+            "Rill Fixture FX",
+            Effect::Vst3 {
+                path: fixture
+                    .path()
+                    .join("RillFixture.vst3")
+                    .to_string_lossy()
+                    .into_owned(),
+                class_id: Some("33333333333333333333333333333333".into()),
+            },
+        ));
+    let effect = project.track(target).unwrap().inserts[0].id;
+    for parameter in [
+        AutomationParameter::TrackGain,
+        AutomationParameter::TrackPan,
+        AutomationParameter::SendGain { bus },
+    ] {
+        project
+            .add_automation_track(
+                parameter.name(),
+                AutomationTarget {
+                    track: target,
+                    parameter,
+                },
+            )
+            .unwrap();
     }
+    project
+        .add_automation_track_with_value(
+            "Fixture parameter",
+            AutomationTarget {
+                track: target,
+                parameter: AutomationParameter::VstParameter {
+                    effect: Some(effect),
+                    id: 0,
+                },
+            },
+            0.5,
+        )
+        .unwrap();
+    let path = app.directory.path().join("pruning.rill");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open","path":path}));
     let before = app.inspect()["project"].clone();
-    // Escape restores Routing, the caller of the parameter picker. Return to
-    // the arranger explicitly before selecting a track on its canvas.
-    menu(&mut app, "Window", "Arranger");
+    assert_eq!(before["tracks"].as_array().unwrap().len(), 6);
     app.click("New instrument");
     menu(&mut app, "Window", "Effects");
     app.click("More");
@@ -641,17 +620,6 @@ fn parameter_picker_creates_independent_lanes_and_removal_prunes_only_affected_t
     assert_eq!(state["project"]["tracks"].as_array().unwrap().len(), 5);
     let state = menu(&mut app, "Edit", "Undo");
     assert_eq!(state["project"], before);
-    let state = menu(&mut app, "Window", "Mixer");
-    assert_eq!(
-        state["visible_labels"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter(|label| *label == "Mute")
-            .count(),
-        3,
-        "The two source channels and the real Master each have Mute"
-    );
     app.quit();
 }
 
@@ -678,7 +646,7 @@ fn installed_vst_parameter_discovery_creates_named_lane_with_current_value() {
     drop(plugin);
     let mut app = Harness::new();
     menu(&mut app, "Track", "Add MIDI track");
-    menu(&mut app, "Window", "Library");
+    menu(&mut app, "Window", "Device browser");
     app.click("Search instruments");
     let name = path.file_stem().unwrap().to_string_lossy();
     app.command(json!({"command":"text","text":name.chars().take(4).collect::<String>()}));
@@ -703,13 +671,13 @@ fn installed_vst_parameter_discovery_creates_named_lane_with_current_value() {
         .unwrap(),
         path.canonicalize().unwrap()
     );
-    menu(&mut app, "Track", "Add automation track…");
-    menu(&mut app, "Volume", "VST instrument parameter");
+    menu(&mut app, "Window", "Instrument");
+    app.click("Parameters…");
     wait_label(&mut app, &first_name);
     app.click("Search parameters");
     app.command(json!({"command":"text","text":selected.name}));
     wait_label(&mut app, &selected.name);
-    let state = app.click("Add automation track");
+    let state = app.click("Automate parameter");
     assert_eq!(state["error"], false, "{state}");
     let track = &state["project"]["tracks"][1];
     assert_eq!(track["name"], format!("New instrument · {}", selected.name));

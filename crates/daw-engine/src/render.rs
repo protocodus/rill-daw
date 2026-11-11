@@ -83,6 +83,10 @@ mod quality_tests;
 mod audio_overlap_tests;
 
 #[cfg(test)]
+#[path = "builtin_render_tests.rs"]
+mod builtin_render_tests;
+
+#[cfg(test)]
 #[path = "midi_loop_tests.rs"]
 mod midi_loop_tests;
 
@@ -308,6 +312,7 @@ impl CompensationDelay {
 enum Processor {
     None,
     Vst(Box<VstInstrument>),
+    Builtin(Box<crate::builtin::BuiltinDevice>),
 }
 
 /// Compiled lane ownership keeps graph lookup and allocation out of rendering.
@@ -524,6 +529,21 @@ fn initialize_automation_defaults(
     Ok(())
 }
 
+/// Built-in devices know their defaults without asking a helper process.
+fn initialize_builtin_defaults(parameters: &mut [PluginAutomation], device: Option<&str>) {
+    let Some(descriptor) = device.and_then(daw_devices::descriptor) else {
+        return;
+    };
+    for parameter in parameters
+        .iter_mut()
+        .filter(|parameter| parameter.manual.is_none())
+    {
+        parameter.manual = descriptor
+            .parameter(parameter.id)
+            .map(|spec| spec.default_normalized());
+    }
+}
+
 fn apply_plugin_automation(
     parameters: &mut [PluginAutomation],
     beat: f64,
@@ -570,15 +590,27 @@ fn apply_plugin_parameter_change(
     Ok(())
 }
 
-enum Insert {
-    Vst {
-        id: u64,
-        effect: Box<VstEffect>,
-        parameters: Vec<PluginAutomation>,
-        inputs: Vec<AuxInput>,
-        arrival_latency: u32,
-        main_delay: CompensationDelay,
-    },
+struct Insert {
+    id: u64,
+    effect: InsertProcessor,
+    parameters: Vec<PluginAutomation>,
+    inputs: Vec<AuxInput>,
+    arrival_latency: u32,
+    main_delay: CompensationDelay,
+}
+
+enum InsertProcessor {
+    Vst(Box<VstEffect>),
+    Builtin(Box<crate::builtin::BuiltinDevice>),
+}
+
+impl InsertProcessor {
+    fn latency_samples(&self) -> u32 {
+        match self {
+            Self::Vst(effect) => effect.latency_samples(),
+            Self::Builtin(device) => device.latency_samples(),
+        }
+    }
 }
 
 /// Every selected native input pair has one retained, double-precision sum.
@@ -1072,7 +1104,7 @@ impl RenderTrack {
         let BlockContext { start, count, .. } = context;
         let end = start + count as u64;
         let beats_per_sample = context.tempo / (60.0 * context.sample_rate as f64);
-        if matches!(self.processor, Processor::Vst(_)) {
+        if !matches!(self.processor, Processor::None) {
             self.collect_midi(context);
         }
         match &mut self.processor {
@@ -1134,6 +1166,29 @@ impl RenderTrack {
                         plugin.info().path.display()
                     )
                 })?;
+                for index in 0..count {
+                    self.mix_left[index] += f64::from(self.left[index]);
+                    self.mix_right[index] += f64::from(self.right[index]);
+                }
+            }
+            Processor::Builtin(device) => {
+                let position = start as i64 - i64::from(self.instrument_input_latency);
+                let beat = position as f64 * beats_per_sample;
+                apply_plugin_automation(&mut self.instrument_automation, beat, |id, value| {
+                    device.set_parameter(id, value);
+                    Ok(())
+                })?;
+                device.process_instrument(
+                    &daw_devices::ProcessContext {
+                        tempo: context.tempo,
+                        beat,
+                        playing: context.timeline,
+                    },
+                    &self.midi,
+                    &self.expression.messages,
+                    &mut self.left[..count],
+                    &mut self.right[..count],
+                )?;
                 for index in 0..count {
                     self.mix_left[index] += f64::from(self.left[index]);
                     self.mix_right[index] += f64::from(self.right[index]);
@@ -1249,25 +1304,46 @@ impl RenderTrack {
             self.right[index] = self.mix_right[index] as f32 * gain;
         }
         for insert in &mut self.inserts {
-            match insert {
-                Insert::Vst {
-                    effect,
-                    parameters,
-                    inputs,
-                    main_delay,
-                    arrival_latency,
-                    ..
-                } => {
-                    let position = if context.timeline {
-                        start as i64 - i64::from(*arrival_latency)
-                    } else {
-                        start as i64
+            let Insert {
+                effect,
+                parameters,
+                inputs,
+                main_delay,
+                arrival_latency,
+                ..
+            } = insert;
+            let position = if context.timeline {
+                start as i64 - i64::from(*arrival_latency)
+            } else {
+                start as i64
+            };
+            for index in 0..count {
+                let frame = main_delay.process([self.left[index], self.right[index]]);
+                self.left[index] = frame[0];
+                self.right[index] = frame[1];
+            }
+            match effect {
+                InsertProcessor::Builtin(device) => {
+                    apply_plugin_automation(
+                        parameters,
+                        position as f64 * beats_per_sample,
+                        |id, value| {
+                            device.set_parameter(id, value);
+                            Ok(())
+                        },
+                    )?;
+                    let transport = daw_devices::ProcessContext {
+                        tempo: context.tempo,
+                        beat: position as f64 * beats_per_sample,
+                        playing: context.timeline,
                     };
-                    for index in 0..count {
-                        let frame = main_delay.process([self.left[index], self.right[index]]);
-                        self.left[index] = frame[0];
-                        self.right[index] = frame[1];
-                    }
+                    device.process_effect(
+                        &transport,
+                        &mut self.left[..count],
+                        &mut self.right[..count],
+                    )?;
+                }
+                InsertProcessor::Vst(effect) => {
                     for input in inputs.iter_mut() {
                         input.prepare(count);
                     }
@@ -1418,6 +1494,7 @@ pub(crate) struct Renderer {
     pub(crate) plugin_errors: u64,
     preview: bool,
     audition: Option<(u64, u8, u8)>,
+    audition_wheels: Option<(u64, f32, f32)>,
     midi_input_notes: Vec<(u64, u8, u8)>,
     expressive_input: Vec<(u64, u8, u8, daw_plugins::ExpressiveMidiData)>,
     live_edit_context: Arc<LiveEditContext>,
@@ -1470,8 +1547,9 @@ impl Renderer {
                 plugin.set_block_transport(policy)?;
             }
             for insert in &mut track.inserts {
-                let Insert::Vst { effect, .. } = insert;
-                effect.set_block_transport(policy)?;
+                if let InsertProcessor::Vst(effect) = &mut insert.effect {
+                    effect.set_block_transport(policy)?;
+                }
             }
         }
         Ok(())
@@ -1491,8 +1569,9 @@ impl Renderer {
                 add(plugin.ipc_stats());
             }
             for insert in &track.inserts {
-                let Insert::Vst { effect, .. } = insert;
-                add(effect.ipc_stats());
+                if let InsertProcessor::Vst(effect) = &insert.effect {
+                    add(effect.ipc_stats());
+                }
             }
         }
         total
@@ -1783,11 +1862,37 @@ impl Renderer {
                     local_tail += (plugin.tail_samples() as u64).min(sample_rate as u64 * 30);
                     (Processor::Vst(Box::new(plugin)), latency)
                 }
+                Instrument::Builtin { device } if enabled && track.kind == TrackKind::Midi => {
+                    // An ID this version does not know stays silent.
+                    match crate::builtin::BuiltinDevice::create(
+                        device,
+                        sample_rate,
+                        BLOCK,
+                        &track.instrument_parameters,
+                    ) {
+                        Some(device) => {
+                            local_tail +=
+                                (device.tail_samples() as u64).min(sample_rate as u64 * 30);
+                            let latency = device.latency_samples();
+                            (Processor::Builtin(Box::new(device)), latency)
+                        }
+                        None => (Processor::None, 0),
+                    }
+                }
                 _ => (Processor::None, 0),
             };
             let mut instrument_automation = plugin_automation(project, track.id, None);
-            if let Processor::Vst(plugin) = &processor {
-                initialize_automation_defaults(&mut instrument_automation, || plugin.parameters())?;
+            match &processor {
+                Processor::Vst(plugin) => {
+                    initialize_automation_defaults(&mut instrument_automation, || {
+                        plugin.parameters()
+                    })?
+                }
+                Processor::Builtin(_) => initialize_builtin_defaults(
+                    &mut instrument_automation,
+                    track.instrument.builtin_device(),
+                ),
+                Processor::None => {}
             }
             let control =
                 |parameter, manual| AutomatedValue::new(project, track.id, parameter, manual);
@@ -1833,11 +1938,41 @@ impl Renderer {
                         local_tail += (effect.tail_samples() as u64).min(sample_rate as u64 * 30);
                         let mut parameters = plugin_automation(project, track.id, Some(slot.id));
                         initialize_automation_defaults(&mut parameters, || effect.parameters())?;
-                        Insert::Vst {
+                        Insert {
                             id: slot.id,
-                            effect: Box::new(effect),
+                            effect: InsertProcessor::Vst(Box::new(effect)),
                             parameters,
                             inputs,
+                            arrival_latency: 0,
+                            main_delay: CompensationDelay::new(0),
+                        }
+                    }
+                    Effect::Builtin { device } => {
+                        ensure!(
+                            slot.inputs.is_empty(),
+                            "Built-in insert {} on {} has no auxiliary inputs",
+                            slot.name,
+                            track.name
+                        );
+                        // An ID this version does not know passes audio
+                        // through; the app shows it as an unknown device.
+                        let Some(device) = crate::builtin::BuiltinDevice::create(
+                            device,
+                            sample_rate,
+                            BLOCK,
+                            &slot.parameters,
+                        ) else {
+                            continue;
+                        };
+                        latency = latency.saturating_add(device.latency_samples());
+                        local_tail += (device.tail_samples() as u64).min(sample_rate as u64 * 30);
+                        let mut parameters = plugin_automation(project, track.id, Some(slot.id));
+                        initialize_builtin_defaults(&mut parameters, slot.effect.builtin_device());
+                        Insert {
+                            id: slot.id,
+                            effect: InsertProcessor::Builtin(Box::new(device)),
+                            parameters,
+                            inputs: Vec::new(),
                             arrival_latency: 0,
                             main_delay: CompensationDelay::new(0),
                         }
@@ -1905,6 +2040,7 @@ impl Renderer {
             }
             let expression_support = match &processor {
                 Processor::Vst(plugin) => midi_expression::Support::query(plugin)?,
+                Processor::Builtin(_) => midi_expression::Support::builtin(),
                 Processor::None => midi_expression::Support::default(),
             };
             let expression =
@@ -1996,7 +2132,7 @@ impl Renderer {
                 input_routes.push((input, None, slot));
             }
             for (effect_index, insert) in tracks[target].inserts.iter().enumerate() {
-                let Insert::Vst { id, inputs, .. } = insert;
+                let Insert { id, inputs, .. } = insert;
                 let model_slot = model
                     .inserts
                     .iter()
@@ -2092,7 +2228,7 @@ impl Renderer {
             );
             let mut arrival = track.source_arrival;
             for (effect_index, insert) in track.inserts.iter_mut().enumerate() {
-                let Insert::Vst {
+                let Insert {
                     effect,
                     arrival_latency,
                     main_delay,
@@ -2162,7 +2298,7 @@ impl Renderer {
                             ..
                         },
                     ) => {
-                        let Insert::Vst {
+                        let Insert {
                             arrival_latency, ..
                         } = &tracks[target].inserts[effect];
                         *arrival_latency
@@ -2282,6 +2418,7 @@ impl Renderer {
             plugin_errors: 0,
             preview: false,
             audition: None,
+            audition_wheels: None,
             midi_input_notes: Vec::with_capacity(4096),
             expressive_input: Vec::with_capacity(16384),
             live_edit_context: Arc::new(LiveEditContext::new(
@@ -2355,12 +2492,12 @@ impl Renderer {
             .find(|track| track.id == track_id)
             .context("Track is not in the render graph")?;
         if let Some(effect_id) = effect_id {
-            let Insert::Vst {
+            let Insert {
                 effect, parameters, ..
             } = track
                 .inserts
                 .iter_mut()
-                .find(|insert| matches!(insert, Insert::Vst { id, .. } if *id == effect_id))
+                .find(|insert| matches!(insert, Insert { id, .. } if *id == effect_id))
                 .context("Insert is not active in the render graph")?;
             apply_plugin_parameter_change(
                 parameters,
@@ -2368,12 +2505,18 @@ impl Renderer {
                 value,
                 override_sequence,
                 |id, value| {
-                    effect.set_parameter(id, value).with_context(|| {
+                    match effect {
+                    InsertProcessor::Vst(effect) => effect.set_parameter(id, value).with_context(|| {
                         format!(
                             "Setting parameter {parameter_id} of effect \"{}\" ({}) on channel \"{}\" (ID {})",
                             effect.info().name, effect.info().path.display(), track.name, track.id
                         )
-                    })
+                    }),
+                    InsertProcessor::Builtin(device) => {
+                        device.set_parameter(id, value);
+                        Ok(())
+                    }
+                }
                 },
             )?;
         } else if let Processor::Vst(plugin) = &mut track.processor {
@@ -2391,8 +2534,19 @@ impl Renderer {
                     })
                 },
             )?;
+        } else if let Processor::Builtin(device) = &mut track.processor {
+            apply_plugin_parameter_change(
+                &mut track.instrument_automation,
+                parameter_id,
+                value,
+                override_sequence,
+                |id, value| {
+                    device.set_parameter(id, value);
+                    Ok(())
+                },
+            )?;
         } else {
-            bail!("Track has no assigned VST instrument")
+            bail!("Track has no assigned instrument")
         }
         Ok(())
     }
@@ -2427,11 +2581,14 @@ impl Renderer {
         self.end_sample = self.timeline_end_sample;
         if !loop_wrap {
             self.audition = None;
+            // Instruments reset on a seek; send the wheels again.
+            self.audition_wheels = None;
             self.midi_input_notes.clear();
             self.expressive_input.clear();
         }
         self.source_sample = sample;
         self.logical_sample = sample;
+        let wheels = self.audition_wheels;
         for track in self.tracks.iter_mut().flatten() {
             track.audio_transition_cursor = track.audio_transition.len();
             for parameter in &mut track.instrument_automation {
@@ -2446,7 +2603,7 @@ impl Renderer {
             }
             for insert in &mut track.inserts {
                 match insert {
-                    Insert::Vst {
+                    Insert {
                         effect,
                         parameters,
                         main_delay,
@@ -2456,6 +2613,13 @@ impl Renderer {
                         for parameter in parameters {
                             parameter.previous = None;
                         }
+                        let effect = match effect {
+                            InsertProcessor::Vst(effect) => effect,
+                            InsertProcessor::Builtin(device) => {
+                                device.reset();
+                                continue;
+                            }
+                        };
                         if let Err(error) = effect.reset() {
                             if !self.tolerate_plugin_failure {
                                 return Err(error);
@@ -2472,7 +2636,7 @@ impl Renderer {
                             self.plugin_errors += 1;
                         }
                     }
-                    Insert::Vst { .. } => {}
+                    Insert { .. } => {}
                 }
             }
             track.event_cursor = track.events.partition_point(|event| event.sample < sample);
@@ -2480,6 +2644,21 @@ impl Renderer {
             track
                 .expression
                 .seek(sample, track.instrument_input_latency, !loop_wrap);
+            // A loop wrap resets touched controllers to their defaults; the
+            // panel's wheels are still where the user holds them.
+            if let Some((_, pitch, modulation)) = wheels.filter(|(id, _, _)| *id == track.id) {
+                use daw_plugins::ExpressiveController as Controller;
+                track.expression.chase_after_seek(
+                    0,
+                    Controller::PitchBend,
+                    (f64::from(pitch) + 1.0) / 2.0,
+                );
+                track.expression.chase_after_seek(
+                    0,
+                    Controller::ControlChange(1),
+                    f64::from(modulation),
+                );
+            }
             track.chase.clear();
             if loop_wrap {
                 // Looping restarts sequencer notes, not the independent live
@@ -2516,13 +2695,14 @@ impl Renderer {
                         self.plugin_errors += 1;
                     }
                 }
-                Processor::Vst(_) => {}
+                Processor::Builtin(device) if !track.plugin_failed && !loop_wrap => device.reset(),
+                Processor::Vst(_) | Processor::Builtin(_) => {}
             }
             for &note in track.notes.iter() {
                 if !self.preview && note.start < sample && note.end > sample {
                     match &mut track.processor {
                         Processor::None => {}
-                        Processor::Vst(_) => track.chase.push(Event {
+                        Processor::Vst(_) | Processor::Builtin(_) => track.chase.push(Event {
                             sample,
                             note,
                             on: true,
@@ -2586,7 +2766,7 @@ impl Renderer {
                 .find(|track| track.id == id)
                 .context("Audition track is not in the render graph")?;
             ensure!(
-                matches!(track.processor, Processor::Vst(_)),
+                !matches!(track.processor, Processor::None),
                 "Assign a plugin instrument to audition notes"
             );
             track.live_midi.push(MidiMessage {
@@ -2598,6 +2778,58 @@ impl Renderer {
             self.audition = note;
         }
         Ok(())
+    }
+
+    /// Sends changed panel wheels to their track's instrument as pitch bend
+    /// and mod wheel, through the live input queue. Detaching the wheels
+    /// centres the bend they left behind, as a wheel springs back; the mod
+    /// wheel stays where it was, as a hardware one does.
+    pub(crate) fn set_audition_wheels(&mut self, wheels: Option<(u64, f32, f32)>) {
+        use daw_plugins::ExpressiveController as Controller;
+        let previous = std::mem::replace(&mut self.audition_wheels, wheels);
+        if previous == wheels {
+            return;
+        }
+        if let Some((id, pitch, _)) = previous
+            && pitch != 0.0
+            && wheels.is_none_or(|(next, _, _)| next != id)
+        {
+            self.send_live_controller(id, Controller::PitchBend, 0.5);
+        }
+        if let Some((id, pitch, modulation)) = wheels {
+            self.send_live_controller(id, Controller::PitchBend, (f64::from(pitch) + 1.0) / 2.0);
+            self.send_live_controller(id, Controller::ControlChange(1), f64::from(modulation));
+        }
+    }
+
+    fn send_live_controller(
+        &mut self,
+        id: u64,
+        controller: daw_plugins::ExpressiveController,
+        value: f64,
+    ) {
+        use daw_plugins::{ExpressiveMidiData as Data, ExpressiveMidiMessage as Message};
+        let Some(track) = self
+            .tracks
+            .iter_mut()
+            .flatten()
+            .find(|track| track.id == id)
+        else {
+            return;
+        };
+        if track.expression.live.len() < 4096 {
+            track.expression.live.push((
+                0,
+                Message {
+                    offset: 0,
+                    data: Data::Controller {
+                        channel: 0,
+                        controller,
+                        value,
+                    },
+                },
+            ));
+        }
     }
 
     /// Normalize the complete held MIDI input chord on the render worker. A
@@ -2795,7 +3027,7 @@ impl Renderer {
                     .iter_mut()
                     .flatten()
                     .find(|track| track.id == id)
-                && matches!(track.processor, Processor::Vst(_))
+                && !matches!(track.processor, Processor::None)
             {
                 track.live_midi.push(MidiMessage {
                     offset,
@@ -2888,7 +3120,7 @@ impl Renderer {
                 input.clear(context.count);
             }
             for insert in &mut track.inserts {
-                let Insert::Vst { inputs, .. } = insert;
+                let Insert { inputs, .. } = insert;
                 for input in inputs {
                     input.clear(context.count);
                 }

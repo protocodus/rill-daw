@@ -71,10 +71,103 @@ pub enum Icon {
     FitSelection,
     Crossfade,
     Input,
+    Arranger,
+    Grid,
+    Nudge,
+    Sparkle,
+    Import,
+    Info,
+    Reset,
+    Marker,
+    Freeze,
+    Note,
+    Wand,
+    Clip,
+    Filter,
+    Power,
 }
 
 impl Icon {
     pub fn for_label(label: &str) -> Option<Self> {
+        Self::for_exact_label(label).or_else(|| Self::for_label_pattern(label))
+    }
+
+    /// Labels built from a verb and a subject ("Add bus", "Cancel export",
+    /// "Snap 1/16") share the verb's icon, so new commands get one without a
+    /// table entry. Exact labels above win.
+    fn for_label_pattern(label: &str) -> Option<Self> {
+        let label = label.trim_end_matches('…').trim_end_matches("...");
+        // Menu-bar titles and on-screen keys stay text; "+ Insert" already
+        // carries its own plus.
+        if matches!(
+            label,
+            "File" | "Edit" | "Track" | "Window" | "Help" | "Space" | "Backspace" | "123"
+        ) || label.starts_with("+ ")
+        {
+            return None;
+        }
+        let first = label.split(' ').next().unwrap_or(label);
+        Some(match first {
+            "AI" | "Assistant" => Self::Sparkle,
+            "Add" | "New" | "Insert" | "Create" => {
+                if label.contains("marker") {
+                    Self::Marker
+                } else {
+                    Self::Add
+                }
+            }
+            "Delete" | "Remove" => Self::Delete,
+            "Cancel" | "Close" | "Dismiss" | "Don't" => Self::Close,
+            "Apply" | "Done" | "Continue" | "Use" | "Recommended" | "Keep" => Self::Check,
+            "Split" | "Slice" | "Cut" | "Trim" | "Strip" => Self::Cut,
+            "Copy" => Self::Copy,
+            "Paste" => Self::Paste,
+            "Clear" if label.contains("filter") => Self::Filter,
+            "Clear" | "Silence" => Self::Erase,
+            "Reset" | "Center" | "Return" => Self::Reset,
+            "Retry" | "Refresh" | "Rescan" | "Read" => Self::Refresh,
+            "Select" => Self::Select,
+            "Export" => Self::Export,
+            "Import" | "Recover" => Self::Import,
+            "Fit" => Self::Fit,
+            "Save" => Self::Save,
+            "Rename" | "Type" => Self::Pencil,
+            "Loop" | "Repeat" => Self::Loop,
+            "Freeze" => Self::Freeze,
+            "Choose" | "Change" | "Keyboard" | "Try" => Self::Instrument,
+            "Snap" | "Quantize" | "Grid" => Self::Grid,
+            "Nudge" => Self::Nudge,
+            "Arranger" => Self::Arranger,
+            "Show" | "Open" => {
+                if label.contains("Arranger") {
+                    Self::Arranger
+                } else if label.contains("Mixer") || label.contains("channel") {
+                    Self::Mixer
+                } else {
+                    Self::Editor
+                }
+            }
+            "Details" | "Device" | "About" | "Inspect" => Self::Info,
+            "Search" => Self::Search,
+            "Markers" => Self::Marker,
+            "Takes" | "Layer" | "Group" => Self::Stack,
+            "Audio" if label.contains("takes") => Self::Stack,
+            "Audio" if label.contains("setup") => Self::Settings,
+            "Transpose" | "Pitch" | "Note" | "Length" | "Key" => Self::Note,
+            "Process" | "Humanize" | "Smooth" | "Boundary" | "Expression" => Self::Wand,
+            "Clip" => Self::Clip,
+            "Plug-in" => Self::Folder,
+            "Previous" => Self::Back,
+            "Next" => Self::ChevronRight,
+            "Up" => Self::Up,
+            "Down" => Self::Down,
+            "Quit" => Self::Power,
+            "Route" | "Master" | "Expand" | "Enable" => Self::Routing,
+            _ => return None,
+        })
+    }
+
+    fn for_exact_label(label: &str) -> Option<Self> {
         Some(match label {
             "Select" => Self::Select,
             "Pencil" => Self::Pencil,
@@ -122,12 +215,13 @@ impl Icon {
             "Apply" | "Apply quantize" | "Assign to selected track" => Self::Check,
             "Setup" | "Properties" | "Manage" => Self::Settings,
             "Add folder" | "Browse…" => Self::Folder,
-            "Library" | "Browse effects" => Self::Library,
+            "Device browser" | "Browse effects" => Self::Library,
             "Instrument" | "Notes" | "Add instrument…" | "Create instrument track" => {
                 Self::Instrument
             }
             "Effects" | "Add to effect chain" => Self::Effect,
-            "Mixer" | "Channel" => Self::Mixer,
+            "Mixer" => Self::Mixer,
+            "Channel" => Self::Settings,
             "Routing" | "Create send effect" => Self::Routing,
             "Edit automation" | "Add automation track" | "Add automation track…" | "Automate" => {
                 Self::Automation
@@ -143,7 +237,7 @@ impl Icon {
             }
             "Reverse" => Self::Reverse,
             "Normalize" => Self::Normalize,
-            "Analyze" | "Transients" => Self::Waveform,
+            "Analyze" | "Transients" | "Warp" => Self::Waveform,
             "History…" => Self::History,
             "Semitone up" | "Octave up" => Self::Up,
             "Semitone down" | "Octave down" => Self::Down,
@@ -423,7 +517,7 @@ impl Icon {
                 line(&[(19., 5.), (5., 19.)]);
             }
             Self::Check => line(&[(3., 12.), (9., 18.), (21., 5.)]),
-            Self::Settings | Self::Mixer => {
+            Self::Settings => {
                 for (x, y) in [(5., 8.), (12., 16.), (19., 10.)] {
                     line(&[(x, 3.), (x, y - 2.)]);
                     line(&[(x, y + 2.), (x, 21.)]);
@@ -590,6 +684,101 @@ impl Icon {
                 line(&[(3., 12.), (14., 12.)]);
                 line(&[(10., 8.), (14., 12.), (10., 16.)]);
                 line(&[(17., 4.), (21., 4.), (21., 20.), (17., 20.)]);
+            }
+            // The two home views: five track rows, five channel strips.
+            Self::Arranger => {
+                for y in [4., 8., 12., 16., 20.] {
+                    line(&[(3., y), (21., y)]);
+                }
+            }
+            Self::Mixer => {
+                for x in [4., 8., 12., 16., 20.] {
+                    line(&[(x, 3.), (x, 21.)]);
+                }
+            }
+            Self::Grid => {
+                box_at(3., 3., 18., 18.);
+                line(&[(3., 12.), (21., 12.)]);
+                line(&[(12., 3.), (12., 21.)]);
+            }
+            Self::Nudge => {
+                line(&[(3., 12.), (21., 12.)]);
+                line(&[(7., 8.), (3., 12.), (7., 16.)]);
+                line(&[(17., 8.), (21., 12.), (17., 16.)]);
+            }
+            Self::Sparkle => line(&[
+                (12., 2.),
+                (14., 10.),
+                (22., 12.),
+                (14., 14.),
+                (12., 22.),
+                (10., 14.),
+                (2., 12.),
+                (10., 10.),
+                (12., 2.),
+            ]),
+            Self::Import => {
+                line(&[(12., 3.), (12., 15.)]);
+                line(&[(7., 10.), (12., 15.), (17., 10.)]);
+                line(&[(4., 15.), (4., 21.), (20., 21.), (20., 15.)]);
+            }
+            Self::Info => {
+                circle(12., 12., 9.);
+                line(&[(12., 11.), (12., 17.)]);
+                painter.circle_filled(point(12., 7.5), size / 24.0, color);
+            }
+            Self::Reset => {
+                // Three quarters of a circle, opening at the top left, with
+                // the arrowhead pointing back along it.
+                let arc: Vec<_> = (0..=12)
+                    .map(|step| {
+                        let angle = std::f32::consts::PI * (-0.75 + 1.5 * step as f32 / 12.0);
+                        point(12. + 8. * angle.sin(), 13. - 8. * angle.cos())
+                    })
+                    .collect();
+                painter.add(Shape::line(arc, stroke));
+                line(&[(3., 3.), (6.3, 7.3), (10.5, 5.)]);
+            }
+            Self::Marker => {
+                line(&[(6., 3.), (6., 21.)]);
+                line(&[(6., 4.), (18., 7.5), (6., 11.)]);
+            }
+            Self::Freeze => {
+                line(&[(12., 3.), (12., 21.)]);
+                line(&[(4.2, 7.5), (19.8, 16.5)]);
+                line(&[(4.2, 16.5), (19.8, 7.5)]);
+            }
+            Self::Note => {
+                circle(8., 17., 3.);
+                line(&[(11., 17.), (11., 4.), (18., 6.)]);
+            }
+            Self::Wand => {
+                line(&[(4., 20.), (13., 11.)]);
+                line(&[(17., 3.), (17., 11.)]);
+                line(&[(13., 7.), (21., 7.)]);
+            }
+            Self::Clip => {
+                box_at(3., 6., 18., 12.);
+                line(&[(3., 10.), (21., 10.)]);
+            }
+            Self::Filter => line(&[
+                (3., 5.),
+                (21., 5.),
+                (14., 13.),
+                (14., 20.),
+                (10., 18.),
+                (10., 13.),
+                (3., 5.),
+            ]),
+            Self::Power => {
+                let arc: Vec<_> = (0..=12)
+                    .map(|step| {
+                        let angle = std::f32::consts::PI * (0.2 + 1.6 * step as f32 / 12.0);
+                        point(12. + 8. * angle.sin(), 13. - 8. * angle.cos())
+                    })
+                    .collect();
+                painter.add(Shape::line(arc, stroke));
+                line(&[(12., 3.), (12., 12.)]);
             }
             Self::Grip => {
                 for x in [8., 16.] {
@@ -774,6 +963,8 @@ impl IconButton {
                 icon,
                 Some(
                     Icon::Back
+                        | Icon::Arranger
+                        | Icon::Info
                         | Icon::View
                         | Icon::Mixer
                         | Icon::Routing
@@ -799,6 +990,10 @@ impl IconButton {
             truncate: false,
             wrap_mode: None,
         }
+    }
+    pub fn icon(mut self, icon: Icon) -> Self {
+        self.icon = Some(icon);
+        self
     }
     pub fn fill(mut self, fill: Color32) -> Self {
         self.fill = Some(fill);
@@ -1094,5 +1289,30 @@ impl Widget for IconButton {
             );
         }
         output.response
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Icon;
+
+    #[test]
+    fn labels_resolve_to_consistent_icons() {
+        for (label, icon) in [
+            ("Arranger", Icon::Arranger),
+            ("Show in Arranger", Icon::Arranger),
+            ("Mixer", Icon::Mixer),
+            ("Show in Mixer", Icon::Mixer),
+            ("Add bus", Icon::Add),
+            ("Delete track", Icon::Delete),
+            ("Export…", Icon::Export),
+            ("Cancel", Icon::Close),
+        ] {
+            assert_eq!(Icon::for_label(label), Some(icon), "{label}");
+        }
+        // Menu-bar titles and digits stay text.
+        for label in ["File", "Edit", "123"] {
+            assert_eq!(Icon::for_label(label), None, "{label}");
+        }
     }
 }

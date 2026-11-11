@@ -356,7 +356,7 @@ fn zero_crossing_snap_changes_cursor_cut_and_trim_together_and_shift_bypasses() 
     let mut app = fixture(false, true);
     let original = app.inspect()["project"].clone();
     near(&at(&mut app, 2.0, false)["audio_editor"]["cursor"], 2.0);
-    app.click("Snap 1/16");
+    app.click("Snap grid");
     assert_eq!(
         app.click("Source zero crossings")["audio_editor"]["snap_zero_crossings"],
         true
@@ -444,7 +444,7 @@ fn exposed_tools_and_common_controls_work_in_narrow_and_wide_audio_editors() {
             "Stretch",
             "Fade in",
             "Fade out",
-            "Snap 1/16",
+            "Snap grid",
             "Clip",
             "View",
             "Tool help",

@@ -1,4 +1,5 @@
-//! Every popup draws its active surface above one dimmed, contextual backdrop.
+//! Every dialog and device panel draws its active surface above one dimmed,
+//! contextual backdrop; full screens replace the workspace without dimming it.
 mod common;
 
 use common::Harness;
@@ -56,6 +57,24 @@ fn assert_backdrop(state: &Value, foreground: &str) {
             .unwrap()
             .iter()
             .all(|side| side.as_u64().unwrap() <= 512)
+    );
+}
+
+/// A page fills the workspace edge to edge; nothing beneath it needs dimming.
+fn assert_page(state: &Value, title: &str) {
+    assert!(dim_layers(state).is_empty(), "{title} must not dim");
+    assert!(state["backdrop_blur"].as_array().unwrap().is_empty());
+    let page = state["window_rects"].as_array().unwrap().last().unwrap();
+    let [left, _, right, bottom] = bounds(page);
+    assert_eq!([left, right, bottom], [0.0, WIDTH, HEIGHT], "{title}");
+    assert!(
+        state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label["text"] == title),
+        "Missing {title}: {}",
+        state["visible_labels"]
     );
 }
 
@@ -163,14 +182,17 @@ fn utility_backdrops_preserve_context_and_clear_after_nested_navigation() {
             ("Instrument", "Instrument of Backdrop synth"),
             ("Effects", "Effects of Backdrop synth"),
             ("Routing", "Routing of Backdrop synth"),
-            ("Automation", "Add automation"),
             ("Properties", "Properties · Backdrop phrase"),
-            ("Library", "Library"),
+            ("Device browser", "Device browser"),
             ("Setup", "Setup"),
         ] {
             window(&mut app, menu);
             let state = painted(&mut app);
-            assert_backdrop(&state, title);
+            if matches!(menu, "Automation" | "Device browser") {
+                assert_page(&state, title);
+            } else {
+                assert_backdrop(&state, title);
+            }
             assert!(state["popup_context"]["shapes"].as_u64().unwrap() > 0);
             assert_eq!(state["popup_context"]["source"], "Arrangement");
             assert_eq!(state["project"], original["project"]);
@@ -190,7 +212,7 @@ fn utility_backdrops_preserve_context_and_clear_after_nested_navigation() {
         for _ in 0..3 {
             app.click("+ Insert");
             let nested = painted(&mut app);
-            assert_backdrop(&nested, "Library");
+            assert_page(&nested, "Device browser");
             assert_eq!(
                 nested["popup_context"]["source"],
                 "Effects · Backdrop synth"

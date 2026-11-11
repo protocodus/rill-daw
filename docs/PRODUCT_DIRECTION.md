@@ -18,11 +18,11 @@ post-production delivery are permanently outside that scope. Their absence is
 not a product deficiency or a roadmap gap. Competitor video capabilities below
 provide context only; priorities and comparisons concern making music.
 
-Rill is intentionally a plugin-based composition and arrangement workstation.
-Built-in instruments and effects remain outside its scope. That decision reduces
-development and interface breadth, but puts sound installation, compatibility
-and preset discovery into the user's starting workflow. Improve that workflow
-rather than treating a bundled synthesizer collection as the next requirement.
+Rill is a plugin-based composition and arrangement workstation with a small
+built-in device set ([R1_DEVICES.md](R1_DEVICES.md)): a new MIDI track starts
+with the R1 Mini synth, so a first part is audible before any plug-in is
+installed. Third-party plug-ins remain the main sound source; keep improving
+their installation, compatibility and preset discovery.
 
 Rill is a functioning early DAW with substantial editing, recording, mixing and
 AI tooling. It is more than a sketchpad, but it is not yet a general replacement
@@ -311,9 +311,9 @@ Official screenshot references, **not firsthand pixel comparisons**:
    sessions. Use screenshots to identify hierarchy problems, then interaction
    tests to verify that tasks became easier.
 
-These are ordered outcomes, not calendar estimates. Keep built-in sound devices,
-a Session-style launcher, notation and specialist immersive music work outside
-the immediate scope. Validate a repeatable 3–5-minute song with real plugins,
+These are ordered outcomes, not calendar estimates. Keep built-in devices
+beyond the R1 set, a Session-style launcher, notation and specialist immersive
+music work outside the immediate scope. Validate a repeatable 3–5-minute song with real plugins,
 recording, buses, returns, automation, Undo, save/reopen and delivery; include
 worker failure and sustained hardware playback. Publish tested configurations
 and practical limits rather than promising universal safety or performance.

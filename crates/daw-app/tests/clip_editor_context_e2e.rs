@@ -231,7 +231,7 @@ fn repeated_clip_shows_song_span_local_ruler_and_stable_properties_without_losin
             let popup = app.click("Properties");
             assert_eq!(popup["popups"]["properties"], true);
             assert_eq!(popup["inspector_page"], "Clip");
-            // Utility windows soften the workspace behind them with one blur.
+            // A dialog softens the workspace behind it with one blur.
             assert_eq!(popup["backdrop_blur"].as_array().unwrap().len(), 1);
             let returned = app.key("Escape");
             unchanged(&returned, &original);

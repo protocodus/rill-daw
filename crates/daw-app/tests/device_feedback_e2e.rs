@@ -77,45 +77,27 @@ fn editor_fixture() -> (tempfile::TempDir, std::path::PathBuf) {
 }
 
 #[test]
-fn device_library_can_move_and_resize_without_changing_the_project() {
+fn device_library_fills_the_workspace_and_back_keeps_the_project() {
     let mut app = Harness::new();
     let before = menu(&mut app, "Track", "Add instrument track…");
-    let window = &before["library"]["window"];
+    // The browser is a page: it takes the workspace below the transport,
+    // edge to edge, and the title does not drag it anywhere.
+    let window = before["library"]["window"].clone();
+    assert_eq!(window["max"][0], before["viewport"][0]);
+    assert_eq!(window["max"][1], before["viewport"][1]);
     let title = before["label_rects"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|label| label["text"] == "Library")
+        .find(|label| label["text"] == "Device browser")
         .unwrap();
-    let moved = drag(&mut app, center(title), (70.0, 35.0));
-    let after = &moved["library"]["window"];
-    assert!(
-        after["min"][0].as_f64().unwrap() - window["min"][0].as_f64().unwrap() > 50.0,
-        "{window} -> {after}"
-    );
-    assert!(after["min"][1].as_f64().unwrap() - window["min"][1].as_f64().unwrap() > 25.0);
-    let at = (
-        after["max"][0].as_f64().unwrap() - 3.0,
-        after["max"][1].as_f64().unwrap() - 3.0,
-    );
-    let resized = drag(&mut app, at, (-120.0, -90.0));
-    let resized_window = &resized["library"]["window"];
-    assert!(
-        resized_window["max"][0].as_f64().unwrap() < after["max"][0].as_f64().unwrap() - 80.0,
-        "{after} -> {resized_window}"
-    );
-    // The instrument browser follows both resize axes while keeping its
-    // catalogue and actions reachable.
-    assert!(
-        resized_window["max"][1].as_f64().unwrap() < after["max"][1].as_f64().unwrap() - 50.0,
-        "{after} -> {resized_window}"
-    );
-    assert!(visible(&resized, "Search instruments"));
-    assert_eq!(resized["project"], before["project"]);
-    assert_eq!(resized["history"], before["history"]);
-    app.key("Escape");
-    let recalled = menu(&mut app, "Window", "Library");
-    assert_eq!(recalled["library"]["window"], resized["library"]["window"]);
+    let dragged = drag(&mut app, center(title), (70.0, 35.0));
+    assert_eq!(dragged["library"]["window"], window);
+    assert!(visible(&dragged, "Search instruments"));
+    let back = app.click("Back");
+    assert_eq!(back["popups"]["library"], false);
+    assert_eq!(back["project"], before["project"]);
+    assert_eq!(back["history"], before["history"]);
     app.quit();
 }
 
@@ -127,7 +109,7 @@ fn unknown_plugins_are_separate_and_explain_missing_or_malformed_metadata() {
     std::fs::create_dir_all(&broken).unwrap();
     std::fs::write(broken.join("moduleinfo.json"), "{not valid JSON").unwrap();
     let mut app = Harness::with_vst_path(fixture.path());
-    menu(&mut app, "Window", "Library");
+    menu(&mut app, "Window", "Device browser");
     app.click("Search instruments");
     app.command(json!({"command":"text","text":"Rill"}));
     common::wait_library_device(&mut app, "Rill Fixture A");

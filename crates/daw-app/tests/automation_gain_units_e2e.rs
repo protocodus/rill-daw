@@ -273,7 +273,7 @@ fn track_and_send_points_use_db_with_precise_commit_undo_and_recall() {
 }
 
 #[test]
-fn gain_popup_bounds_and_override_entry_keep_normalized_curves() {
+fn gain_popup_bounds_keep_normalized_curves() {
     for send in [false, true] {
         let (mut app, lane_id, point_id) = fixture(send, 64.0, 4, 0.2);
         let baseline = app.inspect();
@@ -299,24 +299,6 @@ fn gain_popup_bounds_and_override_entry_keep_normalized_curves() {
             app.key("Escape");
         }
 
-        let overridden = app.click("Override automation");
-        assert!(lane(&overridden, lane_id)["override_value"].is_number());
-        open_gain(&mut app, "override_value_rect");
-        let held = enter(&mut app, "-12");
-        near(
-            lane(&held, lane_id)["override_value"].as_f64().unwrap(),
-            10.0_f64.powf(-12.0 / 20.0) / if send { 16.0 } else { 1.5 },
-        );
-        assert_eq!(
-            lane(&held, lane_id)["points"],
-            lane(&baseline, lane_id)["points"]
-        );
-        let resumed = app.click("Resume automation");
-        assert!(lane(&resumed, lane_id)["override_value"].is_null());
-        assert_eq!(
-            lane(&resumed, lane_id)["points"],
-            lane(&baseline, lane_id)["points"]
-        );
         app.quit();
     }
 }

@@ -76,8 +76,8 @@ fn fade_handles_reveal_near_corners_keep_drag_ownership_and_leave_subtle_applied
                 let state = app.inspect();
                 let body = &region(&state, id)["content_rect"];
                 let at = (center(body).0, body["max"][1].as_f64().unwrap() - 3.0);
-                pointer(&mut app, "double_click", at);
-                assert_eq!(app.inspect()["view"], "Clip");
+                app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":at.0,"y":at.1}));
+                assert_eq!(app.click("Edit audio")["view"], "Clip");
             }
             pointer(&mut app, "move", (1279.0, 0.0));
             let before = app.inspect();

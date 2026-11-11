@@ -132,13 +132,13 @@ fn individual_arranger_tools_keep_full_targets_mouse_access_and_shortcut_parity(
             app.command(json!({"command":"viewport", "width":width, "height":720, "pixels_per_point":density}));
             app.click("Select");
             let state = app.command(json!({"command":"inspect", "paint":true}));
-            let initial_snap = label(&state, "Snap 1/16").clone();
+            let initial_snap = label(&state, "Snap grid").clone();
             tool_labels_fit(&state, width, density);
             for name in [
                 "Nudge",
                 "Add pattern",
                 "View",
-                "Snap 1/16",
+                "Snap grid",
                 "Fit",
                 "Tool help",
             ] {
@@ -170,7 +170,7 @@ fn individual_arranger_tools_keep_full_targets_mouse_access_and_shortcut_parity(
                 let chosen = app.command(json!({"command":"inspect", "paint":true}));
                 tool_labels_fit(&chosen, width, density);
                 assert_eq!(
-                    label(&chosen, "Snap 1/16"),
+                    label(&chosen, "Snap grid"),
                     &initial_snap,
                     "Mode {mode} at width {width} must not move adjacent controls"
                 );
@@ -181,7 +181,7 @@ fn individual_arranger_tools_keep_full_targets_mouse_access_and_shortcut_parity(
                 let shortcut = app.key(key);
                 assert_eq!(shortcut["timeline"]["tool"], mode);
                 unchanged(&shortcut, &before);
-                assert_eq!(label(&shortcut, "Snap 1/16"), &initial_snap);
+                assert_eq!(label(&shortcut, "Snap grid"), &initial_snap);
             }
         }
     }

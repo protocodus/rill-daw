@@ -102,7 +102,7 @@ impl Default for AiSettings {
     }
 }
 
-fn config_dir() -> PathBuf {
+pub(crate) fn config_dir() -> PathBuf {
     if let Some(directory) = std::env::var_os("RILL_CONFIG_DIR")
         && !directory.is_empty()
     {

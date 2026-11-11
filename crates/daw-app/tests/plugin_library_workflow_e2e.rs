@@ -171,7 +171,7 @@ fn recently_used_tracks_assignments_in_mru_order_and_survives_restart() {
     let a = fixture_key(fixture.path(), "11111111111111111111111111111111");
     let b = fixture_key(fixture.path(), "22222222222222222222222222222222");
     assert_eq!(saved_library(&app)["recently_used"], json!([a, b]));
-    menu(&mut app, "Window", "Library");
+    menu(&mut app, "Window", "Device browser");
     let recent = collection(&mut app, "Recently used");
     assert_eq!(
         recent["library"]["order"],
@@ -229,7 +229,7 @@ fn insert_and_send_actions_record_recent_effects_without_duplicate_entries() {
             .len(),
         1
     );
-    menu(&mut app, "Window", "Library");
+    menu(&mut app, "Window", "Device browser");
     app.click("Effects");
     let recent = collection(&mut app, "Recently used");
     assert_eq!(
@@ -239,7 +239,7 @@ fn insert_and_send_actions_record_recent_effects_without_duplicate_entries() {
 
     select_device(&mut app, "Rill Fixture FX");
     app.click("Add to effect chain");
-    menu(&mut app, "Window", "Library");
+    menu(&mut app, "Window", "Device browser");
     app.click("Effects");
     let reused = collection(&mut app, "Recently used");
     assert_eq!(
@@ -317,7 +317,8 @@ fn favorite_action_remains_in_the_footer_on_small_screens_and_persists() {
     compact_layout(&app.inspect());
     let cleared = app.click("Clear");
     assert!(visible(&cleared, "Search instruments"));
-    assert_eq!(cleared["library"]["total"], 2);
+    // The two fixtures and the built-in R1 Mini.
+    assert_eq!(cleared["library"]["total"], 3);
     select_device(&mut app, "Rill Fixture B");
     assert!(app.inspect()["library"]["details"].is_null());
     let marked = footer_favorite(&mut app);

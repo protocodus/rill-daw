@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device": "r1-filter",
+  "name": "Talking Vowels",
+  "author": "Rill",
+  "category": "Character",
+  "tags": ["vowel", "lead"],
+  "description": "Formant filter that drifts from A to O in time with the song.",
+  "parameters": {
+    "model": "Vowel",
+    "cutoff": 1000.0,
+    "resonance": 60.0,
+    "morph": 50.0,
+    "lfo.sync": "1 bar",
+    "lfo.depth": 0.5
+  }
+}

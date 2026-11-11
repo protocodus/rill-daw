@@ -5,6 +5,7 @@ mod audio_asset;
 mod audio_host;
 mod audio_stream;
 mod automation;
+mod builtin;
 mod device;
 mod join;
 mod meter;

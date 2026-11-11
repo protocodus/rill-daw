@@ -54,8 +54,8 @@ fn menu(app: &mut Harness, menu: &str, item: &str) -> Value {
 
 fn show_plugin_parameters(app: &mut Harness) {
     if !visible(&app.inspect(), "Search parameters") {
-        common::wait_visible(app, "Automate…");
-        app.click("Automate…");
+        common::wait_visible(app, "Parameters…");
+        app.click("Parameters…");
     }
     common::wait_visible(app, "Automate parameter");
 }
@@ -235,7 +235,7 @@ fn instrument_and_library_selection_are_undoable_and_escape_closes_the_popup() {
     menu(&mut app, "Track", "Add MIDI track");
     let state = menu(&mut app, "Window", "Instrument");
     assert_only_popup(&state, "instrument");
-    assert!(visible(&state, "No instrument assigned"));
+    assert!(visible(&state, "R1 Mini"));
     app.key("Escape");
     common::fixture_library(&mut app);
     app.click("Rill Fixture A");
@@ -452,7 +452,7 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
     );
     let name = path.file_stem().unwrap().to_string_lossy().to_string();
     let mut app = Harness::with_vst_path(path.parent().unwrap());
-    menu(&mut app, "Window", "Library");
+    menu(&mut app, "Window", "Device browser");
     app.click("Search instruments");
     app.command(json!({"command":"text","text":name.chars().take(4).collect::<String>()}));
     common::wait_visible(&mut app, &name);
@@ -632,7 +632,7 @@ fn installed_instrument_editor_thumbnail_parameter_automation_save_export_and_qu
     );
     // Headless runs never initialize installed devices just to fill previews.
     // This opt-in native scenario explicitly asks for its selected instrument.
-    menu(&mut app, "Window", "Library");
+    menu(&mut app, "Window", "Device browser");
     app.click("Instruments");
     app.click("Search instruments");
     app.command(json!({"command":"key", "key":"A", "cmd":true}));
@@ -822,14 +822,18 @@ fn adding_midi_track_immediately_assigns_instrument_and_cancel_keeps_ready_patte
     let state = menu(&mut app, "Track", "Add MIDI track");
     assert_only_popup(&state, "library");
     assert_eq!(state["project"]["tracks"].as_array().unwrap().len(), 1);
-    assert_eq!(state["project"]["tracks"][0]["instrument"], "None");
+    // Audible at once: the built-in synth plays until something else is chosen.
+    assert_eq!(
+        state["project"]["tracks"][0]["instrument"],
+        json!({"Builtin":{"device":"r1-mini"}})
+    );
     let clips = state["project"]["tracks"][0]["clips"].clone();
     assert_eq!(clips[0]["length"], 4.0);
     let state = app.key("Escape");
     assert_only_popup(&state, "none");
     assert_eq!(state["project"]["tracks"][0]["clips"], clips);
     menu(&mut app, "Window", "Instrument");
-    app.click("Choose instrument");
+    app.click("Change instrument");
     app.command(json!({"command":"text","text":"Fixture B"}));
     common::wait_visible(&mut app, "Rill Fixture B");
     let state = app.key("Enter");
@@ -866,6 +870,20 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
         let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
         app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}))
     }
+    /// One click edits the row's instrument; its context menu changes it.
+    fn change_instrument(app: &mut Harness, track: &Value) -> Value {
+        let state = app.inspect();
+        let rect = &state["timeline"]["tracks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|header| header["track"] == *track)
+            .unwrap()["sections"]["device"];
+        let x = (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5;
+        let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
+        app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
+        app.click("Change instrument…")
+    }
 
     let fixture = common::plugin_fixture();
     let mut app = Harness::with_vst_path(fixture.path());
@@ -880,9 +898,16 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
     let second = original["project"]["tracks"][1]["id"].clone();
     assert_eq!(original["selected_track"], second);
 
-    // Both rows are unassigned. Clicking the first row's instrument control
-    // must target that row, regardless of which track was selected beforehand.
+    // New MIDI tracks play R1 Mini: one click on the first row's instrument
+    // edits it, and changing it targets that row, regardless of which track
+    // was selected beforehand.
     let state = click_header(&mut app, &first, "device");
+    assert_only_popup(&state, "instrument");
+    assert_eq!(state["selected_track"], first);
+    app.key("Escape");
+    let selected = click_header(&mut app, &second, "name");
+    assert_eq!(selected["selected_track"], second);
+    let state = change_instrument(&mut app, &first);
     assert_only_popup(&state, "library");
     assert_eq!(state["selected_track"], first);
     let state = app.key("Escape");
@@ -892,7 +917,7 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
     );
     let selected = click_header(&mut app, &second, "name");
     assert_eq!(selected["selected_track"], second);
-    click_header(&mut app, &first, "device");
+    change_instrument(&mut app, &first);
     app.command(json!({"command":"text","text":"Fixture A"}));
     common::wait_visible(&mut app, "Rill Fixture A");
     assert!(visible(&app.inspect(), "Assign instrument"));

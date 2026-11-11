@@ -92,9 +92,8 @@ impl DawApp {
                     let count = track.inserts.len();
                     for (index, slot) in track.inserts.iter_mut().enumerate() {
                         ui.push_id(slot.id, |ui| {
-                            let Effect::Vst3 { path, class_id } = &slot.effect;
                             let model =
-                                crate::library::plugin_model(&self.vst_catalog, path, class_id);
+                                crate::library::effect_model(&self.vst_catalog, &slot.effect);
                             let row = widgets::effect_slot(
                                 ui,
                                 (track_id, slot.id),
@@ -109,9 +108,14 @@ impl DawApp {
                                     {
                                         edit_effect = Some(slot.id);
                                     }
-                                    if widgets::small_button(ui, "Automate…")
-                                        .on_hover_text("Search this effect's automation parameters")
-                                        .clicked()
+                                    // Built-in effects automate from their own
+                                    // panel's controls; plug-ins need the list.
+                                    if !matches!(slot.effect, daw_core::Effect::Builtin { .. })
+                                        && widgets::small_button(ui, "Parameters…")
+                                            .on_hover_text(
+                                                "Edit or automate this plug-in's parameters",
+                                            )
+                                            .clicked()
                                     {
                                         automate_effect = Some(slot.id);
                                     }
@@ -143,8 +147,11 @@ impl DawApp {
                                     .on_hover_text("Insert actions");
                                 },
                             );
-                            let Effect::Vst3 { path, .. } = &slot.effect;
-                            changed |= row.inner.0.on_hover_text(path).changed();
+                            let location = match &slot.effect {
+                                Effect::Vst3 { path, .. } => path.as_str(),
+                                Effect::Builtin { .. } => "Built-in device",
+                            };
+                            changed |= row.inner.0.on_hover_text(location).changed();
                             if let Some(payload) =
                                 widgets::reorder_drop_target::<(u64, u64)>(ui, &row.response)
                                 && payload.0 == track_id
@@ -204,7 +211,7 @@ impl DawApp {
             self.open_effect_editor(track_id, effect);
         }
         if let Some(effect) = automate_effect {
-            self.open_effect_automation(track_id, effect);
+            self.open_effect_parameters(track_id, effect);
         }
     }
 

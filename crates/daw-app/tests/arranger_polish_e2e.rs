@@ -84,13 +84,13 @@ fn toolbar_follows_the_workflow_with_snap_and_nudge_beside_the_tools() {
         let state = app.command(json!({"command":"inspect","paint":true}));
         let row = center_y(label(&state, "Select"));
         let x = |name: &str| bounds(label(&state, name))[0];
-        for name in ["Slip", "Snap 1/16", "Nudge"] {
+        for name in ["Slip", "Snap grid", "Nudge"] {
             assert!(
                 (center_y(label(&state, name)) - row).abs() <= 2.0,
                 "{name} shares the tools' row at {width}"
             );
         }
-        assert!(x("Slip") < x("Snap 1/16") && x("Snap 1/16") < x("Nudge"));
+        assert!(x("Slip") < x("Snap grid") && x("Snap grid") < x("Nudge"));
         // Add pattern follows in reading order, possibly wrapped to the next row.
         let add_row = center_y(label(&state, "Add pattern"));
         assert!(
@@ -109,7 +109,7 @@ fn toolbar_follows_the_workflow_with_snap_and_nudge_beside_the_tools() {
         assert!(help[2] <= f64::from(width));
     }
     // Snap still changes through the visible chooser.
-    app.click("Snap 1/16");
+    app.click("Snap grid");
     let chosen = app.click("1/8");
     label(&chosen, "Snap 1/8");
     app.quit();

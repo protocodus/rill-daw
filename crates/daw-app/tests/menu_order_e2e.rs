@@ -111,6 +111,14 @@ fn edit_track_and_window_menus_follow_workflow_with_a_shortcut_column() {
 
     app.click("Track");
     let track_menu = app.inspect();
+    assert!(
+        !track_menu["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label == "Add automation track…"),
+        "Automation starts from a control's right-click Automate"
+    );
     assert_order(
         &track_menu,
         &[
@@ -118,7 +126,6 @@ fn edit_track_and_window_menus_follow_workflow_with_a_shortcut_column() {
             "Add audio track",
             "Add bus",
             "Add folder",
-            "Add automation track…",
             "Rename…",
             "Properties",
             "Channel",
@@ -144,14 +151,14 @@ fn edit_track_and_window_menus_follow_workflow_with_a_shortcut_column() {
             "Recording",
             "Automation",
             "Properties",
-            "Library",
+            "Device browser",
             "Assistant",
             "Setup",
         ],
     );
-    let library = app.click("Library");
+    let library = app.click("Device browser");
     assert_eq!(library["popups"]["library"], true);
-    label(&library, "Library");
+    label(&library, "Device browser");
     app.key("Escape");
 
     // Menu bar: project name and duration centered, AI at the far right.

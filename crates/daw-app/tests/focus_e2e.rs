@@ -75,7 +75,7 @@ fn one_workspace_at_a_time_and_back_preserve_the_project_and_editor_view() {
         assert_eq!(properties["popup_context"]["interactive"], false);
 
         // The caller is painted, but its previous Back target cannot navigate
-        // beneath the utility or change the editor selection/view state.
+        // beneath the dialog or change the editor selection/view state.
         let back = editor["label_rects"]
             .as_array()
             .unwrap()
