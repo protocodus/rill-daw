@@ -29,6 +29,9 @@ pub struct Layout {
     pub knob: daw_ui::KnobSize,
     /// Captions that differ from the parameter's name.
     pub captions: &'static [(u32, &'static str)],
+    /// Short choices whose toggle buttons stack, where a card is short of
+    /// width.
+    pub stacked: &'static [u32],
     /// Whether a control does anything in the current mode.
     pub visible: fn(u32, Values<'_>) -> bool,
     /// What happens to a control that does nothing: hidden, or, on a dense
@@ -80,6 +83,7 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
             section("Output", 1, 2, &[&[MIX, OUTPUT]]),
         ];
         layout.hero = Some(CUTOFF);
+        layout.stacked = &[SLOPE];
         layout.visible = |id, values| applies(id, &filter_settings(values));
         layout.options =
             |id, values| (id == TYPE).then(|| type_options(filter_settings(values).model));
@@ -174,6 +178,7 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
                 ]],
             ),
         ];
+        layout.stacked = &[OSC1_MODEL, OSC2_MODEL];
         layout.captions = &[(VELOCITY_CUTOFF, "Velocity"), (VELOCITY_AMP, "Velocity")];
         layout.hero = Some(CUTOFF);
         layout.knob = daw_ui::KnobSize::Dense;
@@ -215,6 +220,7 @@ fn generic(descriptor: &DeviceDescriptor) -> Layout {
         hero: None,
         knob: daw_ui::KnobSize::Standard,
         captions: &[],
+        stacked: &[],
         visible: |_, _| true,
         keep_inactive: false,
         options: |_, _| None,

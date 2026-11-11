@@ -181,6 +181,10 @@ fn active(spec: &ParamSpec, host: &dyn DeviceHost, layout: &panels::Layout) -> b
     (layout.visible)(spec.id, &|id| host.value(id))
 }
 
+fn stacked(spec: &ParamSpec, layout: &panels::Layout) -> bool {
+    toggles(spec) && layout.stacked.contains(&spec.id)
+}
+
 /// Whether a parameter's options are few enough to show as toggle buttons.
 fn toggles(spec: &ParamSpec) -> bool {
     matches!(spec.range, ParamRange::Choice(labels) if labels.len() < daw_ui::TOGGLE_OPTION_LIMIT)
@@ -271,6 +275,8 @@ fn is_knob(spec: &ParamSpec) -> bool {
 fn control_height(spec: &ParamSpec, layout: &panels::Layout) -> f32 {
     if is_knob(spec) {
         knob_diameter(spec, layout)
+    } else if let (true, ParamRange::Choice(labels)) = (stacked(spec, layout), spec.range) {
+        daw_ui::TOGGLE_ROW_HEIGHT * labels.len() as f32
     } else {
         daw_ui::tokens::CONTROL_HEIGHT
     }
@@ -303,10 +309,16 @@ fn cell_width(ui: &Ui, spec: &ParamSpec, layout: &panels::Layout) -> f32 {
             .into_iter()
             .map(|end| text(&spec.format(end), daw_ui::text::TextRole::Note.font()))
             .fold(knob_diameter(spec, layout), f32::max),
-        ParamRange::Choice(labels) if toggles(spec) => labels
-            .iter()
-            .map(|label| text(label, button.clone()) + 2.0 * daw_ui::tokens::SPACE_SM)
-            .sum(),
+        ParamRange::Choice(labels) if toggles(spec) => {
+            let widths = labels
+                .iter()
+                .map(|label| text(label, button.clone()) + 2.0 * daw_ui::tokens::SPACE_SM);
+            if stacked(spec, layout) {
+                widths.fold(0.0, f32::max)
+            } else {
+                widths.sum()
+            }
+        }
         ParamRange::Choice(labels) => choice(widest(&mut labels.iter().map(|l| l.to_string()))),
         ParamRange::Integer { .. } => choice(widest(
             &mut (spec.plain_min() as i32..=spec.plain_max() as i32)
@@ -503,7 +515,11 @@ fn control(
                             .iter()
                             .map(|(plain, option)| (*plain, option.as_str()))
                             .collect();
-                        let response = daw_ui::toggle_group(ui, &mut current, &options);
+                        let response = if stacked(spec, layout) {
+                            daw_ui::toggle_group_vertical(ui, &mut current, &options)
+                        } else {
+                            daw_ui::toggle_group(ui, &mut current, &options)
+                        };
                         if response.changed() {
                             host.set_value(spec.id, f64::from(spec.to_normalized(current)));
                         }

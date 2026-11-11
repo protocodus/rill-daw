@@ -967,6 +967,28 @@ pub fn toggle_group<T: Copy + PartialEq>(
     current: &mut T,
     options: &[(T, &str)],
 ) -> Response {
+    toggle_track(ui, current, options, false)
+}
+
+/// Height of one option of a [`toggle_group_vertical`].
+pub const TOGGLE_ROW_HEIGHT: f32 = tokens::COMPACT_HEIGHT + 4.0;
+
+/// A [`toggle_group`] with its options stacked, for two or three short
+/// options where width is scarcer than height, as beside a row of knobs.
+pub fn toggle_group_vertical<T: Copy + PartialEq>(
+    ui: &mut Ui,
+    current: &mut T,
+    options: &[(T, &str)],
+) -> Response {
+    toggle_track(ui, current, options, true)
+}
+
+fn toggle_track<T: Copy + PartialEq>(
+    ui: &mut Ui,
+    current: &mut T,
+    options: &[(T, &str)],
+    vertical: bool,
+) -> Response {
     let colors = theme::palette(ui.ctx());
     let font = egui::TextStyle::Button.resolve(ui.style());
     let padding = ui.spacing().button_padding.x;
@@ -980,14 +1002,16 @@ pub fn toggle_group<T: Copy + PartialEq>(
             )
         })
         .collect();
-    let width: f32 = galleys
-        .iter()
-        .map(|galley| galley.size().x + 2.0 * padding)
-        .sum();
-    let (rect, mut response) = ui.allocate_exact_size(
-        egui::vec2(width, tokens::CONTROL_HEIGHT),
-        egui::Sense::hover(),
-    );
+    let widths = galleys.iter().map(|galley| galley.size().x + 2.0 * padding);
+    let size = if vertical {
+        egui::vec2(
+            widths.fold(0.0, f32::max),
+            TOGGLE_ROW_HEIGHT * options.len() as f32,
+        )
+    } else {
+        egui::vec2(widths.sum(), tokens::CONTROL_HEIGHT)
+    };
+    let (rect, mut response) = ui.allocate_exact_size(size, egui::Sense::hover());
     if ui.is_rect_visible(rect) {
         ui.painter().add(crate::component_shape(
             ui.painter(),
@@ -999,13 +1023,21 @@ pub fn toggle_group<T: Copy + PartialEq>(
         ));
     }
     let mut changed = false;
-    let mut left = rect.left();
+    let mut next = rect.min;
     for (index, ((value, label), galley)) in options.iter().zip(galleys).enumerate() {
         let segment = egui::Rect::from_min_size(
-            egui::pos2(left, rect.top()),
-            egui::vec2(galley.size().x + 2.0 * padding, rect.height()),
+            next,
+            if vertical {
+                egui::vec2(rect.width(), TOGGLE_ROW_HEIGHT)
+            } else {
+                egui::vec2(galley.size().x + 2.0 * padding, rect.height())
+            },
         );
-        left = segment.right();
+        next = if vertical {
+            segment.left_bottom()
+        } else {
+            segment.right_top()
+        };
         let button = ui.interact(segment, response.id.with(index), egui::Sense::click());
         if button.clicked() && current != value {
             *current = *value;

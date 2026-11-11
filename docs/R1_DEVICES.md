@@ -438,7 +438,8 @@ and a new device has little to decide:
    choices and switches and one baseline for their values, so neighbouring
    cards line up.
 5. **Controls by range.** Continuous value: `labeled_knob`. Fewer than five
-   named options: toggle buttons (`segmented`, `toggle_group`), so every
+   named options: toggle buttons (`segmented`, `toggle_group`, or stacked
+   with `toggle_group_vertical` where a card is short of width), so every
    option is visible. Longer lists: a drop-down or `stepped_selector`. On/off:
    `toggle_led`. One hero knob at most per panel (64 points); standard knobs
    are 48, dense rows 34.

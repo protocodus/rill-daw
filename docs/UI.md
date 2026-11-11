@@ -306,7 +306,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Aligned settings and paths | `form_grid`, `form_label`, `path_row`, `section_gap` |
 | Ghost clip identity | `clip_occurrence_hover`, `clip_title`, `ClipTitleLayout`, `clip_label`, `clip_choice`, `Icon::Link`, `Icon::Unlink` |
 | Arrangement clip surfaces and previews | `clip_surface`, `clip_surface_named`, `ClipSurfaceLayout`, `clip_note_preview` |
-| One choice among fixed options | `choice` (toggle buttons for fewer than five options, otherwise a drop-down), `toggle_group` |
+| One choice among fixed options | `choice` (toggle buttons for fewer than five options, otherwise a drop-down), `toggle_group`, `toggle_group_vertical` |
 | Dropdown choices | `select`, `select_labeled` |
 | Numeric widget builders | `slider`, `Slider`, `SliderScaleGeometry`, `slider_scale_geometry`, `number`, `Number` |
 | Numeric mouse steps and exact entry | `number_stepper`, `number_stepper_integer`, `mouse_value_entry`, `NumberStepperResponse` |
@@ -630,7 +630,7 @@ families sharing a row; wrapped rows start cleanly. Every supported tool stays
 visible, and families wrap as whole units where space permits. Toolbars have a quiet panel fill and bottom
 divider; active tools retain their glowing border and keyboard semantics.
 
-**Choices.** A choice among fewer than five fixed options is a row of toggle buttons, never a drop-down: every option stays visible and one click picks it. Call `choice(ui, id, &mut value, &[(value, "Label"), …])`, which applies the rule: toggle buttons (`toggle_group`) below five options, a `select` drop-down from five on or when the labels are too wide to sit side by side. Use `select` directly only for lists that are long, dynamic (devices, ports, folders) or have long names.
+**Choices.** A choice among fewer than five fixed options is a row of toggle buttons, never a drop-down: every option stays visible and one click picks it. Call `choice(ui, id, &mut value, &[(value, "Label"), …])`, which applies the rule: toggle buttons (`toggle_group`) below five options, a `select` drop-down from five on or when the labels are too wide to sit side by side. `toggle_group_vertical` stacks two or three short options where width is scarcer than height, as beside a row of knobs. Use `select` directly only for lists that are long, dynamic (devices, ports, folders) or have long names.
 
 **Containers.** Group related controls in a labelled container: the title on top in small, dimmed capitals, separated from the contents by a rule or space, and the contents padded by at least `SPACE_MD`. Separate groups with space (`section_gap`, the `grid_row` gutter) rather than extra lines. Containers that share a view sit on `grid_row`'s twelve columns, so their edges line up from row to row.
 
