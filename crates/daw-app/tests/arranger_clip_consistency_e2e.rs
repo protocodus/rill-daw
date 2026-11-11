@@ -412,3 +412,28 @@ fn renaming_a_ghost_pattern_renames_its_linked_copies() {
     assert_eq!(clips[1]["name"], "Echo");
     app.quit();
 }
+
+#[test]
+fn a_pattern_copied_from_its_menu_pastes_with_the_keyboard_over_older_media_copies() {
+    let mut app = Harness::new();
+    let (opened, midi, lane) = fixture(&mut app);
+    pointer(
+        &mut app,
+        "click",
+        (x_at(&opened, 1.0), row_y(&opened, midi)),
+        "primary",
+    );
+    app.command(json!({"command":"key","key":"C","cmd":true}));
+
+    let body = inside(pattern_rect(&opened, 0), 0.5, 0.7);
+    pointer(&mut app, "click", body, "secondary");
+    app.click("Copy");
+    app.command(json!({"command":"pointer","phase":"click","x":x_at(&opened, 20.0),"y":opened["timeline"]["ruler"]["min"][1].as_f64().unwrap() + 10.0}));
+    pointer(&mut app, "click", body, "primary");
+    let pasted = app.command(json!({"command":"key","key":"V","cmd":true}));
+    let clips = patterns(&pasted, lane);
+    assert_eq!(clips.len(), 2);
+    assert!(clips.iter().any(|clip| clip["start"] == 20.0), "{clips:?}");
+    assert_eq!(track(&pasted, midi)["clips"].as_array().unwrap().len(), 1);
+    app.quit();
+}

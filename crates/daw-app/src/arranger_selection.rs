@@ -840,6 +840,11 @@ impl DawApp {
             return false;
         }
         self.sync_arranger_selection();
+        let has_clipboard = self.arranger_selection.clipboard.is_some()
+            || self
+                .selected_track
+                .is_some_and(|track| self.project.automation_lane(track).is_some())
+                && crate::arranger_automation::automation_clipboard(ctx).is_some();
         let commands = ctx.input_mut(|input| {
             let native_copy = input
                 .events
@@ -853,7 +858,6 @@ impl DawApp {
                 .events
                 .iter()
                 .any(|event| matches!(event, egui::Event::Paste(_)));
-            let has_clipboard = self.arranger_selection.clipboard.is_some();
             let mut actions = Vec::new();
             input.events.retain(|event| {
                 let action = match event {

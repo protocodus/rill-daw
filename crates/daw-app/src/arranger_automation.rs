@@ -21,6 +21,7 @@ pub(crate) enum AutomationEdit {
 
 /// Pattern actions the arranger performs outside the automation edit itself.
 pub(crate) enum LaneCommand {
+    Copy(u64),
     EditAutomation(u64),
     Rename(u64),
     Stretch(u64),
@@ -404,7 +405,7 @@ pub(crate) fn automation_lane(
                     }
                     ui.separator();
                     if daw_ui::button(ui, "Copy").clicked() {
-                        copy_automation_clip(ui.ctx(), clip);
+                        result.command = Some(LaneCommand::Copy(clip.id));
                         ui.close();
                     }
                     if daw_ui::button(ui, "Duplicate").clicked() {

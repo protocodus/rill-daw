@@ -1022,8 +1022,12 @@ impl DawApp {
         if step <= 0.0 {
             return beat;
         }
-        // Bar steps follow real bar lines once the meter changes along the song.
-        if !meter.is_uniform() && step == f64::from(meter.initial()) {
+        // A chosen bar step follows real bar lines once the meter changes along
+        // the song. Grid stays on the drawn grid, which is plain multiples.
+        if self.snap != daw_ui::SNAP_GRID
+            && !meter.is_uniform()
+            && step == f64::from(meter.initial())
+        {
             return meter.nearest_bar_line(beat);
         }
         (beat / step).round() * step

@@ -28,6 +28,7 @@ enum Edit {
     Select(u64, u64, bool, bool),
     SelectOnly(u64, u64),
     Rename(u64, u64),
+    CopyPattern(u64, u64),
     AudioStart(u64, u64, crate::arranger_selection::ArrangeAudioMode, f64),
     AudioMotion(f64),
     GroupStart(u64, bool),
@@ -1293,6 +1294,7 @@ impl DawApp {
                                 popup = Some(PopupKind::Automation);
                             }
                             Some(crate::arranger_automation::LaneCommand::Rename(clip)) => edits.push(Edit::Rename(track.id, clip)),
+                            Some(crate::arranger_automation::LaneCommand::Copy(clip)) => edits.push(Edit::CopyPattern(track.id, clip)),
                             Some(crate::arranger_automation::LaneCommand::Stretch(clip)) => {
                                 self.selected_track = Some(track.id);
                                 self.selected_clip = Some(clip);
@@ -2338,6 +2340,7 @@ impl DawApp {
                 Edit::Select(..)
                     | Edit::SelectOnly(..)
                     | Edit::Rename(..)
+                    | Edit::CopyPattern(..)
                     | Edit::AudioStart(..)
                     | Edit::AudioMotion(..)
                     | Edit::GroupStart(..)
@@ -2376,6 +2379,17 @@ impl DawApp {
                         self.arranger_select_clips([(track, clip)], None);
                     }
                     self.start_inline_rename(ui.ctx());
+                    continue;
+                }
+                // Same path as Edit → Copy, so the pattern replaces copied media clips.
+                Edit::CopyPattern(track, clip) => {
+                    self.arranger_select_clips([], None);
+                    self.selected_track = Some(track);
+                    self.selected_clip = Some(clip);
+                    self.arranger_clipboard_action(
+                        ui.ctx(),
+                        crate::audio_editor::AudioClipboardAction::Copy,
+                    );
                     continue;
                 }
                 Edit::AudioStart(track, clip, mode, origin) => {
