@@ -179,9 +179,9 @@ impl DawApp {
         let mut open = true;
         let mut cancel = false;
         let popup = if editing {
-            daw_ui::workspace_popup("Automation", ctx).id(egui::Id::new("automation_editor"))
+            daw_ui::page("Automation").id(egui::Id::new("automation_editor"))
         } else {
-            daw_ui::popup("Add automation", ctx)
+            daw_ui::page("Add automation")
                 .id(egui::Id::new(if parameter_page {
                     "automation_create_parameters"
                 } else {
@@ -189,13 +189,11 @@ impl DawApp {
                 }))
                 // The plug-in parameter browser needs its wide table; choosing
                 // a track and channel parameter is a two-row form.
-                .default_width(if parameter_page {
+                .width(if parameter_page {
                     880.0
                 } else {
                     daw_ui::tokens::FORM_WIDTH
                 })
-                .default_height(if parameter_page { 620.0 } else { 180.0 })
-                .vscroll(false)
         };
         popup.open(&mut open).show(ctx, |ui| {
             daw_ui::automation_control_style(ui);
@@ -1197,7 +1195,7 @@ mod tests {
     }
 
     #[test]
-    fn creation_popup_hugs_short_content_and_aligns_its_footer() {
+    fn creation_page_keeps_its_footer_right_after_the_short_form() {
         for appearance in [
             daw_ui::theme::Appearance::Light,
             daw_ui::theme::Appearance::Dark,
@@ -1236,11 +1234,7 @@ mod tests {
                 }
                 let window = ctx
                     .memory(|memory| memory.area_rect(egui::Id::new("automation_create")))
-                    .expect("creation window");
-                assert!(
-                    window.height() < 300.0,
-                    "Short form must hug its content: {window:?}"
-                );
+                    .expect("creation page");
                 let label_rect = |label| {
                     output
                         .shapes
@@ -1261,9 +1255,10 @@ mod tests {
                 );
                 assert!((add.center().y - cancel.center().y).abs() < 1.0);
                 assert!(cancel.right() < add.left());
+                // A page fills the workspace; its footer follows the form.
                 assert!(
-                    window.bottom() - add.bottom() < 50.0,
-                    "No large blank region below the footer"
+                    add.bottom() - window.top() < 300.0,
+                    "No large blank region above the footer: {window:?} {add:?}"
                 );
             }
         }

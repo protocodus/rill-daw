@@ -228,7 +228,11 @@ fn expose_popup_label(app: &mut Harness, label: &str) {
         // Input selection has its own body above the fixed timing/actions.
         // Reset retained focus scrolling, then inspect each input row by mouse.
         app.command(json!({"command":"scroll", "delta":if attempt == 0 {10000.0} else {-55.0},
-            "x":window["max"][0].as_f64().unwrap()-2.0*f64::from(daw_ui::tokens::SPACE_LG),
+            // Wheel near the right edge of the page's centered column, clear
+            // of the selects whose tooltips would cover the next click.
+            "x":(window["min"][0].as_f64().unwrap()+window["max"][0].as_f64().unwrap())*0.5
+                + (daw_ui::tokens::FORM_WIDTH + daw_ui::tokens::SPACE_SM + daw_ui::tokens::SELECT_WIDTH) as f64 * 0.5
+                - 2.0*f64::from(daw_ui::tokens::SPACE_LG),
             "y":window["min"][1].as_f64().unwrap()+f64::from(daw_ui::tokens::SPACE_XL)*2.0+f64::from(daw_ui::tokens::SPACE_MD)}));
         for _ in 0..20 {
             app.inspect();

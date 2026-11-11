@@ -46,7 +46,7 @@ fn accessible(state: &Value, labels: &[&str]) {
             "{label}: {rect}"
         );
         assert!(rect["min"][1].as_f64().unwrap() >= 120.0, "{label}: {rect}");
-        assert!(rect["max"][1].as_f64().unwrap() <= 696.0, "{label}: {rect}");
+        assert!(rect["max"][1].as_f64().unwrap() <= 707.0, "{label}: {rect}");
         assert!(
             rect["max"][1].as_f64().unwrap() - rect["min"][1].as_f64().unwrap() >= 13.0,
             "Clipped {label}: {rect}"

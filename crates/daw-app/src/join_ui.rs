@@ -134,11 +134,10 @@ impl DawApp {
             .and_then(|id| self.project.track(id))
             .map(|track| format!("Join clips · {}", track.name))
             .unwrap_or_else(|| "Join clips".into());
-        daw_ui::popup(title, ctx)
+        daw_ui::page(title)
             .id(egui::Id::new("join_clips"))
             .open(&mut open)
-            .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
-            .vscroll(false)
+            .width(daw_ui::tokens::POPUP_WIDTH_SM)
             .show(ctx, |ui| {
                 ui.set_min_width(daw_ui::tokens::POPUP_WIDTH_SM);
                 let Some(track) = self.selected_track.and_then(|id| self.project.track(id)) else {

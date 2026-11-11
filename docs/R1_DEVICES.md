@@ -417,8 +417,10 @@ and a new device has little to decide:
    is doing, and is directly editable where that makes sense (drag the EQ
    node, the threshold, the envelope point, the sample marker).
 4. **Signal order.** Sections run left to right in signal order, each a
-   `device_section` with a one-word title; modulation sources sit below the
-   audio path.
+   card with a one-word title; modulation sources sit below the audio path.
+   Sections sharing a row form one `flex_row`: each card's width follows its
+   number of controls and every card takes the row's height, so the panel
+   reads as a 2D front panel. Inside a card, controls fill equal columns.
 5. **Controls by range.** Continuous value: `labeled_knob`. Two to five named
    options: `segmented`. Longer lists: `stepped_selector`. On/off:
    `toggle_led`. One hero knob at most per panel (64 points); standard knobs
@@ -708,7 +710,9 @@ run at 2×. The same kernel is the filter inside Mini, Maxi and Sampler.
 **Panel.** `frequency_plot` with one node (drag = cutoff and resonance) whose
 curve moves with the modulated cutoff from telemetry. Model as a
 `stepped_selector`; hero Cutoff knob; Resonance, Drive, Morph; an LFO
-`device_section` with `lfo_view`; an Envelope section.
+`device_section` with `lfo_view`; an Envelope section. At 987 points the controls form
+two rows of cards, each on one line: Filter and Output, then LFO and
+Envelope.
 
 ## Instruments
 
@@ -745,7 +749,9 @@ per-voice random walk to pitch and cutoff so stacked notes do not sound
 static. The mixer can overdrive the filter input, as on the hardware this
 layout comes from.
 
-**Panel** (987 points, one page):
+**Panel** (987 points, one page). Three rows of three cards: Osc 1, Osc 2,
+Mixer; Filter, Filter envelope, Amp envelope; LFO, Velocity, Voice. The
+sketch below is the original target:
 
 ```text
 ┌ R1 Mini ── preset ◂ ▸ ─────────────────────────────── scope ── Volume ┐

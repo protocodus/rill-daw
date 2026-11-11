@@ -40,7 +40,7 @@ impl DawApp {
             .as_ref()
             .map(|(_, _, _, name, _)| format!("Crossfade · {name}"))
             .unwrap_or_else(|| "Crossfade".into());
-        daw_ui::popup(title, ctx).id(egui::Id::new("crossfade")).open(&mut open).default_width(daw_ui::tokens::POPUP_WIDTH_SM).vscroll(false).show(ctx, |ui| {
+        daw_ui::page(title).id(egui::Id::new("crossfade")).open(&mut open).width(daw_ui::tokens::POPUP_WIDTH_SM).show(ctx, |ui| {
             // A shrinking scroll body lets the window hug the editor.
             daw_ui::scroll_body(ui, "crossfade_body", |ui| {
             let Some((track, clip, original, name, overlap)) = &selection else {
