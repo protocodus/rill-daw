@@ -260,6 +260,15 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-filter/metal-comb.rillpreset"),
         include_str!("../../presets/r1-filter/screaming-high-pass.rillpreset"),
     ],
+    legacy_labels: &[
+        ("model", "Ladder", "Transistor Ladder"),
+        ("model", "M Ladder", "Transistor Ladder"),
+        ("model", "K Sallen-Key", "Sallen-Key"),
+        ("model", "X Pole-Mix", "OTA Cascade"),
+        ("model", "V Digital", "OTA Multimode"),
+        ("model", "Digital Multimode", "OTA Multimode"),
+        ("model", "SP Diode", "Diode Pair"),
+    ],
     create: || Box::new(Filter::new()),
 };
 

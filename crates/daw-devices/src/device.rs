@@ -21,6 +21,10 @@ pub struct DeviceDescriptor {
     pub sidechain_input: bool,
     /// Factory `.rillpreset` documents, compiled in.
     pub factory_presets: &'static [&'static str],
+    /// Choice labels that older versions wrote into presets, as
+    /// `(parameter key, old label, current label)`. Presets store labels, so
+    /// renaming an option without an entry here breaks every older preset.
+    pub legacy_labels: &'static [(&'static str, &'static str, &'static str)],
     pub create: fn() -> Box<dyn Device>,
 }
 

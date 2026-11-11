@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-filter",
+  "name": "Auto-Wah",
+  "author": "Rill",
+  "category": "Envelope",
+  "tags": ["guitar", "funk"],
+  "description": "Band-pass that opens as you play harder.",
+  "parameters": {
+    "model": "Clean",
+    "type": "Band-pass",
+    "cutoff": 350.0,
+    "resonance": 55.0,
+    "env.amount": 3.0,
+    "env.attack": 5.0,
+    "env.release": 120.0
+  }
+}

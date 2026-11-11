@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "device": "r1-mini",
+  "name": "Sync Lead",
+  "author": "Rill",
+  "category": "Lead",
+  "tags": ["mono", "sync", "bright"],
+  "description": "Oscillator 2 synced an octave and a fifth up; the mod wheel adds vibrato.",
+  "parameters": {
+    "osc2.octave": 1,
+    "osc2.semitones": 7,
+    "osc2.detune": 0.0,
+    "osc2.sync": true,
+    "mix.osc1": 60.0,
+    "mix.osc2": 100.0,
+    "filter.cutoff": 3500.0,
+    "filter.resonance": 20.0,
+    "filter.env": 1.5,
+    "filter.drive": 4.0,
+    "fenv.decay": 900.0,
+    "fenv.sustain": 40.0,
+    "aenv.attack": 3.0,
+    "aenv.sustain": 90.0,
+    "aenv.release": 180.0,
+    "lfo.rate": 5.5,
+    "lfo.pitch": 0.4,
+    "lfo.wheel": 100.0,
+    "voice.mode": "Mono",
+    "voice.glide": 60.0,
+    "voice.drift": 35.0
+  }
+}

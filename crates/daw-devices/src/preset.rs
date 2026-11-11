@@ -139,7 +139,18 @@ impl Preset {
                     None => spec.default_normalized(),
                     Some(value) => {
                         let parsed = match (value, spec.range) {
-                            (Value::String(label), ParamRange::Choice(_)) => spec.parse(label),
+                            (Value::String(label), ParamRange::Choice(_)) => {
+                                spec.parse(label).or_else(|| {
+                                    descriptor
+                                        .legacy_labels
+                                        .iter()
+                                        .find(|(key, old, _)| {
+                                            *key == spec.key
+                                                && old.eq_ignore_ascii_case(label.trim())
+                                        })
+                                        .and_then(|(_, _, current)| spec.parse(current))
+                                })
+                            }
                             (Value::Bool(on), ParamRange::Toggle) => Some(f32::from(u8::from(*on))),
                             (Value::Number(number), _) => number
                                 .as_f64()

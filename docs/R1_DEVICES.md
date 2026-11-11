@@ -210,6 +210,9 @@ One format, one browser and one set of tools for every device.
   clamped, an unknown choice label takes the default. Devices can therefore
   gain parameters without invalidating existing presets. A preset whose
   `device` differs from the target is refused.
+  A renamed choice option keeps loading through the descriptor's
+  `legacy_labels`; frozen presets from every earlier version are tested (see
+  the README's "Preset compatibility tests").
 - `samples` is optional and used by Sampler and Drums. Files are referenced
   by name relative to the preset file; loading imports them into the project
   through the normal import path. A drum kit is a folder holding one preset
