@@ -308,6 +308,22 @@ impl DawApp {
         self.instrument_autolaunch = Some(track);
     }
 
+    /// One click from a track to its effects: the only insert opens directly,
+    /// several open the rack, and an empty chain opens the device browser.
+    pub(crate) fn open_track_effects(&mut self, track: u64) {
+        let Some(inserts) = self.project.track(track).map(|track| &track.inserts) else {
+            return;
+        };
+        match inserts.as_slice() {
+            [] => self.open_effect_library(track, false),
+            [only] => self.open_effect_editor(track, only.id),
+            _ => {
+                self.selected_track = Some(track);
+                self.open_popup(PopupKind::Effects);
+            }
+        }
+    }
+
     pub(crate) fn open_effect_parameters(&mut self, track: u64, effect: u64) {
         self.open_popup(PopupKind::Instrument);
         self.selected_track = Some(track);

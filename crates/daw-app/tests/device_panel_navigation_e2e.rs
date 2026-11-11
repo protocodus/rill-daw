@@ -13,6 +13,20 @@ fn center(rect: &Value) -> (f64, f64) {
     )
 }
 
+fn filter(id: u64) -> EffectSlot {
+    EffectSlot {
+        id,
+        name: "R1 Filter".into(),
+        enabled: true,
+        effect: Effect::Builtin {
+            device: "r1-filter".into(),
+        },
+        state: Vec::new(),
+        parameters: Vec::new(),
+        inputs: Vec::new(),
+    }
+}
+
 fn open_project(app: &mut Harness) -> u64 {
     let source = app.directory.path().join("silence.wav");
     AudioData {
@@ -39,17 +53,7 @@ fn open_project(app: &mut Harness) -> u64 {
     track
         .clips
         .push(Clip::audio("Drum loop", 0.0, 2.0, source.to_string_lossy()));
-    track.inserts.push(EffectSlot {
-        id: 900,
-        name: "R1 Filter".into(),
-        enabled: true,
-        effect: Effect::Builtin {
-            device: "r1-filter".into(),
-        },
-        state: Vec::new(),
-        parameters: Vec::new(),
-        inputs: Vec::new(),
-    });
+    track.inserts.push(filter(900));
     let path = app.directory.path().join("devices.rill");
     project.save(&path).unwrap();
     app.command(json!({"command":"open","path":path}));
@@ -110,6 +114,72 @@ fn the_arranger_opens_an_assigned_instrument_in_one_click() {
     app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
     let chooser = app.click("Change instrument…");
     assert_eq!(chooser["popups"]["library"], true);
+    app.quit();
+}
+
+#[test]
+fn effects_and_instruments_open_in_one_click_from_the_arranger_and_the_mixer() {
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    let empty = project.add_midi_track("Empty");
+    let single = project.add_audio_track("Single");
+    project.track_mut(single).unwrap().inserts.push(filter(900));
+    let chain = project.add_bus("Chain");
+    project
+        .track_mut(chain)
+        .unwrap()
+        .inserts
+        .extend([filter(901), filter(902)]);
+    let path = app.directory.path().join("one-click.rill");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open","path":path}));
+    let state = app
+        .command(json!({"command":"viewport","width":1400,"height":1000,"pixels_per_point":1.0}));
+    let effects = |track: u64| {
+        let row = state["timeline"]["tracks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["track"] == track)
+            .unwrap();
+        // The slot shares the identity line with the name at every density.
+        assert!(
+            row["sections"]["effects"]["min"][0].as_f64().unwrap()
+                >= row["name"]["max"][0].as_f64().unwrap(),
+            "{row}"
+        );
+        center(&row["sections"]["effects"])
+    };
+
+    // The only insert opens its editor directly.
+    let (x, y) = effects(single);
+    let editor = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    assert_eq!(editor["popups"]["instrument"], true);
+    assert_eq!(editor["selected_track"], single);
+    assert_eq!(editor["history"], state["history"]);
+    common::wait_visible(&mut app, "Cutoff");
+    app.key("Escape");
+
+    // Several inserts open the rack to choose from.
+    let (x, y) = effects(chain);
+    let rack = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    assert_eq!(rack["popups"]["effects"], true);
+    assert_eq!(rack["selected_track"], chain);
+    app.key("Escape");
+
+    // An empty chain goes straight to the device browser.
+    let (x, y) = effects(empty);
+    let browser = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    assert_eq!(browser["popups"]["library"], true);
+    assert_eq!(browser["project"], state["project"]);
+    app.click("Back");
+
+    // In the mixer, a MIDI channel without an instrument offers the chooser
+    // where the instrument name would be.
+    app.click("Mixer");
+    let chooser = app.click("MIDI · Choose…");
+    assert_eq!(chooser["popups"]["library"], true);
+    assert_eq!(chooser["selected_track"], empty);
     app.quit();
 }
 

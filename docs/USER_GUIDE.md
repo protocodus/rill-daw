@@ -497,7 +497,7 @@ Dropping before or after a track
 places it in that track's folder. Hold near a pane edge to scroll during a drag;
 Escape cancels. Each completed move supports Undo/Redo and saves with the song.
 
-Select a track and choose **Window → Effects**, or use **Channel → Effects** in Mixer. **+ Insert** opens the device browser; drag a slot handle to reorder it. **Open editor** opens the native effect controls and parameter automation. **Create send track** in the browser creates a return bus with the selected effect and a send from the source. Set the plugin wet/dry control as appropriate. To create a shared effect return:
+Click the effects button beside a track's name in Arrangement: it opens the track's only effect, the effects list when there are several, or the device browser when there are none. In Mixer, click an insert row or the instrument row to open that device. You can also select a track and choose **Window → Effects**, or use **Channel → Effects** in Mixer. **+ Insert** opens the device browser; drag a slot handle to reorder it. **Open editor** opens the native effect controls and parameter automation. **Create send track** in the browser creates a return bus with the selected effect and a send from the source. Set the plugin wet/dry control as appropriate. To create a shared effect return:
 
 1. Choose **Add bus** in Mixer or **Track → Add bus**, then rename it in **Window → Properties**.
 2. Open **Window → Effects** and add a VST3 effect to that bus; use 100% wet when appropriate.
