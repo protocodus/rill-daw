@@ -391,10 +391,10 @@ impl DawApp {
         }
         let mut export = false;
         let mut cancel = false;
-        daw_ui::page("Export MIDI 1.0 copy")
+        daw_ui::popup("Export MIDI 1.0 copy", ctx)
             .id(egui::Id::new("midi_export_confirmation"))
-            .width(daw_ui::tokens::POPUP_WIDTH_SM)
-            .open(&mut open).show(ctx, |ui| {
+            .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
+            .vscroll(false).open(&mut open).show(ctx, |ui| {
                 let mut footer = daw_ui::popup_footer(ui, "midi_export_confirmation_actions");
                 let window_ui = ui;
                 daw_ui::popup_scroll_body(footer.body(), "midi_export_confirmation_body", 0.0, |ui| {
@@ -551,9 +551,10 @@ impl DawApp {
                     .and_then(|spec| spec.options.range),
             )
             .join(", ");
-        daw_ui::page("Export audio")
+        daw_ui::popup("Export audio", ctx)
             .id(egui::Id::new("export_options"))
-            .width(daw_ui::tokens::FORM_WIDTH)
+            .default_width(daw_ui::tokens::FORM_WIDTH)
+            .vscroll(false)
             .open(&mut open)
             .show(ctx, |ui| {
                 let mut footer = daw_ui::popup_footer(ui, "export_actions");

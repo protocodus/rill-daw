@@ -114,21 +114,51 @@ fn the_arranger_opens_an_assigned_instrument_in_one_click() {
 }
 
 #[test]
-fn utilities_open_as_pages_and_back_returns_to_the_caller() {
+fn full_screens_have_back_and_action_dialogs_float_above_the_blurred_workspace() {
     let mut app = Harness::new();
     open_project(&mut app);
     app.click("Pattern");
+    // The device browser is a full screen: it fills the workspace below the
+    // transport, and Back returns to the caller.
+    app.click("Window");
+    let browser = app.click("Device browser");
+    assert_eq!(browser["popups"]["library"], true);
+    let page = &browser["window_rects"][0];
+    let viewport = &browser["viewport"];
+    assert_eq!(page["max"][0], viewport[0]);
+    assert!(page["min"][0].as_f64().unwrap() <= 1.0, "{page}");
+    assert!(browser["backdrop_blur"].as_array().unwrap().is_empty());
+    let back = app.click("Back");
+    assert_eq!(back["popups"]["library"], false);
+    assert_eq!(back["view"], "Arrangement");
+    assert_eq!(back["selected_clip"], browser["selected_clip"]);
+
+    // Properties is an action dialog: a bounded window over one blur, with
+    // no Back of its own, closed by its close button.
     app.click("Window");
     let properties = app.click("Properties");
     assert_eq!(properties["popups"]["properties"], true);
-    // The page fills the workspace below the transport.
-    let page = &properties["window_rects"][0];
-    let viewport = &properties["viewport"];
-    assert_eq!(page["max"][0], viewport[0]);
-    assert!(page["min"][0].as_f64().unwrap() <= 1.0, "{page}");
-    let back = app.click("Back");
-    assert_eq!(back["popups"]["properties"], false);
-    assert_eq!(back["view"], "Arrangement");
-    assert_eq!(back["selected_clip"], properties["selected_clip"]);
+    let dialog = properties["window_rects"]
+        .as_array()
+        .unwrap()
+        .last()
+        .unwrap();
+    assert!(dialog["min"][0].as_f64().unwrap() > 100.0, "{dialog}");
+    assert!(
+        dialog["max"][0].as_f64().unwrap() < viewport[0].as_f64().unwrap() - 100.0,
+        "{dialog}"
+    );
+    assert_eq!(properties["backdrop_blur"].as_array().unwrap().len(), 1);
+    assert!(
+        !properties["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label["text"] == "Back")
+    );
+    let closed = common::close_utility(&mut app, &properties, "Properties · Pattern");
+    assert_eq!(closed["popups"]["properties"], false);
+    assert_eq!(closed["view"], "Arrangement");
+    assert_eq!(closed["selected_clip"], properties["selected_clip"]);
     app.quit();
 }

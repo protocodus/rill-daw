@@ -1489,8 +1489,8 @@ pub fn popup_body_size(ctx: &egui::Context) -> egui::Vec2 {
         .floor()
 }
 
-/// On-demand property/utility window with the same surfaces and spacing as the
-/// main workspace. The caller supplies `.open(&mut open)` and persistent `.id`.
+/// A fixed-size dialog or device panel above the blurred workspace, with the
+/// same surfaces and spacing as the main workspace. The caller supplies `.open(&mut open)` and persistent `.id`.
 pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Window<'a> {
     use egui::emath::GuiRounding as _;
 
@@ -1532,11 +1532,10 @@ pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Win
         .movable(true)
         .scroll([false, true])
         .collapsible(false)
-        // Width follows the user's resize; height hugs the content up to the
-        // budget above, so short forms and empty lists never leave a blank
-        // window below their actions.
-        .resizable([true, false])
-        .resize(|resize| resize.with_stroke(false))
+        // A fixed size chosen by its content: height hugs it up to the budget
+        // above, so short forms and empty lists never leave a blank window
+        // below their actions.
+        .resizable(false)
 }
 
 /// Scroll height inside the actual popup body, with subpixel layout clearance.

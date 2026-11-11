@@ -1,5 +1,5 @@
-//! Every popup draws its active surface above one dimmed, contextual backdrop;
-//! pages replace the workspace without dimming it.
+//! Every dialog and device panel draws its active surface above one dimmed,
+//! contextual backdrop; full screens replace the workspace without dimming it.
 mod common;
 
 use common::Harness;
@@ -188,10 +188,10 @@ fn utility_backdrops_preserve_context_and_clear_after_nested_navigation() {
         ] {
             window(&mut app, menu);
             let state = painted(&mut app);
-            if matches!(menu, "Instrument" | "Effects") {
-                assert_backdrop(&state, title);
-            } else {
+            if matches!(menu, "Automation" | "Device browser") {
                 assert_page(&state, title);
+            } else {
+                assert_backdrop(&state, title);
             }
             assert!(state["popup_context"]["shapes"].as_u64().unwrap() > 0);
             assert_eq!(state["popup_context"]["source"], "Arrangement");
@@ -202,10 +202,9 @@ fn utility_backdrops_preserve_context_and_clear_after_nested_navigation() {
 
         window(&mut app, "Routing");
         app.click("Master output");
-        // An open destination list dims the page like any other menu.
-        assert_menu_backdrop(&painted(&mut app), "Master output");
+        assert_backdrop(&painted(&mut app), "Master output");
         app.key("Escape");
-        assert_page(&painted(&mut app), "Routing of Backdrop synth");
+        assert_backdrop(&painted(&mut app), "Routing of Backdrop synth");
         app.key("Escape");
         assert_clear(&mut app);
 
@@ -328,7 +327,7 @@ fn save_confirmation_uses_one_dim_layer_and_restores_the_utility_on_cancel() {
     assert_eq!(blur[0]["gpu_available"], false);
     app.click("Cancel");
     let restored = painted(&mut app);
-    assert_page(&restored, "Properties · New audio");
+    assert_backdrop(&restored, "Properties · New audio");
     assert_eq!(restored["project"], original["project"]);
     assert_eq!(restored["popups"], original["popups"]);
     app.key("Escape");

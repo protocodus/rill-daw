@@ -101,14 +101,14 @@ fn utility_windows_fit_below_transport_and_close_with_the_mouse_in_both_themes()
                 assert_eq!(state["popups"][key], true, "{menu}");
                 unchanged(&state, &original);
                 let [left, top, right, bottom] = bounds(popup_bounds(&state, title));
-                if menu == "Effects" {
+                if menu != "Device browser" {
                     assert!(
                         left >= margin && right <= width as f64 - margin,
                         "{title}: {left}..{right}"
                     );
                     assert!(bottom <= height as f64 - margin, "{title}: bottom {bottom}");
                 } else {
-                    // A page fills the workspace below the transport.
+                    // A full screen fills the workspace below the transport.
                     assert_eq!(
                         [left, right, bottom],
                         [0.0, width as f64, height as f64],
