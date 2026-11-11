@@ -390,7 +390,7 @@ impl DawApp {
         }
         let meter = self.project.meter_map();
         let mut open = true;
-        daw_ui::popup(format!("Audio takes · {track_name}"), ctx).id(egui::Id::new("audio_takes_popup")).open(&mut open).default_width(720.0).default_height(620.0).vscroll(false).show(ctx, |ui| {
+        daw_ui::page(format!("Audio takes · {track_name}")).id(egui::Id::new("audio_takes_popup")).open(&mut open).show(ctx, |ui| {
             // Commands lead in workflow order; View trails, as in the editors.
             daw_ui::toolbar(ui, |ui| {
                 if groups.len() > 1 {
