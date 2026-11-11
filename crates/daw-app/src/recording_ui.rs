@@ -1101,15 +1101,12 @@ impl DawApp {
                             ui.end_row();
                         }
                         let label = daw_ui::form_label(ui, "Monitor");
-                        daw_ui::select("input_monitor_mode", mode.label()).width(field).show_ui(ui, |ui| { for choice in [MonitorMode::Off,MonitorMode::Auto,MonitorMode::On] { daw_ui::selectable_value(ui, &mut mode, choice, choice.label()); } }).response.labelled_by(label.id)
+                        daw_ui::choice(ui, "input_monitor_mode", &mut mode, &[MonitorMode::Off,MonitorMode::Auto,MonitorMode::On].map(|choice| (choice, choice.label()))).labelled_by(label.id)
                             .on_hover_text(if midi { "Hear the input through this track's instrument" } else { "Hear the dry input signal, before effects. Dry monitoring follows channel and output-bus levels. Inserts and sends are bypassed; recorded audio stays unchanged." });
                         ui.end_row();
                         if !midi {
                             let label = daw_ui::form_label(ui, "Record into");
-                            daw_ui::select("recording_placement", if self.recording.placement == RecordingPlacement::Take {"New take"} else {"Overdub layer"}).width(field).show_ui(ui, |ui| {
-                                daw_ui::selectable_value(ui, &mut self.recording.placement, RecordingPlacement::Take, "New take");
-                                daw_ui::selectable_value(ui, &mut self.recording.placement, RecordingPlacement::Overdub, "Overdub layer");
-                            }).response.labelled_by(label.id);
+                            daw_ui::choice(ui, "recording_placement", &mut self.recording.placement, &[(RecordingPlacement::Take, "New take"), (RecordingPlacement::Overdub, "Overdub layer")]).labelled_by(label.id);
                             ui.end_row();
                         }
                         ui.label("");

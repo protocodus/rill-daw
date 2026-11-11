@@ -231,10 +231,12 @@ One format, one browser and one set of tools for every device.
   search), `load_device_preset` and `store_device_preset`. Saving takes a name
   and writes only into the user preset directory, never to an arbitrary path.
 
-The shared `preset_bar` in every panel header shows the current preset name
-with a modified marker, previous/next, and opens the shared `preset_browser`
-(search, category and tag filters, Factory/User, favorites, Save as…, Reset to
-default). Both are `daw-ui` components and identical for all devices.
+The shared `preset_group` in every panel header is one bordered group, set
+apart from the device's own controls: the current preset name with a modified
+marker in a menu of all presets, previous/next, Save as… and Reset. The
+`preset_browser` (search, category and tag filters, Factory/User, favorites)
+is the larger companion. Both are `daw-ui` components and identical for all
+devices.
 
 ### Project model (`daw-core`)
 
@@ -398,7 +400,7 @@ handle uses the 21-point `HIT_TARGET`.
 | --- | --- | --- |
 | `Knob` (extend) | The main device control. | Add `.bipolar()` (arc grows from center), `.taper(Taper::Log)` for frequency and time, `.default_value(v)` with double-click and context-menu **Reset**, `.modulation(range)` drawing a thin outer arc for modulation depth, `.format(fn)`/`.parse(fn)` so "1.2 kHz" displays and types correctly. Existing compact and detailed modes stay. |
 | `labeled_knob` | Knob with caption above and value below in a fixed cell. | Device panels are grids of these; the cell reserves height so rows align (the `AGENTS.md` centering rule). Sizes: 34 (dense), 48 (standard), 64 (hero). |
-| `segmented` | Exclusive choice of 2–5 short options (Digital/Tube/Opto/FET). | Radio semantics. Falls back to the existing `select` when options do not fit. |
+| `segmented` | Exclusive choice of 2–4 short options (Digital/Tube/Opto/FET) as toggle buttons. | Radio semantics. Falls back to the existing `select` when options do not fit. |
 | `stepped_selector` | Previous/next arrows around a current-value menu (wavetable, preset, division). | Reuses `choice_menu`. |
 | `toggle_led` | Small on/off with a lit state for section enables (Echo on, Band on). | Uses the existing `switch` semantics; compact visual. |
 | `xy_pad` | Two parameters on one surface (cutoff × resonance). | Returns per-axis changes; relative Shift-fine drag like `Knob`. |
@@ -425,24 +427,28 @@ and a new device has little to decide:
    is doing, and is directly editable where that makes sense (drag the EQ
    node, the threshold, the envelope point, the sample marker).
 4. **Signal order.** Sections run left to right in signal order, each a
-   card with a one-word title; modulation sources sit below the audio path.
-   Sections sharing a row form one `flex_row`: each card's width follows the
-   natural width of its controls (caption, widest value) and every card takes
-   the row's height, so the panel reads as a 2D front panel. A card may plan
-   its controls on several lines; the lines share table columns, and leftover
-   width goes evenly to the columns. Every line of a row has one center line
-   for its knobs, choices and switches and one baseline for their values, so
-   neighbouring cards line up.
-5. **Controls by range.** Continuous value: `labeled_knob`. Two to five named
-   options: `segmented`. Longer lists: `stepped_selector`. On/off:
+   card with a dimmed title on top, separated from its controls by a rule;
+   modulation sources sit below the audio path. Sections sharing a row form
+   one `grid_row`: each card spans a planned number of the grid's twelve
+   columns and takes the row's height, so card edges line up from row to row
+   and the panel reads as a 2D front panel. Rows and cards are separated by
+   the same gutter. A card may plan its controls on several lines; lines with
+   as many controls share table columns, and leftover width goes evenly to
+   the columns. Every line of a row has one center line for its knobs,
+   choices and switches and one baseline for their values, so neighbouring
+   cards line up.
+5. **Controls by range.** Continuous value: `labeled_knob`. Fewer than five
+   named options: toggle buttons (`segmented`, `toggle_group`), so every
+   option is visible. Longer lists: a drop-down or `stepped_selector`. On/off:
    `toggle_led`. One hero knob at most per panel (64 points); standard knobs
    are 48, dense rows 34.
 6. **Color.** Neutral surfaces from the theme; one value-arc color for all
    knobs; orange only for automation, violet only for modulation, pink only
    for AI. Devices do not have individual accent colors or skins.
-7. **Hidden, not disabled.** A control that does not apply in the current
-   mode is removed and the row closes up, with stable positions for the
-   controls that remain.
+7. **Hidden, or disabled in place.** A control that does not apply in the
+   current mode is removed and the row closes up, with stable positions for
+   the controls that remain. A dense panel whose cards would visibly reflow
+   (R1 Mini) keeps the control in its place, disabled, instead.
 8. **Text.** Parameter names of one or two words, the same word for the same
    thing in every device (Cutoff, Resonance, Drive, Mix, Output, Attack,
    Release). Units always shown with values.
@@ -723,10 +729,10 @@ run at 2×. The same kernel is the filter inside Mini, Maxi and Sampler.
 curve moves with the modulated cutoff from telemetry. Model as a
 `stepped_selector`; hero Cutoff knob; Resonance, Drive, Morph; an LFO
 `device_section` with `lfo_view`; an Envelope section. At 987 points the controls form
-two rows of cards, each on one line. The audio path is on top: Filter (Model,
-Type and Slope choose its character, then Cutoff, Resonance, Drive and Morph)
-and Output (Mix, Output) at the right end. Its modulation sources, LFO and
-Envelope, sit below.
+two rows of cards, each on one line. The Filter spans the top (Model, then
+Type and Slope as toggle buttons choose its character, then Cutoff,
+Resonance, Drive and Morph). Below sit its modulation sources, LFO and
+Envelope, and Output (Mix, Output) at the right end.
 
 ## Instruments
 
@@ -763,21 +769,25 @@ per-voice random walk to pitch and cutoff so stacked notes do not sound
 static. The mixer can overdrive the filter input, as on the hardware this
 layout comes from.
 
-**Panel** (987 points, one page). Three rows of cards in signal order, the
-classic subtractive layout:
+**Panel** (987 points, one page). Four rows of cards in signal order, the
+classic subtractive layout, on the twelve-column grid:
 
 - **Osc 1, Osc 2, Mixer.** An oscillator's first line chooses its character
-  (Model, Wave, and Sync on Osc 2); the second sets its pitch (Octave, and
-  Semitones and Detune on Osc 2) and pulse Width. The Mixer is a two-by-two
-  block of levels.
-- **Filter, Filter envelope, Amp envelope.** Filter Model, the hero Cutoff,
-  Resonance and Drive, then what moves the cutoff: Envelope amount and Key
-  track. Each envelope has A, D, S, R with its Velocity amount below.
-- **LFO, Voice.** The LFO source (Rate, Sync, Shape) and its destinations
-  (Pitch, Cutoff, Width, Mod wheel); then Mode, Voices, Glide, Bend, Drift
-  and Volume, the output, last.
+  (Model and Wave as toggle buttons, and Sync on Osc 2); the second sets its
+  pitch (Octave, and Semitones and Detune on Osc 2) and pulse Width. The
+  Mixer is a two-by-two block of levels.
+- **Filter, Filter envelope.** Filter Model, the hero Cutoff, Resonance and
+  Drive, then what moves the cutoff: Envelope amount and Key track. The
+  envelope is A, D, S, R and its Velocity amount on one line.
+- **Voice, Amp envelope.** Mode (toggle buttons), Voices, Glide, Bend, Drift
+  and Volume; the amp envelope sits under the filter envelope in the same
+  columns.
+- **LFO.** The source (Rate, Sync, Shape) and its destinations (Pitch,
+  Cutoff, Width, Mod wheel) across the full width.
 
-Knobs are dense (34 points) except the hero Cutoff. Unlike the effect, the
+A control that does nothing in the current mode (pulse Width on another
+wave, LFO Rate when synced, Voices outside Poly) stays in place, disabled, so
+the cards never reflow. Knobs are dense (34 points) except the hero Cutoff. Unlike the effect, the
 synth draws no filter response: the controls start right under the header.
 The sketch below is the
 original target:

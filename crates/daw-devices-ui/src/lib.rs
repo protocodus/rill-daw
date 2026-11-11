@@ -99,19 +99,27 @@ pub fn show(
                     .fold(daw_ui::tokens::CONTROL_HEIGHT, f32::max)
             })
             .collect();
-        let weights: Vec<f32> = cards.iter().map(|card| card.weight).collect();
-        daw_ui::flex_row(ui, &weights, |ui, index| {
+        let spans: Vec<u8> = cards.iter().map(|card| card.span).collect();
+        daw_ui::grid_row(ui, &spans, |ui, index| {
             let card = &cards[index];
             daw_ui::device_section_title(ui, card.title);
+            ui.add_space(daw_ui::tokens::SPACE_XS);
             let available = ui.available_width();
             let lines = wrap(&card.lines, available);
-            let columns = columns(&lines, available);
             for (index, line) in lines.iter().enumerate() {
                 let height = heights
                     .get(index)
                     .or(heights.last())
                     .copied()
                     .unwrap_or(0.0);
+                // Lines with as many controls share their columns, as in
+                // a table; a line of another length spreads on its own.
+                let peers: Vec<_> = lines
+                    .iter()
+                    .filter(|peer| peer.len() == line.len())
+                    .cloned()
+                    .collect();
+                let columns = columns(&peers, available);
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     for ((spec, natural), width) in line.iter().zip(&columns) {
@@ -125,9 +133,11 @@ pub fn show(
                 });
             }
         });
-        daw_ui::section_gap(ui);
+        // The gutter between rows equals the one between cards.
+        ui.add_space((daw_ui::tokens::SPACE_SM - ui.spacing().item_spacing.y).max(0.0));
     }
     if descriptor.kind == DeviceKind::Instrument {
+        daw_ui::section_gap(ui);
         performance(ui, host, state);
     }
 }
@@ -136,8 +146,8 @@ pub fn show(
 struct Card<'a> {
     title: &'static str,
     lines: Vec<Vec<(&'a ParamSpec, f32)>>,
-    /// The card's share of its row.
-    weight: f32,
+    /// The card's width in grid columns.
+    span: u8,
 }
 
 fn card<'a>(
@@ -147,24 +157,14 @@ fn card<'a>(
     host: &dyn DeviceHost,
     layout: &panels::Layout,
 ) -> Option<Card<'a>> {
-    let all: Vec<Vec<_>> = section
+    let lines: Vec<Vec<_>> = section
         .lines
         .iter()
         .map(|line| {
             line.iter()
                 .filter_map(|id| descriptor.parameter(*id))
+                .filter(|spec| layout.keep_inactive || active(spec, host, layout))
                 .map(|spec| (spec, cell_width(ui, spec, layout)))
-                .collect()
-        })
-        .collect();
-    // Weighted by every control a section has, not only the visible ones,
-    // so cards keep their place when a mode hides one.
-    let weight = grid_width(&all);
-    let lines: Vec<Vec<_>> = all
-        .into_iter()
-        .map(|line| {
-            line.into_iter()
-                .filter(|(spec, _)| (layout.visible)(spec.id, &|id| host.value(id)))
                 .collect::<Vec<_>>()
         })
         .filter(|line| !line.is_empty())
@@ -172,8 +172,18 @@ fn card<'a>(
     (!lines.is_empty()).then_some(Card {
         title: section.title,
         lines,
-        weight,
+        span: section.span,
     })
+}
+
+/// Whether the control does anything in the device's current mode.
+fn active(spec: &ParamSpec, host: &dyn DeviceHost, layout: &panels::Layout) -> bool {
+    (layout.visible)(spec.id, &|id| host.value(id))
+}
+
+/// Whether a parameter's options are few enough to show as toggle buttons.
+fn toggles(spec: &ParamSpec) -> bool {
+    matches!(spec.range, ParamRange::Choice(labels) if labels.len() < daw_ui::TOGGLE_OPTION_LIMIT)
 }
 
 /// Lines too wide for `width` continue on the next, so a device without
@@ -288,7 +298,15 @@ fn cell_width(ui: &Ui, spec: &ParamSpec, layout: &panels::Layout) -> f32 {
         text + spacing.icon_spacing + spacing.icon_width + 2.0 * daw_ui::tokens::SPACE_SM
     };
     let control = match spec.range {
-        ParamRange::Linear { .. } | ParamRange::Log { .. } => knob_diameter(spec, layout),
+        // The knob, or its value below it at either end of the range.
+        ParamRange::Linear { .. } | ParamRange::Log { .. } => [0.0, 1.0]
+            .into_iter()
+            .map(|end| text(&spec.format(end), daw_ui::text::TextRole::Note.font()))
+            .fold(knob_diameter(spec, layout), f32::max),
+        ParamRange::Choice(labels) if toggles(spec) => labels
+            .iter()
+            .map(|label| text(label, button.clone()) + 2.0 * daw_ui::tokens::SPACE_SM)
+            .sum(),
         ParamRange::Choice(labels) => choice(widest(&mut labels.iter().map(|l| l.to_string()))),
         ParamRange::Integer { .. } => choice(widest(
             &mut (spec.plain_min() as i32..=spec.plain_max() as i32)
@@ -414,6 +432,9 @@ fn control(
         egui::vec2(width, 0.0),
         egui::Layout::top_down(egui::Align::Center),
         |ui| {
+            if !active(spec, host, layout) {
+                ui.disable();
+            }
             // Compact horizontal padding leaves a choice's text the room of its cell.
             ui.spacing_mut().button_padding.x = daw_ui::tokens::SPACE_SM;
             daw_ui::control_caption(ui, caption(spec, layout));
@@ -475,12 +496,22 @@ fn control(
                             })
                             .collect(),
                     };
-                    let current = spec.to_plain(normalized as f32);
+                    let mut current = spec.to_plain(normalized as f32);
                     let label = spec.format(normalized as f32);
-                    let size = egui::vec2(natural - CELL_GAP, daw_ui::tokens::CONTROL_HEIGHT);
-                    // A child of the choice's own width, which the cell centers.
-                    let response = ui
-                        .allocate_ui_with_layout(
+                    let response = if toggles(spec) {
+                        let options: Vec<(f32, &str)> = options
+                            .iter()
+                            .map(|(plain, option)| (*plain, option.as_str()))
+                            .collect();
+                        let response = daw_ui::toggle_group(ui, &mut current, &options);
+                        if response.changed() {
+                            host.set_value(spec.id, f64::from(spec.to_normalized(current)));
+                        }
+                        response
+                    } else {
+                        let size = egui::vec2(natural - CELL_GAP, daw_ui::tokens::CONTROL_HEIGHT);
+                        // A child of the choice's own width, which the cell centers.
+                        ui.allocate_ui_with_layout(
                             size,
                             egui::Layout::left_to_right(egui::Align::Center),
                             |ui| {
@@ -505,7 +536,8 @@ fn control(
                             },
                         )
                         .inner
-                        .on_hover_text(&label);
+                        .on_hover_text(&label)
+                    };
                     daw_ui::automatable_parameter_context(ui, &response, control, automation)
                 }
                 ParamRange::Toggle => {
@@ -530,8 +562,8 @@ fn control(
     );
 }
 
-/// Preset name with a modified marker, previous/next, the preset menu, Save
-/// as… and Reset. Identical for every device.
+/// The device's name beside its `daw_ui::preset_group`. Identical for every
+/// device.
 fn preset_bar(
     ui: &mut Ui,
     descriptor: &DeviceDescriptor,
@@ -564,68 +596,78 @@ fn preset_bar(
             state.preset = Some(preset.name.clone());
         }
     };
-    daw_ui::toolbar(ui, |ui| {
-        daw_ui::text::subtitle(ui, descriptor.name);
-        let name = state.preset.clone().unwrap_or_else(|| "Custom".into());
-        let label = if modified && state.preset.is_some() {
-            format!("{name} *")
-        } else {
-            name
-        };
-        let step = |offset: isize| {
-            let count = presets.len() as isize;
-            let from = current.map_or(if offset > 0 { -1 } else { 0 }, |index| index as isize);
-            (from + offset).rem_euclid(count) as usize
-        };
-        if ui
-            .add(daw_ui::IconButton::icon_only(
-                daw_ui::Icon::Back,
-                "Previous preset",
-            ))
-            .on_hover_text("Previous preset")
-            .clicked()
-            && !presets.is_empty()
-        {
-            load(host, state, presets[step(-1)]);
+    let name = state.preset.clone().unwrap_or_else(|| "Custom".into());
+    let name = if modified && state.preset.is_some() {
+        format!("{name} *")
+    } else {
+        name
+    };
+    let labels: Vec<String> = presets
+        .iter()
+        .map(|preset| {
+            if preset.category.is_empty() {
+                preset.name.clone()
+            } else {
+                format!("{} · {}", preset.category, preset.name)
+            }
+        })
+        .collect();
+    let choices: Vec<_> = presets
+        .iter()
+        .zip(&labels)
+        .map(|(preset, label)| daw_ui::PresetChoice {
+            label,
+            description: &preset.description,
+        })
+        .collect();
+    let step = |offset: isize| {
+        let count = presets.len() as isize;
+        let from = current.map_or(if offset > 0 { -1 } else { 0 }, |index| index as isize);
+        (count > 0).then(|| (from + offset).rem_euclid(count) as usize)
+    };
+    let saving = state.save_name.is_some();
+    // As tall as the group, so the name centers on it.
+    let height = daw_ui::tokens::CONTROL_HEIGHT + 2.0 * daw_ui::tokens::SPACE_SM;
+    let action = ui
+        .allocate_ui_with_layout(
+            egui::vec2(ui.available_width(), height),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.spacing_mut().item_spacing.x = daw_ui::tokens::SPACE_MD;
+                daw_ui::text::subtitle(ui, descriptor.name);
+                daw_ui::preset_group(
+                    ui,
+                    egui::Id::new((descriptor.id, "preset")),
+                    &name,
+                    &choices,
+                    current,
+                    &mut state.save_name,
+                )
+            },
+        )
+        .inner;
+    if !saving && let Some(draft) = &mut state.save_name {
+        // Saving starts from the loaded preset's name.
+        *draft = state.preset.clone().unwrap_or_default();
+    }
+    match action {
+        Some(daw_ui::PresetAction::Previous) => {
+            if let Some(index) = step(-1) {
+                load(host, state, presets[index]);
+            }
         }
-        daw_ui::select(egui::Id::new((descriptor.id, "preset")), label)
-            .width(daw_ui::tokens::SELECT_WIDTH)
-            .show_ui(ui, |ui| {
-                for (index, preset) in presets.iter().enumerate() {
-                    let text = if preset.category.is_empty() {
-                        preset.name.clone()
-                    } else {
-                        format!("{} · {}", preset.category, preset.name)
-                    };
-                    let response = daw_ui::selectable(ui, current == Some(index), text);
-                    let response = if preset.description.is_empty() {
-                        response
-                    } else {
-                        response.on_hover_text(&preset.description)
-                    };
-                    if response.clicked() {
-                        load(host, state, preset);
-                    }
-                }
-            });
-        if ui
-            .add(daw_ui::IconButton::icon_only(
-                daw_ui::Icon::ChevronRight,
-                "Next preset",
-            ))
-            .on_hover_text("Next preset")
-            .clicked()
-            && !presets.is_empty()
-        {
-            load(host, state, presets[step(1)]);
+        Some(daw_ui::PresetAction::Next) => {
+            if let Some(index) = step(1) {
+                load(host, state, presets[index]);
+            }
         }
-        if daw_ui::small_button(ui, "Save as…").clicked() {
-            state.save_name = Some(state.preset.clone().unwrap_or_default());
+        Some(daw_ui::PresetAction::Load(index)) => load(host, state, presets[index]),
+        Some(daw_ui::PresetAction::SaveAs(name)) => {
+            let preset = Preset::capture(descriptor, &name, |id| host.value(id) as f32);
+            host.save_preset(preset);
+            state.preset = Some(name);
         }
-        if daw_ui::small_button(ui, "Reset")
-            .on_hover_text("Return every parameter to its default")
-            .clicked()
-        {
+        Some(daw_ui::PresetAction::Reset) => {
             let values: Vec<_> = descriptor
                 .parameters
                 .iter()
@@ -634,28 +676,7 @@ fn preset_bar(
             host.set_values(&values);
             state.preset = None;
         }
-    });
-    if let Some(mut name) = state.save_name.take() {
-        let mut keep = true;
-        daw_ui::toolbar(ui, |ui| {
-            daw_ui::text_field(ui, &mut name, "Preset name", daw_ui::tokens::SELECT_WIDTH);
-            let valid = !name.trim().is_empty() && name.len() <= 128;
-            if ui
-                .add_enabled(valid, daw_ui::button_widget("Save"))
-                .clicked()
-            {
-                let preset = Preset::capture(descriptor, name.trim(), |id| host.value(id) as f32);
-                host.save_preset(preset);
-                state.preset = Some(name.trim().to_string());
-                keep = false;
-            }
-            if daw_ui::small_button(ui, "Cancel").clicked() {
-                keep = false;
-            }
-        });
-        if keep {
-            state.save_name = Some(name);
-        }
+        Some(daw_ui::PresetAction::ToggleFavorite(_)) | None => {}
     }
 }
 

@@ -190,6 +190,7 @@ pub fn midi_expression_editor(
             crate::form_grid(ui,"expression_value",|ui| {
                 crate::form_label(ui,"Expression");
                 let before = controls.kind;
+                // Four options, but their names are too long to sit side by side as toggle buttons.
                 crate::select("expression_kind",controls.kind.label()).width(crate::tokens::FORM_FIELD_WIDTH).show_ui(ui,|ui| {
                     for kind in MidiExpressionKind::ALL { crate::selectable_value(ui,&mut controls.kind,kind,kind.label()); }
                 });

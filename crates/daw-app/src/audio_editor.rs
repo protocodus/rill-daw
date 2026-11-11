@@ -1239,15 +1239,13 @@ impl DawApp {
                                 "Fade-out length"
                             })
                             .changed();
-                        daw_ui::select("audio_fade_curve", curve.name())
-                            .width(daw_ui::tokens::SELECT_WIDTH)
-                            .show_ui(ui, |ui| {
-                                for value in FadeCurve::ALL {
-                                    changed |=
-                                        daw_ui::selectable_value(ui, curve, value, value.name())
-                                            .changed();
-                                }
-                            });
+                        changed |= daw_ui::choice(
+                            ui,
+                            "audio_fade_curve",
+                            curve,
+                            &FadeCurve::ALL.map(|value| (value, value.name())),
+                        )
+                        .changed();
                         if changed {
                             // Only an intentional independent edit reanchors both
                             // fades to this visible window; merely viewing never does.
@@ -1307,18 +1305,12 @@ impl DawApp {
         if state.transients_open {
             drawer_height = daw_ui::editor_bottom_drawer(ui, drawer_id, |ui| {
                 let previous = state.settings;
-                daw_ui::select("transient_algorithm", state.settings.algorithm.name())
-                    .width(daw_ui::tokens::SELECT_WIDTH)
-                    .show_ui(ui, |ui| {
-                        for algorithm in TransientAlgorithm::ALL {
-                            daw_ui::selectable_value(
-                                ui,
-                                &mut state.settings.algorithm,
-                                algorithm,
-                                algorithm.name(),
-                            );
-                        }
-                    });
+                daw_ui::choice(
+                    ui,
+                    "transient_algorithm",
+                    &mut state.settings.algorithm,
+                    &TransientAlgorithm::ALL.map(|algorithm| (algorithm, algorithm.name())),
+                );
                 let response = ui.add(
                     daw_ui::slider(&mut state.settings.sensitivity, 0.0..=1.0).text("Sensitivity"),
                 );

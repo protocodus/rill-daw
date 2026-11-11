@@ -220,6 +220,109 @@ pub fn preset_browser(
     action
 }
 
+/// One entry of a [`preset_group`]'s menu.
+#[derive(Clone, Copy, Debug)]
+pub struct PresetChoice<'a> {
+    pub label: &'a str,
+    /// Shown on hover; may be empty.
+    pub description: &'a str,
+}
+
+/// Every preset control of a device in one bordered group, set apart from
+/// the device's own controls: previous and next, the preset menu, **Save
+/// as…** and **Reset**. `draft` is the name being typed while saving; the
+/// group opens and closes it. Identical wherever presets appear.
+pub fn preset_group(
+    ui: &mut Ui,
+    id_salt: impl std::hash::Hash,
+    name: &str,
+    choices: &[PresetChoice<'_>],
+    current: Option<usize>,
+    draft: &mut Option<String>,
+) -> Option<PresetAction> {
+    let mut action = None;
+    crate::inset(ui.ctx())
+        .inner_margin(egui::Margin::symmetric(
+            tokens::SPACE_SM as i8,
+            tokens::SPACE_XS as i8,
+        ))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+                let title = group_title(ui, "Preset");
+                let (rect, _) = ui.allocate_exact_size(
+                    title.size() + vec2(tokens::SPACE_XS, 0.0),
+                    egui::Sense::hover(),
+                );
+                ui.painter()
+                    .galley(rect.left_top(), title, egui::Color32::PLACEHOLDER);
+                if ui
+                    .add(IconButton::icon_only(Icon::Back, "Previous preset"))
+                    .on_hover_text("Previous preset")
+                    .clicked()
+                {
+                    action = Some(PresetAction::Previous);
+                }
+                crate::select(id_salt, name)
+                    .width(tokens::SELECT_WIDTH + tokens::SPACE_XL)
+                    .truncate()
+                    .show_ui(ui, |ui| {
+                        for (index, choice) in choices.iter().enumerate() {
+                            let response =
+                                crate::selectable(ui, current == Some(index), choice.label);
+                            let response = if choice.description.is_empty() {
+                                response
+                            } else {
+                                response.on_hover_text(choice.description)
+                            };
+                            if response.clicked() {
+                                action = Some(PresetAction::Load(index));
+                            }
+                        }
+                    });
+                if ui
+                    .add(IconButton::icon_only(Icon::ChevronRight, "Next preset"))
+                    .on_hover_text("Next preset")
+                    .clicked()
+                {
+                    action = Some(PresetAction::Next);
+                }
+                ui.add_space(tokens::SPACE_XS);
+                ui.separator();
+                ui.add_space(tokens::SPACE_XS);
+                if let Some(mut name) = draft.take() {
+                    crate::text_field(ui, &mut name, "Preset name", tokens::SELECT_WIDTH);
+                    let valid = !name.trim().is_empty() && name.len() <= 128;
+                    let mut keep = true;
+                    if ui
+                        .add_enabled(valid, crate::button_widget("Save"))
+                        .clicked()
+                    {
+                        action = Some(PresetAction::SaveAs(name.trim().to_owned()));
+                        keep = false;
+                    }
+                    if crate::small_button(ui, "Cancel").clicked() {
+                        keep = false;
+                    }
+                    if keep {
+                        *draft = Some(name);
+                    }
+                } else {
+                    if crate::small_button(ui, "Save as…").clicked() {
+                        *draft = Some(String::new());
+                    }
+                    if crate::small_button(ui, "Reset")
+                        .on_hover_text("Return every parameter to its default")
+                        .clicked()
+                    {
+                        action = Some(PresetAction::Reset);
+                    }
+                }
+            });
+        });
+    action
+}
+
 /// Preset data the panel header shows.
 #[derive(Clone, Copy)]
 pub struct PresetInfo<'a> {
@@ -478,35 +581,42 @@ pub fn device_section<R>(ui: &mut Ui, title: &str, contents: impl FnOnce(&mut Ui
     .inner
 }
 
-/// The heading of a device section: its name in tracked capitals and a rule
-/// to the section's right edge. Distinct from the sentence-case
-/// [`control_caption`]s under it, so the panel's two levels never read alike.
-pub fn device_section_title(ui: &mut Ui, title: &str) -> Response {
-    let colors = crate::theme::palette(ui.ctx());
+/// A group's name in small tracked capitals, dimmed so it frames the
+/// controls without competing with them.
+fn group_title(ui: &Ui, title: &str) -> std::sync::Arc<egui::Galley> {
     let mut job = egui::text::LayoutJob::default();
     job.append(
         &title.to_uppercase(),
         0.0,
         egui::TextFormat {
-            font_id: crate::text::TextRole::Label.font(),
-            color: colors.text,
+            font_id: egui::FontId::new(tokens::FONT_SMALL, TextRole::Label.font().family),
+            color: theme::palette(ui.ctx()).muted,
             extra_letter_spacing: 1.0,
             ..Default::default()
         },
     );
-    let galley = ui.painter().layout_job(job);
-    let width = ui.available_width();
-    let (rect, response) =
-        ui.allocate_exact_size(vec2(width, galley.size().y), egui::Sense::hover());
-    let rule = rect.left() + galley.size().x + tokens::SPACE_SM;
-    ui.painter().galley(rect.left_top(), galley, colors.text);
-    if rule < rect.right() {
-        ui.painter().hline(
-            rule..=rect.right(),
-            rect.center().y,
-            egui::Stroke::new(tokens::BORDER_WIDTH, colors.line),
-        );
-    }
+    ui.painter().layout_job(job)
+}
+
+/// The heading of a device section: its dimmed name on top and a rule that
+/// separates it from the controls. Distinct from the sentence-case
+/// [`control_caption`]s under it, so the panel's two levels never read alike.
+pub fn device_section_title(ui: &mut Ui, title: &str) -> Response {
+    let galley = group_title(ui, title);
+    let (rect, response) = ui.allocate_exact_size(
+        vec2(
+            ui.available_width(),
+            galley.size().y + tokens::SPACE_SM + tokens::BORDER_WIDTH,
+        ),
+        egui::Sense::hover(),
+    );
+    let colors = theme::palette(ui.ctx());
+    ui.painter().galley(rect.left_top(), galley, colors.muted);
+    ui.painter().hline(
+        rect.x_range(),
+        rect.bottom() - tokens::BORDER_WIDTH * 0.5,
+        egui::Stroke::new(tokens::BORDER_WIDTH, colors.line),
+    );
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, title));
     response
 }
@@ -719,7 +829,7 @@ fn generic_group(ui: &mut Ui, rows: &[&ParamRow<'_>], edits: &mut dyn ParameterE
                 ui.vertical(|ui| {
                     crate::text::note(ui, row.name);
                     let mut index = choice_index(value, options.len());
-                    let response = if options.len() <= 5 && options.len() >= 2 {
+                    let response = if options.len() >= 2 {
                         segmented(ui, &mut index, options)
                     } else {
                         stepped_selector(ui, &mut index, options)

@@ -115,6 +115,35 @@ fn segmented_selects_exclusively() {
 }
 
 #[test]
+fn choice_is_toggle_buttons_below_five_options_and_a_drop_down_from_five() {
+    let ctx = themed();
+    let four = [(0, "Saw"), (1, "Pulse"), (2, "Triangle"), (3, "Sine")];
+    let five = [(0, "A"), (1, "B"), (2, "C"), (3, "D"), (4, "E")];
+    let mut selected = 0;
+    let used = run(&ctx, vec![], |ui| {
+        ui::choice(ui, "wave", &mut 0, &four);
+    });
+    // One click on a visible option picks it; nothing has to open first.
+    let at = pos2(used.right() - 8.0, used.center().y);
+    click(at, 1, &mut |events| {
+        run(&ctx, events, |ui| {
+            ui::choice(ui, "wave", &mut selected, &four);
+        });
+    });
+    assert_eq!(selected, 3);
+    let mut selected = 0;
+    let used = run(&ctx, vec![], |ui| {
+        ui::choice(ui, "letter", &mut 0, &five);
+    });
+    click(used.center(), 1, &mut |events| {
+        run(&ctx, events, |ui| {
+            ui::choice(ui, "letter", &mut selected, &five);
+        });
+    });
+    assert_eq!(selected, 0, "a click on a drop-down only opens its list");
+}
+
+#[test]
 fn toggle_led_flips() {
     let ctx = themed();
     let mut on = false;

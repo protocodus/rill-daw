@@ -582,7 +582,7 @@ impl DawApp {
                 let width = ui.available_width();
                 let compact_filters = width < 1000.0;
                 let choice_width = daw_ui::tokens::SELECT_WIDTH;
-                let sort_width = 160.0;
+                let sort_width = 300.0;
                 let view_width = 110.0;
                 let hide_sidebar = width < SIDEBAR_WIDTH + PANE_GAP + CATALOG_MIN_WIDTH;
                 let search_width = (width - 2.0 * choice_width - view_width
@@ -661,15 +661,9 @@ impl DawApp {
                     if !compact_filters {
                         daw_ui::toolbar_group_sized(ui, sort_width, |ui| {
                             ui.add_enabled_ui(state.collection != Collection::RecentlyUsed, |ui| {
-                                daw_ui::select("library_sort", if state.collection == Collection::RecentlyUsed {
-                                    "Sort: Recently used".to_owned()
-                                } else { format!("Sort: {}", state.sort.label()) })
-                                    .width(sort_width)
-                                    .show_ui(ui, |ui| {
-                                        for sort in Sort::ALL {
-                                            daw_ui::selectable_value(ui, &mut state.sort, sort, sort.label());
-                                        }
-                                    });
+                                daw_ui::choice(ui, "library_sort", &mut state.sort, &Sort::ALL.map(|sort| (sort, sort.label())))
+                                    .on_hover_text("Sort by")
+                                    .on_disabled_hover_text("Recently used plug-ins are listed latest first");
                             });
                         });
                     }

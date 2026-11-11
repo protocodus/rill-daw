@@ -3345,11 +3345,7 @@ impl DawApp {
                 SetupPage::Appearance => {
                     daw_ui::form_grid(ui, "appearance_settings", |ui| {
                         let theme_label = daw_ui::form_label(ui, "Theme");
-                        daw_ui::select("appearance", self.setup_draft.appearance.name()).width(daw_ui::tokens::FORM_FIELD_WIDTH).show_ui(ui, |ui| {
-                            for appearance in [Appearance::System, Appearance::Light, Appearance::Dark] {
-                                daw_ui::selectable_value(ui, &mut self.setup_draft.appearance, appearance, appearance.name());
-                            }
-                        }).response.labelled_by(theme_label.id).on_hover_text("System follows the operating system appearance.");
+                        daw_ui::choice(ui, "appearance", &mut self.setup_draft.appearance, &[Appearance::System, Appearance::Light, Appearance::Dark].map(|appearance| (appearance, appearance.name()))).labelled_by(theme_label.id).on_hover_text("System follows the operating system appearance.");
                         ui.end_row();
                     });
                 }
@@ -3426,10 +3422,7 @@ impl DawApp {
                         });
                         ui.end_row();
                         let conversion_label = daw_ui::form_label(ui, "Resampling");
-                        daw_ui::select("sample_conversion", match self.setup_draft.resample_quality { daw_engine::ResampleQuality::High => "High quality", daw_engine::ResampleQuality::Fast => "Fast" }).width(daw_ui::tokens::FORM_FIELD_WIDTH).show_ui(ui, |ui| {
-                            daw_ui::selectable_value(ui, &mut self.setup_draft.resample_quality, daw_engine::ResampleQuality::High, "High quality");
-                            daw_ui::selectable_value(ui, &mut self.setup_draft.resample_quality, daw_engine::ResampleQuality::Fast, "Fast");
-                        }).response.labelled_by(conversion_label.id).on_hover_text("High quality filters sample-rate conversion; Fast prepares mixed-rate audio sooner. Audio uses 32-bit float with 64-bit summing.");
+                        daw_ui::choice(ui, "sample_conversion", &mut self.setup_draft.resample_quality, &[(daw_engine::ResampleQuality::High, "High quality"), (daw_engine::ResampleQuality::Fast, "Fast")]).labelled_by(conversion_label.id).on_hover_text("High quality filters sample-rate conversion; Fast prepares mixed-rate audio sooner. Audio uses 32-bit float with 64-bit summing.");
                         ui.end_row();
                     });
                     let rate = self.setup_draft.sample_rate.max(1) as f64;

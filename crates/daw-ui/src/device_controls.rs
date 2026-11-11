@@ -364,43 +364,15 @@ fn paint_centered(ui: &Ui, rect: Rect, role: TextRole, text: &str, color: Color3
     crate::text::paint_single_line(ui.painter(), text_rect, font, color, text);
 }
 
-/// Exclusive choice among two to five short options. Falls back to a
-/// drop-down when the options do not fit the available width.
+/// Exclusive choice among two to four short options, as toggle buttons.
+/// Falls back to a drop-down for more, or when they do not fit the width.
 pub fn segmented(ui: &mut Ui, selected: &mut usize, options: &[&str]) -> Response {
-    let font = TextRole::Label.font();
-    let colors = theme::palette(ui.ctx());
-    let needed: f32 = options
-        .iter()
-        .map(|option| {
-            ui.painter()
-                .layout_no_wrap((*option).to_owned(), font.clone(), colors.text)
-                .size()
-                .x
-                + 2.0 * tokens::BUTTON_PADDING_X
-                + 1.0
-        })
-        .sum();
-    if options.len() > 5 || needed > ui.available_width() {
+    let needed = crate::toggle_group_width(ui, options.iter().copied());
+    if options.len() >= crate::TOGGLE_OPTION_LIMIT || needed > ui.available_width() {
         return choice_fallback(ui, selected, options);
     }
-    let mut changed = false;
-    let mut response = ui
-        .horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 1.0;
-            for (index, option) in options.iter().enumerate() {
-                if crate::selectable(ui, *selected == index, *option).clicked()
-                    && *selected != index
-                {
-                    *selected = index;
-                    changed = true;
-                }
-            }
-        })
-        .response;
-    if changed {
-        response.mark_changed();
-    }
-    response
+    let indexed: Vec<(usize, &str)> = options.iter().copied().enumerate().collect();
+    crate::toggle_group(ui, selected, &indexed)
 }
 
 fn choice_fallback(ui: &mut Ui, selected: &mut usize, options: &[&str]) -> Response {

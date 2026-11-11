@@ -232,15 +232,12 @@ impl GenerateDialog {
                             daw_ui::text::label(ui, "Harmony");
                             let mut chord =
                                 matches!(self.settings.harmony, GenerateHarmony::Chord(_));
-                            let response = daw_ui::select(
+                            let response = daw_ui::choice(
+                                ui,
                                 "generate_harmony",
-                                if chord { "Chord" } else { "Scale" },
-                            )
-                            .show_ui(ui, |ui| {
-                                daw_ui::selectable_value(ui, &mut chord, true, "Chord");
-                                daw_ui::selectable_value(ui, &mut chord, false, "Scale");
-                            })
-                            .response;
+                                &mut chord,
+                                &[(true, "Chord"), (false, "Scale")],
+                            );
                             if chord != matches!(self.settings.harmony, GenerateHarmony::Chord(_)) {
                                 self.settings.harmony = if chord {
                                     GenerateHarmony::Chord(self.chord)
@@ -546,14 +543,9 @@ fn choice<T: PartialEq + Copy>(
     name: impl Fn(T) -> &'static str,
 ) {
     let label_response = daw_ui::text::label(ui, label);
-    let response = daw_ui::select(("generate", id), name(*value))
-        .show_ui(ui, |ui| {
-            for &item in values {
-                daw_ui::selectable_value(ui, value, item, name(item));
-            }
-        })
-        .response
-        .labelled_by(label_response.id);
+    let options: Vec<(T, &str)> = values.iter().map(|&item| (item, name(item))).collect();
+    let response =
+        daw_ui::choice(ui, ("generate", id), value, &options).labelled_by(label_response.id);
     controls[id] = rect_json(response.rect);
     ui.end_row();
 }

@@ -1177,21 +1177,14 @@ impl DawApp {
                             ui.with_layout(
                                 egui::Layout::left_to_right(egui::Align::Center),
                                 |ui| {
-                                    daw_ui::select("midi_stack", state.stack.name())
-                                        .width(stack_width)
-                                        .wrap_mode(egui::TextWrapMode::Truncate)
-                                        .show_ui(ui, |ui| {
-                                            for stack in [NoteStack::Chord, NoteStack::Scale] {
-                                                daw_ui::selectable_value(
-                                                    ui,
-                                                    &mut state.stack,
-                                                    stack,
-                                                    stack.name(),
-                                                );
-                                            }
-                                        })
-                                        .response
-                                        .on_hover_text("Multi-draw fills the clicked octave");
+                                    daw_ui::choice(
+                                        ui,
+                                        "midi_stack",
+                                        &mut state.stack,
+                                        &[NoteStack::Chord, NoteStack::Scale]
+                                            .map(|stack| (stack, stack.name())),
+                                    )
+                                    .on_hover_text("Multi-draw fills the clicked octave");
                                     match state.stack {
                                         NoteStack::Single => {}
                                         NoteStack::Chord => {
