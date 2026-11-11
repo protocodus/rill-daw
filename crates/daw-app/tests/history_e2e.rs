@@ -52,8 +52,11 @@ fn named_history_jumps_saved_checkpoint_and_branching_work_through_ui() {
     assert_eq!(state["project"]["tracks"].as_array().unwrap().len(), 3);
     app.click("File");
     app.click("New");
-    let state = app.click("Don't save");
-    assert!(state["history"]["undo"].as_array().unwrap().is_empty());
+    app.click("Don't save");
+    // New waits for a running recovery write before it replaces the song.
+    let state = common::wait_until(&mut app, |state| {
+        state["history"]["undo"].as_array().unwrap().is_empty()
+    });
     assert!(state["history"]["redo"].as_array().unwrap().is_empty());
     app.quit();
 }
