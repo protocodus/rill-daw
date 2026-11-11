@@ -1516,3 +1516,101 @@ pub fn wheel(ui: &mut Ui, value: &mut f32, bipolar: bool, label: &str, size: Vec
     response.widget_info(|| WidgetInfo::slider(true, f64::from(*value), label));
     response.on_hover_text(format!("{label} · {hint}. Double-click to reset."))
 }
+
+/// Width of a [`fader`]'s cap; the fader may be given more, and centers.
+pub const FADER_CAP_WIDTH: f32 = tokens::HIT_TARGET;
+
+/// A vertical fader over a normalized value (0 at the bottom): a rail whose
+/// lower part is highlighted up to a cap. For values read as a shape across
+/// neighbours, as the four stages of an envelope; a knob everywhere else.
+/// Drag motion is relative, with Shift for fine control; arrow keys nudge
+/// when focused. The caller supplies caption, value text and hover.
+pub fn fader(
+    ui: &mut Ui,
+    value: &mut f64,
+    label: &str,
+    size: Vec2,
+    automation: Option<AutomationState>,
+) -> Response {
+    let colors = theme::palette(ui.ctx());
+    let (rect, mut response) = ui.allocate_exact_size(size, Sense::click_and_drag());
+    let before = *value;
+    let fine = ui.input(|input| if input.modifiers.shift { 0.1 } else { 1.0 });
+    let cap = vec2(FADER_CAP_WIDTH.min(rect.width()), 11.0);
+    // The cap's center travels between the rail's ends.
+    let travel = (rect.height() - cap.y).max(1.0);
+    if ui.is_enabled() {
+        if response.dragged_by(egui::PointerButton::Primary) {
+            *value += f64::from(-response.drag_delta().y / travel) * fine;
+        }
+        if response.clicked() {
+            response.request_focus();
+        }
+        if response.has_focus() {
+            ui.input_mut(|input| {
+                for (key, direction) in [(egui::Key::ArrowUp, 1.0), (egui::Key::ArrowDown, -1.0)] {
+                    if input.consume_key(egui::Modifiers::NONE, key)
+                        || input.consume_key(egui::Modifiers::SHIFT, key)
+                    {
+                        *value += direction * 0.02 * fine;
+                    }
+                }
+            });
+        }
+    }
+    *value = value.clamp(0.0, 1.0);
+    if *value != before {
+        response.mark_changed();
+    }
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter();
+        let active = if ui.is_enabled() {
+            automation.map_or(colors.accent, |state| state.color(ui.ctx()))
+        } else {
+            colors.muted
+        };
+        let x = rect.center().x;
+        let (top, bottom) = (rect.top() + cap.y * 0.5, rect.bottom() - cap.y * 0.5);
+        let y = bottom - travel * *value as f32;
+        let rail = |from: f32, to: f32, color: Color32| {
+            painter.line_segment(
+                [egui::pos2(x, from), egui::pos2(x, to)],
+                Stroke::new(4.5_f32, color),
+            );
+        };
+        rail(top, bottom, colors.line);
+        rail(y, bottom, active);
+        let cap = Rect::from_center_size(egui::pos2(x, y), cap);
+        painter.rect(
+            cap,
+            3.0,
+            if response.hovered() || response.dragged() {
+                colors.control_hover
+            } else {
+                colors.control_fill
+            },
+            Stroke::new(
+                if response.has_focus() {
+                    tokens::FOCUS_WIDTH
+                } else {
+                    tokens::BORDER_WIDTH
+                },
+                if response.has_focus() {
+                    colors.text
+                } else {
+                    colors.line
+                },
+            ),
+            StrokeKind::Inside,
+        );
+        painter.line_segment(
+            [
+                egui::pos2(cap.left() + 4.0, y),
+                egui::pos2(cap.right() - 4.0, y),
+            ],
+            Stroke::new(2.0_f32, colors.text),
+        );
+    }
+    response.widget_info(|| WidgetInfo::slider(ui.is_enabled(), *value, label));
+    response
+}

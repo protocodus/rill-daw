@@ -144,6 +144,48 @@ fn choice_is_toggle_buttons_below_five_options_and_a_drop_down_from_five() {
 }
 
 #[test]
+fn toggle_grid_lays_four_options_out_two_by_two() {
+    let ctx = themed();
+    let four = [(0, "Saw"), (1, "Pulse"), (2, "Triangle"), (3, "Sine")];
+    let mut selected = 0;
+    let used = run(&ctx, vec![], |ui| {
+        ui::toggle_grid(ui, &mut 0, &four, 2);
+    });
+    assert_eq!(used.height(), 2.0 * ui::TOGGLE_ROW_HEIGHT);
+    click(used.right_bottom() - vec2(8.0, 8.0), 1, &mut |events| {
+        run(&ctx, events, |ui| {
+            ui::toggle_grid(ui, &mut selected, &four, 2);
+        });
+    });
+    assert_eq!(selected, 3);
+    click(used.left_bottom() + vec2(8.0, -8.0), 1, &mut |events| {
+        run(&ctx, events, |ui| {
+            ui::toggle_grid(ui, &mut selected, &four, 2);
+        });
+    });
+    assert_eq!(selected, 2);
+}
+
+#[test]
+fn fader_and_mini_knob_take_the_size_they_are_given() {
+    let ctx = themed();
+    let size = vec2(ui::FADER_CAP_WIDTH, 120.0);
+    let mut value = 0.5;
+    let used = run(&ctx, vec![], |ui| {
+        ui::fader(ui, &mut value, "Attack", size, None);
+    });
+    assert_eq!(used.size(), size);
+    assert_eq!(value, 0.5, "drawing a fader leaves its value alone");
+    let used = run(&ctx, vec![], |ui| {
+        ui.add(ui::Knob::new(&mut value, 0.0..=1.0).mini());
+    });
+    assert_eq!(
+        used.size(),
+        vec2(ui::MINI_KNOB_DIAMETER, ui::MINI_KNOB_DIAMETER)
+    );
+}
+
+#[test]
 fn toggle_led_flips() {
     let ctx = themed();
     let mut on = false;

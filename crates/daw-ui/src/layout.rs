@@ -84,21 +84,23 @@ fn toolbar_with_row_height<R>(
     row
 }
 
-/// Columns of a [`grid_row`].
-pub const GRID_COLUMNS: u8 = 12;
-
-/// One row of a twelve-column panel grid: each cell is a card `spans[index]`
-/// columns wide, and every card takes the height of the tallest. Rows drawn
-/// under each other share the grid, so their cards' edges line up like the
-/// sections of a hardware front panel. `cell` draws the contents of cell
-/// `index`.
+/// One row of a panel grid: each cell is a card `spans[index]` columns wide
+/// of as many columns as the spans add up to, and every card takes the
+/// height of the tallest. Rows whose spans add up to the same number share
+/// the grid, so their cards' edges line up like the modules of a hardware
+/// front panel. `cell` draws the contents of cell `index`.
 pub fn grid_row<R>(ui: &mut Ui, spans: &[u8], mut cell: impl FnMut(&mut Ui, usize) -> R) -> Vec<R> {
     let frame = crate::card(ui.ctx());
     let margin = frame.total_margin();
     let gap = tokens::SPACE_SM;
     let origin = ui.cursor().min;
     let width = ui.available_width();
-    let column = (width - gap * f32::from(GRID_COLUMNS - 1)).max(0.0) / f32::from(GRID_COLUMNS);
+    let columns = spans
+        .iter()
+        .map(|span| f32::from(*span))
+        .sum::<f32>()
+        .max(1.0);
+    let column = (width - gap * (columns - 1.0)).max(0.0) / columns;
     let mut x = origin.x;
     let mut results = Vec::with_capacity(spans.len());
     let mut cards = Vec::with_capacity(spans.len());

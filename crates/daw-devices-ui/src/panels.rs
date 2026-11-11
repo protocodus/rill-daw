@@ -8,15 +8,47 @@ pub type Values<'a> = &'a dyn Fn(u32) -> f64;
 /// Drawing only; at other host rates the curve differs only near Nyquist.
 const RESPONSE_RATE: f32 = 48_000.0;
 
+/// What stands at one place of a section's line.
+#[derive(Clone, Copy)]
+pub enum Slot {
+    /// One control, this many cells wide.
+    Control(u32, u8),
+    /// Cells left empty, so the controls after them keep their column.
+    Blank(u8),
+    /// Vertical faders sharing this many cells, as tall as all the lines of
+    /// the row: the stages of an envelope.
+    Faders(&'static [u32], u8),
+}
+
+impl Slot {
+    pub fn ids(&self) -> &[u32] {
+        match self {
+            Self::Control(id, _) => std::slice::from_ref(id),
+            Self::Blank(_) => &[],
+            Self::Faders(ids, _) => ids,
+        }
+    }
+}
+
 pub struct Section {
     pub title: &'static str,
     /// Controls line by line; the lines of a card share their columns.
-    pub lines: Vec<Vec<u32>>,
+    pub lines: Vec<Vec<Slot>>,
     /// Sections sharing a row sit side by side, in signal order.
     pub row: usize,
-    /// Width in columns of `daw_ui::grid_row`; a row's spans add up to
-    /// `daw_ui::GRID_COLUMNS`.
+    /// Width in columns of `daw_ui::grid_row`; every row's spans add up to
+    /// the same number. On a cell grid, also the card's width in cells.
     pub span: u8,
+}
+
+impl Section {
+    #[cfg(test)]
+    pub fn ids(&self) -> impl Iterator<Item = u32> + '_ {
+        self.lines
+            .iter()
+            .flatten()
+            .flat_map(|slot| slot.ids().iter().copied())
+    }
 }
 
 pub struct Layout {
@@ -29,9 +61,13 @@ pub struct Layout {
     pub knob: daw_ui::KnobSize,
     /// Captions that differ from the parameter's name.
     pub captions: &'static [(u32, &'static str)],
-    /// Short choices whose toggle buttons stack, where a card is short of
-    /// width.
-    pub stacked: &'static [u32],
+    /// Whether every card divides into equal cells, one control each unless
+    /// a slot says otherwise, as on a hardware front panel. Otherwise a
+    /// control takes the width its caption and value need.
+    pub cells: bool,
+    /// Short choices whose toggle buttons form a grid of this many columns
+    /// instead of one row, where a card is short of width.
+    pub toggle_columns: &'static [(u32, usize)],
     /// Whether a control does anything in the current mode.
     pub visible: fn(u32, Values<'_>) -> bool,
     /// What happens to a control that does nothing: hidden, or, on a dense
@@ -51,6 +87,19 @@ pub struct ResponseView {
 }
 
 fn section(title: &'static str, row: usize, span: u8, lines: &[&[u32]]) -> Section {
+    let lines: Vec<Vec<Slot>> = lines
+        .iter()
+        .map(|line| line.iter().map(|id| Slot::Control(*id, 1)).collect())
+        .collect();
+    Section {
+        title,
+        lines,
+        row,
+        span,
+    }
+}
+
+fn cells(title: &'static str, row: usize, span: u8, lines: &[&[Slot]]) -> Section {
     Section {
         title,
         lines: lines.iter().map(|line| line.to_vec()).collect(),
@@ -83,7 +132,7 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
             section("Output", 1, 2, &[&[MIX, OUTPUT]]),
         ];
         layout.hero = Some(CUTOFF);
-        layout.stacked = &[SLOPE];
+        layout.toggle_columns = &[(SLOPE, 1)];
         layout.visible = |id, values| applies(id, &filter_settings(values));
         layout.options =
             |id, values| (id == TYPE).then(|| type_options(filter_settings(values).model));
@@ -98,90 +147,127 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
     }
     if descriptor.id == mini::DESCRIPTOR.id {
         use mini::*;
-        // A classic subtractive front panel in signal order: the sources
-        // and their mix, the filter with its envelope, the voices with the
-        // amp envelope that ends them, then modulation. An oscillator's
-        // first line chooses its character, the second its pitch and pulse
-        // width. Both envelopes share the right-hand columns.
+        // A hardware front panel on one grid of equal cells, twelve to a
+        // row, in signal order: the sources, their mix and the master
+        // controls; the filter and the two envelopes; modulation and the
+        // voices. Every row breaks after its eighth cell. Both oscillators
+        // share their columns, so the second one's extra controls stand
+        // out; an envelope is four faders, read as its shape.
+        use Slot::{Blank, Control as C, Faders};
         layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
+        layout.cells = true;
         layout.sections = vec![
-            section(
-                "Osc 1",
+            cells(
+                "Oscillators",
                 0,
-                5,
-                &[&[OSC1_MODEL, OSC1_WAVE], &[OSC1_OCTAVE, OSC1_WIDTH]],
-            ),
-            section(
-                "Osc 2",
-                0,
-                5,
+                8,
                 &[
-                    &[OSC2_MODEL, OSC2_WAVE, OSC2_SYNC],
-                    &[OSC2_OCTAVE, OSC2_SEMITONES, OSC2_DETUNE, OSC2_WIDTH],
+                    &[
+                        C(OSC1_MODEL, 1),
+                        C(OSC1_WAVE, 2),
+                        C(OSC1_OCTAVE, 1),
+                        C(OSC1_WIDTH, 1),
+                        Blank(3),
+                    ],
+                    &[
+                        C(OSC2_MODEL, 1),
+                        C(OSC2_WAVE, 2),
+                        C(OSC2_OCTAVE, 1),
+                        C(OSC2_WIDTH, 1),
+                        C(OSC2_SEMITONES, 1),
+                        C(OSC2_DETUNE, 1),
+                        C(OSC2_SYNC, 1),
+                    ],
                 ],
             ),
-            section(
+            cells(
                 "Mixer",
                 0,
                 2,
-                &[&[MIX_OSC1, MIX_OSC2], &[MIX_SUB, MIX_NOISE]],
+                &[
+                    &[C(MIX_OSC1, 1), C(MIX_SUB, 1)],
+                    &[C(MIX_OSC2, 1), C(MIX_NOISE, 1)],
+                ],
             ),
-            section(
+            cells(
+                "Master",
+                0,
+                2,
+                &[
+                    &[C(VOLUME, 1), C(GLIDE, 1)],
+                    &[C(BEND_RANGE, 1), C(DRIFT, 1)],
+                ],
+            ),
+            cells(
                 "Filter",
                 1,
-                8,
-                &[&[
-                    FILTER_MODEL,
-                    CUTOFF,
-                    RESONANCE,
-                    DRIVE,
-                    FILTER_ENV,
-                    KEY_TRACKING,
-                ]],
+                4,
+                &[
+                    &[C(FILTER_MODEL, 3), C(CUTOFF, 1)],
+                    &[
+                        C(RESONANCE, 1),
+                        C(DRIVE, 1),
+                        C(FILTER_ENV, 1),
+                        C(KEY_TRACKING, 1),
+                    ],
+                ],
             ),
-            section(
+            cells(
                 "Filter envelope",
                 1,
                 4,
                 &[&[
-                    FENV_ATTACK,
-                    FENV_DECAY,
-                    FENV_SUSTAIN,
-                    FENV_RELEASE,
-                    VELOCITY_CUTOFF,
+                    Faders(&[FENV_ATTACK, FENV_DECAY, FENV_SUSTAIN, FENV_RELEASE], 3),
+                    C(VELOCITY_CUTOFF, 1),
                 ]],
             ),
-            section(
-                "Voice",
-                2,
-                8,
-                &[&[VOICE_MODE, VOICES, GLIDE, BEND_RANGE, DRIFT, VOLUME]],
-            ),
-            section(
+            cells(
                 "Amp envelope",
-                2,
+                1,
                 4,
                 &[&[
-                    AENV_ATTACK,
-                    AENV_DECAY,
-                    AENV_SUSTAIN,
-                    AENV_RELEASE,
-                    VELOCITY_AMP,
+                    Faders(&[AENV_ATTACK, AENV_DECAY, AENV_SUSTAIN, AENV_RELEASE], 3),
+                    C(VELOCITY_AMP, 1),
                 ]],
             ),
-            section(
+            cells(
                 "LFO",
-                3,
-                12,
+                2,
+                8,
                 &[&[
-                    LFO_RATE, LFO_SYNC, LFO_SHAPE, LFO_PITCH, LFO_CUTOFF, LFO_WIDTH, LFO_WHEEL,
+                    C(LFO_SHAPE, 2),
+                    C(LFO_RATE, 1),
+                    C(LFO_SYNC, 1),
+                    C(LFO_PITCH, 1),
+                    C(LFO_CUTOFF, 1),
+                    C(LFO_WIDTH, 1),
+                    C(LFO_WHEEL, 1),
                 ]],
             ),
+            cells("Voices", 2, 4, &[&[C(VOICE_MODE, 3), C(VOICES, 1)]]),
         ];
-        layout.stacked = &[OSC1_MODEL, OSC2_MODEL];
-        layout.captions = &[(VELOCITY_CUTOFF, "Velocity"), (VELOCITY_AMP, "Velocity")];
+        layout.toggle_columns = &[
+            (OSC1_MODEL, 1),
+            (OSC2_MODEL, 1),
+            (OSC1_WAVE, 2),
+            (OSC2_WAVE, 2),
+        ];
+        layout.captions = &[
+            (OSC1_MODEL, "Osc 1"),
+            (OSC2_MODEL, "Osc 2"),
+            (VELOCITY_CUTOFF, "Velocity"),
+            (VELOCITY_AMP, "Velocity"),
+            // As engraved on hardware; four full names do not fit side by side.
+            (FENV_ATTACK, "A"),
+            (FENV_DECAY, "D"),
+            (FENV_SUSTAIN, "S"),
+            (FENV_RELEASE, "R"),
+            (AENV_ATTACK, "A"),
+            (AENV_DECAY, "D"),
+            (AENV_SUSTAIN, "S"),
+            (AENV_RELEASE, "R"),
+        ];
         layout.hero = Some(CUTOFF);
-        layout.knob = daw_ui::KnobSize::Dense;
         layout.visible = |id, values| applies(id, &mini_settings(values));
         layout.keep_inactive = true;
     }
@@ -205,12 +291,12 @@ fn generic(descriptor: &DeviceDescriptor) -> Layout {
             .iter_mut()
             .find(|section| section.title == spec.group)
         {
-            Some(section) => section.lines[0].push(spec.id),
+            Some(section) => section.lines[0].push(Slot::Control(spec.id, 1)),
             None => sections.push(Section {
                 title: spec.group,
-                lines: vec![vec![spec.id]],
+                lines: vec![vec![Slot::Control(spec.id, 1)]],
                 row: sections.len(),
-                span: daw_ui::GRID_COLUMNS,
+                span: 1,
             }),
         }
     }
@@ -220,7 +306,8 @@ fn generic(descriptor: &DeviceDescriptor) -> Layout {
         hero: None,
         knob: daw_ui::KnobSize::Standard,
         captions: &[],
-        stacked: &[],
+        cells: false,
+        toggle_columns: &[],
         visible: |_, _| true,
         keep_inactive: false,
         options: |_, _| None,

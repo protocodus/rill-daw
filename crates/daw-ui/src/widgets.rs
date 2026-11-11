@@ -967,7 +967,7 @@ pub fn toggle_group<T: Copy + PartialEq>(
     current: &mut T,
     options: &[(T, &str)],
 ) -> Response {
-    toggle_track(ui, current, options, false)
+    toggle_track(ui, current, options, None)
 }
 
 /// Height of one option of a [`toggle_group_vertical`].
@@ -980,14 +980,27 @@ pub fn toggle_group_vertical<T: Copy + PartialEq>(
     current: &mut T,
     options: &[(T, &str)],
 ) -> Response {
-    toggle_track(ui, current, options, true)
+    toggle_grid(ui, current, options, 1)
+}
+
+/// A [`toggle_group`] laid out in `columns` equal columns, row by row: four
+/// options as two by two take the height of a knob, as a waveform selector
+/// beside one does.
+pub fn toggle_grid<T: Copy + PartialEq>(
+    ui: &mut Ui,
+    current: &mut T,
+    options: &[(T, &str)],
+    columns: usize,
+) -> Response {
+    toggle_track(ui, current, options, Some(columns.max(1)))
 }
 
 fn toggle_track<T: Copy + PartialEq>(
     ui: &mut Ui,
     current: &mut T,
     options: &[(T, &str)],
-    vertical: bool,
+    // `None`: one row, each option as wide as its label.
+    columns: Option<usize>,
 ) -> Response {
     let colors = theme::palette(ui.ctx());
     let font = egui::TextStyle::Button.resolve(ui.style());
@@ -1003,13 +1016,13 @@ fn toggle_track<T: Copy + PartialEq>(
         })
         .collect();
     let widths = galleys.iter().map(|galley| galley.size().x + 2.0 * padding);
-    let size = if vertical {
-        egui::vec2(
-            widths.fold(0.0, f32::max),
-            TOGGLE_ROW_HEIGHT * options.len() as f32,
-        )
-    } else {
-        egui::vec2(widths.sum(), tokens::CONTROL_HEIGHT)
+    let widest = widths.clone().fold(0.0, f32::max);
+    let size = match columns {
+        Some(columns) => egui::vec2(
+            widest * columns as f32,
+            TOGGLE_ROW_HEIGHT * options.len().div_ceil(columns) as f32,
+        ),
+        None => egui::vec2(widths.sum(), tokens::CONTROL_HEIGHT),
     };
     let (rect, mut response) = ui.allocate_exact_size(size, egui::Sense::hover());
     if ui.is_rect_visible(rect) {
@@ -1025,19 +1038,21 @@ fn toggle_track<T: Copy + PartialEq>(
     let mut changed = false;
     let mut next = rect.min;
     for (index, ((value, label), galley)) in options.iter().zip(galleys).enumerate() {
-        let segment = egui::Rect::from_min_size(
-            next,
-            if vertical {
-                egui::vec2(rect.width(), TOGGLE_ROW_HEIGHT)
-            } else {
-                egui::vec2(galley.size().x + 2.0 * padding, rect.height())
-            },
-        );
-        next = if vertical {
-            segment.left_bottom()
-        } else {
-            segment.right_top()
+        let segment = match columns {
+            Some(columns) => egui::Rect::from_min_size(
+                rect.min
+                    + egui::vec2(
+                        widest * (index % columns) as f32,
+                        TOGGLE_ROW_HEIGHT * (index / columns) as f32,
+                    ),
+                egui::vec2(widest, TOGGLE_ROW_HEIGHT),
+            ),
+            None => egui::Rect::from_min_size(
+                next,
+                egui::vec2(galley.size().x + 2.0 * padding, rect.height()),
+            ),
         };
+        next = segment.right_top();
         let button = ui.interact(segment, response.id.with(index), egui::Sense::click());
         if button.clicked() && current != value {
             *current = *value;

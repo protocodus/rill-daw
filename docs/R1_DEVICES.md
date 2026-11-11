@@ -429,19 +429,24 @@ and a new device has little to decide:
 4. **Signal order.** Sections run left to right in signal order, each a
    card with a dimmed title on top, separated from its controls by a rule;
    modulation sources sit below the audio path. Sections sharing a row form
-   one `grid_row`: each card spans a planned number of the grid's twelve
-   columns and takes the row's height, so card edges line up from row to row
-   and the panel reads as a 2D front panel. Rows and cards are separated by
+   one `grid_row`: each card spans a planned number of the grid's columns
+   (twelve on the built-in panels) and takes the row's height, so card edges
+   line up from row to row and the panel reads as a 2D front panel. Rows and cards are separated by
    the same gutter. A card may plan its controls on several lines; lines with
    as many controls share table columns, and leftover width goes evenly to
    the columns. Every line of a row has one center line for its knobs,
    choices and switches and one baseline for their values, so neighbouring
-   cards line up.
+   cards line up. A panel with many controls (R1 Mini) is a **cell grid**
+   instead, as on hardware: a card as many columns wide holds that many
+   equal cells per line, one control each unless planned wider, with cells
+   left blank where a line has fewer controls, so controls stand in columns.
 5. **Controls by range.** Continuous value: `labeled_knob`. Fewer than five
    named options: toggle buttons (`segmented`, `toggle_group`, or stacked
    with `toggle_group_vertical` where a card is short of width), so every
-   option is visible. Longer lists: a drop-down or `stepped_selector`. On/off:
-   `toggle_led`. One hero knob at most per panel (64 points); standard knobs
+   option is visible; `toggle_grid` lays four out two by two, as tall as a
+   knob. Whole numbers: a knob with one detent per value. The stages of an
+   envelope: `fader`s side by side, read as its shape. Longer lists: a
+   drop-down or `stepped_selector`. On/off: `toggle_led`. One hero knob at most per panel (64 points); standard knobs
    are 48, dense rows 34.
 6. **Color.** Neutral surfaces from the theme; one value-arc color for all
    knobs; orange only for automation, violet only for modulation, pink only
@@ -770,25 +775,25 @@ per-voice random walk to pitch and cutoff so stacked notes do not sound
 static. The mixer can overdrive the filter input, as on the hardware this
 layout comes from.
 
-**Panel** (987 points, one page). Four rows of cards in signal order, the
-classic subtractive layout, on the twelve-column grid:
+**Panel** (987 points, one page). Three rows of modules on one grid of
+equal cells, twelve to a row, laid out like a hardware front panel; every
+row breaks after its eighth cell:
 
-- **Osc 1, Osc 2, Mixer.** An oscillator's first line chooses its character
-  (Model and Wave as toggle buttons, and Sync on Osc 2); the second sets its
-  pitch (Octave, and Semitones and Detune on Osc 2) and pulse Width. The
-  Mixer is a two-by-two block of levels.
-- **Filter, Filter envelope.** Filter Model, the hero Cutoff, Resonance and
-  Drive, then what moves the cutoff: Envelope amount and Key track. The
-  envelope is A, D, S, R and its Velocity amount on one line.
-- **Voice, Amp envelope.** Mode (toggle buttons), Voices, Glide, Bend, Drift
-  and Volume; the amp envelope sits under the filter envelope in the same
-  columns.
-- **LFO.** The source (Rate, Sync, Shape) and its destinations (Pitch,
-  Cutoff, Width, Mod wheel) across the full width.
+- **Oscillators, Mixer, Master.** Both oscillators share their columns:
+  Model (VCO over DCO), Wave (two by two), Octave and pulse Width, then what
+  only Osc 2 has: Semitones, Detune and Sync. The Mixer is a two-by-two
+  block of levels, each oscillator's beside its line. Master holds Volume,
+  Glide, Bend and Drift.
+- **Filter, Filter envelope, Amp envelope.** Filter Model beside the hero
+  Cutoff, then Resonance, Drive, Envelope amount and Key track. Each
+  envelope is four faders, A D S R, and its Velocity amount.
+- **LFO, Voices.** The source (Shape, Rate, Sync) and its destinations
+  (Pitch, Cutoff, Width, Mod wheel); Mode (toggle buttons) and Voices.
 
 A control that does nothing in the current mode (pulse Width on another
 wave, LFO Rate when synced, Voices outside Poly) stays in place, disabled, so
-the cards never reflow. Knobs are dense (34 points) except the hero Cutoff. Unlike the effect, the
+the cards never reflow. Knobs are standard (48 points) except the hero
+Cutoff; Octave, Semitones, Bend and Voices click through whole values. Unlike the effect, the
 synth draws no filter response: the controls start right under the header.
 The sketch below is the
 original target:

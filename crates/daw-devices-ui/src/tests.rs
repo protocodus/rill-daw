@@ -170,7 +170,7 @@ fn mini_uses_the_wide_panel_and_shows_pulse_width_only_for_pulse() {
     let placed: Vec<u32> = layout
         .sections
         .iter()
-        .flat_map(|section| section.lines.concat())
+        .flat_map(|section| section.ids())
         .collect();
     assert_eq!(placed.len(), mini::DESCRIPTOR.parameters.len());
 }
@@ -194,7 +194,7 @@ fn mini_places_every_parameter_once() {
     let mut placed: Vec<u32> = layout
         .sections
         .iter()
-        .flat_map(|section| section.lines.concat())
+        .flat_map(|section| section.ids())
         .collect();
     placed.sort_unstable();
     placed.dedup();

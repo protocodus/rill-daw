@@ -133,7 +133,7 @@ fn new_midi_tracks_play_r1_mini_shaped_by_tools_presets_and_its_panel() {
     menu(&mut app, "Window", "Instrument");
     common::wait_visible(&mut app, "Cutoff");
     let state = app.inspect();
-    for label in ["OSC 1", "VOICE", "AMP ENVELOPE", "LFO", "Mod wheel"] {
+    for label in ["OSCILLATORS", "MASTER", "AMP ENVELOPE", "LFO", "Mod wheel"] {
         assert!(
             state["visible_labels"]
                 .as_array()
