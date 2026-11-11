@@ -176,6 +176,15 @@ fn fader_and_mini_knob_take_the_size_they_are_given() {
     });
     assert_eq!(used.size(), size);
     assert_eq!(value, 0.5, "drawing a fader leaves its value alone");
+    click(used.center(), 1, &mut |events| {
+        run(&ctx, events, |ui| {
+            ui::fader(ui, &mut value, "Attack", size, None);
+        });
+    });
+    assert!(
+        ui::parameter_owns_document_history(&ctx),
+        "Undo and redo reach the song while a fader has focus"
+    );
     let used = run(&ctx, vec![], |ui| {
         ui.add(ui::Knob::new(&mut value, 0.0..=1.0).mini());
     });

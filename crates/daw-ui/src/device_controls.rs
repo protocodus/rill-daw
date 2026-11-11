@@ -1575,6 +1575,8 @@ pub fn fader(
             });
         }
     }
+    // Undo and redo keep working while the fader has keyboard focus.
+    crate::parameter_focus::register_parameter_history_focus(&response);
     *value = value.clamp(0.0, 1.0);
     if *value != before {
         response.mark_changed();
