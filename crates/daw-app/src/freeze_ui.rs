@@ -690,7 +690,10 @@ impl DawApp {
             let mut track = Track::new(format!("{} · Frozen", original.name), TrackKind::Audio);
             track.color = original.color;
             track.parent_folder = original.parent_folder;
+            // Trim and polarity are printed into the frozen audio; width follows
+            // the print point, like volume and pan.
             track.input_gain = 1.0;
+            track.stereo_width = original.stereo_width;
             track.gain = original.gain;
             track.pan = original.pan;
             track.mute = original.mute;

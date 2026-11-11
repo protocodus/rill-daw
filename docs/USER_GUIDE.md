@@ -28,7 +28,7 @@ the arranger remain available; the starting actions disappear once a track exist
 - Piano roll with scale/chord highlighting, chord database, octave-stack drawing, both note edges, velocity painting, and held-note plugin audition; randomize and quantize previews, voice-aware legato, transpose, and note clipboard.
 - Generate sustained chords, seven arpeggio patterns, and seeded melodies with optional counterpoint or tintinnabuli voices; preview notes in an editable whole-bar range before adding them in one undoable step.
 - Large searchable instrument/effect browser with developer filters and cached native previews; drag-reorder insert chains and create send returns.
-- Pre/post-fader sends, buses, sidechain/multi-input routing, grouped instrument outputs and automatic path delay compensation. Every audio channel, including Master, has automatable input gain, volume and pan. Feedback cycles are rejected.
+- Pre/post-fader sends, buses, sidechain/multi-input routing, grouped instrument outputs and automatic path delay compensation. Every audio channel, including Master, has automatable input gain, volume and pan, plus an invert polarity switch (**Ø**) and a stereo width rail under the input gain. Polarity flips both channels before the inserts. Width works after the inserts and before volume and pan: 0% folds to mono, 100% leaves the signal unchanged and 200% doubles the side signal. It snaps to 100%, and right-click enters an exact value. Feedback cycles are rejected.
 - Reversible clip/track Freeze creates managed audio below the source, preserves originals and supports Return to originals.
 - Drag-and-drop track/channel ordering, nested folders, track colors, folder collapse, compact tracks, and safe track deletion.
 - System-following light/dark themes, bundled Inter typography with Unicode fallbacks, shared text components, and vector toolbar icons.
@@ -385,7 +385,7 @@ instrument prints all configured output channels together from one instance.
 Reported tails are capped at 30 seconds; a Freeze batch is limited to 512 MiB
 of decoded stereo float audio.
 
-The print includes clip processing, input gain and inserts. Volume, pan, sends
+The print includes clip processing, input gain, polarity and inserts. Width, volume, pan, sends
 and their automation remain editable on the new channels; Master processing
 stays live. Sidechain consumers retain their signal through parallel routes to
 the printed channels. When every original clip is frozen, the original channel
@@ -599,7 +599,7 @@ Thumbnails and the plug-in index live in `~/Library/Caches/Rill` on macOS, `%LOC
 
 Choose the input and output devices in **Window → Setup → Audio**, then select an audio track and open **Window → Recording**. Choose **Mono 1**, another input channel, or a stereo pair; enable **Arm recording** and press **Record** in the popup or transport. Track headers also have an arm control. Recording starts at the transport cursor and can continue beyond the current arrangement. The popup's meter shows the raw input level.
 
-**Input monitor (dry)** offers **Off**, **Auto**, and **On**. Auto monitors armed tracks while stopped or recording and turns monitoring off during ordinary playback. On monitors even when the track is unarmed. Monitoring follows channel/output-bus input gain, volume, pan, mute and solo, plus Master input gain, volume, pan and mute. It bypasses inserts and sends, including Master inserts, and joins device output after the Master meter/Analyze tap. Recorded WAVs contain the selected raw input, independent of mixer levels, and monitoring is not included in export.
+**Input monitor (dry)** offers **Off**, **Auto**, and **On**. Auto monitors armed tracks while stopped or recording and turns monitoring off during ordinary playback. On monitors even when the track is unarmed. Monitoring follows channel/output-bus input gain, polarity, width, volume, pan, mute and solo, plus the same Master controls except solo. It bypasses inserts and sends, including Master inserts, and joins device output after the Master meter/Analyze tap. Recorded WAVs contain the selected raw input, independent of mixer levels, and monitoring is not included in export.
 
 Enable the transport loop before recording to retain each pass as a separate take. The newest complete pass becomes audible; a partial final pass remains available without shortening that complete pass. Open **Takes…** to select whole passes or comp ranges with smooth or custom spline crossfades. **Record into → Overdub layer** creates a separate colored audio track with the source track's bus, folder, volume, and pan; inserts and sends are not copied. Existing clips and recorded sources remain intact. Each recording is one undoable edit.
 
@@ -704,7 +704,7 @@ cargo run --release -p daw-engine --example render_bench
 
 Real native plug-in tests are opt-in; commands and environment variables are in the test sources. Local validation exercised Surge XT and CHOWTapeModel, including forcibly terminated plug-in children, recovery, sample-offset MIDI, effect input, state roundtrips, and a routed chain with compensated bus latency.
 
-See [architecture and limitations](ARCHITECTURE.md) for the graph, real-time boundaries, file formats and delay compensation. Current media scope includes PCM/float WAV, MP3, FLAC and OGG/Vorbis import, disk-backed large-audio playback, recording and constant-tempo MIDI with rich project performance data. Tempo maps, automatic tempo-following warp and surround remain absent; manual warp markers and audio quantize are available in the audio Clip Editor. Input gain, volume, pan, note and clip edits update the existing graph; failed audio preparation keeps the last valid audio playing. Structural, plug-in-state and device changes still rebuild playback and may briefly interrupt it. Cosmetic changes do not rebuild the graph, including Undo/Redo.
+See [architecture and limitations](ARCHITECTURE.md) for the graph, real-time boundaries, file formats and delay compensation. Current media scope includes PCM/float WAV, MP3, FLAC and OGG/Vorbis import, disk-backed large-audio playback, recording and constant-tempo MIDI with rich project performance data. Tempo maps, automatic tempo-following warp and surround remain absent; manual warp markers and audio quantize are available in the audio Clip Editor. Input gain, polarity, width, volume, pan, note and clip edits update the existing graph; failed audio preparation keeps the last valid audio playing. Structural, plug-in-state and device changes still rebuild playback and may briefly interrupt it. Cosmetic changes do not rebuild the graph, including Undo/Redo.
 
 ## Build from source
 

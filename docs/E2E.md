@@ -543,6 +543,8 @@ cargo test --locked -p daw-app --test live_edit_e2e
 
 `track_color_picker_e2e` clicks the arranger's color strip and edits native RGB controls, then checks actual painted track markers, clip strokes, and full colored mixer names with subdued strip tints. It covers audio, MIDI, and bus colors, neutral Master, selected and unselected channels, tint restoration through undo/redo and portable save/reopen, both appearances and densities, and compact/folder tracks without changing selection, cursor, clip contents, or folder expansion. Rectangle paint diagnostics are requested only by `inspect` with `paint: true`.
 
+`mixer_polarity_width_e2e` clicks a strip's **Ø** switch and types an exact 0% width, then checks that the exported stereo audio is inverted and folded to mono, and that each edit undoes as its own step.
+
 `mixer_height_e2e` resizes the running mixer between 1100×720, 1440×1100, and 800×600 in light and dark appearances. It checks actual strip and fader bounds, compact horizontal channel meters, the expanding Master meter, aligned output controls, compact-window scrolling, Effects navigation, and a resized fader edit with Undo.
 
 ```sh

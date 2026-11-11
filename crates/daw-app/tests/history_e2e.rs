@@ -54,6 +54,7 @@ fn named_history_jumps_saved_checkpoint_and_branching_work_through_ui() {
     app.click("New");
     let previous_session = &state["song_session"]["id"];
     app.click("Don't save");
+    // New waits for a running recovery write before it replaces the song.
     let state = common::wait_until(&mut app, |state| {
         &state["song_session"]["id"] != previous_session
     });

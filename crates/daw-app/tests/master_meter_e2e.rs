@@ -246,7 +246,22 @@ fn master_keeps_a_short_transient_visible_after_the_next_silent_callback() {
             .iter()
             .any(|label| label == "−∞ dB")
     );
-    near(master(&app.inspect()), master(&silence));
+    // The render worker keeps filling its bounded queue after the pump
+    // returns, and each rendered block releases the channel meters. Once the
+    // queue is full the worker idles, and reads alone must not move the level.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut settled = master(&silence);
+    loop {
+        std::thread::sleep(Duration::from_millis(20));
+        let next = master(&app.inspect());
+        if next == settled {
+            break;
+        }
+        assert!(next[0] <= settled[0], "Meters only release without input");
+        assert!(Instant::now() < deadline, "Render worker never idled");
+        settled = next;
+    }
+    near(master(&app.inspect()), settled);
     near(master(&app.click("Pause")), [0.0; 2]);
     app.click("Stop");
     app.quit();

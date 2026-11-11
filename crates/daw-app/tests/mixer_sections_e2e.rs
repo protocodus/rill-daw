@@ -55,6 +55,11 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
                 ),
                 (
                     &channel["input_gain"],
+                    &channel["stereo_width"],
+                    f64::from(daw_ui::MIXER_ROW_GAP),
+                ),
+                (
+                    &channel["stereo_width"],
                     &sections[1]["rect"],
                     f64::from(daw_ui::MIXER_ROW_GAP),
                 ),
@@ -104,6 +109,8 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
                 assert!(
                     [
                         "input_gain",
+                        "polarity",
+                        "stereo_width",
                         "effects",
                         "analyze",
                         "gain",

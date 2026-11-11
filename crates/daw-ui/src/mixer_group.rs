@@ -122,9 +122,16 @@ pub fn mixer_folded_output_route(ui: &mut Ui, width: f32, destination: &str) -> 
     crate::hover_text(response, format!("{label}\nChoose output destination"))
 }
 
-/// Pre-insert channel gain. The exact entry popup shares the ordinary dB
-/// controls and never rounds a stored value merely by displaying it.
-pub fn mixer_input_gain(ui: &mut Ui, gain: &mut f32, width: f32, name: &str) -> Response {
+/// Polarity switch, then the pre-insert channel gain. The exact entry popup
+/// shares the ordinary dB controls and never rounds a stored value merely by
+/// displaying it.
+pub fn mixer_input_gain(
+    ui: &mut Ui,
+    gain: &mut f32,
+    invert: &mut bool,
+    width: f32,
+    name: &str,
+) -> MixerInputResponse {
     let height = crate::mixer_control_height(ui);
     ui.allocate_ui_with_layout(
         Vec2::new(width, height),
@@ -132,22 +139,28 @@ pub fn mixer_input_gain(ui: &mut Ui, gain: &mut f32, width: f32, name: &str) -> 
         |ui| {
             ui.set_min_size(Vec2::new(width, height));
             ui.spacing_mut().item_spacing.x = crate::tokens::SPACE_XS;
-            ui.label(egui::RichText::new("Gain").size(crate::tokens::FONT_CAPTION));
+            let polarity = crate::mixer_polarity_switch(ui, invert);
             let available = ui.available_width();
-            ui.scope(|ui| {
-                ui.set_min_width(available);
-                ui.set_max_width(available);
-                ui.spacing_mut().interact_size.y = height;
-                let mut response =
-                    crate::gain_value_button_named(ui, "input_gain", gain, 16.0, "", name);
-                response = crate::hover_text(
-                    response,
-                    "Input gain · before inserts · Right-click for automation",
-                );
-                response
-            })
-            .inner
+            let gain = ui
+                .scope(|ui| {
+                    ui.set_min_width(available);
+                    ui.set_max_width(available);
+                    ui.spacing_mut().interact_size.y = height;
+                    let response =
+                        crate::gain_value_button_named(ui, "input_gain", gain, 16.0, "", name);
+                    crate::hover_text(
+                        response,
+                        "Input gain · before inserts · Right-click for automation",
+                    )
+                })
+                .inner;
+            MixerInputResponse { gain, polarity }
         },
     )
     .inner
+}
+
+pub struct MixerInputResponse {
+    pub gain: Response,
+    pub polarity: Response,
 }

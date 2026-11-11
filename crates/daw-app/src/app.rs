@@ -4142,6 +4142,8 @@ pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
             tracks.get(&a.id).is_some_and(|b| {
                 a.kind == b.kind
                     && a.input_gain == b.input_gain
+                    && a.invert_polarity == b.invert_polarity
+                    && a.stereo_width == b.stereo_width
                     && a.gain == b.gain
                     && a.pan == b.pan
                     && a.mute == b.mute

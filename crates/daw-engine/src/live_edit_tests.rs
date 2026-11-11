@@ -117,6 +117,30 @@ fn live_mixer_edit_preserves_parallel_graph_delay_buffers_and_position_without_a
 }
 
 #[test]
+fn live_polarity_and_width_edits_ramp_instead_of_jumping() {
+    let (mut project, _directory, id) = audio_project();
+    let gain = project.track(id).unwrap().gain;
+    let mut renderer = Renderer::new(&project, 8_000, true).unwrap();
+    let mut prepare = renderer.live_edit_preparer();
+    render_block(&mut renderer);
+    project.track_mut(id).unwrap().invert_polarity = true;
+    project.track_mut(id).unwrap().stereo_width = 0.0;
+    let mut edit = prepare.prepare(&project).unwrap();
+    renderer.apply_live_edit(&mut edit).unwrap();
+    let ramp = render_block(&mut renderer);
+    // A switch that jumps from +0.5 to -0.5 in one sample would click.
+    assert!(
+        ramp.windows(2)
+            .all(|pair| (pair[1][0] - pair[0][0]).abs() < 0.05)
+    );
+    let settled = render_block(&mut renderer);
+    let expected = -0.375 * gain;
+    for frame in settled {
+        assert!((frame[0] - expected).abs() < 1e-6 && (frame[1] - expected).abs() < 1e-6);
+    }
+}
+
+#[test]
 fn reordered_tracks_keep_compiled_graph_order_and_later_edits_target_stable_ids() {
     let (mut project, _directory, source) = audio_project();
     let mut copy = project.track(source).unwrap().clips[0].clone();

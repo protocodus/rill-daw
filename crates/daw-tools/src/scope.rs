@@ -607,6 +607,8 @@ impl ToolScope {
                 Self::Channel { .. } => {
                     track.gain = old.gain;
                     track.input_gain = old.input_gain;
+                    track.invert_polarity = old.invert_polarity;
+                    track.stereo_width = old.stereo_width;
                     track.pan = old.pan;
                     track.mute = old.mute;
                     track.solo = old.solo;
@@ -857,7 +859,7 @@ impl ToolScope {
                 result["inserts"] = json!(track.inserts.iter().take(64).map(|e|json!({"id":e.id,"name":crate::bounded_text(&e.name),"enabled":e.enabled,"parameter_count":e.parameters.len()})).collect::<Vec<_>>());
             }
             Self::Channel { .. } => {
-                result["mix"] = json!({"gain":track.gain,"input_gain":track.input_gain,"pan":track.pan,"mute":track.mute,"solo":track.solo})
+                result["mix"] = json!({"gain":track.gain,"input_gain":track.input_gain,"invert_polarity":track.invert_polarity,"stereo_width":track.stereo_width,"pan":track.pan,"mute":track.mute,"solo":track.solo})
             }
             Self::Routing { .. } => {
                 result["output_bus"] = json!(track.output_bus);

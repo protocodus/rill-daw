@@ -109,6 +109,11 @@ pub struct MixChange {
     #[serde(default)]
     pub input_gain_db: Option<f64>,
     #[serde(default)]
+    pub invert_polarity: Option<bool>,
+    /// 0 is mono, 1 unchanged, 2 doubles the side signal.
+    #[serde(default)]
+    pub stereo_width: Option<f32>,
+    #[serde(default)]
     pub pan: Option<f32>,
     #[serde(default)]
     pub mute: Option<bool>,
@@ -923,6 +928,12 @@ fn apply_one(
                         "Input gain must be between -120 and 24 dB"
                     );
                     track.input_gain = 10.0_f64.powf(db / 20.0) as f32;
+                }
+                if let Some(invert) = channel.invert_polarity {
+                    track.invert_polarity = invert;
+                }
+                if let Some(width) = channel.stereo_width {
+                    track.stereo_width = width;
                 }
                 if let Some(pan) = channel.pan {
                     track.pan = pan;

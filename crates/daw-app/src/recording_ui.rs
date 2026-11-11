@@ -836,6 +836,8 @@ impl DawApp {
                     track.instrument_parameters = source.instrument_parameters.clone();
                     track.gain = source.gain;
                     track.input_gain = source.input_gain;
+                    track.invert_polarity = source.invert_polarity;
+                    track.stereo_width = source.stereo_width;
                     track.pan = source.pan;
                     track.output_bus = bus;
                     track.midi_input = source.midi_input;

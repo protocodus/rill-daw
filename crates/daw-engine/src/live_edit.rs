@@ -135,6 +135,8 @@ struct TrackEdit {
     name: String,
     gain: f32,
     input_gain: f32,
+    polarity: f32,
+    width: f32,
     pan: f32,
     gain_lane: Option<CompiledAutomation>,
     input_gain_lane: Option<CompiledAutomation>,
@@ -409,6 +411,8 @@ impl LiveEditPreparer {
                 name: track.name.clone(),
                 gain: track.gain,
                 input_gain: track.input_gain,
+                polarity: crate::render::polarity_sign(track),
+                width: track.stereo_width,
                 pan: track.pan,
                 gain_lane: active_automation_lane(project, id, AutomationParameter::TrackGain)
                     .map(CompiledAutomation::new),
@@ -630,6 +634,8 @@ impl Renderer {
             track
                 .input_gain
                 .set_manual(next.input_gain, self.sample_rate);
+            track.polarity.set_manual(next.polarity, self.sample_rate);
+            track.width.set_manual(next.width, self.sample_rate);
             track.pan.set_manual(next.pan, self.sample_rate);
             std::mem::swap(&mut track.gain.lane, &mut next.gain_lane);
             std::mem::swap(&mut track.input_gain.lane, &mut next.input_gain_lane);

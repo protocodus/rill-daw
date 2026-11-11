@@ -120,6 +120,8 @@ fn without_master_processing(mut project: Project) -> Project {
     project.master.inserts.clear();
     project.master.mute = false;
     project.master.input_gain = 1.0;
+    project.master.invert_polarity = false;
+    project.master.stereo_width = 1.0;
     project.master.gain = 1.0;
     project.master.pan = 0.0;
     project.master.latency_samples = 0;
