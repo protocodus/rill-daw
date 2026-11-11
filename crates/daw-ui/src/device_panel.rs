@@ -241,14 +241,17 @@ pub fn preset_group(
     draft: &mut Option<String>,
 ) -> Option<PresetAction> {
     let mut action = None;
+    // The device popup scrolls only vertically, so on a narrow panel the
+    // actions go on a second row instead of off its right edge.
+    let one_row = ui.available_width() >= tokens::POPUP_WIDTH_MD;
     crate::inset(ui.ctx())
         .inner_margin(egui::Margin::symmetric(
             tokens::SPACE_SM as i8,
             tokens::SPACE_XS as i8,
         ))
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+            ui.spacing_mut().item_spacing = egui::Vec2::splat(tokens::SPACE_XS);
+            let navigation = |ui: &mut Ui, action: &mut Option<PresetAction>| {
                 let title = group_title(ui, "Preset");
                 let (rect, _) = ui.allocate_exact_size(
                     title.size() + vec2(tokens::SPACE_XS, 0.0),
@@ -261,7 +264,7 @@ pub fn preset_group(
                     .on_hover_text("Previous preset")
                     .clicked()
                 {
-                    action = Some(PresetAction::Previous);
+                    *action = Some(PresetAction::Previous);
                 }
                 crate::select(id_salt, name)
                     .width(tokens::SELECT_WIDTH + tokens::SPACE_XL)
@@ -276,7 +279,7 @@ pub fn preset_group(
                                 response.on_hover_text(choice.description)
                             };
                             if response.clicked() {
-                                action = Some(PresetAction::Load(index));
+                                *action = Some(PresetAction::Load(index));
                             }
                         }
                     });
@@ -285,11 +288,10 @@ pub fn preset_group(
                     .on_hover_text("Next preset")
                     .clicked()
                 {
-                    action = Some(PresetAction::Next);
+                    *action = Some(PresetAction::Next);
                 }
-                ui.add_space(tokens::SPACE_XS);
-                ui.separator();
-                ui.add_space(tokens::SPACE_XS);
+            };
+            let mut actions = |ui: &mut Ui, action: &mut Option<PresetAction>| {
                 if let Some(mut name) = draft.take() {
                     crate::text_field(ui, &mut name, "Preset name", tokens::SELECT_WIDTH);
                     let valid = !name.trim().is_empty() && name.len() <= 128;
@@ -298,7 +300,7 @@ pub fn preset_group(
                         .add_enabled(valid, crate::button_widget("Save"))
                         .clicked()
                     {
-                        action = Some(PresetAction::SaveAs(name.trim().to_owned()));
+                        *action = Some(PresetAction::SaveAs(name.trim().to_owned()));
                         keep = false;
                     }
                     if crate::small_button(ui, "Cancel").clicked() {
@@ -315,10 +317,24 @@ pub fn preset_group(
                         .on_hover_text("Return every parameter to its default")
                         .clicked()
                     {
-                        action = Some(PresetAction::Reset);
+                        *action = Some(PresetAction::Reset);
                     }
                 }
-            });
+            };
+            if one_row {
+                ui.horizontal(|ui| {
+                    navigation(ui, &mut action);
+                    ui.add_space(tokens::SPACE_XS);
+                    ui.separator();
+                    ui.add_space(tokens::SPACE_XS);
+                    actions(ui, &mut action);
+                });
+            } else {
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| navigation(ui, &mut action));
+                    ui.horizontal(|ui| actions(ui, &mut action));
+                });
+            }
         });
     action
 }
