@@ -67,9 +67,10 @@ impl DawApp {
         let mut jump = None;
         let undo: Vec<_> = self.history.undo_labels().map(str::to_owned).collect();
         let redo: Vec<_> = self.history.redo_labels().map(str::to_owned).collect();
-        daw_ui::page("History")
+        daw_ui::popup("History", ctx)
             .open(&mut open)
-            .width(daw_ui::tokens::POPUP_WIDTH_SM)
+            .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
+            .vscroll(false)
             .show(ctx, |ui| {
                 daw_ui::text::body(ui, format!("{} undo · {} redo", undo.len(), redo.len()));
                 let mut footer = daw_ui::popup_footer(ui, "history_status");

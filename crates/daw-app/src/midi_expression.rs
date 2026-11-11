@@ -264,7 +264,7 @@ impl DawApp {
                     clip.name.as_str()
                 })
         );
-        daw_ui::page(title).id(egui::Id::new("midi_expression")).open(&mut open).width(daw_ui::tokens::POPUP_WIDTH_MD).show(ctx,|window_ui| {
+        daw_ui::popup(title,ctx).id(egui::Id::new("midi_expression")).open(&mut open).default_width(daw_ui::tokens::POPUP_WIDTH_MD).vscroll(false).show(ctx,|window_ui| {
             let mut footer = daw_ui::popup_footer(window_ui,"midi_expression_footer");
             let mut geometry = None;
             let mut body_clip = egui::Rect::NOTHING;

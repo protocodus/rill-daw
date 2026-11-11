@@ -80,6 +80,17 @@ pub enum PopupKind {
     MidiExpression,
 }
 
+impl PopupKind {
+    /// Large views take over the workspace with Back; action dialogs and
+    /// device panels float above it.
+    fn full_screen(self) -> bool {
+        matches!(
+            self,
+            Self::Assistant | Self::Library | Self::AudioTakes | Self::Analysis | Self::Automation
+        )
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FocusedView {
     Workspace(WorkspaceView),
@@ -2981,9 +2992,10 @@ impl DawApp {
         }
         let mut open = true;
         let mut close = false;
-        daw_ui::page("About RILL")
+        daw_ui::popup("About RILL", ctx)
             .id(egui::Id::new("about_rill"))
-            .width(daw_ui::tokens::POPUP_WIDTH_SM)
+            .default_width(daw_ui::tokens::POPUP_WIDTH_SM)
+            .vscroll(false)
             .open(&mut open)
             .show(ctx, |ui| {
                 let mut footer = daw_ui::popup_footer(ui, "about_actions");
@@ -3283,7 +3295,7 @@ impl DawApp {
         // One form column plus the quiet action that trails a few rows.
         let width =
             daw_ui::tokens::FORM_WIDTH + daw_ui::tokens::SPACE_SM + daw_ui::tokens::SELECT_WIDTH;
-        daw_ui::page("Setup").open(&mut open).width(width).show(ctx, |ui| {
+        daw_ui::popup("Setup", ctx).open(&mut open).default_width(width).vscroll(false).show(ctx, |ui| {
             daw_ui::popup_tabs(ui, &mut self.setup_page, &[
                 (SetupPage::Audio, "Audio"),
                 (SetupPage::Appearance, "Appearance"),
@@ -3845,9 +3857,12 @@ impl DawApp {
         } else {
             daw_ui::ViewBackdrop::capture(ctx, scene_bounds)
         };
-        // Pages fill the workspace and leave the transport as it is; only a
-        // floating device panel softens what lies beneath it.
-        daw_ui::paint_popup_backdrop(ctx, self.instrument_open || self.effects_open);
+        // Full screens replace the workspace and leave the transport as it
+        // is; a dialog or device panel softens what lies beneath it.
+        daw_ui::paint_popup_backdrop(
+            ctx,
+            matches!(self.focused_view(), FocusedView::Popup(kind) if !kind.full_screen()),
+        );
         self.update_note_audition(ctx);
         // Utility windows own their close button and Apply/Cancel flags. Restore
         // their caller only on dismissal, never on a transition to another tool.

@@ -2797,9 +2797,11 @@ impl DawApp {
         let mut navigated = false;
         let mut name_keyboard = None;
         let mut automation_navigation = None;
-        daw_ui::page(title)
+        daw_ui::popup(title, ctx)
             .id(egui::Id::new("inspector"))
-            .width(daw_ui::tokens::POPUP_WIDTH_MD)
+            .default_width(daw_ui::tokens::POPUP_WIDTH_MD)
+            .min_height(daw_ui::popup_body_size(ctx).y.min(if has_clip { 610.0 } else { 377.0 }))
+            .vscroll(false)
             .open(&mut open)
             .show(ctx, |ui| {
                 let Some(id) = self.selected_track else {
