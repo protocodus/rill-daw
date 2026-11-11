@@ -850,6 +850,10 @@ fn plugin_format(label: &str) -> Result<daw_plugins::PluginFormat, ToolError> {
 }
 
 pub(crate) fn catalog_id(entry: &daw_plugins::catalog::CatalogEntry) -> String {
+    // A built-in's fingerprint is already its full `rill:<id>` catalog ID.
+    if crate::builtin_devices::is_builtin(&entry.plugin) {
+        return entry.fingerprint.clone();
+    }
     format!(
         "{}:{}",
         entry.fingerprint,

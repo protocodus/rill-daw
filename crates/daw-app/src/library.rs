@@ -177,6 +177,20 @@ impl DeviceKind {
     }
 }
 
+/// Built-in devices ship their image; hosted plug-ins use their capture.
+fn preview(
+    ctx: &egui::Context,
+    previews: &PreviewCache,
+    entry: &CatalogEntry,
+) -> Option<egui::TextureHandle> {
+    crate::builtin_devices::preview(ctx, &entry.plugin).or_else(|| {
+        entry
+            .thumbnail
+            .as_ref()
+            .and_then(|path| previews.request(ctx, &entry.fingerprint, path))
+    })
+}
+
 fn device_id(fingerprint: &str) -> egui::Id {
     egui::Id::new(("library_device", fingerprint))
 }
@@ -880,7 +894,7 @@ impl DawApp {
                         let mut render = |ui: &mut egui::Ui, index: usize, width: f32| {
                             let item = matches[index];
                             let entry = item.entry;
-                            let texture = entry.thumbnail.as_ref().and_then(|path| state.previews.request(ctx, &entry.fingerprint, path));
+                            let texture = preview(ctx, &state.previews, entry);
                             let selected = state.selected.as_ref() == Some(&entry.fingerprint);
                             let device = daw_ui::DeviceCard {
                                 id: device_id(&entry.fingerprint),
@@ -1000,7 +1014,7 @@ impl DawApp {
                         }
                         egui::ScrollArea::vertical().id_salt("library_details").auto_shrink([false, false]).show(ui, |ui| {
                             let width = ui.available_width();
-                            let texture = entry.thumbnail.as_ref().and_then(|path| state.previews.request(ctx, &entry.fingerprint, path));
+                            let texture = preview(ctx, &state.previews, entry);
                             // Reserve identity and editable categories before
                             // fitting the optional image into a short pane.
                             let text_height = ui.fonts_mut(|fonts| {
@@ -1079,6 +1093,7 @@ impl DawApp {
                                 row("Version", if entry.plugin.version.is_empty() { "Unknown".into() } else { entry.plugin.version.clone() });
                                 row("Architecture", if entry.plugin.architectures.is_empty() { "Unknown".into() } else { entry.plugin.architectures.join(", ") });
                                 row("Preview image", match &entry.status {
+                                    _ if crate::builtin_devices::is_builtin(&entry.plugin) => "Included".into(),
                                     ThumbnailStatus::Ready => "Captured".into(),
                                     ThumbnailStatus::Missing => "Not captured".into(),
                                     ThumbnailStatus::Failed { .. } => "Unavailable".into(),
@@ -1152,7 +1167,8 @@ impl DawApp {
                                 edit = Some(LibraryEdit::Favorite(entry.plugin.clone(), !item.favorite));
                                 ui.close();
                             }
-                            if daw_ui::button(ui, if entry.thumbnail.is_some() { "Refresh preview" } else { "Capture preview" })
+                            if !crate::builtin_devices::is_builtin(&entry.plugin)
+                                && daw_ui::button(ui, if entry.thumbnail.is_some() { "Refresh preview" } else { "Capture preview" })
                                 .on_hover_text("Capture an optional image of the plug-in editor. This does not assign or replace the plug-in.")
                                 .clicked() {
                                 retry = Some(entry.plugin.clone());
@@ -1436,6 +1452,20 @@ pub(crate) fn plugin_model(
 
 pub(crate) fn device_diagnostics(entry: &CatalogEntry) -> (String, String) {
     let plugin = &entry.plugin;
+    if crate::builtin_devices::is_builtin(plugin) {
+        return (
+            "Built-in device details.".into(),
+            format!(
+                "Device: {}\nDeveloper: {}\nType: {}\nCategories: {}\nID: {}\nVersion: {}\n\nBuilt into Rill: no scan, metadata file or preview capture is needed.",
+                plugin.name,
+                plugin.vendor,
+                kind_label(plugin),
+                plugin.category.replace('|', " · "),
+                plugin.path.display(),
+                plugin.version
+            ),
+        );
+    }
     let kind = if plugin.is_instrument() == Some(true) {
         "Instrument"
     } else if plugin.is_effect() == Some(true) {

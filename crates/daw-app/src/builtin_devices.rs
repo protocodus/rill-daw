@@ -4,16 +4,26 @@
 use daw_core::{Effect, Instrument, PluginParameterValue};
 use daw_devices::{DeviceDescriptor, DeviceKind, PRESET_EXTENSION, Preset};
 use daw_plugins::{
-    ParameterInfo, PluginInfo,
+    ParameterInfo, PluginAudioBus, PluginInfo, PluginInspection, PluginParameterMetadata,
     catalog::{CatalogEntry, ThumbnailStatus},
 };
+use eframe::egui;
 use std::{path::PathBuf, sync::OnceLock};
 
 /// Library entries name their device as `rill:<id>`, which is also the
-/// catalog ID the tools accept.
+/// catalog ID the tools accept and the entry's fingerprint.
 const LOCATOR: &str = "rill:";
-const FINGERPRINT: &str = "rill";
 pub(crate) const VENDOR: &str = "Rill";
+
+/// Panel snapshots stand in for the editor captures of hosted plug-ins.
+/// Regenerate them when a panel's look changes noticeably.
+const PREVIEWS: &[(&str, &[u8])] = &[
+    ("r1-mini", include_bytes!("../assets/r1-mini-preview.png")),
+    (
+        "r1-filter",
+        include_bytes!("../assets/r1-filter-preview.png"),
+    ),
+];
 
 /// Built-in devices as Library entries, in registry order.
 pub(crate) fn catalog() -> &'static [CatalogEntry] {
@@ -35,7 +45,7 @@ pub(crate) fn catalog() -> &'static [CatalogEntry] {
                     architectures: Vec::new(),
                     format: Default::default(),
                 },
-                fingerprint: FINGERPRINT.into(),
+                fingerprint: format!("{LOCATOR}{}", descriptor.id),
                 thumbnail: None,
                 thumbnail_size: None,
                 status: ThumbnailStatus::Missing,
@@ -81,6 +91,66 @@ pub(crate) fn instrument(plugin: &PluginInfo) -> Instrument {
             class_id: plugin.class_id.clone(),
         },
     }
+}
+
+/// The compiled-in panel image, decoded once per UI context.
+pub(crate) fn preview(ctx: &egui::Context, plugin: &PluginInfo) -> Option<egui::TextureHandle> {
+    let id = descriptor_for(plugin)?.id;
+    let bytes = PREVIEWS.iter().find(|(device, _)| *device == id)?.1;
+    let key = egui::Id::new(("builtin_device_preview", id));
+    if let Some(texture) = ctx.data(|data| data.get_temp::<egui::TextureHandle>(key)) {
+        return Some(texture);
+    }
+    let image = image::load_from_memory_with_format(bytes, image::ImageFormat::Png)
+        .expect("compiled-in preview is a valid PNG")
+        .to_rgba8();
+    let texture = ctx.load_texture(
+        format!("device-card-{LOCATOR}{id}"),
+        egui::ColorImage::from_rgba_unmultiplied(
+            [image.width() as usize, image.height() as usize],
+            image.as_raw(),
+        ),
+        egui::TextureOptions::LINEAR,
+    );
+    ctx.data_mut(|data| data.insert_temp(key, texture.clone()));
+    Some(texture)
+}
+
+/// Ports and parameters straight from the registry: built-ins need no
+/// isolated inspection process. Every device processes stereo audio.
+pub(crate) fn inspection(plugin: &PluginInfo) -> Option<PluginInspection> {
+    let descriptor = descriptor_for(plugin)?;
+    let bus = |name: &str, main: bool| PluginAudioBus {
+        channels: 2,
+        active: true,
+        name: name.into(),
+        main,
+    };
+    let instrument = descriptor.kind == DeviceKind::Instrument;
+    let mut inputs = Vec::new();
+    if !instrument {
+        inputs.push(bus("Input", true));
+    }
+    if descriptor.sidechain_input {
+        inputs.push(bus("Sidechain", false));
+    }
+    Some(PluginInspection {
+        inputs,
+        outputs: vec![bus("Output", true)],
+        midi_input: instrument,
+        midi_output: false,
+        parameters: parameters(descriptor.id, &[])?
+            .into_iter()
+            .map(|parameter| PluginParameterMetadata {
+                id: parameter.id,
+                name: parameter.name,
+                unit: parameter.unit,
+                steps: parameter.steps,
+                read_only: false,
+                can_automate: true,
+            })
+            .collect(),
+    })
 }
 
 pub(crate) fn format_label(plugin: &PluginInfo) -> &'static str {

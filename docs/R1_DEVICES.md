@@ -321,6 +321,11 @@ panels, presets or projects.
   cards with producer "Rill", without scanning, and before third-party
   results; the **Built-in (R1)** collection lists only them. The empty-library
   text no longer says that MIDI is silent until a plug-in is installed.
+  Their card image is a panel snapshot compiled in from
+  `crates/daw-app/assets/<id>-preview.png` (768×480, cropped from
+  `rill --screenshot … --view instrument|effect-editor`); a device without
+  one shows its icon. **Device details** reads ports and parameters from the
+  registry instantly.
 - **Instrument and Effects windows.** For a built-in, the window body is the
   device panel itself instead of the overview with **Open editor**. The
   shared `utility_header`, **Automate…**, **Pick parameter** and **AI for this
