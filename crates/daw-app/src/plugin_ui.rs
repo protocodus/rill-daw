@@ -712,11 +712,11 @@ impl DawApp {
         if !ui
             .add_enabled(
                 self.parameter_editing_enabled(),
-                daw_ui::button_widget(if picking { "Cancel picking" } else { "Pick parameter" })
+                daw_ui::button_widget(if picking { "Cancel picking" } else { "Automate" })
                     .automation()
                     .selected(picking),
             )
-            .on_hover_text("Create or open automation for the next parameter you click. Use the native editor, or choose a row in the parameter list. Escape cancels.")
+            .on_hover_text("Create or open automation for the next parameter you click in the plug-in editor, or search for it by name in the list. Escape cancels.")
             .clicked()
         {
             return false;
@@ -775,7 +775,10 @@ impl DawApp {
             },
         );
         if self.instrument_ui.picking {
-            daw_ui::text::note(ui, "Click a parameter in the list or native editor.");
+            daw_ui::text::note(
+                ui,
+                "Click a control in the plug-in editor, or choose a parameter here.",
+            );
         }
         if let Some(error) = &self.instrument_ui.error {
             daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, error, 2)
@@ -1403,7 +1406,7 @@ impl DawApp {
                         Instrument::Vst3 { .. } => {
                             let device_name = title.clone();
                             if self.instrument_ui.picking {
-                                daw_ui::text::note(ui, "Click a parameter in the native editor, or open the parameter list.");
+                                daw_ui::text::note(ui, "Click a control in the plug-in editor, or search for it by name.");
                             }
                             if let Some(parameter) =
                                 self.instrument_ui.last_touched.and_then(|id| {
@@ -1449,15 +1452,14 @@ impl DawApp {
                                     self.instrument_ui.closing = true;
                                     self.cancel_parameter_picking();
                                 }
-                                let pick_in_list = self.parameter_picker_control(ui)
-                                    && self.instrument_ui.session.is_none();
                                 // A plug-in's own controls cannot carry Rill's
-                                // right-click Automate; this list is their
-                                // in-Rill editor, with Automate per parameter.
+                                // right-click Automate: arm the next touched
+                                // control and offer the same choice by name.
+                                let automate_by_name = self.parameter_picker_control(ui);
                                 if daw_ui::button(ui, "Parameters…")
-                                    .on_hover_text("Edit or automate this plug-in's parameters")
+                                    .on_hover_text("Edit this plug-in's parameters by name")
                                     .clicked()
-                                    || pick_in_list
+                                    || automate_by_name
                                 {
                                     self.instrument_ui.parameters_open = true;
                                     self.instrument_ui.browser.focus_search = true;

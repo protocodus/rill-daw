@@ -328,7 +328,7 @@ panels, presets or projects.
   registry instantly.
 - **Instrument and Effects windows.** For a built-in, the window body is the
   device panel itself instead of the overview with **Open editor**. The
-  shared `utility_header`, **Automate…**, **Pick parameter** and **AI for this
+  shared `utility_header`, **Automate…**, **Automate** (plug-ins) and **AI for this
   context** stay as they are.
 - **Parameter metadata** comes straight from the registry. No helper process,
   no asynchronous inspection, no "unknown until read" state.
