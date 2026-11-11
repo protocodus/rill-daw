@@ -510,16 +510,9 @@ impl DawApp {
         if activate {
             state.activate_when_ready = false;
         }
-        daw_ui::popup("Device browser", ctx)
+        daw_ui::page("Device browser")
             .id(egui::Id::new("library"))
             .open(&mut open)
-            // A large popup plus the collections sidebar.
-            .default_width(daw_ui::tokens::POPUP_WIDTH_LG + SIDEBAR_WIDTH)
-            .default_height(610.0)
-            // The catalogue panes consume the available body height. Unlike
-            // short property forms, this browser benefits from both resize axes.
-            .resizable(true)
-            .vscroll(false)
             .show(ctx, |ui| {
                 // Share selected identity with the action row on short screens
                 // so the catalogue still has room for a complete card.

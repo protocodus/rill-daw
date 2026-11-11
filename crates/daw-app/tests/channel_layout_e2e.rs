@@ -17,7 +17,7 @@ fn visible(state: &Value, label: &str) {
     let top = rect["min"][1].as_f64().unwrap();
     let bottom = rect["max"][1].as_f64().unwrap();
     assert!(
-        top >= 120.0 && bottom <= 696.0 && bottom - top >= 13.0,
+        top >= 120.0 && bottom <= 707.0 && bottom - top >= 13.0,
         "{label}: {rect}"
     );
 }

@@ -1013,9 +1013,8 @@ impl DawApp {
         // One form column plus the action that trails the device row.
         let recording_width =
             daw_ui::tokens::FORM_WIDTH + daw_ui::tokens::SPACE_SM + daw_ui::tokens::SELECT_WIDTH;
-        daw_ui::popup(title, ctx).id(egui::Id::new("recording_popup")).open(&mut open)
-            .default_width(recording_width).min_width(daw_ui::popup_body_size(ctx).x.min(recording_width))
-            .default_height(610.0).vscroll(false).show(ctx, |ui| {
+        daw_ui::page(title).id(egui::Id::new("recording_popup")).open(&mut open)
+            .width(recording_width).show(ctx, |ui| {
             let busy = self.recording_busy();
             let mut footer = daw_ui::popup_footer(ui, "recording_actions");
             let window_ui = ui;

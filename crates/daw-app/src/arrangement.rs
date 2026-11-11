@@ -619,6 +619,7 @@ impl DawApp {
         let mut channel_controls = Vec::new();
         let mut track_colors = Vec::new();
         let mut instrument_target = None;
+        let mut instrument_editor = None;
         let mut recording_target = None;
         let mut recording_controls = Vec::new();
         let mut arm_toggles = Vec::new();
@@ -928,6 +929,13 @@ impl DawApp {
                             tint: color(track.color), folder: track.kind == TrackKind::Folder,
                             collapsed: track.collapsed && !self.arranger_selection.revealed_folders.contains(&track.id),
                         });
+                    if track.kind == TrackKind::Midi
+                        && ui.interact(header_layout.icon, ui.id().with((track.id, "instrument_icon")), Sense::click())
+                            .on_hover_text(if track.instrument == Instrument::None { "Choose an instrument" } else { "Edit instrument" })
+                            .clicked()
+                    {
+                        if track.instrument == Instrument::None { instrument_target = Some(track.id); } else { instrument_editor = Some(track.id); }
+                    }
                     let name_response = ui.interact(name_rect,
                         ui.id().with((track.id, "reorder_name")), Sense::click_and_drag());
                     let name_response = daw_ui::track_reorder_source(ui, &name_response, track.id);
@@ -1007,11 +1015,27 @@ impl DawApp {
                                             .unwrap_or_else(|| std::path::Path::new(path).file_stem()
                                                 .unwrap_or_default().to_string_lossy().into_owned()),
                                     };
-                                    if daw_ui::track_header_link_at(ui, rect, (track.id, "instrument"),
+                                    let assigned = track.instrument != Instrument::None;
+                                    let response = daw_ui::track_header_link_at(ui, rect, (track.id, "instrument"),
                                         daw_ui::Icon::Instrument, "Instrument", &instrument)
-                                        .on_hover_text(format!("{instrument}\nChoose VST instrument")).clicked() {
-                                        instrument_target = Some(track.id);
+                                        .on_hover_text(if assigned {
+                                            format!("{instrument}\nEdit instrument · Right-click to change it")
+                                        } else {
+                                            "Choose an instrument".to_owned()
+                                        });
+                                    if response.clicked() {
+                                        if assigned { instrument_editor = Some(track.id); } else { instrument_target = Some(track.id); }
                                     }
+                                    response.context_menu(|ui| {
+                                        if ui.add_enabled(assigned, daw_ui::button_widget("Edit instrument")).clicked() {
+                                            instrument_editor = Some(track.id);
+                                            ui.close();
+                                        }
+                                        if daw_ui::button(ui, "Change instrument…").clicked() {
+                                            instrument_target = Some(track.id);
+                                            ui.close();
+                                        }
+                                    });
                                 }
                                 TrackKind::Audio => {
                                     let input = match track.audio_input {
@@ -2245,6 +2269,12 @@ impl DawApp {
         if let Some(track) = recording_target {
             self.open_recording(track);
         }
+        if let Some(track) = instrument_editor {
+            self.selected_track = Some(track);
+            self.selected_clip = None;
+            self.selected_notes.clear();
+            self.open_popup(PopupKind::Instrument);
+        }
         if let Some(track) = instrument_target {
             self.selected_track = Some(track);
             self.selected_clip = None;
@@ -2767,11 +2797,9 @@ impl DawApp {
         let mut navigated = false;
         let mut name_keyboard = None;
         let mut automation_navigation = None;
-        daw_ui::popup(title, ctx)
+        daw_ui::page(title)
             .id(egui::Id::new("inspector"))
-            .default_width(daw_ui::tokens::POPUP_WIDTH_MD)
-            .min_height(daw_ui::popup_body_size(ctx).y.min(if has_clip { 610.0 } else { 377.0 }))
-            .vscroll(false)
+            .width(daw_ui::tokens::POPUP_WIDTH_MD)
             .open(&mut open)
             .show(ctx, |ui| {
                 let Some(id) = self.selected_track else {

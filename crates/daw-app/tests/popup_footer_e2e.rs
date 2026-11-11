@@ -1,4 +1,5 @@
-//! Terminal actions stay at the bottom of short, long and compact dialogs.
+//! Terminal actions stay at the bottom of dialogs, and follow the content of
+//! pages, which fill the workspace.
 mod common;
 use common::Harness;
 use daw_core::{AudioData, Clip, Note, Project};
@@ -18,7 +19,7 @@ fn bounds(rect: &Value) -> [f64; 4] {
         rect["max"][1].as_f64().unwrap(),
     ]
 }
-fn at_bottom(state: &Value, label: &str) {
+fn in_window(state: &Value, label: &str) -> ([f64; 4], [f64; 4]) {
     let window = state["window_rects"].as_array().unwrap().last().unwrap();
     let [left, top, right, bottom] = bounds(window);
     let action = state["label_rects"]
@@ -33,15 +34,27 @@ fn at_bottom(state: &Value, label: &str) {
             }
         })
         .unwrap_or_else(|| panic!("Missing {label}: {}", state["visible_labels"]));
-    let gap = bottom - bounds(action)[3];
+    (bounds(window), bounds(action))
+}
+fn at_bottom(state: &Value, label: &str) {
+    let (window, action) = in_window(state, label);
+    let gap = window[3] - action[3];
     assert!(
         (16.0..=30.0).contains(&gap),
-        "{label} is {gap:.2} points above the dialog bottom: {window}"
+        "{label} is {gap:.2} points above the dialog bottom: {window:?}"
+    );
+}
+/// A page's footer sits right after its content, not at the workspace bottom.
+fn hugs(state: &Value, label: &str, max_height: f64) {
+    let (window, action) = in_window(state, label);
+    assert!(
+        action[3] - window[1] < max_height,
+        "{label} is not right after the page content: {window:?} {action:?}"
     );
 }
 
 #[test]
-fn join_generator_and_take_actions_remain_at_the_bottom_in_both_appearances() {
+fn join_generator_and_take_actions_stay_with_their_content_in_both_appearances() {
     for (dark, width, height, density) in [(false, 1600, 1200, 1.0), (true, 800, 600, 2.0)] {
         let mut app = Harness::new();
         app.command(json!({"command":"system_theme","dark":dark}));
@@ -66,7 +79,7 @@ fn join_generator_and_take_actions_remain_at_the_bottom_in_both_appearances() {
         app.click("Edit");
         app.click("Join clips…");
         let join = settled(&mut app);
-        at_bottom(&join, "Cancel");
+        in_window(&join, "Cancel");
         // The subject lives in the title, and the two-row list leaves no
         // blank band between its last row and the footer divider.
         let title = label(&join, "Join clips · Footer synth");
@@ -106,7 +119,7 @@ fn join_generator_and_take_actions_remain_at_the_bottom_in_both_appearances() {
         app.click("Clip Editor");
         app.click("Clip");
         app.click("Takes…");
-        at_bottom(&settled(&mut app), "Back to editor");
+        in_window(&settled(&mut app), "Back to editor");
         app.click("Back to editor");
         assert_eq!(app.inspect()["project"], opened["project"]);
         app.quit();
@@ -132,14 +145,9 @@ fn footer_windows_hug_short_content_and_put_the_primary_action_rightmost() {
     app.click("Window");
     app.click("Setup");
     let setup = settled(&mut app);
-    at_bottom(&setup, "Apply");
-    let [_, top, _, bottom] = bounds(&setup["window_rects"][0]);
-    // A short form leaves no blank band: the window ends right after its actions,
+    // A short form leaves no blank band: its actions follow right after it,
     // far above the 1200 pt viewport budget.
-    assert!(
-        bottom - top < 700.0,
-        "Setup did not hug its form: {top}..{bottom}"
-    );
+    hugs(&setup, "Apply", 700.0);
     let (apply, cancel) = (label(&setup, "Apply"), label(&setup, "Cancel"));
     assert!(
         apply[0] > cancel[2],
@@ -159,11 +167,6 @@ fn footer_windows_hug_short_content_and_put_the_primary_action_rightmost() {
     app.click("Help");
     app.click("About RILL");
     let about = settled(&mut app);
-    at_bottom(&about, "Close");
-    let [_, top, _, bottom] = bounds(&about["window_rects"][0]);
-    assert!(
-        bottom - top < 400.0,
-        "About did not hug its content: {top}..{bottom}"
-    );
+    hugs(&about, "Close", 400.0);
     app.quit();
 }

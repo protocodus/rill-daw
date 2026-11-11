@@ -265,14 +265,10 @@ impl DawApp {
             .map(|track| (track.id, track.name.clone()))
             .collect();
         let mut open = true;
-        widgets::popup(format!("Routing of {track_name}"), ctx)
+        widgets::page(format!("Routing of {track_name}"))
             .id(egui::Id::new("routing"))
             .open(&mut open)
-            .default_width(widgets::tokens::POPUP_WIDTH_MD)
-            // A send row is one unwrapped parameter_row; keep it whole. The
-            // height hugs the content and the body scrolls in short windows.
-            .min_width(widgets::popup_body_size(ctx).x.min(widgets::tokens::POPUP_WIDTH_MD))
-            .vscroll(false)
+            .width(widgets::tokens::POPUP_WIDTH_MD)
             .show(ctx, |ui| {
                 let scope = daw_tools::ToolScope::Routing { track_id };
                 let label = scope.label(&self.project);

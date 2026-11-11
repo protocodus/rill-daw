@@ -277,3 +277,105 @@ impl ViewBackdrop {
         }
     }
 }
+
+/// A utility shown in the main workspace area, in place of the view that
+/// opened it, with **Back** in its header. Only fixed-size device panels
+/// (instruments and effects) remain floating `popup` windows.
+///
+/// Mirrors the parts of `egui::Window` the utilities use: the caller supplies
+/// `.open(&mut open)`; Back clears it exactly as a window's close button did.
+pub struct Page<'a> {
+    title: egui::WidgetText,
+    id: Option<egui::Id>,
+    open: Option<&'a mut bool>,
+    width: Option<f32>,
+}
+
+pub fn page<'a>(title: impl Into<egui::WidgetText>) -> Page<'a> {
+    Page {
+        title: title.into(),
+        id: None,
+        open: None,
+        width: None,
+    }
+}
+
+impl<'a> Page<'a> {
+    pub fn id(mut self, id: egui::Id) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    pub fn open(mut self, open: &'a mut bool) -> Self {
+        self.open = Some(open);
+        self
+    }
+
+    /// Forms and short lists read best as a centered column; without a width
+    /// the body uses the whole workspace.
+    pub fn width(mut self, width: f32) -> Self {
+        self.width = Some(width);
+        self
+    }
+
+    pub fn show<R>(
+        self,
+        ctx: &Context,
+        add_contents: impl FnOnce(&mut Ui) -> R,
+    ) -> Option<egui::InnerResponse<Option<R>>> {
+        if self.open.as_deref() == Some(&false) {
+            return None;
+        }
+        let Page {
+            title,
+            id,
+            open,
+            width,
+        } = self;
+        let id = id.unwrap_or_else(|| egui::Id::new(title.text()));
+        let mut back = false;
+        // Panels (menu bar, transport, status) are already laid out; the
+        // central workspace is what remains.
+        let response = egui::Window::new(title.clone())
+            .id(id)
+            .title_bar(false)
+            .frame(
+                crate::inset(ctx)
+                    .inner_margin(0)
+                    .corner_radius(0)
+                    .stroke(egui::Stroke::NONE),
+            )
+            .fixed_rect(ctx.available_rect())
+            .collapsible(false)
+            .resizable(false)
+            .movable(false)
+            .scroll(false)
+            .show(ctx, |ui| {
+                ui.set_min_size(ui.available_size());
+                back = crate::workspace_header(ui, title, |_| ()).back.clicked();
+                let margin = crate::tokens::WINDOW_MARGIN;
+                let area = ui.available_rect_before_wrap();
+                let area = Rect::from_min_max(
+                    area.min + egui::vec2(margin.leftf(), margin.topf()),
+                    area.max - egui::vec2(margin.rightf(), margin.bottomf()),
+                );
+                let column = width.map_or(area.width(), |width| width.min(area.width()));
+                let body = Rect::from_center_size(
+                    egui::pos2(area.center().x, area.center().y),
+                    egui::vec2(column, area.height()),
+                );
+                let mut body_ui = ui.new_child(
+                    egui::UiBuilder::new()
+                        .id_salt("page_body")
+                        .max_rect(body)
+                        .layout(egui::Layout::top_down(egui::Align::Min)),
+                );
+                body_ui.set_clip_rect(ui.clip_rect().intersect(body));
+                add_contents(&mut body_ui)
+            });
+        if back && let Some(open) = open {
+            *open = false;
+        }
+        response
+    }
+}

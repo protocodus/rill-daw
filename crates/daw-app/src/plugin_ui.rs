@@ -1143,10 +1143,10 @@ impl DawApp {
             } else if builtin.is_some_and(|d| d.kind == daw_devices::DeviceKind::Instrument) {
                 // The response, every control and the keyboard at once where
                 // the screen allows; the window keeps it on screen otherwise.
-                1080.0
+                1600.0
             } else if builtin.is_some() {
                 // A device panel shows its response and every control at once.
-                680.0
+                760.0
             } else {
                 400.0
             })

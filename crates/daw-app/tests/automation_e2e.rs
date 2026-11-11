@@ -223,7 +223,9 @@ fn automation_navigation_fit_and_musical_beat_editing_share_editor_controls() {
     }
     let state = app.inspect();
     let rect = &state["automation_editor"]["point_beat_rect"];
-    let x = (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5;
+    // The first click turns the field into a narrower text box; the second
+    // must land inside that box too, so aim near the left edge.
+    let x = rect["min"][0].as_f64().unwrap() + 16.0;
     let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
     app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
     app.command(json!({"command":"key","key":"A","cmd":true}));

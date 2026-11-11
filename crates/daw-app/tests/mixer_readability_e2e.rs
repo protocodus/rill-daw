@@ -70,17 +70,7 @@ fn click_bounds(app: &mut Harness, rect: &Value) -> Value {
 }
 
 fn close_window(app: &mut Harness, state: &Value, title: &str) -> Value {
-    let title = Bounds::from(label(state, title));
-    let window = state["window_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(Bounds::from)
-        .find(|window| window.contains(title))
-        .unwrap();
-    let (_, y) = title.center();
-    let x = window.right - (y - window.top);
-    app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}))
+    common::close_utility(app, state, title)
 }
 
 fn unchanged(state: &Value, original: &Value) {

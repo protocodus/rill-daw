@@ -39,6 +39,15 @@ pub struct ResponseView {
 pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
     let mut layout = generic(descriptor);
     if descriptor.id == filter::DESCRIPTOR.id {
+        // A two-by-two front panel: the filter and its output, then the
+        // modulation sources below them, each section on one line.
+        layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
+        for section in &mut layout.sections {
+            section.row = match section.title {
+                "Filter" | "Output" => 0,
+                _ => 1,
+            };
+        }
         layout.hero = Some(filter::CUTOFF);
         layout.visible = |id, values| filter::applies(id, &filter_settings(values));
         layout.options = |id, values| {
@@ -55,16 +64,13 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
     }
     if descriptor.id == mini::DESCRIPTOR.id {
         layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
-        // Rows in signal order, each filled to fit the width without
-        // wrapping: Mixer and Filter side by side would not, so voicing
-        // shares the mixer's row and velocity the filter's.
+        // A classic three-by-three front panel: the sound sources, then
+        // what shapes them, then modulation and performance.
         for section in &mut layout.sections {
             section.row = match section.title {
-                "Osc 1" | "Osc 2" => 0,
-                "Mixer" | "Voice" => 1,
-                "Filter" | "Velocity" => 2,
-                "Filter envelope" | "Amp envelope" => 3,
-                _ => 4,
+                "Osc 1" | "Osc 2" | "Mixer" => 0,
+                "Filter" | "Filter envelope" | "Amp envelope" => 1,
+                _ => 2,
             };
         }
         layout.hero = Some(mini::CUTOFF);

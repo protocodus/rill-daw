@@ -1,4 +1,5 @@
-//! Resize, hover and close the actual application windows using the mouse.
+//! Resize, hover and close the device panels, the only utilities that remain
+//! floating windows, using the mouse. Other utilities are workspace pages.
 mod common;
 use common::Harness;
 use daw_core::{Clip, Note, Project};
@@ -69,12 +70,6 @@ fn assert_actions_at_bottom(state: &Value, dialog: &str) {
     let action = match dialog {
         "Instrument" => "Choose instrument",
         "Effects" => "+ Insert",
-        "Routing" => "New return with effect…",
-        "Setup" | "Export WAV…" => "Cancel",
-        "Device browser" => "More",
-        "Recording" => "Record",
-        "About RILL" => "Close",
-        "Assistant" => "Connect AI",
         _ => return,
     };
     let [left, top, right, bottom] = window(state);
@@ -120,19 +115,7 @@ fn utilities_retain_mouse_sizes_do_not_grow_on_hover_and_show_close_feedback() {
         app.click("Popup phrase");
         let original = app.inspect()["project"].clone();
         let colors = if dark { theme::DARK } else { theme::LIGHT };
-        for (menu, label) in [
-            ("Window", "Instrument"),
-            ("Window", "Effects"),
-            ("Window", "Routing"),
-            ("Window", "Properties"),
-            ("Window", "Device browser"),
-            ("Window", "Setup"),
-            ("Window", "Recording"),
-            ("Window", "Assistant"),
-            ("Edit", "History…"),
-            ("Help", "About RILL"),
-            ("File", "Export WAV…"),
-        ] {
+        for (menu, label) in [("Window", "Instrument"), ("Window", "Effects")] {
             app.click(menu);
             app.click(label);
             let initial = settle(&mut app);
@@ -149,47 +132,30 @@ fn utilities_retain_mouse_sizes_do_not_grow_on_hover_and_show_close_feedback() {
                     );
                 }
             }
-            // About has a fixed size and no resize corner.
-            if label != "About RILL" {
-                let enlarged = resize(&mut app, before, 70.0, 60.0);
-                assert_actions_at_bottom(&enlarged, label);
-                let large = window(&enlarged);
-                assert!(
-                    large[2] - large[0] > before[2] - before[0] + 45.0,
-                    "{label} ignores horizontal resize: {before:?} -> {large:?}"
-                );
-                // Height hugs the content (up to the viewport); a wider window can
-                // only unwrap text, never add a blank band below the actions.
-                if label == "Device browser" {
-                    assert!(
-                        large[3] - large[1] > before[3] - before[1] + 35.0,
-                        "The browser must honor vertical resize: {before:?} -> {large:?}"
-                    );
-                } else {
-                    assert!(
-                        large[3] - large[1] < before[3] - before[1] + 1.1,
-                        "{label} height must hug its content: {before:?} -> {large:?}"
-                    );
-                }
-                let shrunk = resize(&mut app, large, -70.0, -60.0);
-                assert_actions_at_bottom(&shrunk, label);
-                let small = window(&shrunk);
-                assert!(
-                    small[2] - small[0] < large[2] - large[0] - 45.0,
-                    "{label} cannot shrink: {large:?} -> {small:?}"
-                );
-                if label == "Device browser" {
-                    assert!(
-                        small[3] - small[1] < large[3] - large[1] - 35.0,
-                        "The browser must shrink vertically: {large:?} -> {small:?}"
-                    );
-                } else {
-                    assert!(
-                        small[3] - small[1] > large[3] - large[1] - 1.1,
-                        "{label} height must hug its content: {large:?} -> {small:?}"
-                    );
-                }
-            }
+            let enlarged = resize(&mut app, before, 70.0, 60.0);
+            assert_actions_at_bottom(&enlarged, label);
+            let large = window(&enlarged);
+            assert!(
+                large[2] - large[0] > before[2] - before[0] + 45.0,
+                "{label} ignores horizontal resize: {before:?} -> {large:?}"
+            );
+            // Height hugs the content (up to the viewport); a wider window can
+            // only unwrap text, never add a blank band below the actions.
+            assert!(
+                large[3] - large[1] < before[3] - before[1] + 1.1,
+                "{label} height must hug its content: {before:?} -> {large:?}"
+            );
+            let shrunk = resize(&mut app, large, -70.0, -60.0);
+            assert_actions_at_bottom(&shrunk, label);
+            let small = window(&shrunk);
+            assert!(
+                small[2] - small[0] < large[2] - large[0] - 45.0,
+                "{label} cannot shrink: {large:?} -> {small:?}"
+            );
+            assert!(
+                small[3] - small[1] > large[3] - large[1] - 1.1,
+                "{label} height must hug its content: {large:?} -> {small:?}"
+            );
             app.command(json!({"command":"pointer","phase":"move","x":0,"y":0}));
             let idle = settle(&mut app);
             let (line, (x, y)) = close_icon(&idle);

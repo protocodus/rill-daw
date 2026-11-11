@@ -54,7 +54,7 @@ impl DawApp {
             }
         }
         let mut open = true;
-        daw_ui::workspace_popup("Automation", ctx)
+        daw_ui::page("Automation")
             .id(egui::Id::new("automation_editor"))
             .open(&mut open)
             .show(ctx, |ui| {
