@@ -22,7 +22,7 @@ fn open(source: Vec<Note>, bar_snap: bool) -> Harness {
     project.save(&path).unwrap();
     app.command(json!({"command":"open","path":path}));
     if bar_snap {
-        app.click("Snap 1/16");
+        app.click("Snap grid");
         app.click("1 bar");
     }
     app.click("Release phrase");

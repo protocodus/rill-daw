@@ -5,7 +5,7 @@ use crate::app::{DawApp, PopupKind, SetupPage};
 use crate::library_preview::PreviewCache;
 use crate::settings::PluginLibrary;
 use anyhow::Context as _;
-use daw_core::{Clip, Effect, EffectSlot, Instrument, TrackKind};
+use daw_core::{Clip, Effect, EffectSlot, Instrument, TrackKind, TrackPlacement};
 use daw_plugins::{
     PluginInfo,
     catalog::{CatalogEntry, ThumbnailStatus},
@@ -401,6 +401,7 @@ impl DawApp {
         self.open_popup(PopupKind::Library);
         self.plugin_filter.clear();
         self.plugin_assign_target = if assign { target } else { None };
+        self.new_track_after = None;
         self.library_target = LibraryTarget::Instrument {
             track: self.plugin_assign_target,
             name_new_track: false,
@@ -1349,6 +1350,11 @@ impl DawApp {
             target.unwrap()
         } else {
             let id = self.project.add_midi_track(&instrument_name);
+            if let Some(after) = self.new_track_after.take() {
+                // A track removed while the chooser was open leaves the new
+                // track at the end.
+                let _ = self.project.reorder_track(id, after, TrackPlacement::After);
+            }
             let clip = Clip::midi(
                 "New pattern",
                 self.snapped(self.cursor).max(0.0),

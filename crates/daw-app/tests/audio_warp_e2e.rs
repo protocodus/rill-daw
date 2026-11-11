@@ -48,6 +48,7 @@ fn fixture() -> (Harness, std::path::PathBuf) {
     let project_path = app.directory.path().join("warp.rill");
     project.save(&project_path).unwrap();
     app.command(json!({"command":"open","path":project_path}));
+    app.sixteenth_snap();
     (app, project_path)
 }
 

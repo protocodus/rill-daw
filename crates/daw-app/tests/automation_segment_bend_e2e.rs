@@ -95,6 +95,9 @@ fn fixture(surface: Surface, dark: bool, density: f64) -> (Harness, u64) {
         app.click("Shape volume");
         app.click("Window");
         app.click("Automation");
+    } else {
+        // Arrangement lanes and patterns edit their curves with Pencil.
+        app.click("Pencil");
     }
     (app, track)
 }

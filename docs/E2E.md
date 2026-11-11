@@ -1474,3 +1474,11 @@ cargo test --locked -p daw-engine midi2 -- --test-threads=1
 cargo test --locked -p daw-plugins --test multi_bus -- --test-threads=1
 cargo test --locked -p daw-ui --test midi_expression --test midi_note_lengths --test meter_statistics --test signal_analyzer
 ```
+
+`arranger_clip_consistency_e2e` checks that automation patterns select on click
+and only draw points with Pencil, move/stretch/split/erase with the clip tools,
+that double-clicks create MIDI clips and automation patterns at the pointer with
+the last selected clip's length, that the default **Snap grid** follows the
+zoom-dependent arranger grid, and that **Add track…** below the tracks and **Add
+track** in a track's context menu add tracks (the latter right after that track).
+Run with `cargo test --locked -p daw-app --test arranger_clip_consistency_e2e`.

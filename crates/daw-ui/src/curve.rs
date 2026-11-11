@@ -531,9 +531,9 @@ fn curve_editor_inner(
             theme::palette(ui.ctx()).muted,
         );
     }
-    if let (Some(viewport), Some(meter)) = (viewport, grid_meter) {
+    if let (Some(viewport), Some(meter)) = (viewport, grid_meter.as_ref()) {
         // Bars, beats and snap steps use the same grid as the clip editors.
-        crate::paint_beat_grid(&painter, plot, viewport, view.snap, &meter);
+        crate::paint_beat_grid(&painter, plot, viewport, view.snap, meter);
     }
     let tick = ((end - start) / 12.0).ceil().max(1.0);
     let mut x = (start / tick).ceil() * tick;
@@ -588,9 +588,14 @@ fn curve_editor_inner(
             plot.bottom() - point.value.clamp(0.0, 1.0) * plot.height(),
         )
     };
+    let step = crate::snap_step(
+        view.snap,
+        plot.width() / (end - start).max(f64::EPSILON) as f32,
+        grid_meter.as_ref().map_or(4, |meter| meter.initial()),
+    );
     let snap = |x: f64| {
-        let x = if view.snap > 0.0 {
-            (x / view.snap).round() * view.snap
+        let x = if step > 0.0 {
+            (x / step).round() * step
         } else {
             x
         };

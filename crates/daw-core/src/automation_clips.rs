@@ -156,6 +156,74 @@ impl Project {
         Ok(())
     }
 
+    /// Rescale `original`'s pattern in time to `length`, from its start, the
+    /// way MIDI clips stretch. The result is no longer a ghost: its points
+    /// differ from the rest of its link group.
+    pub fn stretch_automation_clip(
+        &mut self,
+        track: u64,
+        original: &AutomationClip,
+        length: f64,
+    ) -> Result<()> {
+        ensure!(
+            length.is_finite() && length > 0.0 && original.start + length <= MAX_BEAT,
+            "Invalid automation clip length"
+        );
+        let factor = length / original.length;
+        let lane = self
+            .automation_lane_mut(track)
+            .context("Automation track not found")?;
+        let index = lane
+            .clips
+            .iter()
+            .position(|clip| clip.id == original.id)
+            .context("Automation clip not found")?;
+        let mut stretched = original.clone();
+        stretched.length = length;
+        stretched.offset = original.offset * factor;
+        for point in &mut stretched.points {
+            point.beat *= factor;
+        }
+        if factor != 1.0 {
+            stretched.link_group = None;
+        }
+        let previous = std::mem::replace(&mut lane.clips[index], stretched);
+        if let Err(error) = lane.validate() {
+            lane.clips[index] = previous;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    /// Split a pattern at `beat` into two placements of the same source; the
+    /// right part keeps the original's link group, like a split MIDI clip.
+    pub fn split_automation_clip(&mut self, track: u64, id: u64, beat: f64) -> Result<u64> {
+        let lane = self
+            .automation_lane_mut(track)
+            .context("Automation track not found")?;
+        let clip = lane
+            .clips
+            .iter_mut()
+            .find(|clip| clip.id == id)
+            .context("Automation clip not found")?;
+        ensure!(
+            beat.is_finite() && beat > clip.start && beat < clip.end(),
+            "Split inside the automation clip"
+        );
+        let mut right = clip.clone();
+        right.id = new_id();
+        right.start = beat;
+        right.length = clip.end() - beat;
+        right.offset = clip.offset + beat - clip.start;
+        clip.length = beat - clip.start;
+        for point in &mut right.points {
+            point.id = new_id();
+        }
+        let right_id = right.id;
+        lane.clips.push(right);
+        Ok(right_id)
+    }
+
     pub fn remove_automation_clip(&mut self, track: u64, id: u64) -> Result<()> {
         let clips = &mut self
             .automation_lane_mut(track)

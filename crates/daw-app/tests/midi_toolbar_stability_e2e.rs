@@ -64,7 +64,7 @@ fn notes(state: &Value) -> &Vec<Value> {
 #[test]
 fn drawing_controls_keep_their_positions_across_mouse_tools_and_selection() {
     let controls = [
-        "Snap 1/16",
+        "Snap grid",
         "Length last",
         "Key C · Natural minor",
         "Generate…",

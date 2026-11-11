@@ -28,6 +28,7 @@ enum Edit {
     Select(u64, u64, bool, bool),
     SelectOnly(u64, u64),
     Rename(u64, u64),
+    CopyPattern(u64, u64),
     AudioStart(u64, u64, crate::arranger_selection::ArrangeAudioMode, f64),
     AudioMotion(f64),
     GroupStart(u64, bool),
@@ -176,6 +177,14 @@ impl DawApp {
                 })
         });
         self.sync_arranger_selection();
+        if let Some(length) = self.selected().map(|clip| clip.length).or_else(|| {
+            self.selected_track
+                .zip(self.selected_clip)
+                .and_then(|(track, clip)| self.project.automation_clip(track, clip))
+                .map(|clip| clip.length)
+        }) {
+            self.last_clip_length = length;
+        }
         // A popup can dismiss in the menu/toolbar code before clip responses
         // are read. Keep its entry/previous-frame state so that same pointer
         // gesture cannot also start a trim on the newly uncovered canvas.
@@ -321,7 +330,7 @@ impl DawApp {
                 daw_ui::toolbar_family_rule(ui, last.rect, precision.response.rect);
             }
             add_pattern = daw_ui::quiet_button(ui, "Add pattern")
-                .on_hover_text("Add a four-beat MIDI pattern at the cursor; use the selected MIDI track or create one")
+                .on_hover_text("Add a MIDI pattern at the cursor, as long as the last selected clip; use the selected MIDI track or create one")
                 .clicked();
             daw_ui::toolbar_trailing(ui, trailing_width, |ui| {
                 let help =
@@ -613,6 +622,8 @@ impl DawApp {
             })
             .collect();
         let mut popup = None;
+        let mut new_track = None;
+        let mut add_track_diagnostic = None;
         let mut channel_target = None;
         let mut mixer_target = None;
         let mut rename_track = None;
@@ -1142,15 +1153,20 @@ impl DawApp {
                         if mute.on_hover_text("Mute folder").clicked() { edits.push(Edit::Mute(track.id)); }
                         if solo.on_hover_text("Solo folder").clicked() { edits.push(Edit::Solo(track.id)); }
                     }
-                    let grid_step = (8.0 / self.zoom).ceil().max(1.0) as usize;
-                    for beat in ((first_beat / grid_step) * grid_step..last_beat).step_by(grid_step) {
+                    // The Grid snap value snaps to exactly these lines.
+                    let grid_step = daw_ui::grid_step(self.zoom, meter.initial());
+                    let first_line = (first_beat as f64 / grid_step).floor() as i64;
+                    let last_line = (last_beat as f64 / grid_step).ceil() as i64;
+                    for line in first_line..=last_line.min(first_line + 4096) {
+                        let beat = line as f64 * grid_step;
                         let x = origin + beat as f32 * self.zoom;
                         if x < grid_left || x > canvas.right() { continue; }
-                        let bar = meter.is_downbeat(beat as f64);
-                        p.line_segment(
-                            [Pos2::new(x, row.top()), Pos2::new(x, row.bottom())],
-                            Stroke::new(1.0_f32, if bar { palette(ui.ctx()).line } else { palette(ui.ctx()).grid_minor }),
-                        );
+                        let color = match daw_ui::beat_grid_level(beat, &meter) {
+                            daw_ui::GridLevel::Bar => palette(ui.ctx()).line,
+                            daw_ui::GridLevel::Beat => palette(ui.ctx()).grid_minor,
+                            daw_ui::GridLevel::Subdivision => palette(ui.ctx()).grid_minor.gamma_multiply(0.5),
+                        };
+                        p.line_segment([Pos2::new(x, row.top()), Pos2::new(x, row.bottom())], Stroke::new(1.0_f32, color));
                     }
                     for marker in &self.project.markers {
                         let x = origin + marker.beat as f32 * self.zoom;
@@ -1185,6 +1201,12 @@ impl DawApp {
                     }
                     row_response.context_menu(|ui| {
  daw_ui::command_menu_contents(ui, |ui| {
+                        daw_ui::menu_button(ui, "Add track", |ui| {
+                            if let Some(choice) = crate::app::add_track_buttons(ui) {
+                                new_track = Some((choice, Some(track.id)));
+                            }
+                        });
+                        ui.separator();
                         let (previous, next) = crate::track_order::track_shift_targets(&self.project, false)
                             .get(&track.id).copied().unwrap_or_default();
                         let actions = daw_ui::track_reorder_menu(ui, daw_ui::TrackReorderAxis::Vertical,
@@ -1281,12 +1303,46 @@ impl DawApp {
                         let rect = Rect::from_min_max(Pos2::new(grid_left, row.top() + 8.0), Pos2::new(canvas.right(), row.bottom() - 8.0));
                         empty_action_rects.push(row);
                         let response = crate::arranger_automation::automation_lane(ui, crate::arranger_automation::LaneView {
-                            track: track.id, rect, viewport: view, snap: self.snap, pointer_blocked: edge_popup_was_open, color: if automation.get(&lane.target).is_some_and(|(_, state, _)| *state != daw_ui::AutomationState::Read) { palette(ui.ctx()).muted } else { palette(ui.ctx()).automation }, navigating: navigation.navigating,
+                            track: track.id, rect, viewport: view, snap: self.snap_step(view.pixels_per_beat), tool: self.tool, new_length: self.last_clip_length, cursor: self.cursor, pointer_blocked: edge_popup_was_open, color: if automation.get(&lane.target).is_some_and(|(_, state, _)| *state != daw_ui::AutomationState::Read) { palette(ui.ctx()).muted } else { palette(ui.ctx()).automation }, navigating: navigation.navigating,
                         }, lane, &mut self.selected_clip);
                         if response.interacted {
                             self.selected_track = Some(track.id);
                             self.arranger_selection.ids.clear();
                             self.arranger_selection.span = None;
+                        }
+                        if response.cursor.is_some() { new_cursor = response.cursor; }
+                        clicked_background |= response.background_click.is_some();
+                        clicked_clip |= response.clip_click.is_some();
+                        if let Some((clip, pos)) = response.clip_click
+                            && self.arranger_selection.click_tracker.register(clip, pos, ui.input(|input| input.time),
+                                ui.input(|input| input.modifiers == egui::Modifiers::NONE)
+                                    && matches!(self.tool, daw_ui::EditorTool::Select | daw_ui::EditorTool::Pencil))
+                        {
+                            edits.push(Edit::Rename(track.id, clip));
+                        }
+                        match response.command {
+                            // Patterns are drawn in place; the Automation editor only edits the lane's own curve.
+                            Some(crate::arranger_automation::LaneCommand::EditAutomation(clip)) => {
+                                self.selected_track = Some(track.id);
+                                self.selected_clip = Some(clip);
+                                self.tool = daw_ui::EditorTool::Pencil;
+                            }
+                            Some(crate::arranger_automation::LaneCommand::Rename(clip)) => edits.push(Edit::Rename(track.id, clip)),
+                            Some(crate::arranger_automation::LaneCommand::Copy(clip)) => edits.push(Edit::CopyPattern(track.id, clip)),
+                            Some(crate::arranger_automation::LaneCommand::Stretch(clip)) => {
+                                self.selected_track = Some(track.id);
+                                self.selected_clip = Some(clip);
+                                self.tool = daw_ui::EditorTool::Stretch;
+                            }
+                            None => {}
+                        }
+                        if let Some(pos) = response.background_click
+                            && self.arranger_selection.background_click_tracker.register(track.id, pos,
+                                ui.input(|input| input.time), self.tool == daw_ui::EditorTool::Select && !ui.input(|input| input.modifiers.shift))
+                        {
+                            let length = self.last_clip_length;
+                            let start = self.snapped(((pos.x - origin) / self.zoom) as f64).clamp(0.0, MAX_BEAT - length);
+                            edits.push(Edit::Automation(track.id, crate::arranger_automation::AutomationEdit::Create(start, length)));
                         }
                         edits.extend(response.edits.into_iter().map(|edit| Edit::Automation(track.id, edit)));
                         automation_diagnostics.push(response.diagnostic);
@@ -1575,19 +1631,10 @@ impl DawApp {
                                 plain_click || self.tool == daw_ui::EditorTool::Pencil && !press_shift
                                     && ui.input(|input| input.modifiers == egui::Modifiers::NONE))
                         });
+                        // Double-click renames an existing clip of any kind; its
+                        // editor opens from the context menu or Window menu.
                         if double {
-                            self.selected_track = Some(track.id);
-                            self.selected_clip = Some(clip.id);
-                            let restore_name = clip.name.trim().is_empty()
-                                && response.interact_pointer_pos().is_some_and(|pos| {
-                                    surface.name_hit.contains(pos)
-                                        && !fades.as_ref().is_some_and(|fades| fades.handles.iter().flatten().any(|handle| handle.contains(pos)))
-                                });
-                            if restore_name {
-                                edits.push(Edit::Rename(track.id, clip.id));
-                            } else {
-                                open_editor = true;
-                            }
+                            edits.push(Edit::Rename(track.id, clip.id));
                         }
                         if response.hovered()
                             && !editing_fade
@@ -1938,6 +1985,23 @@ impl DawApp {
                     Pos2::new(grid_left, empty.top()), Pos2::new(canvas.right(), empty.bottom()),
                 ));
                 let p = ui.painter_at(empty);
+                let add_track_rect = Rect::from_min_size(
+                    empty.min + Vec2::splat(daw_ui::tokens::SPACE_SM),
+                    Vec2::new(header_width - daw_ui::tokens::SPACE_SM * 2.0, daw_ui::tokens::CONTROL_HEIGHT),
+                );
+                let add_track = ui.scope_builder(egui::UiBuilder::new().max_rect(add_track_rect), |ui| {
+                    daw_ui::menu_button(ui, "Add track…", |ui| {
+                        if let Some(choice) = crate::app::add_track_buttons(ui) {
+                            new_track = Some((choice, None));
+                        }
+                    })
+                }).inner.response.on_hover_text("Add an instrument, MIDI, audio, bus, folder or automation track");
+                add_track_diagnostic = Some(add_track.rect);
+                response.context_menu(|ui| daw_ui::command_menu_contents(ui, |ui| {
+                    if let Some(choice) = crate::app::add_track_buttons(ui) {
+                        new_track = Some((choice, None));
+                    }
+                }));
                 if self.project.tracks.is_empty() {
                     let area = Rect::from_min_max(
                         Pos2::new(grid_left + daw_ui::tokens::SPACE_LG, empty.top() + daw_ui::tokens::SPACE_XL),
@@ -2210,6 +2274,7 @@ impl DawApp {
             });
             diagnostics["header_width"] = serde_json::json!(header_width);
             diagnostics["empty_canvas"] = rect_json(empty_canvas);
+            diagnostics["add_track"] = add_track_diagnostic.map(rect_json).into();
             diagnostics["header_resize"] = rect_json(header_gutter);
             diagnostics["row_resize"] = serde_json::json!(row_resize_diagnostics);
             diagnostics["tracks"] = serde_json::json!(track_diagnostics);
@@ -2269,6 +2334,9 @@ impl DawApp {
         if let Some(track) = recording_target {
             self.open_recording(track);
         }
+        if let Some((choice, after)) = new_track {
+            self.add_track(choice, after);
+        }
         if let Some(track) = instrument_editor {
             self.selected_track = Some(track);
             self.selected_clip = None;
@@ -2312,6 +2380,7 @@ impl DawApp {
                 Edit::Select(..)
                     | Edit::SelectOnly(..)
                     | Edit::Rename(..)
+                    | Edit::CopyPattern(..)
                     | Edit::AudioStart(..)
                     | Edit::AudioMotion(..)
                     | Edit::GroupStart(..)
@@ -2342,8 +2411,25 @@ impl DawApp {
                 }
 
                 Edit::Rename(track, clip) => {
-                    self.arranger_select_clips([(track, clip)], None);
+                    if self.project.automation_clip(track, clip).is_some() {
+                        self.arranger_select_clips([], None);
+                        self.selected_track = Some(track);
+                        self.selected_clip = Some(clip);
+                    } else {
+                        self.arranger_select_clips([(track, clip)], None);
+                    }
                     self.start_inline_rename(ui.ctx());
+                    continue;
+                }
+                // Same path as Edit → Copy, so the pattern replaces copied media clips.
+                Edit::CopyPattern(track, clip) => {
+                    self.arranger_select_clips([], None);
+                    self.selected_track = Some(track);
+                    self.selected_clip = Some(clip);
+                    self.arranger_clipboard_action(
+                        ui.ctx(),
+                        crate::audio_editor::AudioClipboardAction::Copy,
+                    );
                     continue;
                 }
                 Edit::AudioStart(track, clip, mode, origin) => {
@@ -2566,15 +2652,17 @@ impl DawApp {
                     result
                 }
                 Edit::New(id, start) => {
-                    // Keep the complete four-beat pattern inside the project range.
-                    let start = start.clamp(0.0, MAX_BEAT - 4.0);
+                    // New patterns take the length of the last selected clip,
+                    // kept inside the project range.
+                    let length = self.last_clip_length;
+                    let start = start.clamp(0.0, MAX_BEAT - length);
                     let new_track = id == 0;
                     let id = if id == 0 {
                         self.project.add_instrument_track("New instrument")
                     } else {
                         id
                     };
-                    let clip = Clip::midi("New pattern", start, 4.0, Vec::new());
+                    let clip = Clip::midi("New pattern", start, length, Vec::new());
                     self.selected_clip = Some(clip.id);
                     self.selected_track = Some(id);
                     self.project.track_mut(id).unwrap().clips.push(clip);
@@ -3354,7 +3442,7 @@ impl DawApp {
             lane,
             view,
             &mut range,
-            self.snap,
+            self.snap_step(view.pixels_per_beat),
             MAX_BEAT,
             Some(daw_ui::TimelineLoopLabel {
                 tempo: self.project.tempo,

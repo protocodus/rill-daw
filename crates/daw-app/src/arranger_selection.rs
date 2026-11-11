@@ -413,7 +413,45 @@ impl DawApp {
         if self.view != WorkspaceView::Arrangement {
             return false;
         }
+        let automation = self
+            .selected_track
+            .zip(self.selected_clip)
+            .and_then(|(track, clip)| {
+                Some((track, self.project.automation_clip(track, clip)?.clone()))
+            });
         match action {
+            // A selected pattern copies to the automation clipboard, which
+            // pastes onto the selected automation lane at the cursor.
+            AudioClipboardAction::Copy | AudioClipboardAction::Cut if automation.is_some() => {
+                let (track, clip) = automation.unwrap();
+                crate::arranger_automation::copy_automation_clip(ctx, &clip);
+                self.arranger_selection.clipboard = None;
+                if matches!(action, AudioClipboardAction::Cut) {
+                    self.apply_clip_command(track, clip.id, crate::app::ClipCommand::Delete);
+                }
+                true
+            }
+            AudioClipboardAction::Paste
+                if self.arranger_selection.clipboard.is_none()
+                    && let Some(track) = self
+                        .selected_track
+                        .filter(|track| self.project.automation_lane(*track).is_some())
+                    && let Some(clip) = crate::arranger_automation::automation_clipboard(ctx) =>
+            {
+                self.begin_edit();
+                match self
+                    .project
+                    .paste_automation_clip(track, &clip, self.cursor)
+                {
+                    Ok(id) => {
+                        self.selected_clip = Some(id);
+                        self.edit_label = Some("Paste automation clip".into());
+                        self.changed();
+                    }
+                    Err(error) => self.message(Err(error), ""),
+                }
+                true
+            }
             AudioClipboardAction::Copy | AudioClipboardAction::Cut => {
                 self.arranger_selection.clipboard = self.arranger_clipboard();
                 if self.arranger_selection.clipboard.is_some() {
@@ -743,7 +781,7 @@ impl DawApp {
         };
         self.arranger_start_group_drag(handle, false);
         let delta = daw_ui::NudgeUnit::load(ctx).beats(
-            self.snap,
+            self.snap_step(self.zoom),
             self.project.tempo,
             self.settings.sample_rate,
         ) * f64::from(direction);
@@ -802,6 +840,11 @@ impl DawApp {
             return false;
         }
         self.sync_arranger_selection();
+        let has_clipboard = self.arranger_selection.clipboard.is_some()
+            || self
+                .selected_track
+                .is_some_and(|track| self.project.automation_lane(track).is_some())
+                && crate::arranger_automation::automation_clipboard(ctx).is_some();
         let commands = ctx.input_mut(|input| {
             let native_copy = input
                 .events
@@ -815,7 +858,6 @@ impl DawApp {
                 .events
                 .iter()
                 .any(|event| matches!(event, egui::Event::Paste(_)));
-            let has_clipboard = self.arranger_selection.clipboard.is_some();
             let mut actions = Vec::new();
             input.events.retain(|event| {
                 let action = match event {

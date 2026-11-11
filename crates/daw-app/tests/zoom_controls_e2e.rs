@@ -304,7 +304,7 @@ fn one_bar_snap_uses_the_current_meter_and_keeps_old_beat_steps_honestly_labelle
     app.click("4/4");
     app.click("3/4");
     let before = app.inspect();
-    app.click("Snap 1/16");
+    app.click("Snap grid");
     let chosen = app.click("1 bar");
     label(&chosen, "Snap 1 bar");
     unchanged(&chosen, &before, "timeline");

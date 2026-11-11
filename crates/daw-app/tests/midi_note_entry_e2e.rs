@@ -238,7 +238,7 @@ fn mouse_length_choices_use_the_meter_and_apply_to_all_note_entry_tools() {
 fn piano_roll_snap_and_length_choosers_set_the_pencil_grid_by_mouse() {
     let (mut app, _, selected) = open(false, 4);
     let baseline = app.inspect();
-    let snap = app.click("Snap 1/16");
+    let snap = app.click("Snap grid");
     assert_eq!(snap["project"], baseline["project"]);
     let chosen = app.click("1/8");
     assert_eq!(

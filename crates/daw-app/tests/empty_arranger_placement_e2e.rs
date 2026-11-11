@@ -100,7 +100,7 @@ fn double_click_at_bar_three_creates_the_first_midi_clip_there_with_one_undo() {
 #[test]
 fn new_track_placement_uses_the_scrolled_zoomed_timeline_and_current_snap() {
     let mut app = fixture(true);
-    app.click("Snap 1/16");
+    app.click("Snap grid");
     let before = app.click("1/8");
     let point = empty_point(&before, 8.0);
     let zoomed = app.command(json!({

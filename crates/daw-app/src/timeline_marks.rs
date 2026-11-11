@@ -377,7 +377,13 @@ impl DawApp {
             }
         }));
         let mut command = None;
-        let snap = |beat: f64, bypass: bool| if bypass { beat } else { self.snapped(beat) };
+        let snap = |beat: f64, bypass: bool| {
+            if bypass {
+                beat
+            } else {
+                self.snapped_at(beat, view.pixels_per_beat)
+            }
+        };
         let mut controls = ui.new_child(egui::UiBuilder::new().max_rect(lane));
         let response = daw_ui::timeline_flags(
             &mut controls,
@@ -458,7 +464,10 @@ impl DawApp {
         if response.lane.clicked()
             && let Some(position) = response.lane.interact_pointer_pos()
         {
-            self.seek(self.snapped(view.beat_at(lane, position.x)).max(0.0));
+            self.seek(
+                self.snapped_at(view.beat_at(lane, position.x), view.pixels_per_beat)
+                    .max(0.0),
+            );
         }
         self.timeline_context_menu(&response.lane, |x| view.beat_at(lane, x));
         let rect_json = |rect: egui::Rect| serde_json::json!({"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]});

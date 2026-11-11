@@ -110,7 +110,7 @@ fn unchanged(state: &Value, before: &Value) {
 
 fn toolbar(state: &Value) -> Vec<Value> {
     [
-        "Snap 1/16",
+        "Snap grid",
         "Length last",
         "Key C · Natural minor",
         "Notes",

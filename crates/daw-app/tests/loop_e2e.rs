@@ -245,6 +245,7 @@ fn loop_drag_fixture(width: u32, density: f64, dark: bool, recording: bool) -> H
     } else {
         Harness::new()
     };
+    app.sixteenth_snap();
     let source = app.directory.path().join("loop-drag.wav");
     daw_core::AudioData {
         sample_rate: 48_000,
