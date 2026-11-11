@@ -192,7 +192,7 @@ fn fader_release_applies_the_motion_since_the_last_held_frame() {
     for sampled in [8.0, 24.0] {
         let ctx = themed();
         let mut value = 0.5;
-        let mut frame = |events: Vec<Event>, value: &mut f64| {
+        let frame = |events: Vec<Event>, value: &mut f64| {
             run(&ctx, events, |ui| {
                 ui::fader(ui, value, "Attack", size, None);
             })
