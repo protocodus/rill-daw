@@ -115,6 +115,115 @@ fn segmented_selects_exclusively() {
 }
 
 #[test]
+fn choice_is_toggle_buttons_below_five_options_and_a_drop_down_from_five() {
+    let ctx = themed();
+    let four = [(0, "Saw"), (1, "Pulse"), (2, "Triangle"), (3, "Sine")];
+    let five = [(0, "A"), (1, "B"), (2, "C"), (3, "D"), (4, "E")];
+    let mut selected = 0;
+    let used = run(&ctx, vec![], |ui| {
+        ui::choice(ui, "wave", &mut 0, &four);
+    });
+    // One click on a visible option picks it; nothing has to open first.
+    let at = pos2(used.right() - 8.0, used.center().y);
+    click(at, 1, &mut |events| {
+        run(&ctx, events, |ui| {
+            ui::choice(ui, "wave", &mut selected, &four);
+        });
+    });
+    assert_eq!(selected, 3);
+    let mut selected = 0;
+    let used = run(&ctx, vec![], |ui| {
+        ui::choice(ui, "letter", &mut 0, &five);
+    });
+    click(used.center(), 1, &mut |events| {
+        run(&ctx, events, |ui| {
+            ui::choice(ui, "letter", &mut selected, &five);
+        });
+    });
+    assert_eq!(selected, 0, "a click on a drop-down only opens its list");
+}
+
+#[test]
+fn toggle_grid_lays_four_options_out_two_by_two() {
+    let ctx = themed();
+    let four = [(0, "Saw"), (1, "Pulse"), (2, "Triangle"), (3, "Sine")];
+    let mut selected = 0;
+    let used = run(&ctx, vec![], |ui| {
+        ui::toggle_grid(ui, &mut 0, &four, 2);
+    });
+    assert_eq!(used.height(), 2.0 * ui::TOGGLE_ROW_HEIGHT);
+    click(used.right_bottom() - vec2(8.0, 8.0), 1, &mut |events| {
+        run(&ctx, events, |ui| {
+            ui::toggle_grid(ui, &mut selected, &four, 2);
+        });
+    });
+    assert_eq!(selected, 3);
+    click(used.left_bottom() + vec2(8.0, -8.0), 1, &mut |events| {
+        run(&ctx, events, |ui| {
+            ui::toggle_grid(ui, &mut selected, &four, 2);
+        });
+    });
+    assert_eq!(selected, 2);
+}
+
+#[test]
+fn fader_and_mini_knob_take_the_size_they_are_given() {
+    let ctx = themed();
+    let size = vec2(ui::FADER_CAP_WIDTH, 120.0);
+    let mut value = 0.5;
+    let used = run(&ctx, vec![], |ui| {
+        ui::fader(ui, &mut value, "Attack", size, None);
+    });
+    assert_eq!(used.size(), size);
+    assert_eq!(value, 0.5, "drawing a fader leaves its value alone");
+    click(used.center(), 1, &mut |events| {
+        run(&ctx, events, |ui| {
+            ui::fader(ui, &mut value, "Attack", size, None);
+        });
+    });
+    assert!(
+        ui::parameter_owns_document_history(&ctx),
+        "Undo and redo reach the song while a fader has focus"
+    );
+    let used = run(&ctx, vec![], |ui| {
+        ui.add(ui::Knob::new(&mut value, 0.0..=1.0).mini());
+    });
+    assert_eq!(
+        used.size(),
+        vec2(ui::MINI_KNOB_DIAMETER, ui::MINI_KNOB_DIAMETER)
+    );
+}
+
+#[test]
+fn fader_release_applies_the_motion_since_the_last_held_frame() {
+    // Height 111 less the 11-point cap: 100 points of travel.
+    let size = vec2(ui::FADER_CAP_WIDTH, 111.0);
+    for sampled in [8.0, 24.0] {
+        let ctx = themed();
+        let mut value = 0.5;
+        let frame = |events: Vec<Event>, value: &mut f64| {
+            run(&ctx, events, |ui| {
+                ui::fader(ui, value, "Attack", size, None);
+            })
+        };
+        let at = frame(vec![], &mut value).center();
+        frame(vec![Event::PointerMoved(at)], &mut value);
+        frame(button(at, true), &mut value);
+        frame(
+            vec![Event::PointerMoved(at - vec2(0.0, sampled))],
+            &mut value,
+        );
+        frame(button(at - vec2(0.0, 30.0), false), &mut value);
+        assert!((value - 0.8).abs() < 1e-6, "{sampled}: {value}");
+        frame(vec![Event::PointerMoved(at - vec2(0.0, 50.0))], &mut value);
+        assert!(
+            (value - 0.8).abs() < 1e-6,
+            "released motion is not replayed"
+        );
+    }
+}
+
+#[test]
 fn toggle_led_flips() {
     let ctx = themed();
     let mut on = false;

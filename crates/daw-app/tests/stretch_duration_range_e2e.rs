@@ -103,15 +103,8 @@ fn control(app: &mut Harness, row: &str, symbol: &str) -> Value {
     click_rect(app, row_control(&state, row, Some(symbol)))
 }
 
-fn mode(app: &mut Harness, from: &str, to: &str) -> Value {
-    let state = control(app, "Duration", from);
-    let item = state["menu_label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|label| label["text"] == to)
-        .unwrap();
-    click_rect(app, item)
+fn mode(app: &mut Harness, to: &str) -> Value {
+    control(app, "Duration", to)
 }
 
 fn clip(state: &Value, id: u64) -> &Value {
@@ -163,7 +156,7 @@ fn invalid_stretch_stays_a_draft_and_both_exact_limits_commit_once() {
     for midi in [false, true] {
         let (mut app, id) = fixture(midi, 4.0, 1.0, false);
         let before = app.inspect();
-        unchanged(&mode(&mut app, "Trim", "Stretch"), &before);
+        unchanged(&mode(&mut app, "Stretch"), &before);
         control(&mut app, "Duration", "123");
         let invalid = enter_mouse(&mut app, "56", &before);
         let rejected = click_rect(&mut app, label(&invalid, "Apply value"));
@@ -194,7 +187,7 @@ fn invalid_stretch_stays_a_draft_and_both_exact_limits_commit_once() {
 fn stretched_trimmed_ghost_uses_its_current_window_without_changing_its_peer() {
     for midi in [false, true] {
         let (mut app, id) = fixture(midi, 4.0, 1.0, true);
-        let before = mode(&mut app, "Trim", "Stretch");
+        let before = mode(&mut app, "Stretch");
         assert_eq!(clip(&before, id)["length"], 6.0);
         assert_eq!(clip(&before, id)["source_rate"], 0.5);
         let opened = control(&mut app, "Duration", "123");
@@ -226,7 +219,7 @@ fn stretched_trimmed_ghost_uses_its_current_window_without_changing_its_peer() {
 #[test]
 fn drag_text_and_steps_share_the_stretch_limits() {
     let (mut app, id) = fixture(true, 4.0, 1.0, false);
-    let before = mode(&mut app, "Trim", "Stretch");
+    let before = mode(&mut app, "Stretch");
     let stepped = control(&mut app, "Duration", "+");
     assert_eq!(clip(&stepped, id)["length"], 5.0);
     assert_eq!(clip(&stepped, id)["source_rate"], 0.8);
@@ -257,13 +250,13 @@ fn drag_text_and_steps_share_the_stretch_limits() {
 #[test]
 fn mode_switch_preserves_trim_and_stretch_respects_the_timeline_end() {
     let (mut app, id) = fixture(true, 4.0, 1.0, false);
-    let before = mode(&mut app, "Trim", "Stretch");
-    unchanged(&mode(&mut app, "Stretch", "Trim"), &before);
+    let before = mode(&mut app, "Stretch");
+    unchanged(&mode(&mut app, "Trim"), &before);
     let trimmed = apply_duration(&mut app, "56");
     assert_eq!(clip(&trimmed, id)["length"], 56.0);
     assert_eq!(clip(&trimmed, id)["source_rate"], 1.0);
     one_edit(&trimmed, &before);
-    unchanged(&mode(&mut app, "Trim", "Stretch"), &trimmed);
+    unchanged(&mode(&mut app, "Stretch"), &trimmed);
     let opened = control(&mut app, "Duration", "123");
     label(&opened, "Range: 14 to 224");
     unchanged(&app.click("Cancel"), &trimmed);
@@ -293,8 +286,8 @@ fn inspecting_precise_already_stretched_values_never_rounds_or_creates_history()
     let precise = 4.123_456_789_123_45;
     let (mut app, id) = fixture(true, precise, 0.5, false);
     let before = app.inspect();
-    for (from, to) in [("Trim", "Stretch"), ("Stretch", "Trim")] {
-        unchanged(&mode(&mut app, from, to), &before);
+    for to in ["Stretch", "Trim"] {
+        unchanged(&mode(&mut app, to), &before);
         let opened = control(&mut app, "Duration", "123");
         label(&opened, &precise.to_string());
         unchanged(&opened, &before);

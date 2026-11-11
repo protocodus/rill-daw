@@ -293,8 +293,7 @@ fn configure_midi(app: &mut Harness, channel: &str, monitor: &str, armed: bool) 
         .as_str()
         .unwrap_or("Off");
     if monitor != current {
-        expose_popup_label(app, current);
-        app.click(current);
+        expose_popup_label(app, monitor);
         app.click(monitor);
     }
     app.key("Escape");
@@ -1253,8 +1252,7 @@ fn an_unselected_midi_channel_records_no_empty_clip() {
     assert_eq!(armed["recording"]["armed"], json!([track]));
     assert_eq!(armed["recording"]["monitors"][track.to_string()], "Auto");
     popup(&mut app);
-    expose_popup_label(&mut app, "Auto");
-    app.click("Auto");
+    expose_popup_label(&mut app, "Off");
     app.click("Off");
     expose_popup_label(&mut app, "No pre-count");
     expose_popup_label(&mut app, "Click");

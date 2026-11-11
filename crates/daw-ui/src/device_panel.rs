@@ -220,6 +220,125 @@ pub fn preset_browser(
     action
 }
 
+/// One entry of a [`preset_group`]'s menu.
+#[derive(Clone, Copy, Debug)]
+pub struct PresetChoice<'a> {
+    pub label: &'a str,
+    /// Shown on hover; may be empty.
+    pub description: &'a str,
+}
+
+/// Every preset control of a device in one bordered group, set apart from
+/// the device's own controls: previous and next, the preset menu, **Save
+/// as…** and **Reset**. `draft` is the name being typed while saving; the
+/// group opens and closes it. Identical wherever presets appear.
+pub fn preset_group(
+    ui: &mut Ui,
+    id_salt: impl std::hash::Hash,
+    name: &str,
+    choices: &[PresetChoice<'_>],
+    current: Option<usize>,
+    draft: &mut Option<String>,
+) -> Option<PresetAction> {
+    let mut action = None;
+    // The device popup scrolls only vertically, so on a narrow panel the
+    // actions go on a second row instead of off its right edge.
+    let one_row = ui.available_width() >= tokens::POPUP_WIDTH_MD;
+    crate::inset(ui.ctx())
+        .inner_margin(egui::Margin::symmetric(
+            tokens::SPACE_SM as i8,
+            tokens::SPACE_XS as i8,
+        ))
+        .show(ui, |ui| {
+            ui.spacing_mut().item_spacing = egui::Vec2::splat(tokens::SPACE_XS);
+            let navigation = |ui: &mut Ui, action: &mut Option<PresetAction>| {
+                let title = group_title(ui, "Preset");
+                let (rect, _) = ui.allocate_exact_size(
+                    title.size() + vec2(tokens::SPACE_XS, 0.0),
+                    egui::Sense::hover(),
+                );
+                ui.painter()
+                    .galley(rect.left_top(), title, egui::Color32::PLACEHOLDER);
+                if ui
+                    .add(IconButton::icon_only(Icon::Back, "Previous preset"))
+                    .on_hover_text("Previous preset")
+                    .clicked()
+                {
+                    *action = Some(PresetAction::Previous);
+                }
+                crate::select(id_salt, name)
+                    .width(tokens::SELECT_WIDTH + tokens::SPACE_XL)
+                    .truncate()
+                    .show_ui(ui, |ui| {
+                        for (index, choice) in choices.iter().enumerate() {
+                            let response =
+                                crate::selectable(ui, current == Some(index), choice.label);
+                            let response = if choice.description.is_empty() {
+                                response
+                            } else {
+                                response.on_hover_text(choice.description)
+                            };
+                            if response.clicked() {
+                                *action = Some(PresetAction::Load(index));
+                            }
+                        }
+                    });
+                if ui
+                    .add(IconButton::icon_only(Icon::ChevronRight, "Next preset"))
+                    .on_hover_text("Next preset")
+                    .clicked()
+                {
+                    *action = Some(PresetAction::Next);
+                }
+            };
+            let mut actions = |ui: &mut Ui, action: &mut Option<PresetAction>| {
+                if let Some(mut name) = draft.take() {
+                    crate::text_field(ui, &mut name, "Preset name", tokens::SELECT_WIDTH);
+                    let valid = !name.trim().is_empty() && name.len() <= 128;
+                    let mut keep = true;
+                    if ui
+                        .add_enabled(valid, crate::button_widget("Save"))
+                        .clicked()
+                    {
+                        *action = Some(PresetAction::SaveAs(name.trim().to_owned()));
+                        keep = false;
+                    }
+                    if crate::small_button(ui, "Cancel").clicked() {
+                        keep = false;
+                    }
+                    if keep {
+                        *draft = Some(name);
+                    }
+                } else {
+                    if crate::small_button(ui, "Save as…").clicked() {
+                        *draft = Some(String::new());
+                    }
+                    if crate::small_button(ui, "Reset")
+                        .on_hover_text("Return every parameter to its default")
+                        .clicked()
+                    {
+                        *action = Some(PresetAction::Reset);
+                    }
+                }
+            };
+            if one_row {
+                ui.horizontal(|ui| {
+                    navigation(ui, &mut action);
+                    ui.add_space(tokens::SPACE_XS);
+                    ui.separator();
+                    ui.add_space(tokens::SPACE_XS);
+                    actions(ui, &mut action);
+                });
+            } else {
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| navigation(ui, &mut action));
+                    ui.horizontal(|ui| actions(ui, &mut action));
+                });
+            }
+        });
+    action
+}
+
 /// Preset data the panel header shows.
 #[derive(Clone, Copy)]
 pub struct PresetInfo<'a> {
@@ -472,10 +591,66 @@ impl<'a> DevicePanel<'a> {
 pub fn device_section<R>(ui: &mut Ui, title: &str, contents: impl FnOnce(&mut Ui) -> R) -> R {
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = tokens::SPACE_SM;
-        crate::text::label(ui, title);
+        device_section_title(ui, title);
         contents(ui)
     })
     .inner
+}
+
+/// A group's name in small tracked capitals, dimmed so it frames the
+/// controls without competing with them.
+fn group_title(ui: &Ui, title: &str) -> std::sync::Arc<egui::Galley> {
+    let mut job = egui::text::LayoutJob::default();
+    job.append(
+        &title.to_uppercase(),
+        0.0,
+        egui::TextFormat {
+            font_id: egui::FontId::new(tokens::FONT_SMALL, TextRole::Label.font().family),
+            color: theme::palette(ui.ctx()).muted,
+            extra_letter_spacing: 1.0,
+            ..Default::default()
+        },
+    );
+    ui.painter().layout_job(job)
+}
+
+/// The heading of a device section: its dimmed name on top and a rule that
+/// separates it from the controls. Distinct from the sentence-case
+/// [`control_caption`]s under it, so the panel's two levels never read alike.
+pub fn device_section_title(ui: &mut Ui, title: &str) -> Response {
+    let galley = group_title(ui, title);
+    let (rect, response) = ui.allocate_exact_size(
+        vec2(
+            ui.available_width(),
+            galley.size().y + tokens::SPACE_SM + tokens::BORDER_WIDTH,
+        ),
+        egui::Sense::hover(),
+    );
+    let colors = theme::palette(ui.ctx());
+    ui.painter().galley(rect.left_top(), galley, colors.muted);
+    ui.painter().hline(
+        rect.x_range(),
+        rect.bottom() - tokens::BORDER_WIDTH * 0.5,
+        egui::Stroke::new(tokens::BORDER_WIDTH, colors.line),
+    );
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, title));
+    response
+}
+
+/// The font of a [`control_caption`], for callers that size cells to it.
+pub fn control_caption_font() -> egui::FontId {
+    crate::text::TextRole::Note.font()
+}
+
+/// The name above one control of a device section: smaller and lighter than
+/// the section's title, in the text color so it stays readable.
+pub fn control_caption(ui: &mut Ui, text: &str) -> Response {
+    let color = crate::theme::palette(ui.ctx()).text;
+    ui.add(egui::Label::new(
+        egui::RichText::new(text)
+            .font(control_caption_font())
+            .color(color),
+    ))
 }
 
 /// How the host stores and edits parameter values for a generated panel.
@@ -670,7 +845,7 @@ fn generic_group(ui: &mut Ui, rows: &[&ParamRow<'_>], edits: &mut dyn ParameterE
                 ui.vertical(|ui| {
                     crate::text::note(ui, row.name);
                     let mut index = choice_index(value, options.len());
-                    let response = if options.len() <= 5 && options.len() >= 2 {
+                    let response = if options.len() >= 2 {
                         segmented(ui, &mut index, options)
                     } else {
                         stepped_selector(ui, &mut index, options)

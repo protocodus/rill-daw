@@ -396,7 +396,7 @@ fn deep_scale_picker_highlights_filters_draws_and_generates_the_composer_scale()
     app.click(HEADER);
 
     app.click("Multi-draw");
-    choose(&mut app, "Chord stack", "Scale stack");
+    app.click("Scale stack");
     let stacked = draw(&mut app, 8.0, 60);
     let at_eight: Vec<_> = notes(&stacked, clip_id)
         .iter()
@@ -408,7 +408,11 @@ fn deep_scale_picker_highlights_filters_draws_and_generates_the_composer_scale()
 
     app.click("Generate…");
     app.click("Arpeggio");
-    generator_choice(&mut app, "harmony", "Scale");
+    // Harmony is a pair of toggle buttons, Chord then Scale.
+    let harmony = generator_control(&mut app, "harmony");
+    let (_, y) = center(&harmony);
+    app.command(json!({"command":"pointer","phase":"click",
+        "x":harmony["max"][0].as_f64().unwrap() - 12.0,"y":y}));
     generator_choice(&mut app, "scale", Scale::Minor.name());
     generator_choice(&mut app, "scale", label);
     generator_number(&mut app, "start_bar", "2");

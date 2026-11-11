@@ -92,6 +92,11 @@ pub enum Taper {
     Log,
 }
 
+/// Diameter of [`Knob::mini`]: as tall as a compact control.
+pub const MINI_KNOB_DIAMETER: f32 = tokens::COMPACT_HEIGHT;
+
+const MINI_ARC_WIDTH: f32 = 3.0;
+
 #[must_use = "Add the knob to a Ui"]
 pub struct Knob<'a> {
     value: Box<dyn FnMut(Option<f64>) -> f64 + 'a>,
@@ -110,6 +115,7 @@ pub struct Knob<'a> {
     compact: bool,
     perceptual_gain: bool,
     pointer: bool,
+    mini: bool,
     display_round_trip: Option<Box<dyn Fn(f64) -> f64 + 'a>>,
     bipolar: bool,
     log: bool,
@@ -147,6 +153,7 @@ impl<'a> Knob<'a> {
             compact: false,
             perceptual_gain: false,
             pointer: false,
+            mini: false,
             display_round_trip: None,
             bipolar: false,
             log: false,
@@ -241,10 +248,20 @@ impl<'a> Knob<'a> {
             *self.range.start() >= 0.0 && *self.range.end() > *self.range.start();
         self
     }
-    /// A compact dial with a filled body and a pointer, so a small ring
+    /// A compact dial with a thick arc, a filled body and a marker that joins
+    /// the arc; `endpoint_labels` print small under the arc's ends. A small ring
     /// still reads as a control rather than a bare arc.
     pub fn pointer(mut self) -> Self {
         self.pointer = true;
+        self
+    }
+    /// A bare arc with its active part highlighted, [`MINI_KNOB_DIAMETER`]
+    /// across: for pan, send or volume inside a compact row, where a dial
+    /// with a body does not fit. The caller supplies caption and hover.
+    pub fn mini(mut self) -> Self {
+        self.compact = true;
+        self.mini = true;
+        self.diameter = MINI_KNOB_DIAMETER;
         self
     }
     pub fn min_decimals(mut self, decimals: usize) -> Self {
@@ -352,7 +369,7 @@ impl<'a> Knob<'a> {
         ui.set_width(width);
         let ring_only = self.compact || self.diameter < 64.0;
         let label = (!self.compact && !self.text.is_empty()).then(|| text::label(ui, &self.text));
-        let height = if self.compact {
+        let height = if self.compact && !self.mini {
             Self::compact_height(self.diameter)
         } else {
             self.diameter
@@ -615,14 +632,18 @@ impl<'a> Knob<'a> {
         }
         let current = (self.value)(None);
         let fraction = self.normalized(current);
-        let radius = (self.diameter * 0.38).min(
-            self.diameter * 0.5
-                - if ring_only {
-                    tokens::SPACE_XS + 1.5
-                } else {
-                    9.0
-                },
-        );
+        let radius = if self.mini {
+            self.diameter * 0.5 - MINI_ARC_WIDTH * 0.5 - 1.0
+        } else {
+            (self.diameter * 0.38).min(
+                self.diameter * 0.5
+                    - if ring_only {
+                        tokens::SPACE_XS + 1.5
+                    } else {
+                        9.0
+                    },
+            )
+        };
         let center = dial.center();
         let divisions = if ring_only {
             0
@@ -672,31 +693,53 @@ impl<'a> Knob<'a> {
             } else {
                 colors.muted
             };
-            if !ring_only {
-                let visuals = ui.style().interact(&dial_response);
-                ui.painter()
-                    .circle(center, radius * 0.75, visuals.bg_fill, visuals.bg_stroke);
-            } else if self.pointer {
-                // Fill only: the ring itself is the body's edge.
-                ui.painter().circle_filled(
+            let focused_ring = ring_only && ui.is_enabled() && dial_response.has_focus();
+            // The pointer dial's arc is its scale: thick enough to read the
+            // range and the value on it without the body.
+            let arc_width = if self.mini {
+                MINI_ARC_WIDTH
+            } else if !self.pointer {
+                2.0
+            } else if self.diameter >= 48.0 {
+                4.5
+            } else {
+                3.5
+            };
+            if self.pointer {
+                ui.painter().circle(
                     center,
-                    radius - 3.0,
+                    radius - arc_width * 0.5 - 1.5,
                     if dial_response.hovered() {
                         colors.control_hover
                     } else {
                         colors.control_fill
                     },
+                    Stroke::new(
+                        if focused_ring { 2.0_f32 } else { 1.0_f32 },
+                        if focused_ring {
+                            colors.text
+                        } else {
+                            colors.line
+                        },
+                    ),
                 );
+            } else if !ring_only {
+                let visuals = ui.style().interact(&dial_response);
+                ui.painter()
+                    .circle(center, radius * 0.75, visuals.bg_fill, visuals.bg_stroke);
             }
-            let focused_ring = ring_only && ui.is_enabled() && dial_response.has_focus();
             ui.painter().add(egui::Shape::line(
                 samples.iter().map(|unit| center + *unit * radius).collect(),
                 Stroke::new(
-                    if focused_ring { 3.0_f32 } else { 2.0_f32 },
-                    if focused_ring {
+                    if self.pointer || self.mini {
+                        arc_width
+                    } else if focused_ring {
+                        3.0_f32
+                    } else {
+                        2.0_f32
+                    },
+                    if focused_ring && !self.pointer {
                         colors.text
-                    } else if self.pointer {
-                        colors.line.lerp_to_gamma(colors.muted, 0.5)
                     } else {
                         colors.line
                     },
@@ -713,8 +756,23 @@ impl<'a> Knob<'a> {
                     .map(|unit| center + *unit * radius),
             );
             fill.push(center + Vec2::angled(START_ANGLE + ARC_ANGLE * to) * radius);
-            ui.painter()
-                .add(egui::Shape::line(fill, Stroke::new(2.5_f32, active)));
+            ui.painter().add(egui::Shape::line(
+                fill,
+                Stroke::new(
+                    if self.pointer || self.mini {
+                        arc_width
+                    } else {
+                        2.5
+                    },
+                    if self.pointer {
+                        // Softer than the marker crossing it, which stays
+                        // the one sharp reading of the value.
+                        active.gamma_multiply(0.7)
+                    } else {
+                        active
+                    },
+                ),
+            ));
             if let Some(depth) = &self.modulation {
                 let (a, b) = (
                     self.normalized(*depth.start()),
@@ -732,7 +790,7 @@ impl<'a> Knob<'a> {
                     Stroke::new(1.5_f32, colors.modulation),
                 ));
             }
-            for fraction in &tick_fractions {
+            for fraction in tick_fractions.iter().filter(|_| !self.pointer) {
                 let unit = samples[(*fraction * ARC_STEPS as f32).round() as usize];
                 let major = *fraction == 0.0 || *fraction == 0.5 || *fraction == 1.0;
                 ui.painter().line_segment(
@@ -747,7 +805,57 @@ impl<'a> Knob<'a> {
                 ui.painter()
                     .circle_stroke(unity, 3.0, Stroke::new(1.5_f32, colors.text));
             }
-            if !ring_only || self.pointer {
+            if let (true, Some(step)) = (self.pointer, self.step) {
+                // A dot per detent while they are few enough to count.
+                let detents = ((self.range.end() - self.range.start()).abs() / step).round();
+                if (1.0..=12.0).contains(&detents) {
+                    for detent in 0..=detents as usize {
+                        let at = START_ANGLE + ARC_ANGLE * detent as f32 / detents as f32;
+                        ui.painter().circle_filled(
+                            center + Vec2::angled(at) * (radius + arc_width * 0.5 + 3.0),
+                            1.0,
+                            colors.muted,
+                        );
+                    }
+                }
+            }
+            if self.pointer {
+                // An engraved marker on the outer half of the body that
+                // crosses the arc to its outer edge; the centre stays quiet.
+                ui.painter().line_segment(
+                    [
+                        center + index_direction * radius * 0.45,
+                        center + index_direction * (radius + arc_width * 0.5),
+                    ],
+                    Stroke::new(
+                        if self.diameter >= 48.0 {
+                            3.0_f32
+                        } else {
+                            2.4_f32
+                        },
+                        colors.text,
+                    ),
+                );
+                if let Some(labels) = &self.endpoint_labels {
+                    let font =
+                        egui::FontId::proportional(if self.diameter >= 48.0 { 9.0 } else { 8.0 });
+                    for (end, label) in [
+                        (geometry.minimum, &labels[0]),
+                        (geometry.maximum, &labels[1]),
+                    ] {
+                        ui.painter().text(
+                            egui::pos2(
+                                end.x + (end.x - center.x).signum() * 2.0,
+                                end.y + arc_width,
+                            ),
+                            egui::Align2::CENTER_TOP,
+                            label,
+                            font.clone(),
+                            colors.muted,
+                        );
+                    }
+                }
+            } else if !ring_only {
                 ui.painter().line_segment(
                     [center + index_direction * radius * 0.18, geometry.index],
                     Stroke::new(2.0_f32, colors.text),
@@ -849,7 +957,9 @@ impl Widget for Knob<'_> {
             // downward and make a compact parameter row taller than requested.
             egui::vec2(
                 width,
-                if self.compact {
+                if self.mini {
+                    self.diameter
+                } else if self.compact {
                     Self::compact_height(self.diameter)
                 } else {
                     0.0

@@ -171,20 +171,15 @@ pub fn clip_timing_fields(
             edit.duration = Some((values.duration, *mode));
         }
         let previous_mode = *mode;
-        crate::select(
+        crate::choice(
+            ui,
             "clip_duration_mode",
-            if *mode == DurationEditMode::Trim {
-                "Trim"
-            } else {
-                "Stretch"
-            },
+            mode,
+            &[
+                (DurationEditMode::Trim, "Trim"),
+                (DurationEditMode::Stretch, "Stretch"),
+            ],
         )
-        .width(89.0)
-        .show_ui(ui, |ui| {
-            crate::selectable_value(ui, mode, DurationEditMode::Trim, "Trim");
-            crate::selectable_value(ui, mode, DurationEditMode::Stretch, "Stretch");
-        })
-        .response
         .on_hover_text("Choose how the next duration edit affects this clip");
         edit.new_gesture |= *mode != previous_mode;
     });

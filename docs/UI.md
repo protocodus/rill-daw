@@ -49,7 +49,7 @@ related-view links, a properties popup, and an open choice menu.
 
 [Light preview](assets/ui-gallery/navigation-light.png) · [Dark preview](assets/ui-gallery/navigation-dark.png)
 
-[`workspace_header`, `toolbar`, `flex_row`](../crates/daw-ui/src/layout.rs) · [`view_links`, `page`](../crates/daw-ui/src/navigation.rs) · [`choice_menu`](../crates/daw-ui/src/widgets.rs) · [`empty_workspace`](../crates/daw-ui/src/empty_workspace.rs)
+[`workspace_header`, `toolbar`, `grid_row`](../crates/daw-ui/src/layout.rs) · [`view_links`, `page`](../crates/daw-ui/src/navigation.rs) · [`choice_menu`](../crates/daw-ui/src/widgets.rs) · [`empty_workspace`](../crates/daw-ui/src/empty_workspace.rs)
 
 ### Musical canvas primitives
 
@@ -306,6 +306,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Aligned settings and paths | `form_grid`, `form_label`, `path_row`, `section_gap` |
 | Ghost clip identity | `clip_occurrence_hover`, `clip_title`, `ClipTitleLayout`, `clip_label`, `clip_choice`, `Icon::Link`, `Icon::Unlink` |
 | Arrangement clip surfaces and previews | `clip_surface`, `clip_surface_named`, `ClipSurfaceLayout`, `clip_note_preview` |
+| One choice among fixed options | `choice` (toggle buttons for fewer than five options, otherwise a drop-down), `toggle_group`, `toggle_group_vertical`, `toggle_grid` |
 | Dropdown choices | `select`, `select_labeled` |
 | Numeric widget builders | `slider`, `Slider`, `SliderScaleGeometry`, `slider_scale_geometry`, `number`, `Number` |
 | Numeric mouse steps and exact entry | `number_stepper`, `number_stepper_integer`, `mouse_value_entry`, `NumberStepperResponse` |
@@ -628,6 +629,10 @@ together as individual quiet buttons. A fine vertical separator distinguishes
 families sharing a row; wrapped rows start cleanly. Every supported tool stays
 visible, and families wrap as whole units where space permits. Toolbars have a quiet panel fill and bottom
 divider; active tools retain their glowing border and keyboard semantics.
+
+**Choices.** A choice among fewer than five fixed options is a row of toggle buttons, never a drop-down: every option stays visible and one click picks it. Call `choice(ui, id, &mut value, &[(value, "Label"), …])`, which applies the rule: toggle buttons (`toggle_group`) below five options, a `select` drop-down from five on or when the labels are too wide to sit side by side. `toggle_group_vertical` stacks two or three short options where width is scarcer than height, as beside a row of knobs; `toggle_grid(ui, &mut value, options, columns)` lays options out in equal columns, four as two by two. Use `select` directly only for lists that are long, dynamic (devices, ports, folders) or have long names.
+
+**Containers.** Group related controls in a labelled container: the title on top in small, dimmed capitals, separated from the contents by a rule or space, and the contents padded by at least `SPACE_MD`. Separate groups with space (`section_gap`, the `grid_row` gutter) rather than extra lines. Containers that share a view sit on `grid_row`: each spans a number of columns, and rows whose spans add up to the same number share the grid, so their edges line up from row to row.
 
 Use distinct control roles consistently. Primary and confirmation actions use filled buttons; persistent secondary toolbar commands use the quiet variants below. `action_menu` keeps the filled treatment and adds a disclosure chevron for commands available on demand. `choice_menu` is a bordered, inset field labelled with its current choice; ordinary single choices use `select`. `view_menu` is a quiet outlined eye button for presentation options such as scale highlighting and row visibility. Keep view controls grouped separately from editing actions. Both settings menus remain open while their controls change; Escape or an outside click dismisses them, and `ui.close()` accepts a choice. Use nested `choice_menu` or `action_menu` for submenus rather than a ComboBox inside a menu, because those share egui's popup state. All three roles retain native focus, accessible labels, disabled behavior, and whole-control toolbar wrapping; they never own project history.
 
@@ -1390,9 +1395,10 @@ arrow keys), and canvas handles use the 21-point `HIT_TARGET`.
 
 | Component | Use |
 | --- | --- |
-| `Knob` additions | `.bipolar()`, `.taper(Taper::Log)`, `.default_value(v)` (double-click and context-menu **Reset**), `.modulation(range)`, `.format(fn)` and `.parse(fn)`. Diameters down to 34. |
+| `Knob` additions | `.bipolar()`, `.taper(Taper::Log)`, `.default_value(v)` (double-click and context-menu **Reset**), `.modulation(range)`, `.format(fn)` and `.parse(fn)`. Diameters down to 34. `.step_by(step)` gives a dial detents; a pointer dial marks up to twelve of them with dots. `.pointer()` is the panel dial: a thick arc as its scale, a body, a marker crossing a softened arc to its outer edge and `endpoint_labels` printed small under the arc's ends. `.mini()` is a bare arc 21 points across with its active part highlighted, for pan, send or volume inside a compact row. |
+| `fader` | A vertical fader over a normalized value: a rail highlighted up to its cap. For values read as a shape across neighbours (envelope stages); a knob everywhere else. Relative drag, Shift for fine, arrow keys when focused. The caller supplies caption, value and hover. |
 | `labeled_knob` | Caption, dial and value in a fixed cell (`KnobSize::Dense` 34, `Standard` 48, `Hero` 64). Clicking the value types a number. The context menu offers **Reset**, **Type value…**, **Automate** (or **Show automation lane**) and, with `.mod_sources`, **Modulate with …**. `show` returns `automate` and `modulate_with`; the host creates the lane or routing. |
-| `segmented`, `stepped_selector`, `toggle_led` | Two to five options (falls back to a drop-down), longer lists, and section enables. |
+| `segmented`, `stepped_selector`, `toggle_led` | Two to four options as toggle buttons (falls back to a drop-down), longer lists, and section enables. |
 | `xy_pad` | Two normalized parameters; a press jumps, further motion is relative, Shift is fine, arrow keys nudge. |
 | `envelope_editor` | ADSR with hold and per-segment curves from plain `EnvelopeShape`; returns `EnvelopeEdit`s. |
 | `pad_grid`, `keyboard_strip` | 4×4 audition pads (click height sets velocity; `SampleDrop` payloads can be dropped on them) and a keyboard. |
@@ -1409,6 +1415,15 @@ arrow keys), and canvas handles use the 21-point `HIT_TARGET`.
 dense Mix/Output (effects) or Volume (instruments) knobs; width is
 `DevicePanelWidth::Medium` (610) or `Large` (987), and a panel never scrolls.
 `device_section` titles a group with a word and spacing instead of an outline.
+Its heading, `device_section_title`, sets the name on top in small, dimmed,
+tracked capitals over a rule that separates it from the controls;
+`control_caption` names one control in sentence-case text in the full text
+color, so the two levels never read alike. Built-in device cards use the same
+pair.
+`preset_group` holds every preset control in one bordered group with its own
+dimmed **Preset** title: previous and next, the preset menu, **Save as…**
+(the name is typed in the group) and **Reset**. It returns a `PresetAction`
+and is the same wherever presets appear.
 `preset_browser` provides search, category and tag filters, Factory/User,
 favorites, **Save as…** and **Reset to default**. `generic_device_panel`
 builds a whole panel from `ParamRow`s (normalized values, `format`/`parse`

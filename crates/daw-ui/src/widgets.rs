@@ -909,6 +909,199 @@ pub fn selectable_value<T: PartialEq>(
     response
 }
 
+/// The most options a choice shows as toggle buttons; from this many on it
+/// is a drop-down.
+pub const TOGGLE_OPTION_LIMIT: usize = 5;
+
+/// One exclusive choice among fixed options. Fewer than five are toggle
+/// buttons, so every option is visible and one click picks it; longer
+/// lists, and options too wide to sit side by side, are a drop-down.
+pub fn choice<T: Copy + PartialEq>(
+    ui: &mut Ui,
+    id_salt: impl Hash,
+    current: &mut T,
+    options: &[(T, &str)],
+) -> Response {
+    if options.len() < TOGGLE_OPTION_LIMIT
+        && toggle_group_width(ui, options.iter().map(|(_, label)| *label))
+            <= ui.available_size_before_wrap().x
+    {
+        return toggle_group(ui, current, options);
+    }
+    let label = options
+        .iter()
+        .find(|(value, _)| value == current)
+        .map_or("", |(_, label)| label);
+    let mut changed = false;
+    let mut response = select(id_salt, label)
+        .show_ui(ui, |ui| {
+            for (value, label) in options {
+                changed |= selectable_value(ui, current, *value, *label).changed();
+            }
+        })
+        .response;
+    if changed {
+        response.mark_changed();
+    }
+    response
+}
+
+/// The width a [`toggle_group`] of these labels takes.
+pub fn toggle_group_width<'a>(ui: &Ui, labels: impl Iterator<Item = &'a str>) -> f32 {
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    labels
+        .map(|label| {
+            ui.painter()
+                .layout_no_wrap(label.to_owned(), font.clone(), egui::Color32::PLACEHOLDER)
+                .size()
+                .x
+                + 2.0 * ui.spacing().button_padding.x
+        })
+        .sum()
+}
+
+/// Toggle buttons in one shared track, exactly one of them on. Prefer
+/// [`choice`], which picks between this and a drop-down by option count.
+pub fn toggle_group<T: Copy + PartialEq>(
+    ui: &mut Ui,
+    current: &mut T,
+    options: &[(T, &str)],
+) -> Response {
+    toggle_track(ui, current, options, None)
+}
+
+/// Height of one option of a [`toggle_group_vertical`].
+pub const TOGGLE_ROW_HEIGHT: f32 = tokens::COMPACT_HEIGHT + 4.0;
+
+/// A [`toggle_group`] with its options stacked, for two or three short
+/// options where width is scarcer than height, as beside a row of knobs.
+pub fn toggle_group_vertical<T: Copy + PartialEq>(
+    ui: &mut Ui,
+    current: &mut T,
+    options: &[(T, &str)],
+) -> Response {
+    toggle_grid(ui, current, options, 1)
+}
+
+/// A [`toggle_group`] laid out in `columns` equal columns, row by row: four
+/// options as two by two take the height of a knob, as a waveform selector
+/// beside one does.
+pub fn toggle_grid<T: Copy + PartialEq>(
+    ui: &mut Ui,
+    current: &mut T,
+    options: &[(T, &str)],
+    columns: usize,
+) -> Response {
+    toggle_track(ui, current, options, Some(columns.max(1)))
+}
+
+fn toggle_track<T: Copy + PartialEq>(
+    ui: &mut Ui,
+    current: &mut T,
+    options: &[(T, &str)],
+    // `None`: one row, each option as wide as its label.
+    columns: Option<usize>,
+) -> Response {
+    let colors = theme::palette(ui.ctx());
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let padding = ui.spacing().button_padding.x;
+    let galleys: Vec<_> = options
+        .iter()
+        .map(|(_, label)| {
+            ui.painter().layout_no_wrap(
+                (*label).to_owned(),
+                font.clone(),
+                egui::Color32::PLACEHOLDER,
+            )
+        })
+        .collect();
+    let widths = galleys.iter().map(|galley| galley.size().x + 2.0 * padding);
+    let widest = widths.clone().fold(0.0, f32::max);
+    let size = match columns {
+        Some(columns) => egui::vec2(
+            widest * columns as f32,
+            TOGGLE_ROW_HEIGHT * options.len().div_ceil(columns) as f32,
+        ),
+        None => egui::vec2(widths.sum(), tokens::CONTROL_HEIGHT),
+    };
+    let (rect, mut response) = ui.allocate_exact_size(size, egui::Sense::hover());
+    if ui.is_rect_visible(rect) {
+        ui.painter().add(crate::component_shape(
+            ui.painter(),
+            rect,
+            tokens::RADIUS,
+            colors.bg,
+            egui::Stroke::new(tokens::BORDER_WIDTH, colors.line),
+            crate::ComponentMaterial::default(),
+        ));
+    }
+    let mut changed = false;
+    let mut next = rect.min;
+    for (index, ((value, label), galley)) in options.iter().zip(galleys).enumerate() {
+        let segment = match columns {
+            Some(columns) => egui::Rect::from_min_size(
+                rect.min
+                    + egui::vec2(
+                        widest * (index % columns) as f32,
+                        TOGGLE_ROW_HEIGHT * (index / columns) as f32,
+                    ),
+                egui::vec2(widest, TOGGLE_ROW_HEIGHT),
+            ),
+            None => egui::Rect::from_min_size(
+                next,
+                egui::vec2(galley.size().x + 2.0 * padding, rect.height()),
+            ),
+        };
+        next = segment.right_top();
+        let button = ui.interact(segment, response.id.with(index), egui::Sense::click());
+        if button.clicked() && current != value {
+            *current = *value;
+            changed = true;
+        }
+        let selected = current == value;
+        button.widget_info(|| {
+            egui::WidgetInfo::selected(
+                egui::WidgetType::RadioButton,
+                ui.is_enabled(),
+                selected,
+                *label,
+            )
+        });
+        if ui.is_rect_visible(segment) {
+            let thumb = segment.shrink(2.0);
+            if selected {
+                ui.painter().rect(
+                    thumb,
+                    tokens::RADIUS - 2,
+                    colors.control_hover,
+                    egui::Stroke::new(tokens::BORDER_WIDTH, colors.line),
+                    egui::StrokeKind::Inside,
+                );
+            }
+            if button.has_focus() {
+                ui.painter().rect_stroke(
+                    thumb,
+                    tokens::RADIUS - 2,
+                    egui::Stroke::new(tokens::FOCUS_WIDTH, colors.accent),
+                    egui::StrokeKind::Inside,
+                );
+            }
+            let color = if selected || button.hovered() {
+                colors.text
+            } else {
+                colors.muted
+            };
+            let text = segment.center() - galley.size() * 0.5;
+            ui.painter().galley(text, galley, color);
+        }
+        response |= button;
+    }
+    if changed {
+        response.mark_changed();
+    }
+    response
+}
+
 /// Compact canvas control with a caller-owned stable ID; used for track mute,
 /// solo, and expansion controls where the arrangement owns the row geometry.
 pub fn selectable_at(

@@ -242,7 +242,6 @@ fn catalog_syncs_on_open_captures_previews_in_background_and_refreshes_on_reques
     assert_eq!(captures(workers.path()), 5);
     assert!(entry(&state, "Nova Pad")["added_unix_ms"].as_u64().unwrap() > keys_added);
     assert_eq!(state["library"]["order"][0], "Acme Keys");
-    app.click("Sort: Name");
     let sorted = app.click("Recently added");
     assert_eq!(sorted["library"]["sort"], "Recently added");
     assert_eq!(sorted["library"]["order"][0], "Nova Pad");

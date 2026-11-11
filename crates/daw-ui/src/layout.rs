@@ -84,32 +84,30 @@ fn toolbar_with_row_height<R>(
     row
 }
 
-/// One row of a two-dimensional panel, like a CSS flex row with `flex-grow`:
-/// each cell is a card whose width is its share of `weights`, and every card
-/// takes the height of the tallest, so stacked rows read as the aligned
-/// sections of a hardware front panel. `cell` draws the contents of cell `index`.
-pub fn flex_row<R>(
-    ui: &mut Ui,
-    weights: &[f32],
-    mut cell: impl FnMut(&mut Ui, usize) -> R,
-) -> Vec<R> {
+/// One row of a panel grid: each cell is a card `spans[index]` columns wide
+/// of as many columns as the spans add up to, and every card takes the
+/// height of the tallest. Rows whose spans add up to the same number share
+/// the grid, so their cards' edges line up like the modules of a hardware
+/// front panel. `cell` draws the contents of cell `index`.
+pub fn grid_row<R>(ui: &mut Ui, spans: &[u8], mut cell: impl FnMut(&mut Ui, usize) -> R) -> Vec<R> {
     let frame = crate::card(ui.ctx());
     let margin = frame.total_margin();
     let gap = tokens::SPACE_SM;
     let origin = ui.cursor().min;
     let width = ui.available_width();
-    let total: f32 = weights.iter().sum();
-    let free = (width - gap * weights.len().saturating_sub(1) as f32).max(0.0);
+    let columns = spans
+        .iter()
+        .map(|span| f32::from(*span))
+        .sum::<f32>()
+        .max(1.0);
+    let column = (width - gap * (columns - 1.0)).max(0.0) / columns;
     let mut x = origin.x;
-    let mut results = Vec::with_capacity(weights.len());
-    let mut cards = Vec::with_capacity(weights.len());
+    let mut results = Vec::with_capacity(spans.len());
+    let mut cards = Vec::with_capacity(spans.len());
     let mut height: f32 = 0.0;
-    for (index, weight) in weights.iter().enumerate() {
-        let outer = if total > 0.0 {
-            free * weight / total
-        } else {
-            0.0
-        };
+    for (index, span) in spans.iter().enumerate() {
+        let span = f32::from(*span);
+        let outer = span * column + (span - 1.0).max(0.0) * gap;
         let content = egui::Rect::from_min_size(
             egui::pos2(x + margin.left, origin.y + margin.top),
             egui::vec2(
@@ -121,7 +119,7 @@ pub fn flex_row<R>(
         let background = ui.painter().add(egui::Shape::Noop);
         let mut child = ui.new_child(
             egui::UiBuilder::new()
-                .id_salt(("flex_cell", index))
+                .id_salt(("grid_cell", index))
                 .max_rect(content)
                 .layout(egui::Layout::top_down(egui::Align::Min)),
         );

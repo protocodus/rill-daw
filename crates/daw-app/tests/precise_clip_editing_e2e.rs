@@ -135,16 +135,24 @@ fn properties(app: &mut Harness, id: u64) -> Value {
     app.click("Properties")
 }
 
-fn front(app: &mut Harness, label: &str) -> Value {
+/// The Stretch toggle of the Duration row; the toolbar has a Stretch tool too.
+fn stretch_mode(app: &mut Harness) -> Value {
     let state = app.inspect();
-    let occurrence = state["visible_labels"]
-        .as_array()
-        .unwrap()
+    let labels = state["label_rects"].as_array().unwrap();
+    let y = |label: &Value| {
+        (label["min"][1].as_f64().unwrap() + label["max"][1].as_f64().unwrap()) * 0.5
+    };
+    let row = labels
         .iter()
-        .filter(|value| *value == label)
-        .count()
-        - 1;
-    app.command(json!({"command":"click", "label":label, "occurrence":occurrence}))
+        .rev()
+        .find(|label| label["text"] == "Duration")
+        .unwrap();
+    let toggle = labels
+        .iter()
+        .find(|label| label["text"] == "Stretch" && (y(label) - y(row)).abs() < 12.0)
+        .unwrap();
+    let x = (toggle["min"][0].as_f64().unwrap() + toggle["max"][0].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y(toggle)}))
 }
 
 fn edit_number(app: &mut Harness, row: &str, value: &str) -> Value {
@@ -264,8 +272,7 @@ fn exact_fields_move_trim_stretch_and_slip_reversed_ghosts_without_changing_sour
     assert_eq!(clip(&trimmed, f.ghost), clip(&moved, f.ghost));
     assert_eq!(undo(&mut app, false)["project"], moved["project"]);
     undo(&mut app, true);
-    app.click("Trim");
-    front(&mut app, "Stretch");
+    stretch_mode(&mut app);
     let stretched = edit_number(&mut app, "Duration", "5");
     assert_eq!(clip(&stretched, f.clip)["length"], 5.0);
     assert_eq!(clip(&stretched, f.clip)["source_rate"], 0.25);
@@ -362,8 +369,7 @@ fn exact_midi_window_and_stretch_keep_all_source_notes_recoverable() {
     assert_eq!(clip(&trimmed, f.midi)["source_rate"], 1.0);
     assert_eq!(clip(&trimmed, f.midi)["offset"], 2.0);
     assert_eq!(clip(&trimmed, f.midi)["content"], notes);
-    app.click("Trim");
-    front(&mut app, "Stretch");
+    stretch_mode(&mut app);
     let stretched = edit_number(&mut app, "Duration", "4");
     assert_eq!(clip(&stretched, f.midi)["source_rate"], 0.5);
     assert_eq!(clip(&stretched, f.midi)["content"], notes);

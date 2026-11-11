@@ -112,23 +112,7 @@ impl DawApp {
                 (Interpolation::Smooth, "Smooth"),
                 (Interpolation::Spline, "Spline"),
             ];
-            if compact {
-                daw_ui::select("automation_interpolation", format!("{interpolation:?}"))
-                    .width(100.0)
-                    .show_ui(ui, |ui| {
-                        for (value, name) in modes {
-                            if daw_ui::selectable_value(ui, &mut interpolation, value, name)
-                                .clicked()
-                            {
-                                ui.close();
-                            }
-                        }
-                    });
-            } else {
-                for (value, name) in modes {
-                    daw_ui::selectable_value(ui, &mut interpolation, value, name);
-                }
-            }
+            daw_ui::choice(ui, "automation_interpolation", &mut interpolation, &modes);
             ui.separator();
             daw_ui::checkbox(ui, &mut enabled, "Enabled");
             daw_ui::automation_badge(ui, automation_state);

@@ -60,6 +60,26 @@ fn center(rect: &Value) -> (f64, f64) {
     )
 }
 
+/// The Stretch toggle of the Duration row; the toolbar has a Stretch tool too.
+fn stretch_mode(app: &mut Harness) -> Value {
+    let state = app.inspect();
+    let labels = state["label_rects"].as_array().unwrap();
+    let y = |label: &Value| {
+        (label["min"][1].as_f64().unwrap() + label["max"][1].as_f64().unwrap()) * 0.5
+    };
+    let row = labels
+        .iter()
+        .rev()
+        .find(|label| label["text"] == "Duration")
+        .unwrap();
+    let toggle = labels
+        .iter()
+        .find(|label| label["text"] == "Stretch" && (y(label) - y(row)).abs() < 12.0)
+        .unwrap();
+    let x = (toggle["min"][0].as_f64().unwrap() + toggle["max"][0].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y(toggle)}))
+}
+
 fn pointer(app: &mut Harness, at: (f64, f64)) -> Value {
     app.command(json!({"command":"pointer", "phase":"click", "x":at.0, "y":at.1}))
 }
@@ -137,14 +157,7 @@ fn repeat_stretch_steps(midi: bool) {
         );
         assert_readout(&original, 4.0);
         assert_geometry(&original, &original, width, height);
-        let choice = app.click("Trim");
-        let stretch = choice["menu_label_rects"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|label| label["text"] == "Stretch")
-            .unwrap();
-        let chosen = pointer(&mut app, center(stretch));
+        let chosen = stretch_mode(&mut app);
         assert_eq!(chosen["project"], original["project"]);
         assert_eq!(chosen["history"], original["history"]);
         assert_readout(&chosen, 4.0);
