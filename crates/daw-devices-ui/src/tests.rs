@@ -170,7 +170,33 @@ fn mini_uses_the_wide_panel_and_shows_pulse_width_only_for_pulse() {
     let placed: Vec<u32> = layout
         .sections
         .iter()
-        .flat_map(|section| section.parameters.clone())
+        .flat_map(|section| section.lines.concat())
         .collect();
+    assert_eq!(placed.len(), mini::DESCRIPTOR.parameters.len());
+}
+
+#[test]
+fn card_lines_share_columns_and_wrap_only_when_too_wide() {
+    let lines = vec![vec![("a", 50.0), ("b", 30.0)], vec![("c", 40.0)]];
+    // Columns as wide as their widest control, leftover shared evenly.
+    assert_eq!(columns(&lines, 100.0), vec![Some(60.0), Some(40.0)]);
+    assert_eq!(columns(&lines, 70.0), vec![None, None]);
+    assert_eq!(wrap(&lines, 100.0), lines);
+    assert_eq!(
+        wrap(&lines, 60.0),
+        vec![vec![("a", 50.0)], vec![("b", 30.0)], vec![("c", 40.0)]]
+    );
+}
+
+#[test]
+fn mini_places_every_parameter_once() {
+    let layout = panels::layout(&mini::DESCRIPTOR);
+    let mut placed: Vec<u32> = layout
+        .sections
+        .iter()
+        .flat_map(|section| section.lines.concat())
+        .collect();
+    placed.sort_unstable();
+    placed.dedup();
     assert_eq!(placed.len(), mini::DESCRIPTOR.parameters.len());
 }

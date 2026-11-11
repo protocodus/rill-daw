@@ -48,11 +48,10 @@ pub struct PanelState {
     pub performance_rects: Option<[egui::Rect; 3]>,
 }
 
-/// Knob diameters from the panel grammar.
-pub const KNOB_DENSE: f32 = 48.0;
+/// The hero knob's diameter from the panel grammar.
 pub const KNOB_HERO: f32 = 64.0;
-/// The narrowest cell of one control; cards divide their width into as many.
-const CELL_WIDTH: f32 = 92.0;
+/// Space between neighbouring controls of one card, so captions never touch.
+const CELL_GAP: f32 = daw_ui::tokens::SPACE_SM;
 
 /// The panel's width, for the window that hosts it.
 pub fn panel_width(descriptor: &DeviceDescriptor) -> f32 {
@@ -78,42 +77,50 @@ pub fn show(
     }
     let rows = layout.sections.iter().map(|section| section.row).max();
     for row in 0..=rows.unwrap_or(0) {
-        // Weighted by every control a section has, not only the visible ones,
-        // so cards keep their place when a mode hides a control.
-        let sections: Vec<_> = layout
+        let cards: Vec<_> = layout
             .sections
             .iter()
             .filter(|section| section.row == row)
-            .filter_map(|section| {
-                let visible: Vec<_> = section
-                    .parameters
-                    .iter()
-                    .filter_map(|id| descriptor.parameter(*id))
-                    .filter(|spec| (layout.visible)(spec.id, &|id| host.value(id)))
-                    .collect();
-                (!visible.is_empty()).then_some((
-                    section.title,
-                    visible,
-                    section.parameters.len() as f32,
-                ))
-            })
+            .filter_map(|section| card(ui, descriptor, section, host, &layout))
             .collect();
-        if sections.is_empty() {
+        if cards.is_empty() {
             continue;
         }
-        let weights: Vec<f32> = sections.iter().map(|(_, _, weight)| *weight).collect();
+        // One center line per line of the row, so knobs, choices and
+        // switches in neighbouring cards line up.
+        let lines = cards.iter().map(|card| card.lines.len()).max().unwrap_or(0);
+        let heights: Vec<f32> = (0..lines)
+            .map(|line| {
+                cards
+                    .iter()
+                    .filter_map(|card| card.lines.get(line))
+                    .flatten()
+                    .map(|(spec, _)| control_height(spec, &layout))
+                    .fold(daw_ui::tokens::CONTROL_HEIGHT, f32::max)
+            })
+            .collect();
+        let weights: Vec<f32> = cards.iter().map(|card| card.weight).collect();
         daw_ui::flex_row(ui, &weights, |ui, index| {
-            let (title, visible, _) = &sections[index];
-            daw_ui::text::subtitle(ui, *title);
-            // Equal columns across the card; controls fill rows in order.
-            let columns = ((ui.available_width() / CELL_WIDTH).floor() as usize).max(1);
-            let cell = ui.available_width() / columns as f32;
-            for line in visible.chunks(columns) {
+            let card = &cards[index];
+            daw_ui::text::subtitle(ui, card.title);
+            let available = ui.available_width();
+            let lines = wrap(&card.lines, available);
+            let columns = columns(&lines, available);
+            for (index, line) in lines.iter().enumerate() {
+                let height = heights
+                    .get(index)
+                    .or(heights.last())
+                    .copied()
+                    .unwrap_or(0.0);
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
-                    for spec in line {
-                        let hero = layout.hero == Some(spec.id);
-                        control(ui, descriptor, spec, host, hero, cell, &layout);
+                    for ((spec, natural), width) in line.iter().zip(&columns) {
+                        let cell = Cell {
+                            width: width.unwrap_or(*natural),
+                            natural: *natural,
+                            height,
+                        };
+                        control(ui, descriptor, spec, host, cell, &layout);
                     }
                 });
             }
@@ -123,6 +130,174 @@ pub fn show(
     if descriptor.kind == DeviceKind::Instrument {
         performance(ui, host, state);
     }
+}
+
+/// A section's visible controls, line by line, with their natural widths.
+struct Card<'a> {
+    title: &'static str,
+    lines: Vec<Vec<(&'a ParamSpec, f32)>>,
+    /// The card's share of its row.
+    weight: f32,
+}
+
+fn card<'a>(
+    ui: &Ui,
+    descriptor: &'a DeviceDescriptor,
+    section: &panels::Section,
+    host: &dyn DeviceHost,
+    layout: &panels::Layout,
+) -> Option<Card<'a>> {
+    let all: Vec<Vec<_>> = section
+        .lines
+        .iter()
+        .map(|line| {
+            line.iter()
+                .filter_map(|id| descriptor.parameter(*id))
+                .map(|spec| (spec, cell_width(ui, spec, layout)))
+                .collect()
+        })
+        .collect();
+    // Weighted by every control a section has, not only the visible ones,
+    // so cards keep their place when a mode hides one.
+    let weight = grid_width(&all);
+    let lines: Vec<Vec<_>> = all
+        .into_iter()
+        .map(|line| {
+            line.into_iter()
+                .filter(|(spec, _)| (layout.visible)(spec.id, &|id| host.value(id)))
+                .collect::<Vec<_>>()
+        })
+        .filter(|line| !line.is_empty())
+        .collect();
+    (!lines.is_empty()).then_some(Card {
+        title: section.title,
+        lines,
+        weight,
+    })
+}
+
+/// Lines too wide for `width` continue on the next, so a device without
+/// planned lines still fits its panel.
+fn wrap<T: Copy>(lines: &[Vec<(T, f32)>], width: f32) -> Vec<Vec<(T, f32)>> {
+    let mut wrapped = Vec::new();
+    for line in lines {
+        let mut current: Vec<(T, f32)> = Vec::new();
+        let mut used = 0.0;
+        for &(item, cell) in line {
+            if !current.is_empty() && used + cell > width {
+                wrapped.push(std::mem::take(&mut current));
+                used = 0.0;
+            }
+            current.push((item, cell));
+            used += cell;
+        }
+        wrapped.push(current);
+    }
+    wrapped
+}
+
+/// Columns as wide as their widest control, as in a table.
+fn grid_width<T>(lines: &[Vec<(T, f32)>]) -> f32 {
+    let columns = lines.iter().map(Vec::len).max().unwrap_or(0);
+    (0..columns)
+        .map(|column| {
+            lines
+                .iter()
+                .filter_map(|line| line.get(column))
+                .map(|(_, width)| *width)
+                .fold(0.0, f32::max)
+        })
+        .sum()
+}
+
+/// Column widths that align the lines of a card and share its leftover
+/// width evenly. `None` when the aligned columns do not fit: each control
+/// then keeps its natural width.
+fn columns<T>(lines: &[Vec<(T, f32)>], available: f32) -> Vec<Option<f32>> {
+    let count = lines.iter().map(Vec::len).max().unwrap_or(0);
+    let used = grid_width(lines);
+    if used > available {
+        return vec![None; count];
+    }
+    let extra = (available - used) / count.max(1) as f32;
+    (0..count)
+        .map(|column| {
+            let natural = lines
+                .iter()
+                .filter_map(|line| line.get(column))
+                .map(|(_, width)| *width)
+                .fold(0.0, f32::max);
+            Some(natural + extra)
+        })
+        .collect()
+}
+
+/// The name the panel shows for a parameter: its own, unless the layout
+/// moved it to a card where another name reads right.
+fn caption(spec: &ParamSpec, layout: &panels::Layout) -> &'static str {
+    layout
+        .captions
+        .iter()
+        .find(|(id, _)| *id == spec.id)
+        .map_or(spec.name, |(_, caption)| caption)
+}
+
+fn knob_diameter(spec: &ParamSpec, layout: &panels::Layout) -> f32 {
+    if layout.hero == Some(spec.id) {
+        KNOB_HERO
+    } else {
+        layout.knob.diameter()
+    }
+}
+
+fn is_knob(spec: &ParamSpec) -> bool {
+    matches!(
+        spec.range,
+        ParamRange::Linear { .. } | ParamRange::Log { .. }
+    )
+}
+
+/// Height of the control itself, between its caption and its value.
+fn control_height(spec: &ParamSpec, layout: &panels::Layout) -> f32 {
+    if is_knob(spec) {
+        knob_diameter(spec, layout)
+    } else {
+        daw_ui::tokens::CONTROL_HEIGHT
+    }
+}
+
+/// The narrowest cell that shows a control's caption, and its widest value
+/// whole, with a gap to its neighbours.
+fn cell_width(ui: &Ui, spec: &ParamSpec, layout: &panels::Layout) -> f32 {
+    let text = |value: &str, font: egui::FontId| {
+        ui.painter()
+            .layout_no_wrap(value.to_owned(), font, egui::Color32::PLACEHOLDER)
+            .size()
+            .x
+    };
+    let label = daw_ui::text::TextRole::Label.font();
+    let caption = text(caption(spec, layout), label.clone());
+    let button = egui::TextStyle::Button.resolve(ui.style());
+    let widest = |values: &mut dyn Iterator<Item = String>| {
+        values
+            .map(|value| text(&value, button.clone()))
+            .fold(0.0, f32::max)
+    };
+    // Text, padding on both sides and the chevron, as the choice draws them.
+    let spacing = ui.spacing();
+    let choice = |text: f32| {
+        text + spacing.icon_spacing + spacing.icon_width + 2.0 * daw_ui::tokens::SPACE_SM
+    };
+    let control = match spec.range {
+        ParamRange::Linear { .. } | ParamRange::Log { .. } => knob_diameter(spec, layout),
+        ParamRange::Choice(labels) => choice(widest(&mut labels.iter().map(|l| l.to_string()))),
+        ParamRange::Integer { .. } => choice(widest(
+            &mut (spec.plain_min() as i32..=spec.plain_max() as i32)
+                .map(|value| spec.format(spec.to_normalized(value as f32))),
+        )),
+        ParamRange::Toggle => daw_ui::tokens::SWITCH_WIDTH,
+    };
+    caption.max(control) + CELL_GAP
 }
 
 const KEYBOARD_FIRST: u8 = 36;
@@ -209,16 +384,29 @@ fn response(
     }
 }
 
-/// One control chosen by the parameter's range, centered in a cell `width` wide.
+/// A control's cell: its width in the line, its own natural width, which a
+/// choice keeps, and the height of the line's control band.
+struct Cell {
+    width: f32,
+    natural: f32,
+    height: f32,
+}
+
+/// One control chosen by the parameter's range, centered in its cell, on the
+/// line's center line below its caption.
 fn control(
     ui: &mut Ui,
     descriptor: &DeviceDescriptor,
     spec: &ParamSpec,
     host: &mut dyn DeviceHost,
-    hero: bool,
-    width: f32,
+    cell: Cell,
     layout: &panels::Layout,
 ) {
+    let Cell {
+        width,
+        natural,
+        height,
+    } = cell;
     let normalized = host.value(spec.id);
     let automation = host.automation(spec.id);
     let id = egui::Id::new((descriptor.id, spec.id));
@@ -229,7 +417,11 @@ fn control(
         |ui| {
             // Compact horizontal padding leaves a choice's text the room of its cell.
             ui.spacing_mut().button_padding.x = daw_ui::tokens::SPACE_SM;
-            daw_ui::text::label(ui, spec.name);
+            daw_ui::text::label(ui, caption(spec, layout));
+            let offset = (height - control_height(spec, layout)) * 0.5;
+            if offset > 0.0 {
+                ui.add_space(offset);
+            }
             let navigation = match spec.range {
                 ParamRange::Linear { .. } | ParamRange::Log { .. } => {
                     let mut value = normalized;
@@ -237,11 +429,13 @@ fn control(
                         daw_ui::Knob::new(&mut value, 0.0..=1.0)
                             .compact()
                             .pointer()
-                            .diameter(if hero { KNOB_HERO } else { KNOB_DENSE })
-                            .text(spec.name)
+                            .diameter(knob_diameter(spec, layout))
+                            .text(caption(spec, layout))
                             .automation(automation.map(|(_, state)| state)),
                     );
                     let text = spec.format(normalized as f32);
+                    // Values share one baseline across the line.
+                    ui.add_space(offset);
                     daw_ui::text::note(ui, &text);
                     let (action, exact) = daw_ui::automatable_parameter_value_context_named(
                         ui,
@@ -284,19 +478,34 @@ fn control(
                     };
                     let current = spec.to_plain(normalized as f32);
                     let label = spec.format(normalized as f32);
-                    let response = daw_ui::select(id, &label)
-                        .width(width - daw_ui::tokens::SPACE_XS)
-                        // Long names ("Transistor Ladder") must not push the
-                        // next control out of its cell; the list shows them whole.
-                        .truncate()
-                        .show_ui(ui, |ui| {
-                            for (plain, option) in &options {
-                                if daw_ui::selectable(ui, *plain == current, option).clicked() {
-                                    host.set_value(spec.id, f64::from(spec.to_normalized(*plain)));
-                                }
-                            }
-                        })
-                        .response
+                    let size = egui::vec2(natural - CELL_GAP, daw_ui::tokens::CONTROL_HEIGHT);
+                    // A child of the choice's own width, which the cell centers.
+                    let response = ui
+                        .allocate_ui_with_layout(
+                            size,
+                            egui::Layout::left_to_right(egui::Align::Center),
+                            |ui| {
+                                daw_ui::select(id, &label)
+                                    .width(size.x)
+                                    // Long names ("Transistor Ladder") must not push the
+                                    // next control out of its cell; the list shows them whole.
+                                    .truncate()
+                                    .show_ui(ui, |ui| {
+                                        for (plain, option) in &options {
+                                            if daw_ui::selectable(ui, *plain == current, option)
+                                                .clicked()
+                                            {
+                                                host.set_value(
+                                                    spec.id,
+                                                    f64::from(spec.to_normalized(*plain)),
+                                                );
+                                            }
+                                        }
+                                    })
+                                    .response
+                            },
+                        )
+                        .inner
                         .on_hover_text(&label);
                     daw_ui::automatable_parameter_context(ui, &response, control, automation)
                 }
@@ -309,6 +518,12 @@ fn control(
                     daw_ui::automatable_parameter_context(ui, &response, control, automation)
                 }
             };
+            if !is_knob(spec) {
+                // An empty value line, so every cell of a line is as tall as
+                // a knob's and the next line starts level across cards.
+                ui.add_space(offset);
+                daw_ui::text::note(ui, " ");
+            }
             if let Some(action) = navigation {
                 host.navigate(action);
             }

@@ -426,9 +426,13 @@ and a new device has little to decide:
    node, the threshold, the envelope point, the sample marker).
 4. **Signal order.** Sections run left to right in signal order, each a
    card with a one-word title; modulation sources sit below the audio path.
-   Sections sharing a row form one `flex_row`: each card's width follows its
-   number of controls and every card takes the row's height, so the panel
-   reads as a 2D front panel. Inside a card, controls fill equal columns.
+   Sections sharing a row form one `flex_row`: each card's width follows the
+   natural width of its controls (caption, widest value) and every card takes
+   the row's height, so the panel reads as a 2D front panel. A card may plan
+   its controls on several lines; the lines share table columns, and leftover
+   width goes evenly to the columns. Every line of a row has one center line
+   for its knobs, choices and switches and one baseline for their values, so
+   neighbouring cards line up.
 5. **Controls by range.** Continuous value: `labeled_knob`. Two to five named
    options: `segmented`. Longer lists: `stepped_selector`. On/off:
    `toggle_led`. One hero knob at most per panel (64 points); standard knobs
@@ -719,8 +723,10 @@ run at 2×. The same kernel is the filter inside Mini, Maxi and Sampler.
 curve moves with the modulated cutoff from telemetry. Model as a
 `stepped_selector`; hero Cutoff knob; Resonance, Drive, Morph; an LFO
 `device_section` with `lfo_view`; an Envelope section. At 987 points the controls form
-two rows of cards, each on one line: Filter and Output, then LFO and
-Envelope.
+two rows of cards, each on one line. The audio path is on top: Filter (Model,
+Type and Slope choose its character, then Cutoff, Resonance, Drive and Morph)
+and Output (Mix, Output) at the right end. Its modulation sources, LFO and
+Envelope, sit below.
 
 ## Instruments
 
@@ -757,9 +763,22 @@ per-voice random walk to pitch and cutoff so stacked notes do not sound
 static. The mixer can overdrive the filter input, as on the hardware this
 layout comes from.
 
-**Panel** (987 points, one page). Three rows of three cards: Osc 1, Osc 2,
-Mixer; Filter, Filter envelope, Amp envelope; LFO, Velocity, Voice. The
-sketch below is the original target:
+**Panel** (987 points, one page). Three rows of cards in signal order, the
+classic subtractive layout:
+
+- **Osc 1, Osc 2, Mixer.** An oscillator's first line chooses its character
+  (Model, Wave, and Sync on Osc 2); the second sets its pitch (Octave, and
+  Semitones and Detune on Osc 2) and pulse Width. The Mixer is a two-by-two
+  block of levels.
+- **Filter, Filter envelope, Amp envelope.** Filter Model, the hero Cutoff,
+  Resonance and Drive, then what moves the cutoff: Envelope amount and Key
+  track. Each envelope has A, D, S, R with its Velocity amount below.
+- **LFO, Voice.** The LFO source (Rate, Sync, Shape) and its destinations
+  (Pitch, Cutoff, Width, Mod wheel); then Mode, Voices, Glide, Bend, Drift
+  and Volume, the output, last.
+
+Knobs are dense (34 points) except the hero Cutoff. The sketch below is the
+original target:
 
 ```text
 ┌ R1 Mini ── preset ◂ ▸ ─────────────────────────────── scope ── Volume ┐
