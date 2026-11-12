@@ -1,6 +1,6 @@
 use super::*;
 use daw_devices::{
-    devices::{equalizer, filter, mini},
+    devices::{compressor, equalizer, filter, mini, saturator},
     registry,
 };
 use egui::{Event, Modifiers, PointerButton, Pos2, pos2, vec2};
@@ -20,6 +20,9 @@ struct TableHost {
     navigation: Vec<AutomationNavigation>,
     auditions: Vec<Option<(u8, f32)>>,
     wheels: Vec<(f32, f32)>,
+    /// What is routed to the sidechain input, and how often Routing was asked for.
+    sources: Option<Vec<String>>,
+    routed: usize,
 }
 
 impl TableHost {
@@ -75,6 +78,12 @@ impl DeviceHost for TableHost {
     }
     fn wheels(&mut self, pitch: f32, modulation: f32) {
         self.wheels.push((pitch, modulation));
+    }
+    fn sidechain_sources(&self) -> Option<Vec<String>> {
+        self.sources.clone()
+    }
+    fn route_sidechain(&mut self) {
+        self.routed += 1;
     }
 }
 
@@ -325,7 +334,11 @@ impl Panel {
     }
 
     fn cell(&self, id: u32) -> egui::Rect {
-        let cell = self.state.table_rects.iter().find(|(cell, _)| *cell == id);
+        let cell = self
+            .state
+            .control_rects
+            .iter()
+            .find(|(cell, _)| *cell == id);
         cell.unwrap().1
     }
 }
@@ -385,7 +398,7 @@ fn equalizer_bands_stand_in_six_equal_columns() {
     // No control leaves its column, and the widest value fits its cell.
     for (index, base) in [0, 10, 20, 30, 40, 50].into_iter().enumerate() {
         let center = lamps[index].center().x;
-        for (id, rect) in &panel.state.table_rects {
+        for (id, rect) in &panel.state.control_rects {
             if (base..base + 10).contains(id) && (index > 0 || *id < 10) {
                 assert!(
                     rect.left() >= center - column * 0.5 - 0.01
@@ -542,7 +555,7 @@ fn equalizer_table_controls_edit_their_band() {
 fn equalizer_axis_and_auto_gain_readout_follow_the_values() {
     use equalizer::*;
     let layout = panels::layout(&DESCRIPTOR);
-    let view = layout.response.as_ref().unwrap();
+    let view = layout.response().unwrap();
     let mut host = TableHost::new(&DESCRIPTOR);
     let set = |host: &mut TableHost, id: u32, plain: f32| {
         let spec = DESCRIPTOR.parameter(id).unwrap();
@@ -613,4 +626,371 @@ fn filter_response_keeps_its_one_node_on_the_cutoff() {
         modifiers: Modifiers::NONE,
     }]);
     assert_eq!(panel.host.values, values);
+}
+
+fn placed(descriptor: &DeviceDescriptor) -> Vec<u32> {
+    let mut placed: Vec<u32> = panels::layout(descriptor)
+        .sections
+        .iter()
+        .flat_map(|section| section.ids())
+        .collect();
+    placed.sort_unstable();
+    placed
+}
+
+fn wheel(notches: f32) -> Event {
+    Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Line,
+        delta: vec2(0.0, notches),
+        modifiers: Modifiers::NONE,
+    }
+}
+
+#[test]
+fn saturator_and_compressor_fit_their_window_in_both_themes() {
+    for descriptor in [&saturator::DESCRIPTOR, &compressor::DESCRIPTOR] {
+        assert_eq!(panel_width(descriptor), daw_ui::tokens::POPUP_WIDTH_LG);
+        for appearance in [
+            daw_ui::theme::Appearance::Light,
+            daw_ui::theme::Appearance::Dark,
+        ] {
+            let mut host = TableHost::new(descriptor);
+            let used = render(
+                descriptor,
+                &mut host,
+                &mut PanelState::default(),
+                appearance,
+            );
+            // As the Equalizer: what the effect window shows without scrolling.
+            assert!(
+                used.height() <= 620.0,
+                "{} is {} points high",
+                descriptor.id,
+                used.height()
+            );
+        }
+        let mut all: Vec<u32> = descriptor.parameters.iter().map(|spec| spec.id).collect();
+        all.sort_unstable();
+        assert_eq!(placed(descriptor), all, "every parameter once");
+    }
+}
+
+#[test]
+fn saturator_picture_fills_the_width_and_only_shows() {
+    use saturator::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let [curve, bars] = panel.state.picture_rects[..] else {
+        panic!("a curve and the harmonics");
+    };
+    assert_eq!(curve.size(), vec2(233.0, 233.0));
+    assert_eq!(bars.height(), 233.0);
+    assert!(bars.left() > curve.right());
+    let cards = panel.cell(OUTPUT).right();
+    assert!(bars.right() >= cards, "the picture is as wide as the cards");
+    // Nothing to grab: a drag, the wheel and a double-click leave the values.
+    let values = panel.host.values.clone();
+    panel.drag(curve.center(), curve.center() + vec2(40.0, -40.0));
+    panel.click(bars.center(), 2);
+    panel.frame(vec![wheel(3.0)]);
+    assert_eq!(panel.host.values, values);
+}
+
+#[test]
+fn saturator_character_is_named_for_the_model_without_moving_a_control() {
+    use saturator::*;
+    let layout = panels::layout(&DESCRIPTOR);
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let spec = DESCRIPTOR.parameter(CHARACTER).unwrap();
+    let before = panel.state.control_rects.clone();
+    for (model, name) in [(0.0, "Hardness"), (1.0, "Bias"), (2.0, "Compress")] {
+        panel.set(MODEL, model);
+        assert_eq!(caption(&DESCRIPTOR, spec, &panel.host, &layout), name);
+        assert_eq!(panel.state.control_rects, before);
+    }
+}
+
+#[test]
+fn saturator_readouts_say_what_the_device_does() {
+    use saturator::*;
+    let layout = panels::layout(&DESCRIPTOR);
+    let mut host = TableHost::new(&DESCRIPTOR);
+    let set = |host: &mut TableHost, id: u32, plain: f32| {
+        let spec = DESCRIPTOR.parameter(id).unwrap();
+        host.values.insert(id, f64::from(spec.to_normalized(plain)));
+    };
+    let readout = |host: &TableHost, id: u32| (layout.readout)(id, &|id| host.value(id));
+    set(&mut host, FOCUS, 0.0);
+    assert_eq!(readout(&host, FOCUS).as_deref(), Some("Off"));
+    set(&mut host, FOCUS, 50.0);
+    assert_eq!(readout(&host, FOCUS), None);
+    assert_eq!(readout(&host, DRIVE), None);
+    // Nothing is applied while Auto gain is off.
+    set(&mut host, AUTO_GAIN, 0.0);
+    assert_eq!(readout(&host, AUTO_GAIN), None);
+    set(&mut host, AUTO_GAIN, 1.0);
+    // More drive, more to take back.
+    let gain = |host: &TableHost| -> f32 {
+        let text = readout(host, AUTO_GAIN).unwrap();
+        text.trim_end_matches(" dB").parse().unwrap()
+    };
+    set(&mut host, DRIVE, 6.0);
+    let low = gain(&host);
+    set(&mut host, DRIVE, 30.0);
+    assert!(gain(&host) < low - 6.0, "{} {low}", gain(&host));
+}
+
+#[test]
+fn compressor_controls_share_columns_and_keep_their_places_in_every_mode() {
+    use compressor::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let used = panel.frame(vec![]);
+    let before = panel.state.control_rects.clone();
+    // The one-cell controls of a line are one cell apart.
+    let line = [THRESHOLD, RATIO, KNEE, CEILING].map(|id| panel.cell(id));
+    let cell = line[1].center().x - line[0].center().x;
+    for pair in line.windows(2) {
+        assert!((pair[1].center().x - pair[0].center().x - cell).abs() < 0.6);
+        assert_eq!(pair[0].top(), pair[1].top());
+    }
+    for (upper, lower) in [
+        (THRESHOLD, ATTACK),
+        (RATIO, RELEASE),
+        (KNEE, AUTO_RELEASE),
+        (CEILING, LOOKAHEAD),
+        (MAKEUP, MIX),
+        (AUTO_MAKEUP, OUTPUT),
+    ] {
+        let (upper, lower) = (panel.cell(upper), panel.cell(lower));
+        assert!((upper.center().x - lower.center().x).abs() < 0.6);
+        assert!(lower.top() >= upper.bottom());
+    }
+    // The two narrow cards are cut alike.
+    let narrow =
+        |first: u32, second: u32| panel.cell(second).center().x - panel.cell(first).center().x;
+    assert!((narrow(SIDECHAIN_HIGH_PASS, STEREO_LINK) - narrow(MAKEUP, AUTO_MAKEUP)).abs() < 0.6);
+    // Both lines start level in all four cards.
+    for line in [
+        [MODE, THRESHOLD, SIDECHAIN, MAKEUP],
+        [CHARACTER, ATTACK, SIDECHAIN_HIGH_PASS, MIX],
+    ] {
+        let top = panel.cell(line[0]).top();
+        assert!(line.iter().all(|id| panel.cell(*id).top() == top));
+    }
+    for mode in [1.0, 2.0, 0.0] {
+        panel.set(MODE, mode);
+        assert_eq!(panel.frame(vec![]), used, "mode {mode}");
+        assert_eq!(panel.state.control_rects, before, "mode {mode}");
+        let settings = panels::compressor_settings(&|id| panel.host.value(id));
+        let mut off: Vec<u32> = PARAMETERS
+            .iter()
+            .map(|spec| spec.id)
+            .filter(|id| !applies(*id, &settings))
+            .collect();
+        off.sort_unstable();
+        let mut disabled = panel.state.disabled.clone();
+        disabled.sort_unstable();
+        assert_eq!(disabled, off, "mode {mode}");
+    }
+}
+
+#[test]
+fn compressor_disabled_controls_do_not_move() {
+    use compressor::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let ceiling = panel.cell(CEILING).center();
+    let before = panel.plain(CEILING);
+    panel.drag(ceiling, ceiling - vec2(0.0, 60.0));
+    assert_eq!(panel.plain(CEILING), before, "no ceiling on a compressor");
+    panel.set(MODE, 1.0);
+    panel.drag(ceiling, ceiling + vec2(0.0, 60.0));
+    assert!(panel.plain(CEILING) < before, "a limiter's ceiling drags");
+}
+
+#[test]
+fn compressor_readouts_say_what_the_device_uses() {
+    use compressor::*;
+    let layout = panels::layout(&DESCRIPTOR);
+    let mut host = TableHost::new(&DESCRIPTOR);
+    let set = |host: &mut TableHost, id: u32, plain: f32| {
+        let spec = DESCRIPTOR.parameter(id).unwrap();
+        host.values.insert(id, f64::from(spec.to_normalized(plain)));
+    };
+    let readout = |host: &TableHost, id: u32| (layout.readout)(id, &|id| host.value(id));
+    let own = |id: u32, plain: f32| {
+        let spec = DESCRIPTOR.parameter(id).unwrap();
+        Some(spec.format(spec.to_normalized(plain)))
+    };
+    // Digital at its defaults: every knob shows its own value.
+    for id in [THRESHOLD, RATIO, KNEE, ATTACK, RELEASE, CEILING] {
+        assert_eq!(readout(&host, id), None, "parameter {id}");
+    }
+    assert_eq!(readout(&host, LOOKAHEAD).as_deref(), Some("Off"));
+    assert_eq!(readout(&host, SIDECHAIN_HIGH_PASS).as_deref(), Some("Off"));
+    // Auto makeup is off by default: nothing is applied, nothing is shown.
+    assert_eq!(readout(&host, AUTO_MAKEUP), None);
+    set(&mut host, AUTO_MAKEUP, 1.0);
+    assert!(readout(&host, AUTO_MAKEUP).unwrap().ends_with(" dB"));
+    set(&mut host, AUTO_RELEASE, 1.0);
+    assert_eq!(readout(&host, RELEASE).as_deref(), Some("Auto"));
+    // Opto cannot follow faster than 10 ms; Tube has no hard knee.
+    set(&mut host, ATTACK, 1.0);
+    set(&mut host, KNEE, 0.0);
+    set(&mut host, CHARACTER, 2.0);
+    assert_eq!(readout(&host, ATTACK), own(ATTACK, 10.0));
+    assert_eq!(readout(&host, KNEE), None);
+    set(&mut host, CHARACTER, 1.0);
+    assert_eq!(readout(&host, ATTACK), None);
+    assert_eq!(readout(&host, KNEE), own(KNEE, 12.0));
+    // A limiter always looks ahead, and has no ratio to choose.
+    set(&mut host, MODE, 1.0);
+    assert_eq!(readout(&host, RATIO).as_deref(), Some("∞:1"));
+    assert_eq!(readout(&host, LOOKAHEAD), own(LOOKAHEAD, 5.0));
+    assert_eq!(readout(&host, AUTO_MAKEUP), None);
+    set(&mut host, LOOKAHEAD, 2.0);
+    assert_eq!(readout(&host, LOOKAHEAD), None);
+    let makeup = DESCRIPTOR.parameter(MAKEUP).unwrap();
+    assert_eq!(caption(&DESCRIPTOR, makeup, &host, &layout), "Gain");
+    set(&mut host, MODE, 2.0);
+    assert_eq!(caption(&DESCRIPTOR, makeup, &host, &layout), "Makeup");
+}
+
+/// Where the Compressor's curve draws its handle for a level in dB.
+fn handle(panel: &Panel, db: f32) -> Pos2 {
+    let inner = panel.state.picture_rects[0].shrink(1.0);
+    let fraction = (db + 60.0) / 60.0;
+    pos2(
+        inner.left() + inner.width() * fraction,
+        inner.bottom() - inner.height() * fraction,
+    )
+}
+
+#[test]
+fn compressor_handle_sets_threshold_and_the_wheel_ratio() {
+    use compressor::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let [curve, history, meter] = panel.state.picture_rects[..] else {
+        panic!("a curve, the history and the meter");
+    };
+    assert_eq!(curve.size(), vec2(208.0, 208.0));
+    assert_eq!((history.height(), meter.size()), (208.0, vec2(48.0, 208.0)));
+    assert!(history.left() > curve.right() && meter.left() > history.right());
+    assert!(meter.right() >= panel.cell(OUTPUT).right());
+
+    let from = handle(&panel, -18.0);
+    panel.drag(from, from + vec2(-40.0, 0.0));
+    let threshold = panel.plain(THRESHOLD);
+    assert!((-31.5..=-28.5).contains(&threshold), "{threshold}");
+    assert!(panel.host.singles.iter().all(|id| *id == THRESHOLD));
+    assert!(panel.host.batch_ids.is_empty());
+
+    // The pointer rests on the handle: the wheel turns Ratio.
+    let ratio = panel.plain(RATIO);
+    panel.frame(vec![Event::PointerMoved(handle(&panel, threshold))]);
+    panel.frame(vec![]);
+    panel.frame(vec![wheel(4.0)]);
+    panel.frame(vec![]);
+    assert!(panel.plain(RATIO) > ratio * 1.2, "{}", panel.plain(RATIO));
+    assert_eq!(panel.plain(THRESHOLD), threshold);
+
+    panel.click(handle(&panel, threshold), 2);
+    assert_eq!(panel.plain(THRESHOLD), -18.0, "a double-click resets");
+}
+
+#[test]
+fn compressor_handle_is_the_ceiling_in_front_of_a_limiter() {
+    use compressor::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    panel.set(MODE, 1.0);
+    let ceiling = panel.plain(CEILING);
+    let threshold = panel.plain(THRESHOLD);
+    let ratio = panel.plain(RATIO);
+    let from = handle(&panel, ceiling);
+    panel.drag(from, from + vec2(-30.0, 0.0));
+    assert!(
+        panel.plain(CEILING) < ceiling - 5.0,
+        "{}",
+        panel.plain(CEILING)
+    );
+    panel.frame(vec![Event::PointerMoved(handle(
+        &panel,
+        panel.plain(CEILING),
+    ))]);
+    panel.frame(vec![]);
+    panel.frame(vec![wheel(4.0)]);
+    panel.frame(vec![]);
+    assert_eq!(
+        (panel.plain(THRESHOLD), panel.plain(RATIO)),
+        (threshold, ratio)
+    );
+    assert!(panel.host.singles.iter().all(|id| *id == CEILING));
+}
+
+#[test]
+fn compressor_history_line_drags_the_threshold_and_a_click_clears_the_hold() {
+    use compressor::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let history = panel.state.picture_rects[1].shrink(1.0);
+    // The line stands at the height of the curve's handle.
+    let at = pos2(history.center().x, handle(&panel, -18.0).y);
+    panel.drag(at, at + vec2(0.0, 35.0));
+    let threshold = panel.plain(THRESHOLD);
+    assert!((-29.0..=-27.0).contains(&threshold), "{threshold}");
+    assert!(panel.host.singles.iter().all(|id| *id == THRESHOLD));
+
+    panel.state.reduction_hold = 7.5;
+    panel.frame(vec![]);
+    assert_eq!(panel.state.reduction_hold, 7.5, "held until clicked");
+    let meter = panel.state.picture_rects[2];
+    panel.click(meter.center(), 1);
+    assert_eq!(panel.state.reduction_hold, 0.0);
+}
+
+#[test]
+fn compressor_meter_holds_the_largest_reduction_while_the_device_plays() {
+    use compressor::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let telemetry = Arc::new(Telemetry::default());
+    panel.host.telemetry = Some(telemetry.clone());
+    let block = vec![0.25; 512];
+    for reduction in [3.0, 9.0, 4.0] {
+        telemetry.set_value(TELEMETRY_REDUCTION, reduction);
+        telemetry.record_output(&block, &block);
+        panel.frame(vec![]);
+    }
+    assert_eq!(panel.state.reduction_hold, 9.0);
+    assert_eq!(
+        panel.host.values, panel.host.defaults,
+        "showing edits nothing"
+    );
+}
+
+#[test]
+fn compressor_external_sidechain_names_its_source_and_opens_routing() {
+    use compressor::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    panel.host.sources = Some(Vec::new());
+    // The value line of the Sidechain cell.
+    let link = |panel: &Panel| {
+        let cell = panel.cell(SIDECHAIN);
+        pos2(cell.center().x, cell.bottom() - 8.0)
+    };
+    // Internal: nothing to route.
+    panel.click(link(&panel), 1);
+    assert_eq!(panel.host.routed, 0);
+    let before = panel.state.control_rects.clone();
+    panel.set(SIDECHAIN, 1.0);
+    assert_eq!(
+        panel.state.control_rects, before,
+        "the line was there already"
+    );
+    panel.click(link(&panel), 1);
+    assert_eq!(panel.host.routed, 1, "\"No source\" opens Routing");
+    panel.host.sources = Some(vec!["Kick".into(), "Snare".into()]);
+    panel.click(link(&panel), 1);
+    assert_eq!(panel.host.routed, 2);
+    assert_eq!(panel.plain(SIDECHAIN), 1.0);
+    // A limiter listens to its own input only.
+    panel.set(MODE, 1.0);
+    panel.click(link(&panel), 1);
+    assert_eq!(panel.host.routed, 2);
 }

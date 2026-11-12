@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "device": "r1-saturator",
+  "name": "Transistor Edge",
+  "author": "Rill",
+  "category": "Transistor",
+  "tags": ["guitar", "lead"],
+  "description": "Bite for guitars and synth leads.",
+  "parameters": {
+    "model": "Transistor",
+    "drive": 14.0,
+    "character": 60.0,
+    "tone": 2.0
+  }
+}

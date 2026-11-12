@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "device": "r1-saturator",
+  "name": "Fuzz Box",
+  "author": "Rill",
+  "category": "Transistor",
+  "tags": ["fuzz"],
+  "description": "Square-wave fuzz.",
+  "parameters": {
+    "model": "Transistor",
+    "drive": 30.0,
+    "character": 95.0,
+    "tone": -2.0,
+    "focus": 150.0
+  }
+}

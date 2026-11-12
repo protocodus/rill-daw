@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "device": "r1-compressor",
+  "name": "Sidechain Duck",
+  "author": "Rill",
+  "category": "Sidechain",
+  "tags": ["duck", "kick"],
+  "description": "Ducks under a routed kick. Route the kick to this device's sidechain input.",
+  "parameters": {
+    "sidechain": "External",
+    "threshold": -30.0,
+    "ratio": 8.0,
+    "attack": 1.0,
+    "release": 180.0
+  }
+}

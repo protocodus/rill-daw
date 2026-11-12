@@ -261,7 +261,7 @@ fn device_browser_opens_on_the_callers_kind_and_lists_built_in_devices() {
     assert!(visible(&inserts, "Search effects"), "{inserts}");
     assert_eq!(
         inserts["library"]["order"],
-        json!(["R1 Equalizer", "R1 Filter"])
+        json!(["R1 Compressor", "R1 Equalizer", "R1 Filter", "R1 Saturator"])
     );
     app.key("Escape");
     app.key("Escape");

@@ -12,6 +12,7 @@ use egui::Ui;
 use std::sync::Arc;
 
 mod panels;
+mod pictures;
 
 /// The panel's view of the parameter owner.
 pub trait DeviceHost {
@@ -44,6 +45,13 @@ pub trait DeviceHost {
     fn telemetry(&self) -> Option<Arc<Telemetry>> {
         None
     }
+    /// Names of the channels routed to the device's sidechain input.
+    /// `None` when the host cannot say (a gallery, a test table).
+    fn sidechain_sources(&self) -> Option<Vec<String>> {
+        None
+    }
+    /// Opens the host's routing view for this device.
+    fn route_sidechain(&mut self) {}
 }
 
 /// Per-panel UI state the host keeps between frames.
@@ -65,11 +73,46 @@ pub struct PanelState {
     /// not rescale under the pointer.
     held_range: Option<f32>,
     spectrum: SpectrumState,
-    /// Where the response and each table control were last drawn.
+    /// Whether the device's telemetry still moves.
+    activity: Activity,
+    /// The largest gain reduction since the meter was last clicked, in dB.
+    pub reduction_hold: f32,
+    /// The level history as last read, oldest first.
+    history: Vec<[f32; 3]>,
+    /// Where the response, the parts of another picture and each control
+    /// were last drawn, and which controls were disabled.
     #[cfg(test)]
     response_rect: Option<egui::Rect>,
     #[cfg(test)]
-    table_rects: Vec<(u32, egui::Rect)>,
+    picture_rects: Vec<egui::Rect>,
+    #[cfg(test)]
+    control_rects: Vec<(u32, egui::Rect)>,
+    #[cfg(test)]
+    disabled: Vec<u32>,
+}
+
+/// Tells a device that plays from one whose telemetry holds what last
+/// played: a ring nothing has written to for a while is stale.
+#[derive(Debug, Default)]
+struct Activity {
+    /// Where the ring's writer was at the last look, and for how long it
+    /// has not moved.
+    position: usize,
+    idle_seconds: f32,
+}
+
+impl Activity {
+    /// Whether the writer, now at `position`, moved within
+    /// [`IDLE_SECONDS`]; `seconds` have passed since the previous call.
+    fn live(&mut self, position: usize, seconds: f32) -> bool {
+        self.idle_seconds = if position == self.position {
+            self.idle_seconds + seconds
+        } else {
+            0.0
+        };
+        self.position = position;
+        self.idle_seconds <= IDLE_SECONDS
+    }
 }
 
 /// The analyzer behind a response, created when a spectrum first shows.
@@ -77,15 +120,12 @@ pub struct PanelState {
 struct SpectrumState {
     analyzer: Option<(f32, SpectrumAnalyzer)>,
     frames: Vec<f32>,
-    /// Where the ring's writer was at the last look, and for how long it
-    /// has not moved.
-    position: usize,
-    idle_seconds: f32,
+    activity: Activity,
 }
 
 /// A ring nothing has written to for this long holds what last played, not
-/// what sounds: the spectrum then falls as for silence.
-const SPECTRUM_IDLE_SECONDS: f32 = 0.25;
+/// what sounds: a spectrum then falls as for silence and a meter rests.
+const IDLE_SECONDS: f32 = 0.25;
 
 impl std::fmt::Debug for SpectrumState {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -116,13 +156,7 @@ impl SpectrumState {
             panels::Tap::Input => telemetry.input_position(),
             panels::Tap::Output => telemetry.output_position(),
         };
-        self.idle_seconds = if position == self.position {
-            self.idle_seconds + seconds
-        } else {
-            0.0
-        };
-        self.position = position;
-        if self.idle_seconds > SPECTRUM_IDLE_SECONDS {
+        if !self.activity.live(position, seconds) {
             self.frames.fill(0.0);
         } else {
             match tap {
@@ -160,11 +194,25 @@ pub fn show(
     let layout = panels::layout(descriptor);
     ui.set_width(layout.width.min(ui.available_width()));
     #[cfg(test)]
-    state.table_rects.clear();
+    {
+        state.control_rects.clear();
+        state.picture_rects.clear();
+        state.disabled.clear();
+    }
     preset_bar(ui, descriptor, host, state);
     daw_ui::section_gap(ui);
-    if let Some(view) = &layout.response {
-        response(ui, descriptor, view, &layout, host, state);
+    if let Some(picture) = &layout.picture {
+        match picture {
+            panels::Picture::Response(view) => {
+                response(ui, descriptor, view, &layout, host, state);
+            }
+            panels::Picture::Saturation { height } => {
+                pictures::saturation(ui, *height, host, state);
+            }
+            panels::Picture::Dynamics { height } => {
+                pictures::dynamics(ui, *height, host, state);
+            }
+        }
         daw_ui::section_gap(ui);
     }
     let rows = layout.sections.iter().map(|section| section.row).max();
@@ -175,7 +223,7 @@ pub fn show(
             .filter(|section| section.row == row)
             .collect();
         let drawn = if layout.cells {
-            cell_row(ui, descriptor, &sections, host, &layout);
+            cell_row(ui, descriptor, &sections, host, state, &layout);
             true
         } else {
             natural_row(ui, descriptor, &sections, host, state, &layout)
@@ -258,7 +306,7 @@ fn natural_row(
                         lead: 0.0,
                         fader: false,
                     };
-                    control(ui, descriptor, spec, host, cell, layout);
+                    control(ui, descriptor, spec, host, state, cell, layout);
                 }
             });
         }
@@ -274,6 +322,7 @@ fn cell_row(
     descriptor: &DeviceDescriptor,
     sections: &[&panels::Section],
     host: &mut dyn DeviceHost,
+    state: &mut PanelState,
     layout: &panels::Layout,
 ) {
     let lines = sections
@@ -340,7 +389,7 @@ fn cell_row(
                             lead: if alone && !fader { tall - last } else { 0.0 },
                             fader,
                         };
-                        control(ui, descriptor, spec, host, cell, layout);
+                        control(ui, descriptor, spec, host, state, cell, layout);
                     }
                 }
             });
@@ -461,9 +510,36 @@ fn columns<T>(lines: &[Vec<(T, f32)>], available: f32) -> Vec<Option<f32>> {
         .collect()
 }
 
+/// The captions a parameter takes with the options of the choice it
+/// follows, and that choice.
+fn mode_captions(
+    spec: &ParamSpec,
+    layout: &panels::Layout,
+) -> Option<(u32, &'static [&'static str])> {
+    layout
+        .mode_captions
+        .iter()
+        .find(|(id, _, _)| *id == spec.id)
+        .map(|(_, choice, captions)| (*choice, *captions))
+}
+
 /// The name the panel shows for a parameter: its own, unless the layout
-/// moved it to a card where another name reads right.
-fn caption(spec: &ParamSpec, layout: &panels::Layout) -> &'static str {
+/// moved it to a card where another name reads right or names it after
+/// what it does in the current mode.
+fn caption(
+    descriptor: &DeviceDescriptor,
+    spec: &ParamSpec,
+    host: &dyn DeviceHost,
+    layout: &panels::Layout,
+) -> &'static str {
+    if let Some((choice, captions)) = mode_captions(spec, layout)
+        && let Some(choice) = descriptor.parameter(choice)
+    {
+        let option = choice.to_plain(host.value(choice.id) as f32).round() as usize;
+        if let Some(caption) = captions.get(option) {
+            return caption;
+        }
+    }
     layout
         .captions
         .iter()
@@ -487,7 +563,16 @@ fn value_text(spec: &ParamSpec, normalized: f32) -> String {
 fn end_label(spec: &ParamSpec, normalized: f32) -> String {
     let split = |normalized: f32| {
         let text = value_text(spec, normalized);
-        let (number, unit) = text.split_once(' ').unwrap_or((&text, ""));
+        // "20 Hz", or a unit that joins its number: "4.0:1".
+        let (number, unit) = text
+            .split_once(' ')
+            .or_else(|| {
+                (!spec.unit.is_empty())
+                    .then(|| text.strip_suffix(spec.unit))
+                    .flatten()
+                    .map(|number| (number, spec.unit))
+            })
+            .unwrap_or((&text, ""));
         let number = if number.contains('.') {
             number.trim_end_matches('0').trim_end_matches('.')
         } else {
@@ -570,7 +655,21 @@ fn cell_width(ui: &Ui, spec: &ParamSpec, layout: &panels::Layout) -> f32 {
     if let Some(label) = led(spec, layout) {
         return daw_ui::toggle_led_width(ui, label) + LED_MARKER + CELL_GAP;
     }
-    let caption = text(caption(spec, layout), daw_ui::control_caption_font());
+    // The widest caption the control ever takes, so its cell never changes.
+    let caption = match mode_captions(spec, layout) {
+        Some((_, captions)) => captions
+            .iter()
+            .map(|caption| text(caption, daw_ui::control_caption_font()))
+            .fold(0.0, f32::max),
+        None => text(
+            layout
+                .captions
+                .iter()
+                .find(|(id, _)| *id == spec.id)
+                .map_or(spec.name, |(_, caption)| caption),
+            daw_ui::control_caption_font(),
+        ),
+    };
     let widest = |values: &mut dyn Iterator<Item = String>| {
         values
             .map(|value| text(&value, button.clone()))
@@ -945,7 +1044,7 @@ fn table_body(
                 state.selected = Some(index);
             }
             #[cfg(test)]
-            state.table_rects.push((spec.id, child.min_rect()));
+            state.control_rects.push((spec.id, child.min_rect()));
         }
     }
 }
@@ -1087,6 +1186,8 @@ fn control(
     descriptor: &DeviceDescriptor,
     spec: &ParamSpec,
     host: &mut dyn DeviceHost,
+    // Only tests look at where controls were drawn.
+    #[cfg_attr(not(test), expect(unused_variables))] state: &mut PanelState,
     cell: Cell,
     layout: &panels::Layout,
 ) {
@@ -1101,11 +1202,17 @@ fn control(
     let automation = host.automation(spec.id);
     let id = egui::Id::new((descriptor.id, spec.id));
     let control = AutomationControl::DeviceParameter { id: spec.id };
-    ui.allocate_ui_with_layout(
+    let caption = caption(descriptor, spec, host, layout);
+    let applies = active(spec, host, layout);
+    #[cfg(test)]
+    if !applies {
+        state.disabled.push(spec.id);
+    }
+    let _drawn = ui.allocate_ui_with_layout(
         egui::vec2(width, 0.0),
         egui::Layout::top_down(egui::Align::Center),
         |ui| {
-            if !active(spec, host, layout) {
+            if !applies {
                 ui.disable();
             }
             // Compact horizontal padding leaves a choice's text the room of its cell.
@@ -1113,7 +1220,7 @@ fn control(
             ui.add_space(lead);
             // A lamp carries its own label.
             let named = led(spec, layout).is_none();
-            daw_ui::control_caption(ui, if named { caption(spec, layout) } else { " " });
+            daw_ui::control_caption(ui, if named { caption } else { " " });
             let own = if fader {
                 height
             } else {
@@ -1135,7 +1242,7 @@ fn control(
                             .compact()
                             .pointer()
                             .diameter(knob_diameter(spec, layout))
-                            .text(caption(spec, layout))
+                            .text(caption)
                             .endpoint_labels(end_label(spec, 0.0), end_label(spec, 1.0))
                             .automation(state);
                         if spec.plain_min() == -spec.plain_max() {
@@ -1148,10 +1255,22 @@ fn control(
                         }
                         ui.add(knob)
                     };
-                    let text = value_text(spec, normalized as f32);
+                    // What the device uses, where that is not the knob's value.
+                    let own = value_text(spec, normalized as f32);
+                    let replaced = (layout.readout)(spec.id, &|id| host.value(id));
                     // Values share one baseline across the line.
                     ui.add_space(offset);
-                    daw_ui::text::note(ui, &text);
+                    match replaced {
+                        // The pointer and the number disagree: say where
+                        // the knob is.
+                        Some(text) if text != own => {
+                            daw_ui::text::note(ui, &text)
+                                .on_hover_text(format!("The knob is at {own}"));
+                        }
+                        _ => {
+                            daw_ui::text::note(ui, &own);
+                        }
+                    }
                     knob_edits(ui, spec, host, &response, value, normalized, automation)
                 }
                 ParamRange::Choice(labels) => {
@@ -1236,14 +1355,41 @@ fn control(
                 // say there, so every cell of a line is as tall as a knob's
                 // and the next line starts level across cards.
                 ui.add_space(offset);
-                let readout = (layout.readout)(spec.id, &|id| host.value(id));
-                daw_ui::text::note(ui, readout.as_deref().unwrap_or(" "));
+                let source = (layout.sidechain == Some(spec.id) && applies && normalized >= 0.5)
+                    .then(|| host.sidechain_sources())
+                    .flatten();
+                match source {
+                    Some(sources) => {
+                        let text = match &sources[..] {
+                            [] => "No source".to_owned(),
+                            [only] => only.clone(),
+                            [first, rest @ ..] => format!("{first} +{}", rest.len()),
+                        };
+                        let link =
+                            daw_ui::value_link(ui, &text, sources.is_empty(), width - CELL_GAP)
+                                .on_hover_text(if sources.is_empty() {
+                                    "Nothing is routed to the sidechain input. Open Routing"
+                                        .to_owned()
+                                } else {
+                                    format!("Sidechain from {}. Open Routing", sources.join(", "))
+                                });
+                        if link.clicked() {
+                            host.route_sidechain();
+                        }
+                    }
+                    None => {
+                        let readout = (layout.readout)(spec.id, &|id| host.value(id));
+                        daw_ui::text::note(ui, readout.as_deref().unwrap_or(" "));
+                    }
+                }
             }
             if let Some(action) = navigation {
                 host.navigate(action);
             }
         },
     );
+    #[cfg(test)]
+    state.control_rects.push((spec.id, _drawn.response.rect));
 }
 
 /// The device's name beside its `daw_ui::preset_group`. Identical for every

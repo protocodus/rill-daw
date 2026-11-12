@@ -7,6 +7,11 @@ pub const TELEMETRY_FRAMES: usize = 16_384;
 /// Each device documents which index means what.
 pub const TELEMETRY_VALUES: usize = 8;
 
+/// Columns of level history: 8 s at [`HISTORY_RATE`].
+pub const HISTORY_COLUMNS: usize = 512;
+/// History columns per second, whatever the sample rate or block size.
+pub const HISTORY_RATE: f32 = 64.0;
+
 /// Lock-free path from the audio instance to its panel. The audio thread
 /// writes, any thread reads. A torn read costs one odd frame in a drawing.
 pub struct Telemetry {
@@ -15,6 +20,11 @@ pub struct Telemetry {
     output_peak: AtomicU32,
     input: Ring,
     output: Ring,
+    /// Three device-defined values per column, such as input peak, output
+    /// peak and gain reduction. Written by the audio side at a fixed rate,
+    /// so a drawing of it does not depend on the UI frame rate.
+    history: Box<[[AtomicU32; 3]]>,
+    history_count: AtomicUsize,
 }
 
 impl Default for Telemetry {
@@ -25,6 +35,10 @@ impl Default for Telemetry {
             output_peak: AtomicU32::new(0),
             input: Ring::default(),
             output: Ring::default(),
+            history: (0..HISTORY_COLUMNS)
+                .map(|_| std::array::from_fn(|_| AtomicU32::new(0)))
+                .collect(),
+            history_count: AtomicUsize::new(0),
         }
     }
 }
@@ -83,6 +97,66 @@ impl Telemetry {
     pub fn output_position(&self) -> usize {
         self.output.cursor.load(Relaxed)
     }
+
+    /// Appends one history column; see [`HistoryMeter`].
+    pub fn push_history(&self, column: [f32; 3]) {
+        let count = self.history_count.load(Relaxed);
+        for (slot, value) in self.history[count % HISTORY_COLUMNS].iter().zip(column) {
+            slot.store(value.to_bits(), Relaxed);
+        }
+        self.history_count.store(count.wrapping_add(1), Relaxed);
+    }
+
+    /// Copies the most recent columns, oldest first, into `out` (at most
+    /// [`HISTORY_COLUMNS`]). Columns never written are zero.
+    pub fn read_history(&self, out: &mut [[f32; 3]]) {
+        let count = out.len().min(HISTORY_COLUMNS);
+        let end = self.history_count.load(Relaxed);
+        for (index, column) in out[..count].iter_mut().enumerate() {
+            let position = end.wrapping_add(HISTORY_COLUMNS - count + index) % HISTORY_COLUMNS;
+            *column = std::array::from_fn(|value| {
+                f32::from_bits(self.history[position][value].load(Relaxed))
+            });
+        }
+    }
+
+    /// Columns written so far (wrapping): moves when there is news to draw.
+    pub fn history_count(&self) -> usize {
+        self.history_count.load(Relaxed)
+    }
+}
+
+/// Collects the largest of three values per history column and pushes each
+/// finished column: call [`Self::add`] once per sample.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct HistoryMeter {
+    column: [f32; 3],
+    period: u32,
+    filled: u32,
+}
+
+impl HistoryMeter {
+    pub fn prepare(&mut self, sample_rate: f32) {
+        self.period = ((sample_rate / HISTORY_RATE).round() as u32).max(1);
+        self.reset();
+    }
+
+    pub fn reset(&mut self) {
+        self.column = [0.0; 3];
+        self.filled = 0;
+    }
+
+    #[inline]
+    pub fn add(&mut self, a: f32, b: f32, c: f32, telemetry: &Telemetry) {
+        for (slot, value) in self.column.iter_mut().zip([a, b, c]) {
+            *slot = slot.max(value);
+        }
+        self.filled += 1;
+        if self.filled >= self.period {
+            telemetry.push_history(self.column);
+            self.reset();
+        }
+    }
 }
 
 struct Ring {
@@ -140,5 +214,35 @@ mod tests {
         telemetry.set_value(0, 440.0);
         assert_eq!(telemetry.value(0), 440.0);
         assert_eq!(telemetry.value(99), 0.0);
+    }
+
+    #[test]
+    fn history_keeps_the_latest_columns_at_a_fixed_rate() {
+        let telemetry = Telemetry::default();
+        let mut out = [[1.0; 3]; 4];
+        telemetry.read_history(&mut out);
+        assert_eq!(out, [[0.0; 3]; 4]);
+        let mut meter = HistoryMeter::default();
+        meter.prepare(48_000.0);
+        // 750 samples per column; each column holds the maxima of its span.
+        for n in 0..750 * 600 {
+            let column = (n / 750) as f32;
+            let last = n % 750 == 749;
+            meter.add(
+                if last { column } else { 0.0 },
+                if n % 750 == 0 { 2.0 * column } else { 0.0 },
+                -1.0,
+                &telemetry,
+            );
+        }
+        assert_eq!(telemetry.history_count(), 600);
+        telemetry.read_history(&mut out);
+        assert_eq!(out.map(|column| column[0]), [596.0, 597.0, 598.0, 599.0]);
+        assert_eq!(out[3], [599.0, 1198.0, 0.0]);
+        let mut all = vec![[0.0; 3]; HISTORY_COLUMNS + 10];
+        telemetry.read_history(&mut all);
+        assert_eq!(all[0][0], 88.0);
+        assert_eq!(all[HISTORY_COLUMNS - 1][0], 599.0);
+        assert_eq!(all[HISTORY_COLUMNS], [0.0; 3]);
     }
 }

@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "device": "r1-saturator",
+  "name": "Tape Glue",
+  "author": "Rill",
+  "category": "Tape",
+  "tags": ["bus"],
+  "description": "Bus cohesion with a soft top.",
+  "parameters": {
+    "model": "Tape",
+    "drive": 8.0,
+    "character": 60.0,
+    "tone": -0.5
+  }
+}

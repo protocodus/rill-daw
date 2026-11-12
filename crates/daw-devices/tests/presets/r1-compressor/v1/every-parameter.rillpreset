@@ -1,0 +1,25 @@
+{
+  "format": 1,
+  "device": "r1-compressor",
+  "name": "Every parameter",
+  "description": "Every parameter key of this version, so a removed or renamed key is caught.",
+  "parameters": {
+    "mode": "Expander",
+    "character": "Opto",
+    "threshold": -33.5,
+    "ratio": 7.3,
+    "knee": 17.2,
+    "attack": 0.35,
+    "release": 640.0,
+    "auto_release": true,
+    "lookahead": 3.7,
+    "ceiling": -4.4,
+    "sidechain": "External",
+    "sidechain.high_pass": 145.0,
+    "stereo_link": 35.0,
+    "makeup": 8.6,
+    "auto_makeup": true,
+    "mix": 64.0,
+    "output": -9.6
+  }
+}

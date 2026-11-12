@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "device": "r1-saturator",
+  "name": "Bass Grit",
+  "author": "Rill",
+  "category": "Tube",
+  "tags": ["bass"],
+  "description": "Growl on top of a clean low end.",
+  "parameters": {
+    "model": "Tube",
+    "drive": 16.0,
+    "character": 60.0,
+    "focus": 180.0
+  }
+}

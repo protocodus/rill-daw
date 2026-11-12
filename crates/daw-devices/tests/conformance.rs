@@ -110,6 +110,23 @@ fn block_events(descriptor: &DeviceDescriptor, block: usize) -> Vec<Event> {
     }
 }
 
+/// Whether a device gets an external sidechain: the registry-wide tests run
+/// a device that declares the input once without and once with it, so both
+/// branches are swept.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Sidechain {
+    None,
+    Noise,
+}
+
+fn sidechain_runs(descriptor: &DeviceDescriptor) -> &'static [Sidechain] {
+    if descriptor.sidechain_input {
+        &[Sidechain::None, Sidechain::Noise]
+    } else {
+        &[Sidechain::None]
+    }
+}
+
 /// Runs `blocks` blocks, calling `before` ahead of each, and returns the
 /// interleaved output.
 fn render(
@@ -119,11 +136,31 @@ fn render(
     input: &mut dyn FnMut() -> f32,
     before: &mut dyn FnMut(&mut dyn Device, usize),
 ) -> Vec<f32> {
+    render_with(device, descriptor, blocks, input, before, Sidechain::None)
+}
+
+fn render_with(
+    device: &mut dyn Device,
+    descriptor: &DeviceDescriptor,
+    blocks: usize,
+    input: &mut dyn FnMut() -> f32,
+    before: &mut dyn FnMut(&mut dyn Device, usize),
+    sidechain: Sidechain,
+) -> Vec<f32> {
     let mut output = Vec::with_capacity(blocks * BLOCK * 2);
     let mut left = vec![0.0; BLOCK];
     let mut right = vec![0.0; BLOCK];
+    let mut key = Lcg(41);
+    let mut key_left = vec![0.0; BLOCK];
+    let mut key_right = vec![0.0; BLOCK];
     for block in 0..blocks {
         before(device, block);
+        // Bursts, so the detector rises and falls.
+        let level = if block % 6 < 3 { 2.0 } else { 0.01 };
+        for (l, r) in key_left.iter_mut().zip(&mut key_right) {
+            *l = level * (key.next() - 0.5);
+            *r = level * (key.next() - 0.5);
+        }
         for (l, r) in left.iter_mut().zip(&mut right) {
             *l = input();
             *r = input();
@@ -140,7 +177,8 @@ fn render(
             StereoIo {
                 left: &mut left,
                 right: &mut right,
-                sidechain: None,
+                sidechain: (sidechain == Sidechain::Noise)
+                    .then_some((&key_left[..], &key_right[..])),
             },
         );
         for (l, r) in left.iter().zip(&right) {
@@ -299,33 +337,36 @@ fn presets_round_trip_through_capture() {
 #[test]
 fn processing_is_deterministic() {
     for descriptor in registry() {
-        let run = || {
-            let mut device = prepared(descriptor);
-            let mut random = Lcg(11);
-            render(
-                &mut *device,
-                descriptor,
-                40,
-                &mut noise(3),
-                &mut |device, block| {
-                    if block % 4 == 0 {
-                        for spec in descriptor.parameters {
-                            device.set_parameter(spec.id, random.next());
+        for &sidechain in sidechain_runs(descriptor) {
+            let run = || {
+                let mut device = prepared(descriptor);
+                let mut random = Lcg(11);
+                render_with(
+                    &mut *device,
+                    descriptor,
+                    40,
+                    &mut noise(3),
+                    &mut |device, block| {
+                        if block % 4 == 0 {
+                            for spec in descriptor.parameters {
+                                device.set_parameter(spec.id, random.next());
+                            }
                         }
-                    }
-                },
-            )
-        };
-        let first = run();
-        let second = run();
-        assert!(
-            first
-                .iter()
-                .zip(&second)
-                .all(|(a, b)| a.to_bits() == b.to_bits()),
-            "{} output differs between runs",
-            descriptor.id
-        );
+                    },
+                    sidechain,
+                )
+            };
+            let first = run();
+            let second = run();
+            assert!(
+                first
+                    .iter()
+                    .zip(&second)
+                    .all(|(a, b)| a.to_bits() == b.to_bits()),
+                "{} output differs between runs ({sidechain:?})",
+                descriptor.id
+            );
+        }
     }
 }
 
@@ -345,7 +386,8 @@ fn reset_restores_the_initial_state() {
 #[test]
 fn random_parameters_and_hostile_input_stay_finite() {
     for descriptor in registry() {
-        for seed in 0..12 {
+        for seed in 0..12 * sidechain_runs(descriptor).len() as u64 {
+            let sidechain = sidechain_runs(descriptor)[seed as usize / 12];
             let mut device = prepared(descriptor);
             let mut random = Lcg(seed);
             let mut source = Lcg(seed + 100);
@@ -366,7 +408,7 @@ fn random_parameters_and_hostile_input_stay_finite() {
                     _ => 8.0 * (source.next() - 0.5),
                 }
             };
-            let output = render(
+            let output = render_with(
                 &mut *device,
                 descriptor,
                 120,
@@ -384,11 +426,12 @@ fn random_parameters_and_hostile_input_stay_finite() {
                         }
                     }
                 },
+                sidechain,
             );
             let peak = output.iter().fold(0.0_f32, |peak, x| peak.max(x.abs()));
             assert!(
                 output.iter().all(|x| x.is_finite()) && peak < 1000.0,
-                "{} seed {seed}: peak {peak}",
+                "{} seed {seed} ({sidechain:?}): peak {peak}",
                 descriptor.id
             );
         }
@@ -440,6 +483,7 @@ fn process_does_not_allocate() {
             .map(|block| block_events(descriptor, block))
             .collect();
         let mut input = noise(23);
+        let key = vec![0.3; BLOCK];
         let allocations = count_allocations(|| {
             for block in 0..64 {
                 for spec in descriptor.parameters {
@@ -455,7 +499,8 @@ fn process_does_not_allocate() {
                     StereoIo {
                         left: &mut left,
                         right: &mut right,
-                        sidechain: None,
+                        sidechain: (descriptor.sidechain_input && block % 2 == 1)
+                            .then_some((&key[..], &key[..])),
                     },
                 );
             }
@@ -509,6 +554,44 @@ fn parameter_jumps_are_click_free() {
                     "{} {}: jump {from}→{to} steps {jump}, steady {steady}",
                     descriptor.id,
                     spec.key
+                );
+            }
+        }
+    }
+}
+
+/// The engine compares `descriptor.latency` across an edit to decide whether
+/// delay compensation must be rebuilt, so it has to be what the device
+/// reports for the same values.
+#[test]
+fn descriptor_latency_is_what_the_device_reports() {
+    for descriptor in registry() {
+        let mut random = Lcg(29);
+        for rate in [44_100.0, 48_000.0, 96_000.0, 192_000.0] {
+            for round in 0..40 {
+                let values: Vec<_> = descriptor
+                    .parameters
+                    .iter()
+                    .map(|spec| {
+                        let value = if round == 0 {
+                            spec.default_normalized()
+                        } else {
+                            random.next()
+                        };
+                        (spec.id, value)
+                    })
+                    .collect();
+                let mut device = (descriptor.create)();
+                device.prepare(rate, BLOCK);
+                for (id, value) in &values {
+                    device.set_parameter(*id, *value);
+                }
+                let value = |id| values.iter().find(|(key, _)| *key == id).unwrap().1;
+                assert_eq!(
+                    (descriptor.latency)(&value, rate),
+                    device.latency_samples(),
+                    "{} at {rate} Hz, round {round}",
+                    descriptor.id
                 );
             }
         }

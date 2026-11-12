@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-compressor",
+  "name": "Parallel Crush",
+  "author": "Rill",
+  "category": "Drums",
+  "tags": ["parallel"],
+  "description": "The crush, blended under the dry signal.",
+  "parameters": {
+    "character": "FET",
+    "threshold": -35.0,
+    "ratio": 20.0,
+    "attack": 0.05,
+    "release": 80.0,
+    "makeup": 10.0,
+    "mix": 40.0
+  }
+}

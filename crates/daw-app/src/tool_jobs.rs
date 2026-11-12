@@ -393,13 +393,20 @@ fn builtin_parameter_page(
         })
         .collect();
     let next_offset = args.offset.saturating_add(page.len());
-    Ok(json!({
+    let mut description = json!({
         "track_id":args.track_id,"insert_id":args.insert_id,"device":device,
         "total_parameters":descriptor.parameters.len(),"matched_parameters":matched,"parameters":page,
         "next_offset":(next_offset<matched).then_some(next_offset),
         "value_format":"Plain values in each parameter's unit; choices by label; toggles as booleans. set_plugin_parameters accepts the same forms.",
         "automation_note":"Returned values are stored manual/preset values. Enabled automation may override them at playback time."
-    }))
+    });
+    if descriptor.sidechain_input {
+        description["sidechain_input"] = json!({
+            "name":"Sidechain","bus":1,"first_channel":0,
+            "routing":"Route source tracks to it with the set_plugin_inputs edit on this insert."
+        });
+    }
+    Ok(description)
 }
 
 fn bounded_text(text: &str, max_chars: usize) -> String {

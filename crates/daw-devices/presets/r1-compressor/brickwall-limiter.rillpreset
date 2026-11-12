@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "device": "r1-compressor",
+  "name": "Brickwall Limiter",
+  "author": "Rill",
+  "category": "Limiter",
+  "tags": ["master", "safety"],
+  "description": "A safety ceiling just below full scale.",
+  "parameters": {
+    "mode": "Limiter",
+    "ceiling": -0.3,
+    "knee": 0.0,
+    "release": 100.0,
+    "lookahead": 5.0
+  }
+}

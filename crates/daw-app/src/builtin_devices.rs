@@ -27,6 +27,14 @@ const PREVIEWS: &[(&str, &[u8])] = &[
         "r1-equalizer",
         include_bytes!("../assets/r1-equalizer-preview.png"),
     ),
+    (
+        "r1-saturator",
+        include_bytes!("../assets/r1-saturator-preview.png"),
+    ),
+    (
+        "r1-compressor",
+        include_bytes!("../assets/r1-compressor-preview.png"),
+    ),
 ];
 
 /// Built-in devices as Library entries, in registry order.
@@ -128,7 +136,12 @@ pub(crate) fn preview(ctx: &egui::Context, plugin: &PluginInfo) -> Option<egui::
 /// Ports and parameters straight from the registry: built-ins need no
 /// isolated inspection process. Every device processes stereo audio.
 pub(crate) fn inspection(plugin: &PluginInfo) -> Option<PluginInspection> {
-    let descriptor = descriptor_for(plugin)?;
+    inspection_for_device(descriptor_for(plugin)?.id)
+}
+
+/// The same for a device named by a project.
+pub(crate) fn inspection_for_device(device: &str) -> Option<PluginInspection> {
+    let descriptor = daw_devices::descriptor(device)?;
     let bus = |name: &str, main: bool| PluginAudioBus {
         channels: 2,
         active: true,

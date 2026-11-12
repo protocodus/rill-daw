@@ -203,6 +203,59 @@ impl DawApp {
         ctx.request_repaint();
     }
 
+    /// The buses of a hosted plug-in once it was inspected; until then the
+    /// button that asks for it and the state of that request.
+    fn inspected_plugin_io(
+        &mut self,
+        ui: &mut egui::Ui,
+        target: IoTarget,
+    ) -> Option<Arc<PluginInspection>> {
+        let inspection = ui
+            .ctx()
+            .data(|data| data.get_temp::<Inspection>(inspection_id()))
+            .filter(|inspection| {
+                inspection.target == target && self.current_io_inspection(inspection)
+            });
+        let status = inspection
+            .as_ref()
+            .map(|inspection| inspection.status.lock().unwrap().clone());
+        let loading = matches!(status, Some(InspectionStatus::Loading));
+        if ui.add_enabled(!loading && !self.state_sync_pending(), daw_ui::button_widget(if inspection.is_some() { "Refresh I/O" } else { "Inspect I/O" }))
+            .on_hover_text("Save the native editor state, then inspect audio buses in a separate, time-limited process")
+            .clicked()
+        {
+            self.request_plugin_io_inspection(ui.ctx(), target);
+        }
+        match status {
+            Some(InspectionStatus::Ready(details)) => Some(details),
+            Some(InspectionStatus::Loading) => {
+                ui.spinner();
+                daw_ui::text::note(ui, "Inspecting plug-in buses…");
+                None
+            }
+            Some(InspectionStatus::Failed(message)) => {
+                daw_ui::text::note(ui, message);
+                None
+            }
+            None => {
+                daw_ui::text::note(
+                    ui,
+                    "Inspect this processor to connect extra inputs or expose instrument outputs.",
+                );
+                None
+            }
+        }
+    }
+
+    /// Opens Routing on the inputs of one processor: where a device panel
+    /// sends the user to connect its sidechain.
+    pub(crate) fn open_plugin_io(&mut self, ctx: &egui::Context, target: IoTarget) {
+        let choice = egui::Id::new(("plugin_io_choice", self.song_session.id, target.track));
+        ctx.data_mut(|data| data.insert_temp(choice, target.effect));
+        self.selected_track = Some(target.track);
+        self.open_popup(crate::app::PopupKind::Routing);
+    }
+
     pub(crate) fn plugin_io_controls(&mut self, ui: &mut egui::Ui, track: u64) {
         let Some(channel) = self.project.track(track) else {
             return;
@@ -247,40 +300,29 @@ impl DawApp {
         ui.ctx()
             .data_mut(|data| data.insert_temp(choice_id, effect));
         let target = IoTarget { track, effect };
-        let inspection = ui
-            .ctx()
-            .data(|data| data.get_temp::<Inspection>(inspection_id()))
-            .filter(|inspection| {
-                inspection.target == target && self.current_io_inspection(inspection)
-            });
-        let status = inspection
-            .as_ref()
-            .map(|inspection| inspection.status.lock().unwrap().clone());
-        let loading = matches!(status, Some(InspectionStatus::Loading));
-        if ui.add_enabled(!loading && !self.state_sync_pending(), daw_ui::button_widget(if inspection.is_some() { "Refresh I/O" } else { "Inspect I/O" }))
-            .on_hover_text("Save the native editor state, then inspect audio buses in a separate, time-limited process")
-            .clicked()
-        {
-            self.request_plugin_io_inspection(ui.ctx(), target);
-        }
-        let details = match status {
-            Some(InspectionStatus::Ready(details)) => details,
-            Some(InspectionStatus::Loading) => {
-                ui.spinner();
-                daw_ui::text::note(ui, "Inspecting plug-in buses…");
+        // A built-in device's buses are known without asking a process.
+        let builtin = self.project.track(track).and_then(|channel| {
+            let device = match effect {
+                Some(id) => channel
+                    .inserts
+                    .iter()
+                    .find(|slot| slot.id == id)?
+                    .effect
+                    .builtin_device(),
+                None => channel.instrument.builtin_device(),
+            }?;
+            Some(crate::builtin_devices::inspection_for_device(device))
+        });
+        let details = match builtin {
+            Some(Some(details)) if details.inputs.len() > 1 => Arc::new(details),
+            Some(_) => {
+                daw_ui::text::note(ui, "This device has no extra inputs.");
                 return;
             }
-            Some(InspectionStatus::Failed(message)) => {
-                daw_ui::text::note(ui, message);
-                return;
-            }
-            None => {
-                daw_ui::text::note(
-                    ui,
-                    "Inspect this processor to connect extra inputs or expose instrument outputs.",
-                );
-                return;
-            }
+            None => match self.inspected_plugin_io(ui, target) {
+                Some(details) => details,
+                None => return,
+            },
         };
         if effect.is_none()
             && self

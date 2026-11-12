@@ -180,3 +180,253 @@ fn builtin_parameters_change_live_without_a_rebuild() {
     let dry = render(&noise_project().0, RATE, 4.0).unwrap();
     assert!(high_band_ratio(&rendered) < high_band_ratio(&dry) * 0.1);
 }
+
+mod sidechain {
+    use super::*;
+    use daw_core::PluginInputRoute;
+    use daw_devices::devices::{compressor, saturator};
+
+    /// Where the detector signal starts, in frames.
+    const BURST: usize = 12_000;
+
+    /// A track playing two seconds of `level` from frame `from` on.
+    fn steady(
+        project: &mut Project,
+        directory: &std::path::Path,
+        name: &str,
+        from: usize,
+        level: f32,
+    ) -> u64 {
+        let path = directory.join(format!("{name}.wav"));
+        AudioData {
+            sample_rate: RATE,
+            channels: 2,
+            samples: (0..RATE as usize * 2)
+                .flat_map(|frame| [if frame >= from { level } else { 0.0 }; 2])
+                .collect(),
+        }
+        .write_wav(&path)
+        .unwrap();
+        let track = project.add_audio_track(name);
+        project.track_mut(track).unwrap().gain = 1.0;
+        project.track_mut(track).unwrap().clips.push(Clip::audio(
+            name,
+            0.0,
+            4.0,
+            path.to_string_lossy(),
+        ));
+        track
+    }
+
+    fn builtin(descriptor: &daw_devices::DeviceDescriptor, values: &[(u32, f32)]) -> EffectSlot {
+        let mut slot = EffectSlot::new(
+            descriptor.name,
+            Effect::Builtin {
+                device: descriptor.id.into(),
+            },
+        );
+        slot.parameters = values
+            .iter()
+            .map(|(id, plain)| PluginParameterValue {
+                id: *id,
+                value: f64::from(descriptor.parameter(*id).unwrap().to_normalized(*plain)),
+            })
+            .collect();
+        slot
+    }
+
+    /// A fast, hard compressor keyed from its sidechain input.
+    fn ducker() -> EffectSlot {
+        use compressor::*;
+        builtin(
+            &DESCRIPTOR,
+            &[
+                (SIDECHAIN, 1.0),
+                (THRESHOLD, -30.0),
+                (RATIO, 20.0),
+                (KNEE, 0.0),
+                (ATTACK, 0.02),
+            ],
+        )
+    }
+
+    fn route(source: u64, bus: u32) -> PluginInputRoute {
+        PluginInputRoute {
+            source_track: source,
+            bus,
+            first_channel: 0,
+            gain: 1.0,
+            pre_fader: true,
+        }
+    }
+
+    /// A silent key track and a steady target that ducks under it.
+    fn ducking_project() -> (Project, u64, u64, tempfile::TempDir) {
+        let directory = tempfile::tempdir().unwrap();
+        let mut project = Project::new();
+        project.tempo = 120.0;
+        let key = steady(&mut project, directory.path(), "key", BURST, 1.0);
+        // Heard by the detector only: the route is taken before the fader.
+        project.track_mut(key).unwrap().gain = 0.0;
+        let target = steady(&mut project, directory.path(), "target", 0, 0.5);
+        let mut slot = ducker();
+        slot.inputs.push(route(key, 1));
+        project.track_mut(target).unwrap().inserts.push(slot);
+        (project, key, target, directory)
+    }
+
+    /// The first frame the target plays below its steady level.
+    fn first_ducked(project: &Project) -> usize {
+        let rendered = render(project, RATE, 4.0).unwrap();
+        let left: Vec<f32> = rendered.iter().step_by(2).copied().collect();
+        assert!((left[BURST - 1] - 0.5).abs() < 1e-4, "{}", left[BURST - 1]);
+        assert!(left[BURST + 480] < 0.05, "{}", left[BURST + 480]);
+        left.iter().position(|sample| *sample < 0.49).unwrap()
+    }
+
+    #[test]
+    fn builtin_sidechain_ducks_and_is_sample_aligned() {
+        let (project, key, target, _directory) = ducking_project();
+        assert_eq!(first_ducked(&project), BURST);
+        // A key that arrives late delays the main signal at the insert.
+        let mut late = project.clone();
+        late.track_mut(key)
+            .unwrap()
+            .inserts
+            .push(builtin(&filter::DESCRIPTOR, &[(filter::MIX, 0.0)]));
+        assert_eq!(first_ducked(&late), BURST);
+        let mut shifted = project.clone();
+        shifted.track_mut(target).unwrap().latency_samples = 37;
+        assert_eq!(first_ducked(&shifted), BURST);
+        // Without the route the device hears no key and leaves the level.
+        let mut unrouted = project;
+        unrouted.track_mut(target).unwrap().inserts[0]
+            .inputs
+            .clear();
+        let rendered = render(&unrouted, RATE, 4.0).unwrap();
+        assert!((rendered[2 * (BURST + 480)] - 0.5).abs() < 1e-4);
+    }
+
+    #[test]
+    fn builtin_input_routes_need_a_sidechain_bus() {
+        let (mut project, key, target, _directory) = ducking_project();
+        let error = |project: &Project| format!("{:#}", render(project, RATE, 1.0).unwrap_err());
+        project.track_mut(target).unwrap().inserts[0].inputs[0].bus = 2;
+        assert!(error(&project).contains("Plug-in input bus is unavailable"));
+        project.track_mut(target).unwrap().inserts[0].inputs[0].bus = 0;
+        assert!(error(&project).contains("cannot replace an insert's main input"));
+        // A device without a sidechain has only its main input.
+        let mut slot = builtin(&filter::DESCRIPTOR, &[]);
+        slot.inputs.push(route(key, 1));
+        project.track_mut(target).unwrap().inserts[0] = slot;
+        let message = error(&project);
+        assert!(
+            message.contains("Plug-in input bus is unavailable"),
+            "{message}"
+        );
+        assert!(message.contains("R1 Filter"), "{message}");
+    }
+
+    /// Two tracks with the same click, one through `slot`: the frames of the
+    /// master that are not silent.
+    fn summed_clicks(slot: EffectSlot) -> Vec<(usize, f32)> {
+        let directory = tempfile::tempdir().unwrap();
+        let mut project = Project::new();
+        project.tempo = 120.0;
+        let path = directory.path().join("click.wav");
+        let mut samples = vec![0.0; RATE as usize * 2];
+        samples[2 * 1000] = 0.25;
+        samples[2 * 1000 + 1] = 0.25;
+        AudioData {
+            sample_rate: RATE,
+            channels: 2,
+            samples,
+        }
+        .write_wav(&path)
+        .unwrap();
+        for name in ["plain", "processed"] {
+            let track = project.add_audio_track(name);
+            project.track_mut(track).unwrap().gain = 1.0;
+            project.track_mut(track).unwrap().clips.push(Clip::audio(
+                name,
+                0.0,
+                2.0,
+                path.to_string_lossy(),
+            ));
+        }
+        let processed = project.tracks.last().unwrap().id;
+        project.track_mut(processed).unwrap().inserts.push(slot);
+        render(&project, RATE, 2.0)
+            .unwrap()
+            .iter()
+            .step_by(2)
+            .copied()
+            .enumerate()
+            .filter(|(_, sample)| sample.abs() > 1e-4)
+            .collect()
+    }
+
+    #[test]
+    fn compressor_lookahead_latency_is_compensated() {
+        use compressor::*;
+        let clicks = summed_clicks(builtin(&DESCRIPTOR, &[(LOOKAHEAD, 5.0), (RATIO, 1.0)]));
+        assert_eq!(clicks.len(), 1, "{clicks:?}");
+        assert_eq!(clicks[0].0, 1000);
+        assert!((clicks[0].1 - 0.5).abs() < 1e-3, "{}", clicks[0].1);
+    }
+
+    #[test]
+    fn a_latency_changing_edit_rebuilds_and_others_stay_live() {
+        use compressor::*;
+        let (mut project, _key, target, _directory) = ducking_project();
+        let effect = project.track(target).unwrap().inserts[0].id;
+        let renderer = Renderer::new(&project, RATE, false).unwrap();
+        let preparer = renderer.live_edit_preparer();
+        // The panel's edit: the value goes to the live queue, then the project.
+        let edit =
+            |preparer: &live_edit::LiveEditPreparer, project: &mut Project, id: u32, plain: f32| {
+                let value = f64::from(DESCRIPTOR.parameter(id).unwrap().to_normalized(plain));
+                preparer
+                    .compatibility()
+                    .acknowledge_parameter(target, Some(effect), id, value);
+                let parameters = &mut project.track_mut(target).unwrap().inserts[0].parameters;
+                match parameters.iter_mut().find(|parameter| parameter.id == id) {
+                    Some(parameter) => parameter.value = value,
+                    None => parameters.push(PluginParameterValue { id, value }),
+                }
+                preparer.compatible(project)
+            };
+        assert!(edit(&preparer, &mut project, THRESHOLD, -12.0));
+        assert!(
+            !edit(&preparer, &mut project, LOOKAHEAD, 5.0),
+            "lookahead is latency"
+        );
+        assert!(edit(&preparer, &mut project, LOOKAHEAD, 0.0));
+        assert!(
+            !edit(&preparer, &mut project, MODE, 1.0),
+            "the limiter looks ahead"
+        );
+        assert!(edit(&preparer, &mut project, MODE, 0.0));
+        // FET has no lookahead, so the knob moves nothing there.
+        edit(&preparer, &mut project, CHARACTER, 3.0);
+        let renderer = Renderer::new(&project, RATE, false).unwrap();
+        let preparer = renderer.live_edit_preparer();
+        assert!(edit(&preparer, &mut project, LOOKAHEAD, 5.0));
+    }
+
+    #[test]
+    fn saturator_latency_is_the_same_at_every_quality() {
+        use saturator::*;
+        for quality in 0..3 {
+            let clicks = summed_clicks(builtin(
+                &DESCRIPTOR,
+                &[(QUALITY, quality as f32), (MIX, 0.0)],
+            ));
+            assert_eq!(clicks.len(), 1, "{quality}: {clicks:?}");
+            assert_eq!(clicks[0].0, 1000);
+        }
+        let values = |_: u32| 0.0;
+        assert_eq!((DESCRIPTOR.latency)(&values, 48_000.0), LATENCY);
+        assert_eq!((DESCRIPTOR.latency)(&|_| 1.0, 96_000.0), LATENCY);
+    }
+}

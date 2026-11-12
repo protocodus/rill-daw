@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-compressor",
+  "name": "Drum Bus Glue",
+  "author": "Rill",
+  "category": "Bus",
+  "tags": ["drums"],
+  "description": "Variable-mu cohesion for a drum bus.",
+  "parameters": {
+    "character": "Tube",
+    "threshold": -16.0,
+    "ratio": 2.0,
+    "knee": 12.0,
+    "attack": 30.0,
+    "release": 300.0,
+    "auto_makeup": true
+  }
+}

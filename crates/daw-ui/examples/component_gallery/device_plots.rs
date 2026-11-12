@@ -1,6 +1,7 @@
 use daw_ui::{
-    self as ui, DelayViewData, FrequencyCurve, FrequencyNode, FrequencyPlot, SampleViewData,
-    Spectrum, TransferPlot, tokens,
+    self as ui, DelayViewData, FrequencyCurve, FrequencyNode, FrequencyPlot, HarmonicsView,
+    LevelHistory, ReductionMeter, SampleViewData, Spectrum, TransferAxis, TransferHandle,
+    TransferPlot, tokens,
 };
 
 pub struct State {
@@ -8,7 +9,10 @@ pub struct State {
     spectrum: Vec<f32>,
     nodes: Vec<FrequencyNode<'static>>,
     transfer: Vec<f32>,
-    history: Vec<(f32, f32)>,
+    shaper: Vec<f32>,
+    history: Vec<[f32; 3]>,
+    threshold: f32,
+    hold: f32,
     wave: Vec<f32>,
     frames: Vec<Vec<f32>>,
     peaks: Vec<(f32, f32)>,
@@ -54,12 +58,16 @@ impl Default for State {
                 }
             })
             .collect();
-        let history = (0..120)
+        let shaper = (0..65)
+            .map(|i| (3.0 * (i as f32 / 32.0 - 1.0)).tanh())
+            .collect();
+        // Hits that decay, squeezed 2:1 above −24 dB.
+        let history = (0..240)
             .map(|i| {
-                (
-                    0.2 + 0.6 * ((i as f32 / 9.0).sin().abs()),
-                    8.0 * ((i as f32 / 9.0).sin().abs()),
-                )
+                let level = 0.01 + 0.3 * (-((i % 40) as f32) / 9.0).exp();
+                let over = (20.0 * level.log10() + 24.0).max(0.0);
+                let reduction = over * 0.5;
+                [level, level * 10f32.powf(-reduction / 20.0), reduction]
             })
             .collect();
         let wave = (0..256)
@@ -91,7 +99,10 @@ impl Default for State {
             spectrum,
             nodes,
             transfer,
+            shaper,
             history,
+            threshold: -24.0,
+            hold: 9.0,
             wave,
             frames,
             peaks,
@@ -139,19 +150,84 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
     }
     ui.add_space(tokens::SPACE_MD);
     ui.horizontal(|ui| {
-        ui::transfer_plot(
+        let readout = format!("Threshold {:.1} dB", state.threshold);
+        let output = ui::transfer_plot(
             ui,
             &TransferPlot {
                 curve: &state.transfer,
                 x_range: (-60.0, 0.0),
                 y_range: (-60.0, 0.0),
+                axis: TransferAxis::Decibels,
                 input: Some(-18.0),
-                size: small,
+                shade: Some((-27.0, -21.0)),
+                handle: Some(TransferHandle {
+                    x: state.threshold,
+                    y: state.threshold,
+                    label: "T",
+                    readout: &readout,
+                }),
+                size: egui::vec2(170.0, 170.0),
+                ..Default::default()
             },
         );
-        ui::gain_reduction_history(ui, &state.history, egui::vec2(233.0, 120.0), 24.0);
-        ui::reduction_meter(ui, 6.0, 9.0, 24.0, egui::vec2(13.0, 120.0));
-        ui::scope(ui, &state.wave, true, small);
+        if let Some((x, _)) = output.dragged {
+            state.threshold = x;
+        }
+        if let Some((x, _)) = output.nudged {
+            state.threshold = (state.threshold + x).clamp(-60.0, 0.0);
+        }
+        let output = ui::gain_reduction_history(
+            ui,
+            &LevelHistory {
+                columns: &state.history,
+                floor_db: -60.0,
+                max_reduction_db: 24.0,
+                threshold_db: Some(state.threshold),
+                threshold_label: "Threshold",
+                draggable: true,
+                span_seconds: 8.0,
+                size: egui::vec2(340.0, 170.0),
+            },
+        );
+        if let Some(threshold) = output.threshold {
+            state.threshold = threshold;
+        }
+        let meter = ui::reduction_meter(
+            ui,
+            &ReductionMeter {
+                reduction_db: 6.0,
+                hold_db: state.hold,
+                max_reduction_db: 24.0,
+                size: egui::vec2(48.0, 170.0),
+            },
+        );
+        if meter.clicked() {
+            state.hold = 6.0;
+        }
+    });
+    ui.add_space(tokens::SPACE_MD);
+    ui.horizontal(|ui| {
+        ui::transfer_plot(
+            ui,
+            &TransferPlot {
+                curve: &state.shaper,
+                input: Some(0.4),
+                lit: Some((-0.4, 0.4)),
+                size: egui::vec2(120.0, 120.0),
+                ..Default::default()
+            },
+        );
+        ui::harmonics_view(
+            ui,
+            &HarmonicsView {
+                levels_db: &[
+                    -3.0, -15.0, -9.0, -27.0, -21.0, -39.0, -33.0, -51.0, -63.0, -90.0,
+                ],
+                floor_db: -80.0,
+                size: egui::vec2(335.0, 120.0),
+            },
+        );
+        ui::scope(ui, &state.wave, true, egui::vec2(120.0, 120.0));
     });
     ui.add_space(tokens::SPACE_MD);
     ui.horizontal(|ui| {
@@ -193,13 +269,6 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
                 pre_delay_seconds: 0.02,
                 span_seconds: 1.5,
             },
-            small,
-        );
-        ui::harmonics_view(
-            ui,
-            &[
-                0.0, -12.0, -6.0, -24.0, -18.0, -36.0, -30.0, -48.0, -60.0, -70.0,
-            ],
             small,
         );
     });

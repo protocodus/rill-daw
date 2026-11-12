@@ -167,6 +167,7 @@ impl SongToolHost for DawApp {
     fn apply_edits(&mut self, batch: EditBatch) -> Result<EditResult, ToolError> {
         self.tool_ready()?;
         self.validate_tool_plugin_parameters(&batch)?;
+        self.validate_tool_builtin_inputs(&batch)?;
         let mut candidate = self.project.clone();
         let result = batch
             .apply_with_source_durations(&mut candidate, &|path| {
@@ -766,6 +767,47 @@ impl DawApp {
 }
 
 impl DawApp {
+    /// A built-in insert takes input routes only on its sidechain pair. The
+    /// engine refuses anything else when it builds the graph; a tool gets
+    /// the reason before its edit is applied.
+    fn validate_tool_builtin_inputs(&self, batch: &EditBatch) -> Result<(), ToolError> {
+        for edit in &batch.edits {
+            let SongEdit::SetPluginInputs {
+                track: EntityRef::Id(track),
+                effect: Some(effect),
+                inputs,
+            } = edit
+            else {
+                continue;
+            };
+            let descriptor = self
+                .project
+                .track(*track)
+                .and_then(|track| track.inserts.iter().find(|slot| slot.id == *effect))
+                .and_then(|slot| slot.effect.builtin_device())
+                .and_then(daw_devices::descriptor);
+            let Some(descriptor) = descriptor.filter(|_| !inputs.is_empty()) else {
+                continue;
+            };
+            if !descriptor.sidechain_input {
+                return Err(ToolError::new(
+                    "invalid_arguments",
+                    format!("{} has no sidechain input", descriptor.name),
+                ));
+            }
+            if inputs
+                .iter()
+                .any(|route| route.bus != 1 || route.first_channel != 0)
+            {
+                return Err(ToolError::new(
+                    "invalid_arguments",
+                    "Built-in sidechain is bus 1, channel pair 0",
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// The built-in device assigned as this track's instrument or insert.
     fn tool_device(
         &self,

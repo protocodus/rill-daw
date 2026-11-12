@@ -69,15 +69,17 @@ impl BuiltinDevice {
         self.device.set_parameter(id, value as f32);
     }
 
-    /// Effects: transforms the block in place.
+    /// Effects: transforms the block in place. `sidechain` is the signal
+    /// routed to the device's sidechain input, if any.
     pub(crate) fn process_effect(
         &mut self,
         context: &ProcessContext,
         left: &mut [f32],
         right: &mut [f32],
+        sidechain: Option<(&[f32], &[f32])>,
     ) -> Result<()> {
         self.events.clear();
-        self.run(context, left, right)
+        self.run(context, left, right, sidechain)
     }
 
     /// Instruments: overwrites the block from note and controller events.
@@ -113,7 +115,7 @@ impl BuiltinDevice {
         self.events.sort_by_key(|event| event.offset);
         left.fill(0.0);
         right.fill(0.0);
-        self.run(context, left, right)
+        self.run(context, left, right, None)
     }
 
     fn push(&mut self, offset: u32, kind: EventKind) {
@@ -122,7 +124,13 @@ impl BuiltinDevice {
         }
     }
 
-    fn run(&mut self, context: &ProcessContext, left: &mut [f32], right: &mut [f32]) -> Result<()> {
+    fn run(
+        &mut self,
+        context: &ProcessContext,
+        left: &mut [f32],
+        right: &mut [f32],
+        sidechain: Option<(&[f32], &[f32])>,
+    ) -> Result<()> {
         let processed = catch_unwind(AssertUnwindSafe(|| {
             self.device.process(
                 context,
@@ -130,7 +138,7 @@ impl BuiltinDevice {
                 StereoIo {
                     left: &mut *left,
                     right: &mut *right,
-                    sidechain: None,
+                    sidechain,
                 },
             );
         }));
@@ -153,6 +161,21 @@ impl BuiltinDevice {
             self.device.reset();
         }
         Ok(())
+    }
+}
+
+/// The audio inputs a built-in insert offers to routing: its main input
+/// and, where the device has one, a stereo sidechain as bus 1.
+pub(crate) fn bus_layout(
+    descriptor: &daw_devices::DeviceDescriptor,
+) -> daw_plugins::AudioBusLayout {
+    let stereo = daw_plugins::AudioBusConfig {
+        channel_count: 2,
+        active: true,
+    };
+    daw_plugins::AudioBusLayout {
+        inputs: vec![stereo; if descriptor.sidechain_input { 2 } else { 1 }],
+        outputs: vec![stereo],
     }
 }
 
@@ -261,7 +284,7 @@ mod tests {
         let mut left = vec![0.5; 64];
         let mut right = left.clone();
         let error = device
-            .process_effect(&ProcessContext::default(), &mut left, &mut right)
+            .process_effect(&ProcessContext::default(), &mut left, &mut right, None)
             .unwrap_err();
         assert!(error.to_string().contains("R1 Filter"));
         assert!(left.iter().chain(&right).all(|sample| *sample == 0.0));
@@ -273,7 +296,7 @@ mod tests {
         let mut left = vec![0.5; 64];
         let mut right = left.clone();
         device
-            .process_effect(&ProcessContext::default(), &mut left, &mut right)
+            .process_effect(&ProcessContext::default(), &mut left, &mut right, None)
             .unwrap();
         assert!(left.iter().chain(&right).all(|sample| *sample == 0.0));
     }
@@ -292,7 +315,7 @@ mod tests {
         left[0] = 1.0;
         let mut right = left.clone();
         device
-            .process_effect(&ProcessContext::default(), &mut left, &mut right)
+            .process_effect(&ProcessContext::default(), &mut left, &mut right, None)
             .unwrap();
         // Mix 0 from the saved values: the dry path, delayed by the latency.
         assert!((left[31] - 1.0).abs() < 1e-3);

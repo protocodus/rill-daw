@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "device": "r1-saturator",
+  "name": "Warm Tube",
+  "author": "Rill",
+  "category": "Tube",
+  "tags": ["vocal", "keys"],
+  "description": "Gentle thickening for vocals and keys.",
+  "parameters": {
+    "model": "Tube",
+    "drive": 10.0,
+    "character": 35.0,
+    "tone": -1.0
+  }
+}

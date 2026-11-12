@@ -1,7 +1,7 @@
 //! Per-device layout rules. A device without an entry here gets the generic
 //! layout: one section per parameter group, every control visible.
 use daw_devices::DeviceDescriptor;
-use daw_devices::devices::{equalizer, filter, mini};
+use daw_devices::devices::{compressor, equalizer, filter, mini, saturator};
 use daw_ui::{Glyph, ToggleFace};
 
 pub type Values<'a> = &'a dyn Fn(u32) -> f64;
@@ -95,10 +95,41 @@ pub struct Layout {
     /// Toggles drawn as `daw_ui::toggle_led` with this label instead of a
     /// captioned switch.
     pub leds: &'static [(u32, &'static str)],
-    /// Text for the value line of a control that is not a knob.
+    /// Captions that follow a choice: the caption of the first parameter is
+    /// the entry at the option index of the second, a choice. The cell is as
+    /// wide as the widest entry, so a card never reflows when the caption
+    /// changes; the parameter's own name stays what lanes and tools show.
+    pub mode_captions: &'static [(u32, u32, &'static [&'static str])],
+    /// Text for a control's value line: what stands under a control that is
+    /// not a knob, and what replaces a knob's value where the device uses
+    /// another ("Off" at a minimum, a time a character holds up).
     pub readout: fn(u32, Values<'_>) -> Option<String>,
-    /// The response curve drawn above the controls.
-    pub response: Option<ResponseView>,
+    /// The choice whose value line names what the host routed to the
+    /// device's sidechain input, as a link to the routing.
+    pub sidechain: Option<u32>,
+    /// What is drawn above the controls.
+    pub picture: Option<Picture>,
+}
+
+/// The picture of a device, fed by the same functions as its audio path.
+pub enum Picture {
+    /// A frequency response with draggable nodes.
+    Response(ResponseView),
+    /// A shaper: its curve beside the harmonics it adds.
+    Saturation { height: f32 },
+    /// Dynamics: the static curve, levels and reduction over time, and the
+    /// reduction meter.
+    Dynamics { height: f32 },
+}
+
+impl Layout {
+    #[cfg(test)]
+    pub fn response(&self) -> Option<&ResponseView> {
+        match &self.picture {
+            Some(Picture::Response(view)) => Some(view),
+            _ => None,
+        }
+    }
 }
 
 /// How the options of some choices look as toggle segments.
@@ -220,7 +251,7 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
         layout.visible = |id, values| applies(id, &filter_settings(values));
         layout.options =
             |id, values| (id == TYPE).then(|| type_options(filter_settings(values).model));
-        layout.response = Some(ResponseView {
+        layout.picture = Some(Picture::Response(ResponseView {
             curve: |values, rate, frequencies, out| {
                 let settings = filter_settings(values);
                 // The drawn curve is static; the sounding cutoff also moves with the LFO and envelope.
@@ -241,10 +272,16 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
             height: 160.0,
             range_db: |_| 24.0,
             limit_db: 24.0,
-        });
+        }));
     }
     if descriptor.id == equalizer::DESCRIPTOR.id {
         layout = equalizer_layout(layout);
+    }
+    if descriptor.id == saturator::DESCRIPTOR.id {
+        layout = saturator_layout(layout);
+    }
+    if descriptor.id == compressor::DESCRIPTOR.id {
+        layout = compressor_layout(layout);
     }
     if descriptor.id == mini::DESCRIPTOR.id {
         use mini::*;
@@ -497,7 +534,7 @@ fn equalizer_layout(mut layout: Layout) -> Layout {
         let db = auto_gain_db(&equalizer_settings(values), RESPONSE_RATE);
         Some(spec.format(spec.to_normalized(db)))
     };
-    layout.response = Some(ResponseView {
+    layout.picture = Some(Picture::Response(ResponseView {
         curve: |values, rate, frequencies, out| {
             response_db(&equalizer_settings(values), rate, frequencies, out);
         },
@@ -540,8 +577,144 @@ fn equalizer_layout(mut layout: Layout) -> Layout {
             if beyond { 24.0 } else { 12.0 }
         },
         limit_db: 24.0,
-    });
+    }));
     layout
+}
+
+/// A value printed as another parameter of the device prints its own.
+fn formatted(descriptor: &DeviceDescriptor, like: u32, plain: f32) -> Option<String> {
+    let spec = descriptor.parameter(like)?;
+    Some(spec.format(spec.to_normalized(plain)))
+}
+
+fn saturator_layout(mut layout: Layout) -> Layout {
+    use saturator::*;
+    // The curve and what it adds on top; below, in the order of the signal:
+    // the model and how hard it is hit, what colours it, then the cost
+    // setting and the output. The wide panel: at the narrow width two rows
+    // of cards leave the picture 110 points.
+    layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
+    layout.sections = vec![
+        section(
+            "Saturation",
+            0,
+            6,
+            &[&[MODEL, DRIVE, CHARACTER, TONE, FOCUS]],
+        ),
+        section("Quality", 0, 2, &[&[QUALITY]]),
+        section("Output", 0, 4, &[&[AUTO_GAIN, MIX, OUTPUT]]),
+    ];
+    layout.hero = Some(DRIVE);
+    layout.leds = &[(AUTO_GAIN, "Auto gain")];
+    // What Character does in each model.
+    layout.mode_captions = &[(CHARACTER, MODEL, &["Hardness", "Bias", "Compress"])];
+    layout.readout = |id, values| match id {
+        FOCUS if values(FOCUS) <= 0.0 => Some("Off".into()),
+        // What Auto gain applies, printed like Output beside it; nothing
+        // while it is off.
+        AUTO_GAIN if values(AUTO_GAIN) >= 0.5 => formatted(
+            &DESCRIPTOR,
+            OUTPUT,
+            auto_gain_db(&saturator_settings(values)),
+        ),
+        _ => None,
+    };
+    layout.picture = Some(Picture::Saturation { height: 233.0 });
+    layout
+}
+
+fn compressor_layout(mut layout: Layout) -> Layout {
+    use Slot::Control as C;
+    use compressor::*;
+    // One row of four cards on a grid of twelve cells, read as the signal
+    // and the convention go: the style; threshold, ratio and knee over the
+    // timing; the detector's own path, kept small; makeup and output last.
+    layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
+    layout.cells = true;
+    layout.sections = vec![
+        cells("Mode", 0, 4, &[&[C(MODE, 4)], &[C(CHARACTER, 4)]]),
+        cells(
+            "Dynamics",
+            0,
+            4,
+            &[
+                &[C(THRESHOLD, 1), C(RATIO, 1), C(KNEE, 1), C(CEILING, 1)],
+                &[
+                    C(ATTACK, 1),
+                    C(RELEASE, 1),
+                    C(AUTO_RELEASE, 1),
+                    C(LOOKAHEAD, 1),
+                ],
+            ],
+        ),
+        cells(
+            "Sidechain",
+            0,
+            2,
+            &[
+                &[C(SIDECHAIN, 2)],
+                &[C(SIDECHAIN_HIGH_PASS, 1), C(STEREO_LINK, 1)],
+            ],
+        ),
+        cells(
+            "Output",
+            0,
+            2,
+            &[
+                &[C(MAKEUP, 1), C(AUTO_MAKEUP, 1)],
+                &[C(MIX, 1), C(OUTPUT, 1)],
+            ],
+        ),
+    ];
+    layout.toggle_columns = &[(SIDECHAIN, 1)];
+    layout.leds = &[(AUTO_RELEASE, "Auto"), (AUTO_MAKEUP, "Auto")];
+    // The card names the sidechain already.
+    layout.captions = &[(SIDECHAIN_HIGH_PASS, "High-pass"), (STEREO_LINK, "Link")];
+    // In front of a limiter the same value is the gain that drives it.
+    layout.mode_captions = &[(MAKEUP, MODE, &["Makeup", "Gain", "Makeup"])];
+    layout.visible = |id, values| applies(id, &compressor_settings(values));
+    // Hiding Ratio, Ceiling or Lookahead would reflow the cards on every
+    // change of Mode.
+    layout.keep_inactive = true;
+    layout.readout = |id, values| {
+        let settings = compressor_settings(values);
+        let effective = effective(&settings);
+        let limiter = settings.mode == Mode::Limiter;
+        match id {
+            RATIO if limiter => Some("∞:1".into()),
+            // A character that holds a value up shows what it uses.
+            ATTACK if !limiter && effective.attack_ms != settings.attack_ms => {
+                formatted(&DESCRIPTOR, ATTACK, effective.attack_ms)
+            }
+            KNEE if effective.curve.knee_db != settings.knee_db => {
+                formatted(&DESCRIPTOR, KNEE, effective.curve.knee_db)
+            }
+            RELEASE if !applies(RELEASE, &settings) => Some("Auto".into()),
+            LOOKAHEAD if settings.lookahead_ms <= 0.0 => Some(if limiter {
+                formatted(&DESCRIPTOR, LOOKAHEAD, effective.lookahead_ms)?
+            } else {
+                "Off".into()
+            }),
+            SIDECHAIN_HIGH_PASS if !settings.high_pass_on => Some("Off".into()),
+            // What Auto makeup applies, printed like Makeup beside it;
+            // nothing while it is off.
+            AUTO_MAKEUP if settings.auto_makeup && applies(AUTO_MAKEUP, &settings) => {
+                formatted(&DESCRIPTOR, MAKEUP, auto_makeup_db(&settings))
+            }
+            _ => None,
+        }
+    };
+    layout.sidechain = Some(SIDECHAIN);
+    layout.picture = Some(Picture::Dynamics { height: 208.0 });
+    layout
+}
+
+pub fn saturator_settings(values: Values<'_>) -> saturator::Settings {
+    saturator::Settings::from_normalized(|id| values(id) as f32)
+}
+
+pub fn compressor_settings(values: Values<'_>) -> compressor::Settings {
+    compressor::Settings::from_normalized(|id| values(id) as f32)
 }
 
 fn equalizer_settings(values: Values<'_>) -> equalizer::Settings {
@@ -588,7 +761,9 @@ fn generic(descriptor: &DeviceDescriptor) -> Layout {
         options: |_, _| None,
         faces: &[],
         leds: &[],
+        mode_captions: &[],
         readout: |_, _| None,
-        response: None,
+        sidechain: None,
+        picture: None,
     }
 }

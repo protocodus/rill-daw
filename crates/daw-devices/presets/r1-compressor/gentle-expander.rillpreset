@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device": "r1-compressor",
+  "name": "Gentle Expander",
+  "author": "Rill",
+  "category": "Gate",
+  "tags": ["noise"],
+  "description": "Pushes the noise floor down without gating.",
+  "parameters": {
+    "mode": "Expander",
+    "threshold": -40.0,
+    "ratio": 2.0,
+    "knee": 12.0,
+    "attack": 5.0,
+    "release": 250.0
+  }
+}

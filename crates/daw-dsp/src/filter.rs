@@ -4,8 +4,8 @@
 //! every model is delayed to the same [`FilterKernel::LATENCY`], so models and
 //! dry paths line up whatever is selected.
 use super::{
-    Complex, DelayLine, Ladder, Oversampler2x, SallenKey, Svf, SvfOutputs, db_to_gain, prewarp,
-    tanh_fast,
+    Complex, DelayLine, Ladder, Oversampler2x, SallenKey, StaticDelay, Svf, SvfOutputs, db_to_gain,
+    prewarp, tanh_fast,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -216,32 +216,7 @@ fn pick(out: SvfOutputs, filter_type: FilterType, band_gain: f32) -> f32 {
 
 /// Delays a signal by [`FilterKernel::LATENCY`]; for a dry path beside a
 /// kernel.
-#[derive(Clone, Debug)]
-pub struct LatencyDelay {
-    buffer: [f32; Oversampler2x::LATENCY as usize],
-    cursor: usize,
-}
-
-impl Default for LatencyDelay {
-    fn default() -> Self {
-        Self {
-            buffer: [0.0; Oversampler2x::LATENCY as usize],
-            cursor: 0,
-        }
-    }
-}
-
-impl LatencyDelay {
-    #[inline]
-    pub fn process(&mut self, input: f32) -> f32 {
-        let output = std::mem::replace(&mut self.buffer[self.cursor], input);
-        self.cursor += 1;
-        if self.cursor == self.buffer.len() {
-            self.cursor = 0;
-        }
-        output
-    }
-}
+pub type LatencyDelay = StaticDelay<{ Oversampler2x::LATENCY as usize }>;
 
 /// One channel of filtering, every model.
 #[derive(Clone, Debug, Default)]

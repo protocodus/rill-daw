@@ -142,6 +142,8 @@ struct PanelHost<'a> {
     /// `Some(None)` releases the panel keyboard's note.
     audition: Option<Option<(u8, f32)>>,
     wheels: Option<(f32, f32)>,
+    /// The panel asked for the routing of its sidechain input.
+    route: bool,
 }
 
 impl PanelHost<'_> {
@@ -219,6 +221,27 @@ impl daw_devices_ui::DeviceHost for PanelHost<'_> {
             .engine
             .as_ref()?
             .device_telemetry(self.target.track, self.target.effect)
+    }
+    fn sidechain_sources(&self) -> Option<Vec<String>> {
+        if !self.descriptor.sidechain_input {
+            return None;
+        }
+        let project = &self.app.project;
+        let slot = project
+            .track(self.target.track)?
+            .inserts
+            .iter()
+            .find(|slot| Some(slot.id) == self.target.effect)?;
+        Some(
+            slot.inputs
+                .iter()
+                .filter_map(|route| project.track(route.source_track))
+                .map(|source| source.name.clone())
+                .collect(),
+        )
+    }
+    fn route_sidechain(&mut self) {
+        self.route = true;
     }
 }
 
@@ -1138,6 +1161,7 @@ impl DawApp {
         let mut automate = None;
         let mut resume = None;
         let mut device_requests = None;
+        let mut route_sidechain = false;
         // Panel keyboard note and wheels, applied after drawing.
         let mut panel_note: Option<Option<(u8, f32)>> = None;
         let mut panel_wheels: Option<(f32, f32)> = None;
@@ -1373,6 +1397,7 @@ impl DawApp {
                                 saved: None,
                                 audition: None,
                                 wheels: None,
+                                route: false,
                             };
                             daw_devices_ui::show(ui, descriptor, &mut host, &mut panel);
                             if let Some(note) = host.audition {
@@ -1383,6 +1408,7 @@ impl DawApp {
                             panel_wheels = Some(
                                 host.wheels.unwrap_or((panel.pitch_wheel, panel.mod_wheel)),
                             );
+                            route_sidechain = host.route;
                             device_requests =
                                 Some((host.updates, host.batch, host.navigation, host.saved));
                             self.instrument_ui.device_panel = panel;
@@ -1592,6 +1618,15 @@ impl DawApp {
         }
         if let Some((updates, batch, navigation, saved)) = device_requests {
             self.apply_device_panel(target, updates, batch, navigation, saved);
+        }
+        if route_sidechain {
+            self.open_plugin_io(
+                ctx,
+                crate::plugin_io::IoTarget {
+                    track: target.track,
+                    effect: target.effect,
+                },
+            );
         }
         if target.effect.is_none() {
             if let Some(note) = panel_note {
@@ -2087,6 +2122,16 @@ impl DawApp {
         }
         self.flush_pending_edit();
         let before = self.project.clone();
+        let latency = |app: &Self| {
+            let rate = app.engine.as_ref()?.sample_rate();
+            let (_, parameters) = app.editor_state(target)?;
+            Some(daw_engine::builtin_latency(
+                instrument.builtin_device(),
+                parameters,
+                rate,
+            ))
+        };
+        let latency_before = latency(self);
         let mut automation_changed = false;
         for &(id, value) in updates {
             if !value.is_finite() || !(0.0..=1.0).contains(&value) {
@@ -2151,7 +2196,11 @@ impl DawApp {
             self.song_session.bump();
             self.modified = true;
             self.revision = self.revision.wrapping_add(1);
-            if automation_changed {
+            if latency(self) != latency_before {
+                // The live queue already took the value, so the engine's own
+                // compatibility check would see nothing to rebuild for.
+                self.rebuild();
+            } else if automation_changed {
                 // Native editor gestures use grouped history rather than
                 // changed(); publish their lane takeover through the same live
                 // project path so automation cannot reclaim the value.

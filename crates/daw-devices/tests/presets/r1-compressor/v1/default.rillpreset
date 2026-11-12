@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "device": "r1-compressor",
+  "name": "Default",
+  "author": "Rill",
+  "category": "Basic",
+  "description": "A clean 4:1 compressor to start from.",
+  "parameters": {}
+}

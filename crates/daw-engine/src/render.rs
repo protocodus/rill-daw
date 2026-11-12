@@ -1337,10 +1337,19 @@ impl RenderTrack {
                         beat: position as f64 * beats_per_sample,
                         playing: context.timeline,
                     };
+                    for input in inputs.iter_mut() {
+                        input.prepare(count);
+                    }
+                    // A built-in has one sidechain pair; every route to it
+                    // is already summed there.
+                    let sidechain = inputs
+                        .first()
+                        .map(|input| (&input.left[..count], &input.right[..count]));
                     device.process_effect(
                         &transport,
                         &mut self.left[..count],
                         &mut self.right[..count],
+                        sidechain,
                     )?;
                 }
                 InsertProcessor::Vst(effect) => {
@@ -1948,14 +1957,19 @@ impl Renderer {
                         }
                     }
                     Effect::Builtin { device } => {
-                        ensure!(
-                            slot.inputs.is_empty(),
-                            "Built-in insert {} on {} has no auxiliary inputs",
-                            slot.name,
-                            track.name
-                        );
                         // An ID this version does not know passes audio
                         // through; the app shows it as an unknown device.
+                        let Some(descriptor) = daw_devices::descriptor(device) else {
+                            continue;
+                        };
+                        let inputs = aux_inputs(
+                            &slot.inputs,
+                            &crate::builtin::bus_layout(descriptor),
+                            Some(0),
+                        )
+                        .with_context(|| {
+                            format!("Routing inputs of insert {} on {}", slot.name, track.name)
+                        })?;
                         let Some(device) = crate::builtin::BuiltinDevice::create(
                             device,
                             sample_rate,
@@ -1972,7 +1986,7 @@ impl Renderer {
                             id: slot.id,
                             effect: InsertProcessor::Builtin(Box::new(device)),
                             parameters,
-                            inputs: Vec::new(),
+                            inputs,
                             arrival_latency: 0,
                             main_delay: CompensationDelay::new(0),
                         }

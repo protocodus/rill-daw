@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device": "r1-compressor",
+  "name": "Vocal Leveler",
+  "author": "Rill",
+  "category": "Vocal",
+  "tags": ["vocal"],
+  "description": "Smooth, forgiving leveling.",
+  "parameters": {
+    "character": "Opto",
+    "threshold": -22.0,
+    "ratio": 3.0,
+    "attack": 10.0,
+    "release": 80.0,
+    "auto_makeup": true
+  }
+}

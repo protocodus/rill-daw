@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-compressor",
+  "name": "Noise Gate",
+  "author": "Rill",
+  "category": "Gate",
+  "tags": ["gate"],
+  "description": "Closes on silence and opens ahead of the hit.",
+  "parameters": {
+    "mode": "Expander",
+    "threshold": -45.0,
+    "ratio": 10.0,
+    "knee": 3.0,
+    "attack": 0.5,
+    "release": 150.0,
+    "lookahead": 2.0
+  }
+}

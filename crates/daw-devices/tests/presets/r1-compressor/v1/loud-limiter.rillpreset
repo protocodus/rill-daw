@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device": "r1-compressor",
+  "name": "Loud Limiter",
+  "author": "Rill",
+  "category": "Limiter",
+  "tags": ["master", "loud"],
+  "description": "6 dB into the ceiling.",
+  "parameters": {
+    "mode": "Limiter",
+    "makeup": 6.0,
+    "ceiling": -1.0,
+    "knee": 3.0,
+    "auto_release": true,
+    "lookahead": 5.0
+  }
+}

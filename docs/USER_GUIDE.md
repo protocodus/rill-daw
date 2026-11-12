@@ -6,7 +6,7 @@ A reference for composing, recording, editing, mixing, and saving in Rill.
 
 ## First session
 
-The initial session contains an original generated audio loop. Rill includes a built-in synth, **R1 Mini**, and the **R1 Filter** and **R1 Equalizer** effects. A new MIDI track starts with R1 Mini, so its notes are audible at once; choose a plug-in instrument to replace it. Use **File → New** to start empty. Press **Space** to play or pause.
+The initial session contains an original generated audio loop. Rill includes a built-in synth, **R1 Mini**, and the **R1 Filter**, **R1 Equalizer**, **R1 Saturator** and **R1 Compressor** effects. A new MIDI track starts with R1 Mini, so its notes are audible at once; choose a plug-in instrument to replace it. Use **File → New** to start empty. Press **Space** to play or pause.
 
 An empty song offers three starting points: **Choose instrument…** opens your
 installed sounds, **Import audio or MIDI…** brings in a recording or sequence,
@@ -452,7 +452,8 @@ For an extra input pair, choose **Add source…**, its level and **Pre volume**
 when needed. Pre volume taps follow the source's inserts but precede volume/pan;
 otherwise the tap follows volume/pan. Several sources can sum into one pair.
 This connects sidechains and audio-input instruments; a processor must actually
-support that input. Feedback-producing choices are excluded. Ordinary insert
+support that input. The built-in R1 Compressor has one, named **Sidechain**;
+it is listed without **Inspect I/O**. Feedback-producing choices are excluded. Ordinary insert
 input stays connected to its channel.
 
 Use **Enable output…** or **Enable all output channels** for an instrument.
@@ -575,6 +576,18 @@ Adjust an automated control to override its curve. **Overridden** and coral-red 
 For an instrument, open **Window → Instrument**, choose **Open editor**, and adjust a native plug-in control. **Automate last touched** creates its parameter track. In the native editor, right-click a control and choose **Automate in Rill**, or choose **Automate** and then either click the control in the plug-in editor or search for it by name in the list that opens. **Parameters…** lists a plug-in's parameters for editing, with **Automate parameter** per entry. Plug-in effects offer the same from their insert chain. Built-in devices such as R1 Mini need no list: right-click a control on the panel. Discovery and native editors run in separate helper processes. Mixer controls render sample-accurately; plug-in automation (VST3, CLAP, LV2, AU) is evaluated once per 256-frame block. Automation lanes do not extend song duration.
 
 **R1 Equalizer** has a high-pass, four bands and a low-pass. Add it from **Window → Effects → + Insert** under **Built-in (R1)**. In the plot, drag a band's node to set its frequency and gain (hold Shift for fine steps), turn the wheel over it for Q or the slope, double-click it to switch the band on or off, and right-click it for its type or **Reset band**. The table below holds the same values per band: the lamp switches a band on, the shapes choose bell, low shelf, high shelf or notch, and each value is a small dial you can drag, double-click to reset, or click to type. The spectrum behind the curve shows the track before or after the equalizer (**Analyzer**) while it plays. **Mode** chooses the exact Digital curves or the broader, slightly coloured Analog ones, and **Auto gain** offsets the level change of the bands so a comparison with bypass is fair.
+
+**R1 Saturator** adds harmonics and drive. Choose a **Model**: Transistor is an edgy clipper, Tube a warmer curve whose second harmonic you set, Tape a soft stage that also compresses. **Drive** is how hard the signal meets the curve; the next knob is named for what it does in the chosen model (**Hardness**, **Bias** or **Compress**). **Tone** tilts the result darker or brighter, and **Focus** keeps everything below its frequency clean, so bass stays solid under heavy drive. The picture shows the curve, lit where the signal reaches it while the song plays, and the harmonics it adds at that level. **Auto gain** takes back the loudness Drive adds, so you compare colour and not level; the number under it is what it applies. **Quality** trades processor time for cleaner highs and never changes the timing of the track. **Mix** blends the untouched signal back in.
+
+**R1 Compressor** evens out levels, limits peaks or closes gaps, by **Mode**:
+
+- **Compressor** turns down what is louder than **Threshold** by **Ratio**; **Knee** rounds the corner. **Attack** is how fast it reacts and **Release** how fast it lets go; **Auto** release adapts to the material. **Character** chooses how it behaves: Digital is exact and can look ahead, Tube is slow and smooth, Opto lets go fast at first and then slowly, FET grabs fastest and adds edge. **Makeup** restores loudness; **Auto** adds a fixed amount for the set curve, shown beside it.
+- **Limiter** lets nothing pass the **Ceiling**. Makeup becomes **Gain**, the level that drives it. It looks ahead 5 ms unless you set **Lookahead**; the track's timing is compensated. The ceiling holds with **Mix** at 100 % and **Output** at or below 0 dB.
+- **Expander** turns down what is quieter than Threshold; with a high Ratio it is a gate. Attack opens it and Release closes it.
+
+The picture shows the curve with its threshold as a handle (**T**, or **C** for the ceiling): drag it, or the line in the history beside it, to set the level; turn the wheel over the handle for Ratio; double-click it to reset. The history shows the last eight seconds of input and output with the gain reduction hanging from the top, and the meter at the right holds the largest reduction until you click it. Controls that do nothing in the current mode stay in place, dimmed.
+
+To duck a track under another (a pad under a kick), add R1 Compressor to the track to be ducked and set **Sidechain** to **External** (the **Sidechain Duck** preset does). **No source** appears under it: click it to open **Routing** on the compressor, choose **Add source…** under **Sidechain** and pick the kick's track. The compressor now reacts to the kick instead of its own input, and the source's name stands under **External**. **High-pass** keeps bass out of the detector, and **Link** sets how far the two stereo sides are turned down together.
 
 ## Plug-in instruments and effects
 

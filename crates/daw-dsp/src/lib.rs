@@ -7,10 +7,12 @@
 mod biquad;
 mod complex;
 mod delay;
+mod dynamics;
 mod envelope;
 pub mod filter;
 mod follower;
 mod lfo;
+mod limiter;
 pub mod matched;
 mod nonlinear;
 pub mod oscillator;
@@ -23,20 +25,25 @@ mod svf;
 
 pub use biquad::Biquad;
 pub use complex::Complex;
-pub use delay::DelayLine;
+pub use delay::{DelayLine, StaticDelay};
+pub use dynamics::{Ballistics, CurveKind, GainComputer, ProgramRelease};
 pub use envelope::{Adsr, Stage};
 pub use filter::{FilterKernel, FilterModel, FilterShape, FilterType, LatencyDelay};
 pub use follower::EnvelopeFollower;
 pub use lfo::{Lfo, LfoShape};
+pub use limiter::{BoxSmoother, SlidingMax, TruePeak4x};
 pub use matched::{BUTTERWORTH_Q, Fit, MatchedDesigner, Prototype};
 pub use nonlinear::{Ladder, SallenKey, tanh_fast};
 pub use oscillator::{Drift, Oscillator, OscillatorModel, SubOscillator, Waveform};
-pub use oversample::Oversampler2x;
+pub use oversample::{HalfBand, OversampleFactor, Oversampler, Oversampler2x};
 pub use random::Random;
 pub use real::Real;
-pub use shaper::{Adaa1, BoundedCubic, Shape};
+pub use shaper::{
+    Adaa1, AdaaCentered, AlgebraicSigmoid, AntialiasedShaper, BoundedCubic, BoundedSquare,
+    DroopCorrector, HyperbolicClip, Shape,
+};
 pub use smooth::{LinearRamp, Smoothed};
-pub use svf::{OnePole, Svf, SvfMix, SvfMixRamp, SvfOutputs};
+pub use svf::{OnePole, Shelf1, Svf, SvfMix, SvfMixRamp, SvfOutputs};
 
 /// Below this, filter states are flushed to zero so decays never reach
 /// denormal numbers.

@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "device": "r1-compressor",
+  "name": "Master Bus",
+  "author": "Rill",
+  "category": "Bus",
+  "tags": ["master"],
+  "description": "Transparent 1–2 dB over a mix.",
+  "parameters": {
+    "threshold": -12.0,
+    "ratio": 1.5,
+    "knee": 12.0,
+    "attack": 30.0,
+    "auto_release": true
+  }
+}

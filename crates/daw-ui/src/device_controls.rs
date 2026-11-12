@@ -643,6 +643,37 @@ pub fn toggle_led(ui: &mut Ui, value: &mut bool, label: &str) -> Response {
     response
 }
 
+/// One line of text on a control's value line that opens something: the
+/// name of what is routed to a device, or a note that nothing is. As tall as
+/// the value text it stands for, cut with an ellipsis at `max_width`.
+/// `attention` draws it in the warning color: something the user should
+/// look at.
+pub fn value_link(ui: &mut Ui, text: &str, attention: bool, max_width: f32) -> Response {
+    let colors = theme::palette(ui.ctx());
+    let color = if attention {
+        colors.warning
+    } else {
+        colors.action
+    };
+    let mut job =
+        egui::text::LayoutJob::simple_singleline(text.to_owned(), TextRole::Note.font(), color);
+    job.wrap = egui::text::TextWrapping::truncate_at_width(max_width);
+    let galley = ui.fonts_mut(|fonts| fonts.layout_job(job));
+    let (rect, response) = ui.allocate_exact_size(galley.size(), Sense::click());
+    let response = response.on_hover_cursor(egui::CursorIcon::PointingHand);
+    if ui.is_rect_visible(rect) {
+        ui.painter().galley(rect.min, galley, color);
+        if response.hovered() || response.has_focus() {
+            ui.painter().line_segment(
+                [rect.left_bottom(), rect.right_bottom()],
+                Stroke::new(1.0_f32, color),
+            );
+        }
+    }
+    response.widget_info(|| WidgetInfo::labeled(WidgetType::Link, ui.is_enabled(), text));
+    response
+}
+
 /// Per-axis outcome of an [`xy_pad`] frame.
 pub struct XyPadOutput {
     pub response: Response,
