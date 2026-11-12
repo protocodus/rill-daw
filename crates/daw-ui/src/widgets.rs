@@ -967,7 +967,7 @@ pub fn toggle_group<T: Copy + PartialEq>(
     current: &mut T,
     options: &[(T, &str)],
 ) -> Response {
-    toggle_track(ui, current, options, None)
+    toggle_track(ui, current, &text_faces(options), TrackLayout::Row)
 }
 
 /// Height of one option of a [`toggle_group_vertical`].
@@ -992,37 +992,161 @@ pub fn toggle_grid<T: Copy + PartialEq>(
     options: &[(T, &str)],
     columns: usize,
 ) -> Response {
-    toggle_track(ui, current, options, Some(columns.max(1)))
+    toggle_track(
+        ui,
+        current,
+        &text_faces(options),
+        TrackLayout::Grid(columns.max(1)),
+    )
+}
+
+/// A small curve that names a toggle option faster than a word: filter
+/// responses and waveforms.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Glyph {
+    Bell,
+    LowShelf,
+    HighShelf,
+    Notch,
+    LowPass,
+    HighPass,
+    BandPass,
+    Sine,
+    Triangle,
+    Saw,
+    Square,
+    SampleHold,
+}
+
+impl Glyph {
+    /// The curve in a unit box: x from 0 to 1, y from −1 (bottom) to 1.
+    fn points(self) -> Vec<(f32, f32)> {
+        let sampled = |curve: &dyn Fn(f32) -> f32| {
+            (0..=16)
+                .map(|step| {
+                    let x = step as f32 / 16.0;
+                    (x, curve(x))
+                })
+                .collect()
+        };
+        let bump = |x: f32, width: f32| (-((x - 0.5) / width).powi(2)).exp();
+        let fall = |x: f32| {
+            if x <= 0.5 {
+                0.5
+            } else {
+                0.5 - 1.3 * ((x - 0.5) / 0.5).powf(1.5)
+            }
+        };
+        match self {
+            Self::Bell => sampled(&|x| -0.6 + 1.4 * bump(x, 0.17)),
+            Self::Notch => sampled(&|x| 0.6 - 1.4 * bump(x, 0.12)),
+            Self::LowShelf => sampled(&|x| -0.6 * ((x - 0.5) * 6.0).tanh()),
+            Self::HighShelf => sampled(&|x| 0.6 * ((x - 0.5) * 6.0).tanh()),
+            Self::LowPass => sampled(&fall),
+            Self::HighPass => sampled(&|x| fall(1.0 - x)),
+            Self::BandPass => sampled(&|x| 0.6 - 1.4 * (2.0 * x - 1.0).powi(2)),
+            Self::Sine => sampled(&|x| 0.75 * (std::f32::consts::TAU * x).sin()),
+            Self::Triangle => vec![(0.0, 0.0), (0.25, 0.75), (0.75, -0.75), (1.0, 0.0)],
+            Self::Saw => vec![(0.0, -0.7), (0.5, 0.7), (0.5, -0.7), (1.0, 0.7)],
+            Self::Square => vec![
+                (0.0, -0.7),
+                (0.0, 0.7),
+                (0.5, 0.7),
+                (0.5, -0.7),
+                (1.0, -0.7),
+                (1.0, 0.7),
+            ],
+            Self::SampleHold => vec![
+                (0.0, 0.2),
+                (0.25, 0.2),
+                (0.25, -0.6),
+                (0.5, -0.6),
+                (0.5, 0.7),
+                (0.75, 0.7),
+                (0.75, -0.1),
+                (1.0, -0.1),
+            ],
+        }
+    }
+}
+
+const GLYPH_SIZE: egui::Vec2 = egui::vec2(13.0, 11.0);
+
+/// What one option of a [`glyph_toggle`] shows.
+#[derive(Clone, Copy, Debug)]
+pub enum ToggleFace<'a> {
+    Glyph(Glyph),
+    Text(&'a str),
+}
+
+/// A [`toggle_group`] of equal segments `segment_width` wide whose faces
+/// are [`Glyph`]s or short texts ("12", "2×"), each with the name that
+/// hover and assistive technology read. For a choice that must fit a narrow
+/// column, where words would not.
+pub fn glyph_toggle<T: Copy + PartialEq>(
+    ui: &mut Ui,
+    current: &mut T,
+    options: &[(T, ToggleFace<'_>, &str)],
+    segment_width: f32,
+) -> Response {
+    toggle_track(
+        ui,
+        current,
+        options,
+        TrackLayout::Fixed(segment_width.max(tokens::HIT_TARGET)),
+    )
+}
+
+fn text_faces<'a, T: Copy>(options: &[(T, &'a str)]) -> Vec<(T, ToggleFace<'a>, &'a str)> {
+    options
+        .iter()
+        .map(|(value, label)| (*value, ToggleFace::Text(label), *label))
+        .collect()
+}
+
+enum TrackLayout {
+    /// One row, each option as wide as its label.
+    Row,
+    /// Rows of this many equal columns.
+    Grid(usize),
+    /// One row of segments this wide.
+    Fixed(f32),
 }
 
 fn toggle_track<T: Copy + PartialEq>(
     ui: &mut Ui,
     current: &mut T,
-    options: &[(T, &str)],
-    // `None`: one row, each option as wide as its label.
-    columns: Option<usize>,
+    options: &[(T, ToggleFace<'_>, &str)],
+    layout: TrackLayout,
 ) -> Response {
     let colors = theme::palette(ui.ctx());
     let font = egui::TextStyle::Button.resolve(ui.style());
     let padding = ui.spacing().button_padding.x;
     let galleys: Vec<_> = options
         .iter()
-        .map(|(_, label)| {
-            ui.painter().layout_no_wrap(
+        .map(|(_, face, _)| match face {
+            ToggleFace::Text(label) => Some(ui.painter().layout_no_wrap(
                 (*label).to_owned(),
                 font.clone(),
                 egui::Color32::PLACEHOLDER,
-            )
+            )),
+            ToggleFace::Glyph(_) => None,
         })
         .collect();
-    let widths = galleys.iter().map(|galley| galley.size().x + 2.0 * padding);
-    let widest = widths.clone().fold(0.0, f32::max);
-    let size = match columns {
-        Some(columns) => egui::vec2(
+    let widths: Vec<f32> = galleys
+        .iter()
+        .map(|galley| galley.as_ref().map_or(GLYPH_SIZE.x, |g| g.size().x) + 2.0 * padding)
+        .collect();
+    let widest = widths.iter().copied().fold(0.0, f32::max);
+    let size = match layout {
+        TrackLayout::Grid(columns) => egui::vec2(
             widest * columns as f32,
             TOGGLE_ROW_HEIGHT * options.len().div_ceil(columns) as f32,
         ),
-        None => egui::vec2(widths.sum(), tokens::CONTROL_HEIGHT),
+        TrackLayout::Row => egui::vec2(widths.iter().sum(), tokens::CONTROL_HEIGHT),
+        TrackLayout::Fixed(width) => {
+            egui::vec2(width * options.len() as f32, tokens::CONTROL_HEIGHT)
+        }
     };
     let (rect, mut response) = ui.allocate_exact_size(size, egui::Sense::hover());
     if ui.is_rect_visible(rect) {
@@ -1037,9 +1161,11 @@ fn toggle_track<T: Copy + PartialEq>(
     }
     let mut changed = false;
     let mut next = rect.min;
-    for (index, ((value, label), galley)) in options.iter().zip(galleys).enumerate() {
-        let segment = match columns {
-            Some(columns) => egui::Rect::from_min_size(
+    for (index, (((value, face, name), galley), width)) in
+        options.iter().zip(galleys).zip(widths).enumerate()
+    {
+        let segment = match layout {
+            TrackLayout::Grid(columns) => egui::Rect::from_min_size(
                 rect.min
                     + egui::vec2(
                         widest * (index % columns) as f32,
@@ -1047,13 +1173,13 @@ fn toggle_track<T: Copy + PartialEq>(
                     ),
                 egui::vec2(widest, TOGGLE_ROW_HEIGHT),
             ),
-            None => egui::Rect::from_min_size(
-                next,
-                egui::vec2(galley.size().x + 2.0 * padding, rect.height()),
-            ),
+            TrackLayout::Row => egui::Rect::from_min_size(next, egui::vec2(width, rect.height())),
+            TrackLayout::Fixed(width) => {
+                egui::Rect::from_min_size(next, egui::vec2(width, rect.height()))
+            }
         };
         next = segment.right_top();
-        let button = ui.interact(segment, response.id.with(index), egui::Sense::click());
+        let mut button = ui.interact(segment, response.id.with(index), egui::Sense::click());
         if button.clicked() && current != value {
             *current = *value;
             changed = true;
@@ -1064,9 +1190,13 @@ fn toggle_track<T: Copy + PartialEq>(
                 egui::WidgetType::RadioButton,
                 ui.is_enabled(),
                 selected,
-                *label,
+                *name,
             )
         });
+        if !matches!(face, ToggleFace::Text(text) if text == name) {
+            // The face abbreviates; hover says it in full.
+            button = crate::hover_text(button, *name);
+        }
         if ui.is_rect_visible(segment) {
             let thumb = segment.shrink(2.0);
             if selected {
@@ -1091,8 +1221,28 @@ fn toggle_track<T: Copy + PartialEq>(
             } else {
                 colors.muted
             };
-            let text = segment.center() - galley.size() * 0.5;
-            ui.painter().galley(text, galley, color);
+            match (face, galley) {
+                (ToggleFace::Glyph(glyph), _) => {
+                    let area = egui::Rect::from_center_size(segment.center(), GLYPH_SIZE);
+                    let points = glyph
+                        .points()
+                        .into_iter()
+                        .map(|(x, y)| {
+                            egui::pos2(
+                                area.left() + area.width() * x,
+                                area.center().y - area.height() * 0.5 * y,
+                            )
+                        })
+                        .collect();
+                    ui.painter()
+                        .add(egui::Shape::line(points, egui::Stroke::new(1.5_f32, color)));
+                }
+                (ToggleFace::Text(_), Some(galley)) => {
+                    let text = segment.center() - galley.size() * 0.5;
+                    ui.painter().galley(text, galley, color);
+                }
+                (ToggleFace::Text(_), None) => {}
+            }
         }
         response |= button;
     }

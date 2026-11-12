@@ -6,7 +6,7 @@ use daw_ui::{
 pub struct State {
     response: Vec<f32>,
     spectrum: Vec<f32>,
-    nodes: Vec<FrequencyNode>,
+    nodes: Vec<FrequencyNode<'static>>,
     transfer: Vec<f32>,
     history: Vec<(f32, f32)>,
     wave: Vec<f32>,
@@ -27,17 +27,22 @@ impl Default for State {
         let spectrum = (0..2049)
             .map(|bin| -20.0 - 40.0 * (bin as f32 / 2049.0).sqrt() - (bin % 7) as f32)
             .collect();
-        let node = |frequency, gain_db, selected, gain_editable| FrequencyNode {
-            frequency,
-            gain_db,
-            selected,
-            color: None,
-            gain_editable,
-        };
         let nodes = vec![
-            node(80.0, 0.0, false, false),
-            node(1000.0, 6.0, true, true),
-            node(9000.0, -2.0, false, true),
+            FrequencyNode {
+                gain_editable: false,
+                label: Some("HP"),
+                readout: Some("80 Hz  24 dB/oct"),
+                ..FrequencyNode::new(80.0, 0.0)
+            },
+            FrequencyNode {
+                selected: true,
+                readout: Some("1.00 kHz  +6.0 dB  Q 1.00"),
+                ..FrequencyNode::new(1000.0, 6.0)
+            },
+            FrequencyNode {
+                enabled: false,
+                ..FrequencyNode::new(9000.0, -2.0)
+            },
         ];
         let transfer = (0..65)
             .map(|i| {
@@ -110,11 +115,13 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
                 emphasis: true,
             }],
             spectrum: Some(Spectrum {
-                bins_db: &state.spectrum,
-                sample_rate: 48_000.0,
+                tilt_db_per_octave: 4.5,
+                smoothing_octaves: 1.0 / 6.0,
+                ..Spectrum::new(&state.spectrum, 48_000.0)
             }),
             nodes: &state.nodes,
             range_db: 18.0,
+            limit_db: 18.0,
             size: egui::vec2(610.0, 170.0),
         },
     );
@@ -126,6 +133,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
         for (i, node) in state.nodes.iter_mut().enumerate() {
             node.selected = i == index;
         }
+    }
+    if let Some(index) = output.double_clicked {
+        state.nodes[index].enabled = !state.nodes[index].enabled;
     }
     ui.add_space(tokens::SPACE_MD);
     ui.horizontal(|ui| {
@@ -148,14 +158,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
         let frames: Vec<&[f32]> = state.frames.iter().map(Vec::as_slice).collect();
         ui::wavetable_view(ui, &frames, 0.4, small);
         ui::lfo_view(ui, &state.wave[..128], Some(0.3), small);
-        ui::spectrum(
-            ui,
-            Spectrum {
-                bins_db: &state.spectrum,
-                sample_rate: 48_000.0,
-            },
-            small,
-        );
+        ui::spectrum(ui, Spectrum::new(&state.spectrum, 48_000.0), small);
     });
     ui.add_space(tokens::SPACE_MD);
     ui.horizontal(|ui| {

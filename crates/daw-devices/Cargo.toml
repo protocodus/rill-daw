@@ -8,5 +8,6 @@ description = "Rill's built-in instruments and effects: parameters, registry and
 
 [dependencies]
 daw-dsp.workspace = true
+rustfft = "=6.4.1"
 serde.workspace = true
 serde_json.workspace = true

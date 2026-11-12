@@ -14,6 +14,12 @@ pub struct State {
     slot: ModSlot,
     pitch: f32,
     modulation: f32,
+    /// Frequency (Hz), gain (dB) and Q of three table columns.
+    bands: [[f64; 3]; 3],
+    band_types: [ui::Glyph; 3],
+    slope: u32,
+    shape: ui::Glyph,
+    selected_band: usize,
 }
 
 impl Default for State {
@@ -36,6 +42,11 @@ impl Default for State {
             },
             pitch: 0.0,
             modulation: 0.3,
+            bands: [[100.0, 0.0, 0.71], [1200.0, 3.5, 1.4], [8000.0, -6.0, 0.71]],
+            band_types: [ui::Glyph::LowShelf, ui::Glyph::Bell, ui::Glyph::HighShelf],
+            slope: 24,
+            shape: ui::Glyph::Sine,
+            selected_band: 1,
         }
     }
 }
@@ -143,4 +154,160 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
         &[(1, "LFO 1"), (2, "Env 2")],
         &[(1, "Pitch"), (2, "Cutoff")],
     );
+    ui.add_space(tokens::SPACE_LG);
+    ui::text::note(
+        ui,
+        "inline_knob · glyph_toggle · column_highlight: a table of like values with a selected column",
+    );
+    ui.add_space(tokens::SPACE_SM);
+    band_table(ui, state);
+    ui.add_space(tokens::SPACE_MD);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = tokens::SPACE_LG;
+        let text = |label| ui::ToggleFace::Text(label);
+        ui::glyph_toggle(
+            ui,
+            &mut state.slope,
+            &[
+                (12, text("12"), "12 dB/oct"),
+                (24, text("24"), "24 dB/oct"),
+                (48, text("48"), "48 dB/oct"),
+            ],
+            28.0,
+        );
+        let wave = |glyph, name| (glyph, ui::ToggleFace::Glyph(glyph), name);
+        ui::glyph_toggle(
+            ui,
+            &mut state.shape,
+            &[
+                wave(ui::Glyph::Sine, "Sine"),
+                wave(ui::Glyph::Triangle, "Triangle"),
+                wave(ui::Glyph::Saw, "Saw"),
+                wave(ui::Glyph::Square, "Square"),
+                wave(ui::Glyph::SampleHold, "Sample and hold"),
+            ],
+            28.0,
+        );
+        let mut filter = ui::Glyph::LowPass;
+        ui::glyph_toggle(
+            ui,
+            &mut filter,
+            &[
+                wave(ui::Glyph::LowPass, "Low-pass"),
+                wave(ui::Glyph::BandPass, "Band-pass"),
+                wave(ui::Glyph::HighPass, "High-pass"),
+            ],
+            28.0,
+        );
+        ui.add_enabled_ui(false, |ui| {
+            let mut level = 0.3;
+            ui.add(ui::inline_knob("Level", &mut level, 0.0..=1.0, "30 %"));
+        });
+        let mut send = 0.6;
+        ui.add(
+            ui::inline_knob("Send", &mut send, 0.0..=1.0, "60 %")
+                .automation(Some(ui::AutomationState::Read)),
+        );
+    });
+}
+
+/// Three columns of frequency, gain and Q under a type selector, the middle
+/// one selected: how a device lays out a table of bands.
+fn band_table(ui: &mut egui::Ui, state: &mut State) {
+    const COLUMN: f32 = 89.0;
+    const CAPTION: f32 = 48.0;
+    let origin = ui.cursor().min;
+    let height = 4.0 * tokens::CONTROL_HEIGHT + 3.0 * ui.spacing().item_spacing.y;
+    ui::column_highlight(
+        ui,
+        egui::Rect::from_min_size(
+            origin + egui::vec2(CAPTION + COLUMN * state.selected_band as f32, 0.0),
+            egui::vec2(COLUMN, height),
+        )
+        .expand2(egui::vec2(0.0, tokens::SPACE_XS)),
+    );
+    let line = |ui: &mut egui::Ui, caption: &str, cell: &mut dyn FnMut(&mut egui::Ui, usize)| {
+        let (row, _) = ui.allocate_exact_size(
+            egui::vec2(CAPTION + COLUMN * 3.0, tokens::CONTROL_HEIGHT),
+            egui::Sense::hover(),
+        );
+        ui.painter().text(
+            row.left_center(),
+            egui::Align2::LEFT_CENTER,
+            caption,
+            ui::control_caption_font(),
+            ui::theme::palette(ui.ctx()).text,
+        );
+        for band in 0..3 {
+            let center = egui::pos2(
+                row.left() + CAPTION + COLUMN * (band as f32 + 0.5),
+                row.center().y,
+            );
+            let mut child = ui.new_child(
+                egui::UiBuilder::new()
+                    .id_salt((caption, band))
+                    .max_rect(egui::Rect::from_center_size(
+                        center,
+                        egui::vec2(COLUMN, ui::MINI_KNOB_DIAMETER),
+                    ))
+                    .layout(egui::Layout::top_down(egui::Align::Center)),
+            );
+            cell(&mut child, band);
+        }
+    };
+    let types = [
+        (ui::Glyph::Bell, "Bell"),
+        (ui::Glyph::LowShelf, "Low shelf"),
+        (ui::Glyph::HighShelf, "High shelf"),
+        (ui::Glyph::Notch, "Notch"),
+    ]
+    .map(|(glyph, name)| (glyph, ui::ToggleFace::Glyph(glyph), name));
+    let mut selected = state.selected_band;
+    line(ui, "", &mut |ui, band| {
+        if ui::glyph_toggle(ui, &mut state.band_types[band], &types, 21.0).clicked() {
+            selected = band;
+        }
+    });
+    let width = COLUMN - tokens::SPACE_SM;
+    line(ui, "Freq", &mut |ui, band| {
+        let hz = state.bands[band][0];
+        let text = if hz >= 1000.0 {
+            format!("{:.2} kHz", hz / 1000.0)
+        } else {
+            format!("{hz:.0} Hz")
+        };
+        let knob = ui::inline_knob(
+            "Frequency",
+            &mut state.bands[band][0],
+            20.0..=20_000.0,
+            text,
+        )
+        .taper(Taper::Log)
+        .default_value(1000.0)
+        .width(width);
+        if ui.add(knob).clicked() {
+            selected = band;
+        }
+    });
+    line(ui, "Gain", &mut |ui, band| {
+        let text = format!("{:+.1} dB", state.bands[band][1]);
+        let knob = ui::inline_knob("Gain", &mut state.bands[band][1], -24.0..=24.0, text)
+            .bipolar()
+            .default_value(0.0)
+            .width(width);
+        if ui.add(knob).clicked() {
+            selected = band;
+        }
+    });
+    line(ui, "Q", &mut |ui, band| {
+        let text = format!("{:.2}", state.bands[band][2]);
+        let knob = ui::inline_knob("Q", &mut state.bands[band][2], 0.1..=18.0, text)
+            .taper(Taper::Log)
+            .default_value(1.0)
+            .width(width);
+        if ui.add(knob).clicked() {
+            selected = band;
+        }
+    });
+    state.selected_band = selected;
 }

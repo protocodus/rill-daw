@@ -2,6 +2,7 @@
 //! pure response functions its panel draws.
 use crate::{ParamRange, ParamSpec};
 
+pub mod equalizer;
 pub mod filter;
 pub mod mini;
 

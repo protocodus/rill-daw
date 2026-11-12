@@ -1,7 +1,8 @@
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering::Relaxed};
 
-/// Frames kept for scopes and spectra.
-pub const TELEMETRY_FRAMES: usize = 4096;
+/// Frames kept for scopes and spectra: a third of a second at 48 kHz, so a
+/// spectrum resolves 6 Hz and still has a dozen bins below 100 Hz.
+pub const TELEMETRY_FRAMES: usize = 16_384;
 /// Device-defined live values (effective cutoff, gain reduction, LFO phase…).
 /// Each device documents which index means what.
 pub const TELEMETRY_VALUES: usize = 8;
@@ -71,6 +72,17 @@ impl Telemetry {
     pub fn read_output(&self, out: &mut [f32]) {
         self.output.read(out);
     }
+
+    /// Where the next input frame goes in its ring. It moves with every
+    /// recorded block, so a reader can tell a ring that is being written
+    /// from one that holds what last played.
+    pub fn input_position(&self) -> usize {
+        self.input.cursor.load(Relaxed)
+    }
+
+    pub fn output_position(&self) -> usize {
+        self.output.cursor.load(Relaxed)
+    }
 }
 
 struct Ring {
@@ -117,12 +129,14 @@ mod tests {
     #[test]
     fn ring_reads_latest_frames_in_order() {
         let telemetry = Telemetry::default();
-        let block: Vec<f32> = (0..5000).map(|index| index as f32).collect();
+        let block: Vec<f32> = (0..20_000).map(|index| index as f32).collect();
         telemetry.record_output(&block, &block);
         let mut out = [0.0; 3];
         telemetry.read_output(&mut out);
-        assert_eq!(out, [4997.0, 4998.0, 4999.0]);
-        assert_eq!(telemetry.output_peak(), 4999.0);
+        assert_eq!(out, [19_997.0, 19_998.0, 19_999.0]);
+        assert_eq!(telemetry.output_peak(), 19_999.0);
+        assert_eq!(telemetry.output_position(), 20_000 % TELEMETRY_FRAMES);
+        assert_eq!(telemetry.input_position(), 0);
         telemetry.set_value(0, 440.0);
         assert_eq!(telemetry.value(0), 440.0);
         assert_eq!(telemetry.value(99), 0.0);

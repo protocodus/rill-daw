@@ -116,6 +116,7 @@ pub struct Knob<'a> {
     perceptual_gain: bool,
     pointer: bool,
     mini: bool,
+    hit_width: Option<f32>,
     display_round_trip: Option<Box<dyn Fn(f64) -> f64 + 'a>>,
     bipolar: bool,
     log: bool,
@@ -154,6 +155,7 @@ impl<'a> Knob<'a> {
             perceptual_gain: false,
             pointer: false,
             mini: false,
+            hit_width: None,
             display_round_trip: None,
             bipolar: false,
             log: false,
@@ -164,7 +166,8 @@ impl<'a> Knob<'a> {
         }
     }
 
-    /// The value arc grows from the center (zero when the range contains it).
+    /// The value arc grows from zero where the range crosses it, otherwise
+    /// from the center.
     pub fn bipolar(mut self) -> Self {
         self.bipolar = true;
         self
@@ -264,6 +267,13 @@ impl<'a> Knob<'a> {
         self.diameter = MINI_KNOB_DIAMETER;
         self
     }
+    /// A [`Self::mini`] arc at the left of a hit target `width` wide, so a
+    /// value printed beside the arc drags it too. See `inline_knob`.
+    pub fn inline(mut self, width: f32) -> Self {
+        self = self.mini();
+        self.hit_width = Some(width.max(self.diameter));
+        self
+    }
     pub fn min_decimals(mut self, decimals: usize) -> Self {
         self.min_decimals = decimals.min(16);
         self
@@ -312,7 +322,8 @@ impl<'a> Knob<'a> {
     fn origin(&self) -> f32 {
         if !self.bipolar {
             0.0
-        } else if self.range.contains(&0.0) {
+        } else if *self.range.start() < 0.0 && 0.0 < *self.range.end() {
+            // Zero at an end is a normalized range: its center is the origin.
             self.normalized(0.0)
         } else {
             0.5
@@ -375,7 +386,7 @@ impl<'a> Knob<'a> {
             self.diameter
         };
         let (target, mut response) = ui.allocate_exact_size(
-            egui::vec2(self.diameter, height),
+            egui::vec2(self.hit_width.unwrap_or(self.diameter), height),
             egui::Sense::click_and_drag(),
         );
         let dial = Rect::from_min_size(target.min, Vec2::splat(self.diameter));
@@ -912,7 +923,7 @@ impl<'a> Knob<'a> {
 impl Widget for Knob<'_> {
     fn ui(mut self, ui: &mut Ui) -> Response {
         let width = if self.compact {
-            self.diameter
+            self.hit_width.unwrap_or(self.diameter)
         } else {
             let current = (self.value)(None);
             let number = self.formatter.as_ref().map_or_else(
@@ -969,5 +980,20 @@ impl Widget for Knob<'_> {
             |ui| self.add_contents(ui, width),
         );
         response.inner.union(response.response)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Knob;
+
+    #[test]
+    fn bipolar_arc_starts_at_zero_inside_the_range_or_at_the_center() {
+        let origin = |range| Knob::new(&mut 0.0, range).bipolar().origin();
+        assert_eq!(origin(-24.0..=24.0), 0.5);
+        assert_eq!(origin(-10.0..=30.0), 0.25);
+        // A normalized range, as device panels use.
+        assert_eq!(origin(0.0..=1.0), 0.5);
+        assert_eq!(Knob::new(&mut 0.0, 0.0..=1.0).origin(), 0.0);
     }
 }

@@ -59,3 +59,33 @@ r1-mini 82 voice.glide "Glide" log 1 2000
 r1-mini 83 voice.bend "Bend" integer 0 24
 r1-mini 84 voice.drift "Drift" linear 0 100
 r1-mini 85 voice.volume "Volume" linear -36 6
+r1-equalizer 1 hp.on "On" toggle
+r1-equalizer 2 hp.frequency "Frequency" log 20 2000
+r1-equalizer 3 hp.slope "Slope" choice 12 dB|24 dB|48 dB
+r1-equalizer 10 band1.on "On" toggle
+r1-equalizer 11 band1.type "Type" choice Bell|Low shelf|High shelf|Notch
+r1-equalizer 12 band1.frequency "Frequency" log 20 20000
+r1-equalizer 13 band1.gain "Gain" linear -24 24
+r1-equalizer 14 band1.q "Q" log 0.1 18
+r1-equalizer 20 band2.on "On" toggle
+r1-equalizer 21 band2.type "Type" choice Bell|Low shelf|High shelf|Notch
+r1-equalizer 22 band2.frequency "Frequency" log 20 20000
+r1-equalizer 23 band2.gain "Gain" linear -24 24
+r1-equalizer 24 band2.q "Q" log 0.1 18
+r1-equalizer 30 band3.on "On" toggle
+r1-equalizer 31 band3.type "Type" choice Bell|Low shelf|High shelf|Notch
+r1-equalizer 32 band3.frequency "Frequency" log 20 20000
+r1-equalizer 33 band3.gain "Gain" linear -24 24
+r1-equalizer 34 band3.q "Q" log 0.1 18
+r1-equalizer 40 band4.on "On" toggle
+r1-equalizer 41 band4.type "Type" choice Bell|Low shelf|High shelf|Notch
+r1-equalizer 42 band4.frequency "Frequency" log 20 20000
+r1-equalizer 43 band4.gain "Gain" linear -24 24
+r1-equalizer 44 band4.q "Q" log 0.1 18
+r1-equalizer 50 lp.on "On" toggle
+r1-equalizer 51 lp.frequency "Frequency" log 200 20000
+r1-equalizer 52 lp.slope "Slope" choice 12 dB|24 dB|48 dB
+r1-equalizer 60 mode "Mode" choice Digital|Analog
+r1-equalizer 61 auto_gain "Auto gain" toggle
+r1-equalizer 62 analyzer "Analyzer" choice Off|Input|Output
+r1-equalizer 63 output "Output" linear -24 24

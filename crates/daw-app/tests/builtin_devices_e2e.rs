@@ -1,4 +1,4 @@
-//! Rill's built-in R1 Filter through the running app: the Library catalog,
+//! Rill's built-in effects through the running app: the Library catalog,
 //! tools in plain units, presets, the device panel and right-click automation.
 mod common;
 
@@ -43,9 +43,8 @@ fn label_center(state: &Value, label: &str) -> (f64, f64) {
     )
 }
 
-#[test]
-fn r1_filter_shapes_audio_loads_presets_and_automates_from_its_panel() {
-    let mut app = Harness::new();
+/// Opens a project with one audio track playing a second of white noise.
+fn noise_project(app: &mut Harness, file: &str) -> u64 {
     // Deterministic white noise: energy in every band.
     let mut seed = 0x2545_f491_u32;
     let samples = (0..48_000)
@@ -75,9 +74,16 @@ fn r1_filter_shapes_audio_loads_presets_and_automates_from_its_panel() {
         2.0,
         source.to_string_lossy(),
     ));
-    let path = app.directory.path().join("filter.rill");
+    let path = app.directory.path().join(file);
     project.save(&path).unwrap();
     app.command(json!({"command":"open","path":path}));
+    track
+}
+
+#[test]
+fn r1_filter_shapes_audio_loads_presets_and_automates_from_its_panel() {
+    let mut app = Harness::new();
+    let track = noise_project(&mut app, "filter.rill");
     let dry = high_band_db(&mut app);
 
     // The Library catalog lists the device beside hosted plug-ins.
@@ -259,6 +265,165 @@ fn r1_filter_shapes_audio_loads_presets_and_automates_from_its_panel() {
     app.quit();
 }
 
+fn band_db(app: &mut Harness, band: &str) -> f64 {
+    let analysis = song_tool(
+        app,
+        "audio_analyze",
+        json!({"start_beat":0.0,"end_beat":2.0}),
+    );
+    analysis["tool_result"]["result"]["band_rms_estimates_dbfs"][band]
+        .as_f64()
+        .unwrap()
+}
+
+#[test]
+fn r1_equalizer_shapes_audio_loads_presets_and_edits_from_its_plot() {
+    let mut app = Harness::new();
+    let track = noise_project(&mut app, "equalizer.rill");
+    let dry = (band_db(&mut app, "below_250_hz"), high_band_db(&mut app));
+
+    let listed = song_tool(&mut app, "list_plugins", json!({"query":"R1 Equalizer"}));
+    let plugin = &listed["tool_result"]["result"]["plugins"][0];
+    assert_eq!(plugin["id"], "rill:r1-equalizer", "{listed}");
+    assert_eq!(plugin["format"], "Built-in");
+    assert_eq!(plugin["is_instrument"], false);
+    let (id, revision) = session(&listed);
+    let assigned = song_tool(
+        &mut app,
+        "assign_plugin",
+        json!({"session_id":id,"expected_revision":revision,"track_id":track,
+            "plugin_id":"rill:r1-equalizer","insert":true}),
+    );
+    let insert = assigned["tool_result"]["result"]["insert_id"].clone();
+    assert_eq!(
+        assigned["project"]["tracks"][0]["inserts"][0]["effect"],
+        json!({"Builtin":{"device":"r1-equalizer"}})
+    );
+    // The default is flat: inserting it changes nothing audible.
+    let flat = (band_db(&mut app, "below_250_hz"), high_band_db(&mut app));
+    assert!(
+        (flat.0 - dry.0).abs() < 0.2 && (flat.1 - dry.1).abs() < 0.2,
+        "dry {dry:?}, flat {flat:?}"
+    );
+
+    // Tools speak decibels, hertz and option names.
+    let (id, revision) = session(&assigned);
+    let set = song_tool(
+        &mut app,
+        "set_device_parameters",
+        json!({"session_id":id,"expected_revision":revision,"track_id":track,"insert_id":insert,
+            "parameters":[
+                {"parameter":"band1.type","value":"low shelf"},
+                {"parameter":"band1.frequency","value":"200 Hz"},
+                {"parameter":"band1.gain","value":12},
+                {"parameter":"lp.on","value":true},
+                {"parameter":"lp.frequency","value":"1 kHz"},
+                {"parameter":"lp.slope","value":"48 dB"}]}),
+    );
+    let stored = &set["tool_result"]["result"]["parameters"];
+    assert_eq!(stored[0]["value"], "Low shelf");
+    assert!((stored[2]["value"].as_f64().unwrap() - 12.0).abs() < 0.01);
+    let shaped = (band_db(&mut app, "below_250_hz"), high_band_db(&mut app));
+    assert!(
+        shaped.0 > flat.0 + 6.0,
+        "lows {} dB to {} dB",
+        flat.0,
+        shaped.0
+    );
+    assert!(
+        shaped.1 < flat.1 - 20.0,
+        "highs {} dB to {} dB",
+        flat.1,
+        shaped.1
+    );
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], assigned["project"]);
+
+    let (id, revision) = session(&undone);
+    let loaded = song_tool(
+        &mut app,
+        "load_device_preset",
+        json!({"name":"telephone","track_id":track,"insert_id":insert,
+            "session_id":id,"expected_revision":revision}),
+    );
+    assert_eq!(loaded["tool_result"]["result"]["skipped"], json!([]));
+    assert_eq!(loaded["history"]["undo"][0], "Device preset");
+    let telephone = (band_db(&mut app, "below_250_hz"), high_band_db(&mut app));
+    assert!(
+        telephone.0 < flat.0 - 1.0 && telephone.1 < flat.1 - 8.0,
+        "flat {flat:?}, telephone {telephone:?}"
+    );
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], assigned["project"]);
+
+    // The panel: dragging band 3's node in the plot sets its frequency and
+    // gain together, in one Undo step.
+    app.command(json!({"command":"viewport","width":1280,"height":1000,"pixels_per_point":1.0}));
+    app.click("Noise burst");
+    app.click("Window");
+    app.click("Effects");
+    app.click("Open editor");
+    common::wait_visible(&mut app, "Freq");
+    let before = app.inspect();
+    let window = &before["window_rects"][0];
+    let inside = |rect: &Value| {
+        (0..2).all(|axis| {
+            rect["min"][axis].as_f64() >= window["min"][axis].as_f64()
+                && rect["max"][axis].as_f64() <= window["max"][axis].as_f64()
+        })
+    };
+    // The plot sits above the table, whose columns carry the same numbers.
+    let marker = before["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry["text"] == "3" && inside(entry))
+        .min_by(|a, b| {
+            a["min"][1]
+                .as_f64()
+                .unwrap()
+                .total_cmp(&b["min"][1].as_f64().unwrap())
+        })
+        .unwrap_or_else(|| panic!("No band 3 node: {}", before["label_rects"]));
+    // The node's number sits 10 points above its center.
+    let node_x = (marker["min"][0].as_f64().unwrap() + marker["max"][0].as_f64().unwrap()) * 0.5;
+    let node_y = marker["max"][1].as_f64().unwrap() + 10.0;
+    let moved = app.command(json!({"command":"pointer","phase":"drag",
+        "x":node_x,"y":node_y,"to_x":node_x + 65.0,"to_y":node_y - 40.0}));
+    let value = |state: &Value, id: u64| {
+        state["project"]["tracks"][0]["inserts"][0]["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|parameter| parameter["id"] == id)
+            .map_or(0.5, |parameter| parameter["value"].as_f64().unwrap())
+    };
+    assert!(
+        value(&moved, 32) > value(&before, 32),
+        "{}",
+        moved["project"]
+    );
+    assert!(value(&moved, 33) > 0.5, "{}", moved["project"]);
+    assert_eq!(moved["history"]["undo"][0], "Effect parameter");
+    // One Undo takes back both values of the drag, one Redo returns them.
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], before["project"]);
+    let redone = app.command(json!({"command":"key","key":"Z","cmd":true,"shift":true}));
+    assert_eq!(redone["project"], moved["project"]);
+    assert!(high_band_db(&mut app) > flat.1 + 1.0);
+
+    // Save and reopen: the boost comes back as stored.
+    let path = app.directory.path().join("equalized.rill");
+    app.command(json!({"command":"save","path":path}));
+    let reopened = app.command(json!({"command":"open","path":path}));
+    assert_eq!(
+        reopened["project"]["tracks"][0]["inserts"],
+        moved["project"]["tracks"][0]["inserts"]
+    );
+    assert!(high_band_db(&mut app) > flat.1 + 1.0);
+    app.quit();
+}
+
 fn select_card(app: &mut Harness, name: &str) -> Value {
     common::wait_library_device(app, name);
     let state = app.inspect();
@@ -347,7 +512,10 @@ fn builtin_devices_show_metadata_and_preview_in_the_device_browser() {
     app.click("Window");
     app.click("Effects");
     let inserts = app.click("+ Insert");
-    assert_eq!(inserts["library"]["order"], json!(["R1 Filter"]));
+    assert_eq!(
+        inserts["library"]["order"],
+        json!(["R1 Equalizer", "R1 Filter"])
+    );
     builtin_details(&mut app, "R1 Filter", "rill:r1-filter", false);
     app.quit();
 }

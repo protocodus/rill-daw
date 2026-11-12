@@ -156,6 +156,7 @@ Rill ships its own instruments and effects, so a new song makes sound before any
 | --- | --- |
 | ![R1 Mini panel](artifacts/readme-r1-mini.png) **R1 Mini** · instrument | A two-oscillator subtractive synth and the default instrument of new MIDI tracks. Circuit-modelled VCO and DCO oscillators, a sub and noise source, a choice of five analog filter circuits, two envelopes, an LFO, and poly, mono and legato voicing. Play it from the panel keyboard with pitch and mod wheels. |
 | ![R1 Filter panel](artifacts/readme-r1-filter.png) **R1 Filter** · effect | A filter for inserts and sends. Pick the transparent Clean model or one of eight characters (transistor ladder, Sallen-Key, two OTA designs, diode pair, state variable, comb and vowel), then move it with the built-in LFO and envelope follower. |
+| ![R1 Equalizer panel](artifacts/readme-r1-equalizer.png) **R1 Equalizer** · effect | A six-band equalizer: high-pass, four bands (bell, low shelf, high shelf or notch) and low-pass, with slopes up to 48 dB per octave. Drag the bands in the plot over a live spectrum of the track, or set them in the table below. Digital mode is exact and neutral; Analog adds proportional-Q bells, passive-style shelves and a trace of colour. Auto gain keeps the level steady while you compare. |
 
 The full design, including the devices still to come, is in [R1 built-in devices](docs/R1_DEVICES.md).
 

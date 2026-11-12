@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "device": "r1-equalizer",
+  "name": "Air Shelf",
+  "author": "Rill",
+  "category": "Mix",
+  "tags": ["air", "analog"],
+  "description": "Broad top-end lift at matched loudness.",
+  "parameters": {
+    "mode": "Analog",
+    "band1.type": "Low shelf",
+    "band1.frequency": 60.0,
+    "band1.gain": 1.5,
+    "band4.type": "High shelf",
+    "band4.frequency": 12000.0,
+    "band4.gain": 3.0,
+    "band4.q": 0.6,
+    "auto_gain": true
+  }
+}

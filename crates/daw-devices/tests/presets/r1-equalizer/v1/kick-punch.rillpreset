@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "device": "r1-equalizer",
+  "name": "Kick Punch",
+  "author": "Rill",
+  "category": "Drums",
+  "tags": ["kick", "drums"],
+  "description": "Weight, less cardboard and more beater click.",
+  "parameters": {
+    "hp.on": true,
+    "hp.frequency": 30.0,
+    "hp.slope": "24 dB",
+    "band1.type": "Bell",
+    "band1.frequency": 60.0,
+    "band1.gain": 4.0,
+    "band1.q": 1.2,
+    "band2.type": "Bell",
+    "band2.frequency": 350.0,
+    "band2.gain": -5.0,
+    "band2.q": 1.4,
+    "band3.type": "Bell",
+    "band3.frequency": 4000.0,
+    "band3.gain": 3.5,
+    "band3.q": 1.5,
+    "band4.on": false,
+    "lp.on": true,
+    "lp.frequency": 14000.0,
+    "lp.slope": "12 dB"
+  }
+}

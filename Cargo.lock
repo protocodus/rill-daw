@@ -1066,6 +1066,7 @@ name = "daw-devices"
 version = "0.1.0"
 dependencies = [
  "daw-dsp",
+ "rustfft",
  "serde",
  "serde_json",
 ]

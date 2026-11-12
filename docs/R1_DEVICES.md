@@ -1,10 +1,10 @@
 # R1 built-in devices: design draft
 
 Status: **design approved on 2026-11-10. Steps 2 and 4 of the
-[implementation order](#implementation-order) are in place:** the device
-foundation, model/engine/app/tools integration, R1 Filter, and R1 Mini as the
-default instrument of new MIDI tracks. The other devices are not implemented
-yet. This document proposes the
+[implementation order](#implementation-order) and the Equalizer of step 3
+are in place:** the device foundation, model/engine/app/tools integration,
+R1 Filter, R1 Equalizer, and R1 Mini as the default instrument of new MIDI
+tracks. The other devices are not implemented yet. This document proposes the
 architecture, the shared UI additions and the per-device specifications for
 Rill's first built-in instruments and effects. Implementation follows in
 separate changes. The review answers are recorded in
@@ -156,7 +156,7 @@ pub fn create(id: &str) -> Option<Box<dyn Device>>;
   it from its existing decoded-source cache; devices never read files.
 - `Telemetry` is the lock-free path from the audio instance to its panel:
   atomics for scalars (gain reduction, input/output peak, effective cutoff,
-  LFO phase, up to 32 voice playheads) and a fixed 4,096-frame ring of the
+  LFO phase, up to 32 voice playheads) and a fixed 16,384-frame ring of the
   device's output (and input, for effects) for scope and spectrum. A torn read
   costs one odd frame in a drawing and is accepted. The FFT for the spectrum
   runs on the UI side.
@@ -364,18 +364,34 @@ A panel talks to its owner only through this trait:
 // daw-devices-ui
 pub trait DeviceHost {
     fn value(&self, id: u32) -> f64;                    // normalized
-    fn begin_edit(&mut self, id: u32);                  // one gesture = one Undo step
-    fn set_value(&mut self, id: u32, normalized: f64);
-    fn end_edit(&mut self, id: u32);
-    fn automation(&self, id: u32) -> Option<AutomationState>;
-    fn telemetry(&self) -> Option<&Telemetry>;
-    fn sample(&self, slot: u32) -> Option<SampleView<'_>>;   // name, peaks for drawing
-    fn request_sample(&mut self, slot: u32);            // host opens its chooser
+    fn set_value(&mut self, id: u32, normalized: f64);  // one gesture on one control
+    fn set_values(&mut self, values: &[(u32, f64)]);    // several parameters at once
+    fn automation(&self, id: u32) -> Option<(u64, AutomationState)>;
+    fn navigate(&mut self, action: AutomationNavigation);
+    fn user_presets(&self) -> Vec<Preset>;
+    fn save_preset(&mut self, preset: Preset);
     fn audition(&mut self, note: Option<(u8, f32)>);
+    fn wheels(&mut self, pitch: f32, modulation: f32);
+    fn telemetry(&self) -> Option<Arc<Telemetry>> { None }
 }
 
 pub fn show(ui: &mut egui::Ui, device: &DeviceDescriptor, host: &mut dyn DeviceHost, state: &mut PanelState);
 ```
+
+Consecutive `set_value` calls for one parameter form one Undo step.
+`set_values` with every parameter (a preset, **Reset**) is one named step;
+with fewer it is one gesture on those controls, and consecutive calls with
+the same IDs form one step, so a node dragged across a response moves its
+frequency and gain together and one Undo takes both back.
+
+`telemetry` is the sounding instance's block: values the device publishes
+(the Equalizer its sample rate, the Filter its modulated cutoff) and rings
+of its input and output signal. The render worker registers each built-in
+device's block under its track and slot when a graph is built or edited, and
+`AudioEngine::device_telemetry` hands it to the app; the panel computes
+spectra from the rings on the UI thread, so the audio thread only copies
+samples. Without a sounding instance a panel draws from the parameter values
+alone.
 
 The app implements it over the session service. The gallery and the UI tests
 implement it over a plain value table, so every panel can be rendered and
@@ -434,7 +450,13 @@ and a new device has little to decide:
    line up from row to row and the panel reads as a 2D front panel. Rows and cards are separated by
    the same gutter. A card may plan its controls on several lines; lines with
    as many controls share table columns, and leftover width goes evenly to
-   the columns. Every line of a row has one center line for its knobs,
+   the columns. A card may instead be a **table** (R1 Equalizer's bands):
+   a narrow caption column, then equal columns of one object each, with a
+   lamp heading every column, a `glyph_toggle` under it and one
+   `inline_knob` per line, so six bands of up to five controls fit two
+   thirds of the wide panel and read across as well as down; a table shares
+   its row with ordinary cards. A cell that does not apply stays
+   empty or disabled in place. Every line of a row has one center line for its knobs,
    choices and switches and one baseline for their values, so neighbouring
    cards line up. A panel with many controls (R1 Mini) is a **cell grid**
    instead, as on hardware: a card as many columns wide holds that many
@@ -466,7 +488,7 @@ to place the visualization and order the sections well, not to restyle.
 
 | Component | Shows | Data it takes |
 | --- | --- | --- |
-| `frequency_plot` | Log-frequency magnitude graph: one or more response curves, optional spectrum backdrop, optional draggable band nodes. | Curves as `&[f32]` dB values over a shared log grid; nodes as `(freq, gain, selected, color)`. Returns node drags. Used by Equalizer, Filter, Mini, Maxi, Sampler, Modulator. |
+| `frequency_plot` | Log-frequency magnitude graph: one or more response curves, optional spectrum backdrop, optional draggable band nodes. | Curves as `&[f32]` dB values over a shared log grid; nodes with frequency, gain, name, selected, enabled and a hover readout. Returns node drags, double-clicks, wheel steps and each node's response. Used by Equalizer, Filter, Mini, Maxi, Sampler, Modulator. |
 | `transfer_plot` | Input→output curve with a live operating point. | Curve samples and the current input level. Compressor (dB/dB) and Saturator (linear). |
 | `gain_reduction_history` | Scrolling input envelope with the gain-reduction trace over it. | Ring of `(input_peak, reduction_db)` columns. |
 | `reduction_meter` | Vertical gain-reduction bar reading downward. | One value plus hold; reuses `channel_meter` styling. |
@@ -491,7 +513,7 @@ The `daw-dsp` crate, used by all devices and unit-tested on its own. `daw_dsp::f
 | --- | --- |
 | Parameter smoothing | Linear ramp (gains, mixes) and one-pole (times); filter coefficients interpolated per sample. |
 | Oversampling | 2×/4×/8× polyphase half-band FIR, linear phase, latency reported to the engine. Used around every nonlinearity. |
-| Linear filters | Zero-delay-feedback (TPT) state-variable filter as the default; biquads with matched magnitude at Nyquist (Vicanek's matched design) so bells and shelves near 10–20 kHz are not cramped at 44.1/48 kHz. |
+| Linear filters | Zero-delay-feedback (TPT) state-variable filter as the default; biquads with matched magnitude at Nyquist (Vicanek's matched design) so bells and shelves near 10–20 kHz are not cramped at 44.1/48 kHz. `daw_dsp::matched` designs them (impulse-invariant poles, numerator fitted to the analog magnitude up to 20 kHz) and `SvfMix::from_biquad` runs any of them as a state-variable filter, in `f64` where low, narrow bands need it. |
 | Nonlinear filters | ZDF transistor ladder (4-pole, saturating stages, resonance to self-oscillation, with pole-output taps for multimode mixing), Sallen-Key with clipped feedback, and state-variable filters with clipped band state (diode pair) or saturating integrators (OTA). Each loop is solved linearly and then saturated, with a rational `tanh` approximation (within 1e-4) instead of `tanh`, and runs at 2×. |
 | Waveshapers | Static curves with first-order antiderivative anti-aliasing, inside the oversampler. |
 | Delay lines | Power-of-two ring buffers with third-order Lagrange (modulated delays) or allpass (fixed fractional) interpolation. |
@@ -502,7 +524,9 @@ The `daw-dsp` crate, used by all devices and unit-tested on its own. `daw_dsp::f
 | Sample playback | 16-tap windowed-sinc polyphase interpolation whose cutoff lowers when pitching up, to keep aliasing out. |
 | Hygiene | Denormal guard, DC blocker after asymmetric shapers, equal-power dry/wet. |
 
-Processing is stereo `f32`. All devices are deterministic: the same events and
+Processing is stereo `f32`; blocks that need more (the equalizer's filters)
+take `f64` through the `Real` trait and convert at the device boundary. All
+devices are deterministic: the same events and
 parameters give bit-identical output, including "analog" drift and noise,
 which use a seeded generator reset by `reset()`.
 
@@ -681,18 +705,55 @@ Six bands: a high-pass, four parametric bands, a low-pass.
 | | Auto gain | toggle | off |
 | | Analyzer | Off, Input, Output | Output |
 
-**DSP.** *Digital*: minimum-phase matched-magnitude filters, so the audible
-curve equals the drawn curve up to 20 kHz at any sample rate; precise and
-neutral. *Analog*: proportional-Q bells (broad at small gains, narrower as
-gain rises), shelves with the gentle opposite dip of passive designs, and a
-subtle output-stage saturation; realized with SVFs. Coefficients are
-interpolated per sample, so sweeping a band is click-free. Zero latency in
-both modes. A band at 0 dB gain is skipped.
+**DSP.** A serial chain of matched second-order sections (`daw_dsp::matched`),
+each run as a state-variable filter with `f64` state. *Digital*:
+minimum-phase matched-magnitude filters, so the audible curve follows the
+analog curve up to 20 kHz at any sample rate and equals the drawn curve
+exactly; precise and neutral. *Analog*: proportional-Q bells (half the Q near
+0 dB, the set Q at ±12 dB, double at ±24 dB), shelves with the gentle
+opposite dip of passive designs (about a tenth of the gain), and a subtle
+output colour: a bounded third-harmonic residual, anti-aliased at 2× and
+added to the untouched signal, so it never limits and never moves the
+response by more than 0.2 dB. Band values glide over 20 ms and coefficients
+are interpolated per sample, so sweeping a band is click-free; bells and
+notches run with a constant-peak band state, so sweeping Q does not
+overshoot; changing a band's type fades it out and back in. Zero latency in
+both modes. A band at 0 dB gain is skipped. Auto gain is static, from the
+curve of the four parametric bands. A guard clamps the output at +36 dBFS.
 
-**Panel** (610 points). A large `frequency_plot` with the `spectrum` backdrop
-and one draggable node per enabled band: drag for frequency and gain,
-double-click to toggle the band. Below it one row of six band columns (enable,
-type or slope, Frequency, Gain, Q), with the selected band highlighted.
+**Panel** (987 points, about 590 high), top to bottom in signal order. The
+effect window shows about 630 points of a panel in the app's default
+window, and at 610 points of width this one needed 750:
+
+- **Response**, 200 points high: the summed curve the audio path computes
+  (`response_db`), the selected band's own curve filled behind it, and the
+  spectrum of the input or output behind both, drawn from the telemetry ring
+  with a 4.5 dB/octave tilt and sixth-octave smoothing and falling away when the
+  signal stops. The scale is ±12 dB and widens to ±24 dB while an enabled
+  band exceeds it. Six nodes, **HP**, **1**–**4**, **LP**: drag for
+  frequency and gain (cuts and notches: frequency only), Shift for fine,
+  wheel for Q (slope on the cuts), double-click to switch the band on or
+  off, right-click for type and **Reset band**. A band that is off keeps a
+  hollow node, so it can be placed before it is switched on. The node shows
+  its values while it is hovered or dragged.
+- **Bands**: a table with one column per band in the same order and the
+  selected band's column marked. Each column has an enable lamp, the type
+  as drawn shapes (bell, low shelf, high shelf, notch) or the slope (12,
+  24, 48), then Frequency, Gain and Q as inline dials on shared lines;
+  cells a band does not have stay empty, and a notch keeps its Gain
+  disabled in place. The table is the plain-click path to everything the
+  plot does by dragging.
+- **Global**, beside the table on the last third of the width: Mode
+  (Digital, Analog) and Analyzer (Off, Input, Output) on one line, the Auto
+  gain lamp with the compensation it applies and the Output knob on the
+  next.
+
+The graph is the point of an equalizer, so it has the height; the table
+replaced the first draft's row of knob columns because thirty knobs do not
+fit the panel at a readable size, while a table of values does and can be
+compared across bands. The controls it needed are shared `daw-ui`
+components (`inline_knob`, `glyph_toggle`, `column_highlight`, the extended
+`frequency_plot` and `Spectrum`), described in [UI.md](UI.md).
 
 ### R1 Filter
 
@@ -1000,8 +1061,10 @@ empty Sampler shows **Load sample…**; a kit preset can bring its own samples
   and preset checks below run over `registry()`, so a newly registered device
   is covered without writing those tests again. Every factory preset must
   load without a skipped key.
-- Response accuracy: each linear filter and EQ band matches its analytic
-  magnitude within 0.1 dB up to 20 kHz at 44.1 and 48 kHz; the drawing
+- Response accuracy: each linear filter and EQ band sounds as it is drawn
+  within 0.1 dB up to 20 kHz at 44.1 and 48 kHz, and an EQ band follows its
+  analog curve within 0.5 dB at 44.1 kHz, 0.35 dB at 48 kHz and 0.03 dB at
+  96 kHz (no zero-latency biquad comes closer next to Nyquist); the drawing
   functions and the audio path agree.
 - Aliasing: oscillators and each saturator model at specified drive keep
   aliased components at least 80 dB (oscillators) and 70 dB (nonlinearities at
@@ -1044,16 +1107,20 @@ separation holds:
    ranges, defaults), the `Device` implementation built from toolkit blocks,
    and any response functions its picture needs.
 2. One line in the registry.
-3. `daw-devices/presets/<id>/`: at least a default preset.
-4. `daw-devices-ui/src/panels/<name>.rs`: the panel, following the
+3. `daw-devices/presets/<id>/`: at least a default preset, and a frozen copy
+   of the first shipped set in `daw-devices/tests/presets/<id>/v1/` with an
+   `every-parameter.rillpreset`, which `preset_compatibility.rs` requires.
+4. `daw-devices-ui/src/panels.rs`: the panel's layout, following the
    [panel grammar](#panel-grammar). Until it exists, `generic_device_panel`
    makes the device fully usable.
 5. Device-specific DSP tests; the registry-wide conformance tests, the ID
    snapshot, the gallery rendering and the preset validation pick the device
    up automatically.
 6. One end-to-end test through the running app.
+7. The Library preview picture and its line in `PREVIEWS`
+   (`daw-app/src/builtin_devices.rs`).
 
-Nothing changes in `daw-core`, `daw-engine`, `daw-app` or `daw-tools`: the
+Nothing else changes in `daw-core`, `daw-engine`, `daw-app` or `daw-tools`: the
 Library, the Instrument and Effects windows, automation, presets and the tools
 all work from the descriptor. A new Maxi module follows the same pattern one
 level down: a module file, a line in the slot's type list, a section painter.

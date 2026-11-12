@@ -1,7 +1,11 @@
 use crate::{Device, DeviceDescriptor, devices};
 
 /// Every built-in device, in Library order. Adding a device is one line here.
-static REGISTRY: &[&DeviceDescriptor] = &[&devices::mini::DESCRIPTOR, &devices::filter::DESCRIPTOR];
+static REGISTRY: &[&DeviceDescriptor] = &[
+    &devices::mini::DESCRIPTOR,
+    &devices::filter::DESCRIPTOR,
+    &devices::equalizer::DESCRIPTOR,
+];
 
 pub fn registry() -> &'static [&'static DeviceDescriptor] {
     REGISTRY

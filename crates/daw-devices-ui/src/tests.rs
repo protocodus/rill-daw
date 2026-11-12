@@ -1,8 +1,9 @@
 use super::*;
 use daw_devices::{
-    devices::{filter, mini},
+    devices::{equalizer, filter, mini},
     registry,
 };
+use egui::{Event, Modifiers, PointerButton, Pos2, pos2, vec2};
 use std::collections::HashMap;
 
 /// A plain value table, as the gallery and tests use instead of an engine.
@@ -11,6 +12,10 @@ struct TableHost {
     values: HashMap<u32, f64>,
     defaults: HashMap<u32, f64>,
     batches: usize,
+    /// The IDs of every `set_values` call and of every `set_value`, in order.
+    batch_ids: Vec<Vec<u32>>,
+    singles: Vec<u32>,
+    telemetry: Option<Arc<Telemetry>>,
     saved: Vec<Preset>,
     navigation: Vec<AutomationNavigation>,
     auditions: Vec<Option<(u8, f32)>>,
@@ -41,11 +46,17 @@ impl DeviceHost for TableHost {
             .unwrap_or(0.0)
     }
     fn set_value(&mut self, id: u32, normalized: f64) {
+        self.singles.push(id);
         self.values.insert(id, normalized);
     }
     fn set_values(&mut self, values: &[(u32, f64)]) {
         self.batches += 1;
+        self.batch_ids
+            .push(values.iter().map(|(id, _)| *id).collect());
         self.values.extend(values.iter().copied());
+    }
+    fn telemetry(&self) -> Option<Arc<Telemetry>> {
+        self.telemetry.clone()
     }
     fn automation(&self, _: u32) -> Option<(u64, AutomationState)> {
         None
@@ -199,4 +210,407 @@ fn mini_places_every_parameter_once() {
     placed.sort_unstable();
     placed.dedup();
     assert_eq!(placed.len(), mini::DESCRIPTOR.parameters.len());
+}
+
+/// One frame of a panel in a context that lives across frames, so gestures
+/// can span them.
+fn frame(
+    ctx: &egui::Context,
+    events: Vec<Event>,
+    descriptor: &DeviceDescriptor,
+    host: &mut TableHost,
+    state: &mut PanelState,
+) -> egui::Rect {
+    let mut used = egui::Rect::NOTHING;
+    let _ = ctx.run(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 1000.0))),
+            time: Some(ctx.cumulative_frame_nr() as f64 * 0.1),
+            events,
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                used = ui
+                    .scope(|ui| show(ui, descriptor, host, state))
+                    .response
+                    .rect;
+            });
+        },
+    );
+    used
+}
+
+fn button(at: Pos2, pressed: bool) -> Event {
+    Event::PointerButton {
+        pos: at,
+        button: PointerButton::Primary,
+        pressed,
+        modifiers: Modifiers::NONE,
+    }
+}
+
+struct Panel {
+    ctx: egui::Context,
+    descriptor: &'static DeviceDescriptor,
+    host: TableHost,
+    state: PanelState,
+}
+
+impl Panel {
+    fn new(descriptor: &'static DeviceDescriptor) -> Self {
+        let ctx = egui::Context::default();
+        daw_ui::theme::apply(&ctx);
+        let mut panel = Self {
+            ctx,
+            descriptor,
+            host: TableHost::new(descriptor),
+            state: PanelState::default(),
+        };
+        panel.frame(vec![]);
+        panel.frame(vec![]);
+        panel
+    }
+
+    fn frame(&mut self, events: Vec<Event>) -> egui::Rect {
+        frame(
+            &self.ctx,
+            events,
+            self.descriptor,
+            &mut self.host,
+            &mut self.state,
+        )
+    }
+
+    /// Hover, then press and release in separate frames, as a real pointer does.
+    fn click(&mut self, at: Pos2, times: usize) {
+        self.frame(vec![Event::PointerMoved(at)]);
+        for _ in 0..times {
+            self.frame(vec![button(at, true)]);
+            self.frame(vec![button(at, false)]);
+        }
+        self.frame(vec![]);
+    }
+
+    fn drag(&mut self, from: Pos2, to: Pos2) {
+        self.frame(vec![Event::PointerMoved(from)]);
+        self.frame(vec![button(from, true)]);
+        for step in 1..=4 {
+            self.frame(vec![Event::PointerMoved(from.lerp(to, step as f32 / 4.0))]);
+        }
+        self.frame(vec![button(to, false)]);
+        self.frame(vec![]);
+    }
+
+    fn set(&mut self, id: u32, plain: f32) {
+        let spec = self.descriptor.parameter(id).unwrap();
+        self.host
+            .values
+            .insert(id, f64::from(spec.to_normalized(plain)));
+        self.frame(vec![]);
+    }
+
+    fn plain(&self, id: u32) -> f32 {
+        let spec = self.descriptor.parameter(id).unwrap();
+        spec.to_plain(self.host.value(id) as f32)
+    }
+
+    /// Where the response draws a node at this frequency and gain.
+    fn node(&self, frequency: f32, gain_db: f32, range_db: f32) -> Pos2 {
+        let inner = self.state.response_rect.unwrap().shrink(1.0);
+        pos2(
+            inner.left() + inner.width() * (frequency / 20.0).ln() / 1000f32.ln(),
+            inner.center().y - inner.height() * 0.5 * gain_db / range_db,
+        )
+    }
+
+    fn cell(&self, id: u32) -> egui::Rect {
+        let cell = self.state.table_rects.iter().find(|(cell, _)| *cell == id);
+        cell.unwrap().1
+    }
+}
+
+#[test]
+fn equalizer_fits_its_window_in_both_themes() {
+    for appearance in [
+        daw_ui::theme::Appearance::Light,
+        daw_ui::theme::Appearance::Dark,
+    ] {
+        let mut host = TableHost::new(&equalizer::DESCRIPTOR);
+        let used = render(
+            &equalizer::DESCRIPTOR,
+            &mut host,
+            &mut PanelState::default(),
+            appearance,
+        );
+        assert_eq!(
+            panel_width(&equalizer::DESCRIPTOR),
+            daw_ui::tokens::POPUP_WIDTH_LG
+        );
+        // What the effect window shows of a panel without scrolling in the
+        // app's default 1480 x 960 window is about 634 points.
+        assert!(used.height() <= 620.0, "{} points high", used.height());
+    }
+}
+
+#[test]
+fn equalizer_places_every_parameter_once() {
+    let layout = panels::layout(&equalizer::DESCRIPTOR);
+    let mut placed: Vec<u32> = layout
+        .sections
+        .iter()
+        .flat_map(|section| section.ids())
+        .collect();
+    placed.sort_unstable();
+    let mut all: Vec<u32> = equalizer::PARAMETERS.iter().map(|spec| spec.id).collect();
+    all.sort_unstable();
+    assert_eq!(placed, all);
+}
+
+#[test]
+fn equalizer_bands_stand_in_six_equal_columns() {
+    use equalizer::*;
+    let panel = Panel::new(&DESCRIPTOR);
+    let lamps: Vec<egui::Rect> = [HP_ON, 10, 20, 30, 40, LP_ON]
+        .into_iter()
+        .map(|id| panel.cell(id))
+        .collect();
+    let column = lamps[1].center().x - lamps[0].center().x;
+    assert!((98.0..=99.0).contains(&column), "{column}");
+    for pair in lamps.windows(2) {
+        let step = pair[1].center().x - pair[0].center().x;
+        // Equal but for the snap to the pixel grid.
+        assert!((step - column).abs() < 0.05, "{step} {column}");
+    }
+    // No control leaves its column, and the widest value fits its cell.
+    for (index, base) in [0, 10, 20, 30, 40, 50].into_iter().enumerate() {
+        let center = lamps[index].center().x;
+        for (id, rect) in &panel.state.table_rects {
+            if (base..base + 10).contains(id) && (index > 0 || *id < 10) {
+                assert!(
+                    rect.left() >= center - column * 0.5 - 0.01
+                        && rect.right() <= center + column * 0.5 + 0.01,
+                    "parameter {id}: {rect:?} outside the column at {center}"
+                );
+            }
+        }
+    }
+    let ui_width = |text: &str| {
+        let mut width = 0.0;
+        let _ = panel.ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default()
+                .show(ctx, |ui| width = daw_ui::inline_knob_width(ui, text));
+        });
+        width
+    };
+    // With room left, so a value reads with its own dial and not the next.
+    assert!(ui_width("20.00 kHz") <= column - 8.0);
+    assert!(ui_width("+24.0 dB") <= column - 8.0);
+}
+
+#[test]
+fn equalizer_notch_disables_gain_in_place() {
+    use equalizer::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let gain = BANDS[1] + BAND_GAIN;
+    let before = (panel.frame(vec![]), panel.cell(gain));
+    panel.set(BANDS[1] + BAND_TYPE, 3.0);
+    assert_eq!((panel.frame(vec![]), panel.cell(gain)), before);
+    let at = panel.cell(gain).center();
+    panel.drag(at, at - vec2(0.0, 60.0));
+    assert_eq!(panel.plain(gain), 0.0, "a notch has no gain to drag");
+    panel.set(BANDS[1] + BAND_TYPE, 0.0);
+    panel.drag(at, at - vec2(0.0, 60.0));
+    assert!(panel.plain(gain) > 1.0, "a bell's gain drags");
+    assert_eq!(panel.state.selected, Some(2), "using a column selects it");
+}
+
+#[test]
+fn equalizer_node_drag_moves_frequency_and_gain_as_one_gesture() {
+    use equalizer::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let (frequency, gain) = (BANDS[1] + BAND_FREQUENCY, BANDS[1] + BAND_GAIN);
+    let from = panel.node(400.0, 0.0, 12.0);
+    panel.drag(from, from + vec2(60.0, -40.0));
+    assert!(panel.plain(frequency) > 500.0);
+    assert!(panel.plain(gain) > 3.0);
+    assert_eq!(panel.state.selected, Some(2));
+    // Both parameters in every call: the host makes the drag one Undo step.
+    assert!(panel.host.batch_ids.len() >= 3);
+    assert!(
+        panel
+            .host
+            .batch_ids
+            .iter()
+            .all(|ids| ids == &[frequency, gain])
+    );
+    assert!(panel.host.singles.is_empty());
+}
+
+#[test]
+fn equalizer_axis_holds_still_while_a_node_is_dragged_past_it() {
+    use equalizer::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let gain = BANDS[1] + BAND_GAIN;
+    let from = panel.node(400.0, 0.0, 12.0);
+    panel.frame(vec![Event::PointerMoved(from)]);
+    panel.frame(vec![button(from, true)]);
+    // The whole height of the plot is 24 dB on the ±12 dB axis.
+    for step in 1..=5 {
+        panel.frame(vec![Event::PointerMoved(
+            from - vec2(0.0, 30.0 * step as f32),
+        )]);
+    }
+    assert!(panel.plain(gain) > 16.0, "{}", panel.plain(gain));
+    assert_eq!(panel.state.held_range, Some(12.0));
+    panel.frame(vec![button(from - vec2(0.0, 150.0), false)]);
+    panel.frame(vec![]);
+    assert_eq!(panel.state.held_range, None, "the axis widens on release");
+}
+
+#[test]
+fn equalizer_cut_and_notch_nodes_move_along_the_frequency_axis_only() {
+    use equalizer::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let from = panel.node(30.0, 0.0, 12.0);
+    panel.drag(from, from + vec2(50.0, -40.0));
+    assert!(panel.plain(HP_FREQUENCY) > 40.0);
+    assert_eq!(panel.host.singles.last(), Some(&HP_FREQUENCY));
+    assert!(panel.host.batch_ids.is_empty());
+    assert_eq!(panel.state.selected, Some(0));
+}
+
+#[test]
+fn equalizer_node_double_click_toggles_and_the_wheel_turns_q_or_steps_slope() {
+    use equalizer::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let band = panel.node(2500.0, 0.0, 12.0);
+    assert_eq!(panel.plain(BANDS[2] + BAND_ON), 1.0);
+    panel.click(band, 2);
+    assert_eq!(panel.plain(BANDS[2] + BAND_ON), 0.0);
+    panel.click(band, 2);
+    assert_eq!(panel.plain(BANDS[2] + BAND_ON), 1.0);
+
+    let wheel = |notches: f32| Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Line,
+        delta: vec2(0.0, notches),
+        modifiers: Modifiers::NONE,
+    };
+    let q = panel.plain(BANDS[2] + BAND_Q);
+    panel.frame(vec![wheel(4.0)]);
+    panel.frame(vec![]);
+    assert!(panel.plain(BANDS[2] + BAND_Q) > q * 1.5, "four notches up");
+
+    let cut = panel.node(18_000.0, 0.0, 12.0);
+    panel.frame(vec![Event::PointerMoved(cut)]);
+    panel.frame(vec![]);
+    for expected in [1.0, 2.0, 2.0] {
+        panel.frame(vec![wheel(1.0)]);
+        panel.frame(vec![]);
+        assert_eq!(panel.plain(LP_SLOPE), expected);
+    }
+    panel.frame(vec![wheel(-1.0)]);
+    panel.frame(vec![]);
+    assert_eq!(panel.plain(LP_SLOPE), 1.0);
+    assert_eq!(panel.state.selected, Some(5));
+}
+
+#[test]
+fn equalizer_table_controls_edit_their_band() {
+    use equalizer::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    panel.click(panel.cell(LP_ON).center(), 1);
+    assert_eq!(panel.plain(LP_ON), 1.0);
+    assert_eq!(panel.state.selected, Some(5));
+    // The fourth glyph of band 1's Type is the notch.
+    let track = panel.cell(BANDS[0] + BAND_TYPE);
+    panel.click(pos2(track.right() - 10.0, track.center().y), 1);
+    assert_eq!(panel.plain(BANDS[0] + BAND_TYPE), 3.0);
+    assert_eq!(panel.state.selected, Some(1));
+    let slope = panel.cell(HP_SLOPE);
+    panel.click(slope.center(), 1);
+    assert_eq!(panel.plain(HP_SLOPE), 1.0);
+    // A double-click on a dial is Reset.
+    let frequency = panel.cell(BANDS[2] + BAND_FREQUENCY).center();
+    panel.drag(frequency, frequency - vec2(0.0, 40.0));
+    assert!(panel.plain(BANDS[2] + BAND_FREQUENCY) > 2600.0);
+    panel.click(frequency, 2);
+    assert!((panel.plain(BANDS[2] + BAND_FREQUENCY) - 2500.0).abs() < 1.0);
+}
+
+#[test]
+fn equalizer_axis_and_auto_gain_readout_follow_the_values() {
+    use equalizer::*;
+    let layout = panels::layout(&DESCRIPTOR);
+    let view = layout.response.as_ref().unwrap();
+    let mut host = TableHost::new(&DESCRIPTOR);
+    let set = |host: &mut TableHost, id: u32, plain: f32| {
+        let spec = DESCRIPTOR.parameter(id).unwrap();
+        host.values.insert(id, f64::from(spec.to_normalized(plain)));
+    };
+    assert_eq!((view.range_db)(&|id| host.value(id)), 12.0);
+    assert_eq!(
+        (layout.readout)(AUTO_GAIN, &|id| host.value(id)).as_deref(),
+        Some("+0.0 dB")
+    );
+    set(&mut host, BANDS[1] + BAND_GAIN, 6.0);
+    set(&mut host, AUTO_GAIN, 1.0);
+    assert_eq!(
+        (layout.readout)(AUTO_GAIN, &|id| host.value(id)).as_deref(),
+        Some("-1.6 dB")
+    );
+    assert_eq!((layout.readout)(OUTPUT, &|id| host.value(id)), None);
+    set(&mut host, BANDS[1] + BAND_GAIN, 18.0);
+    assert_eq!((view.range_db)(&|id| host.value(id)), 24.0);
+    // A band that is off does not widen the axis; nor does a notch.
+    set(&mut host, BANDS[1] + BAND_ON, 0.0);
+    assert_eq!((view.range_db)(&|id| host.value(id)), 12.0);
+    let readout = view.readout.unwrap();
+    assert_eq!(readout(0, &|id| host.value(id)), "30 Hz   12 dB/oct");
+    set(&mut host, BANDS[1] + BAND_TYPE, 3.0);
+    assert!(!readout(2, &|id| host.value(id)).contains("dB"));
+}
+
+#[test]
+fn equalizer_spectrum_needs_telemetry_and_a_source() {
+    use equalizer::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    assert!(
+        panel.state.spectrum.analyzer.is_none(),
+        "nothing to analyze"
+    );
+    let telemetry = Arc::new(Telemetry::default());
+    telemetry.set_value(TELEMETRY_SAMPLE_RATE, 96_000.0);
+    let block = vec![0.25; 512];
+    telemetry.record_output(&block, &block);
+    panel.host.telemetry = Some(telemetry);
+    panel.set(ANALYZER, 0.0);
+    assert!(panel.state.spectrum.analyzer.is_none(), "Analyzer is Off");
+    panel.set(ANALYZER, 2.0);
+    // At the device's own rate.
+    let (rate, analyzer) = panel.state.spectrum.analyzer.as_ref().unwrap();
+    assert_eq!((*rate, analyzer.size()), (96_000.0, 16_384));
+    assert_eq!(panel.host.values.len(), DESCRIPTOR.parameters.len());
+}
+
+#[test]
+fn filter_response_keeps_its_one_node_on_the_cutoff() {
+    use filter::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let cutoff = panel.plain(CUTOFF);
+    let from = panel.node(cutoff, 0.0, 24.0);
+    panel.drag(from, from + vec2(80.0, -30.0));
+    assert!(panel.plain(CUTOFF) > cutoff * 1.5);
+    assert!(panel.host.singles.iter().all(|id| *id == CUTOFF));
+    assert!(panel.host.batch_ids.is_empty());
+    // No band to switch or reset: a double-click and the wheel do nothing.
+    let at = panel.node(panel.plain(CUTOFF), 0.0, 24.0);
+    let values = panel.host.values.clone();
+    panel.click(at, 2);
+    panel.frame(vec![Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Line,
+        delta: vec2(0.0, 3.0),
+        modifiers: Modifiers::NONE,
+    }]);
+    assert_eq!(panel.host.values, values);
 }

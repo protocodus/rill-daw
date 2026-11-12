@@ -23,6 +23,10 @@ const PREVIEWS: &[(&str, &[u8])] = &[
         "r1-filter",
         include_bytes!("../assets/r1-filter-preview.png"),
     ),
+    (
+        "r1-equalizer",
+        include_bytes!("../assets/r1-equalizer-preview.png"),
+    ),
 ];
 
 /// Built-in devices as Library entries, in registry order.

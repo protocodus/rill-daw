@@ -1,0 +1,24 @@
+{
+  "format": 1,
+  "device": "r1-equalizer",
+  "name": "Hum Notch 50 Hz",
+  "author": "Rill",
+  "category": "Repair",
+  "tags": ["hum", "notch"],
+  "description": "Mains hum and two harmonics; retune to 60, 120 and 180 Hz where needed.",
+  "parameters": {
+    "hp.on": true,
+    "hp.frequency": 25.0,
+    "hp.slope": "24 dB",
+    "band1.type": "Notch",
+    "band1.frequency": 50.0,
+    "band1.q": 12.0,
+    "band2.type": "Notch",
+    "band2.frequency": 100.0,
+    "band2.q": 14.0,
+    "band3.type": "Notch",
+    "band3.frequency": 150.0,
+    "band3.q": 16.0,
+    "band4.on": false
+  }
+}

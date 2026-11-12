@@ -186,7 +186,13 @@ impl daw_devices_ui::DeviceHost for PanelHost<'_> {
         self.updates.push((id, normalized));
     }
     fn set_values(&mut self, values: &[(u32, f64)]) {
-        self.batch = Some(values.to_vec());
+        if values.len() < self.descriptor.parameters.len() {
+            // A gesture on a few controls: grouped with the frames before
+            // it on the same ones, like consecutive `set_value`s.
+            self.updates.extend_from_slice(values);
+        } else {
+            self.batch = Some(values.to_vec());
+        }
     }
     fn automation(&self, id: u32) -> Option<(u64, daw_ui::AutomationState)> {
         self.app
@@ -207,6 +213,12 @@ impl daw_devices_ui::DeviceHost for PanelHost<'_> {
     }
     fn wheels(&mut self, pitch: f32, modulation: f32) {
         self.wheels = Some((pitch, modulation));
+    }
+    fn telemetry(&self) -> Option<std::sync::Arc<daw_devices::Telemetry>> {
+        self.app
+            .engine
+            .as_ref()?
+            .device_telemetry(self.target.track, self.target.effect)
     }
 }
 

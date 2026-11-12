@@ -4,31 +4,39 @@
 //! Each block is deterministic, allocation-free after construction and
 //! unit-tested on its own. No other `daw-*` crate, no I/O.
 #![forbid(unsafe_code)]
+mod biquad;
 mod complex;
 mod delay;
 mod envelope;
 pub mod filter;
 mod follower;
 mod lfo;
+pub mod matched;
 mod nonlinear;
 pub mod oscillator;
 mod oversample;
 mod random;
+mod real;
+mod shaper;
 mod smooth;
 mod svf;
 
+pub use biquad::Biquad;
 pub use complex::Complex;
 pub use delay::DelayLine;
 pub use envelope::{Adsr, Stage};
 pub use filter::{FilterKernel, FilterModel, FilterShape, FilterType, LatencyDelay};
 pub use follower::EnvelopeFollower;
 pub use lfo::{Lfo, LfoShape};
+pub use matched::{BUTTERWORTH_Q, Fit, MatchedDesigner, Prototype};
 pub use nonlinear::{Ladder, SallenKey, tanh_fast};
 pub use oscillator::{Drift, Oscillator, OscillatorModel, SubOscillator, Waveform};
 pub use oversample::Oversampler2x;
 pub use random::Random;
-pub use smooth::Smoothed;
-pub use svf::{OnePole, Svf, SvfOutputs};
+pub use real::Real;
+pub use shaper::{Adaa1, BoundedCubic, Shape};
+pub use smooth::{LinearRamp, Smoothed};
+pub use svf::{OnePole, Svf, SvfMix, SvfMixRamp, SvfOutputs};
 
 /// Below this, filter states are flushed to zero so decays never reach
 /// denormal numbers.

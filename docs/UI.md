@@ -1399,6 +1399,11 @@ arrow keys), and canvas handles use the 21-point `HIT_TARGET`.
 | `fader` | A vertical fader over a normalized value: a rail highlighted up to its cap. For values read as a shape across neighbours (envelope stages); a knob everywhere else. Relative drag, Shift for fine, arrow keys when focused. The caller supplies caption, value and hover. |
 | `labeled_knob` | Caption, dial and value in a fixed cell (`KnobSize::Dense` 34, `Standard` 48, `Hero` 64). Clicking the value types a number. The context menu offers **Reset**, **Type value…**, **Automate** (or **Show automation lane**) and, with `.mod_sources`, **Modulate with …**. `show` returns `automate` and `modulate_with`; the host creates the lane or routing. |
 | `segmented`, `stepped_selector`, `toggle_led` | Two to four options as toggle buttons (falls back to a drop-down), longer lists, and section enables. |
+| `inline_knob` | A knob for a table of parameters: a mini arc with its value beside it on one 21-point line, the whole cell one hit target. The line's caption stands once, in the table's caption column, and the name is the accessible label. Same gestures as every knob (relative drag, Shift for fine, double-click to reset, arrow keys, right-click menu, click the value to type). `.width` fixes the cell so lines share columns; `inline_knob_width` measures a value text. |
+| `glyph_toggle` | A toggle group whose segments show a drawn shape (`ToggleFace::Glyph`: bell, shelves, notch, pass filters, LFO waves) or a short text (`ToggleFace::Text`, such as 12, 24, 48) in equal segments of a given width. Each option carries its full name for hover and screen readers. Use it where option names do not fit the column; plain `toggle_group` everywhere else. |
+| `column_highlight` | Paints the selection mark behind one column of a table: call it with the column's rectangle before drawing the cells. |
+| `toggle_led_width` | The width a `toggle_led` with a given label takes, to center a lamp in a column. |
+| `quiet_automation_indicators` | Called on a `Ui` whose controls stand close together (table cells): their automation indicators appear only while a lane exists, is being read or is overridden, never as idle rings. The context menu still offers **Automate**. |
 | `xy_pad` | Two normalized parameters; a press jumps, further motion is relative, Shift is fine, arrow keys nudge. |
 | `envelope_editor` | ADSR with hold and per-segment curves from plain `EnvelopeShape`; returns `EnvelopeEdit`s. |
 | `pad_grid`, `keyboard_strip` | 4×4 audition pads (click height sets velocity; `SampleDrop` payloads can be dropped on them) and a keyboard. |
@@ -1407,7 +1412,19 @@ arrow keys), and canvas handles use the 21-point `HIT_TARGET`.
 
 ### Visualizations ([`device_plots.rs`](../crates/daw-ui/src/device_plots.rs))
 
-`frequency_plot` (curves on the shared log grid `log_grid_frequency`, optional spectrum backdrop and draggable nodes), `spectrum`, `transfer_plot`, `gain_reduction_history`, `reduction_meter`, `scope`, `wavetable_view`, `lfo_view`, `sample_view` (draggable start, end and loop markers), `delay_view` and `harmonics_view`. They take plain data and own no audio state.
+`frequency_plot` draws curves on the shared log grid `log_grid_frequency`,
+with an optional spectrum backdrop and draggable nodes. A `FrequencyNode`
+has a name (`label`, its number by default), an `enabled` state (a disabled
+node is drawn hollow and stays draggable) and an optional `readout` shown in
+a bubble while it is hovered or dragged. A drag is relative to the press
+(Shift for fine) and may leave the frame up to `limit_db`, so a value beyond
+the visible range stays reachable; the selected node wins where nodes
+overlap. `FrequencyPlotOutput` reports `dragged`, `double_clicked`,
+`scrolled` (the wheel over a node, consumed so the view does not scroll),
+`dragging` and each node's `Response` for context menus. A `Spectrum` holds
+linear bins of an FFT in dB with `tilt_db_per_octave` (4.5 makes pink noise
+read flat) and `smoothing_octaves`; `level_db` reads it at any frequency.
+The other plots: `spectrum`, `transfer_plot`, `gain_reduction_history`, `reduction_meter`, `scope`, `wavetable_view`, `lfo_view`, `sample_view` (draggable start, end and loop markers), `delay_view` and `harmonics_view`. They take plain data and own no audio state.
 
 ### Panels ([`device_panel.rs`](../crates/daw-ui/src/device_panel.rs))
 

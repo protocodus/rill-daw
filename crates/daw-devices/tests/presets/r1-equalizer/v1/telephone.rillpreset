@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "device": "r1-equalizer",
+  "name": "Telephone",
+  "author": "Rill",
+  "category": "Effect",
+  "tags": ["lo-fi", "band-pass"],
+  "description": "Narrow, nasal band.",
+  "parameters": {
+    "hp.on": true,
+    "hp.frequency": 400.0,
+    "hp.slope": "48 dB",
+    "band1.on": false,
+    "band2.type": "Bell",
+    "band2.frequency": 1200.0,
+    "band2.gain": 6.0,
+    "band2.q": 1.5,
+    "band3.type": "Bell",
+    "band3.frequency": 2200.0,
+    "band3.gain": 3.0,
+    "band3.q": 2.0,
+    "band4.on": false,
+    "lp.on": true,
+    "lp.frequency": 3200.0,
+    "lp.slope": "48 dB"
+  }
+}

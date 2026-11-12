@@ -259,7 +259,10 @@ fn device_browser_opens_on_the_callers_kind_and_lists_built_in_devices() {
     window(&mut app, "Effects");
     let inserts = app.click("+ Insert");
     assert!(visible(&inserts, "Search effects"), "{inserts}");
-    assert_eq!(inserts["library"]["order"], json!(["R1 Filter"]));
+    assert_eq!(
+        inserts["library"]["order"],
+        json!(["R1 Equalizer", "R1 Filter"])
+    );
     app.key("Escape");
     app.key("Escape");
 

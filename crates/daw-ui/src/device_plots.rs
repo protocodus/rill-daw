@@ -73,37 +73,98 @@ fn finite(value: f32, fallback: f32) -> f32 {
 pub struct Spectrum<'a> {
     pub bins_db: &'a [f32],
     pub sample_rate: f32,
+    /// Tilt about 1 kHz. 4.5 dB per octave draws pink-ish material level,
+    /// as analyzers behind an equalizer curve do; 0 shows the bins as they are.
+    pub tilt_db_per_octave: f32,
+    /// Each drawn point is the mean power of the bins within this many
+    /// octaves around it; 0 reads the bins directly.
+    pub smoothing_octaves: f32,
 }
 
 const SPECTRUM_FLOOR: f32 = -90.0;
+
+impl<'a> Spectrum<'a> {
+    /// Bins as they are: no tilt, no smoothing.
+    pub fn new(bins_db: &'a [f32], sample_rate: f32) -> Self {
+        Self {
+            bins_db,
+            sample_rate,
+            tilt_db_per_octave: 0.0,
+            smoothing_octaves: 0.0,
+        }
+    }
+
+    /// The level drawn at `frequency`, smoothed and tilted. Where the
+    /// smoothing band holds no bin (low frequencies), the level is
+    /// interpolated between the two neighbouring bins, so the trace neither
+    /// stair-steps there nor skips bins at the top.
+    pub fn level_db(&self, frequency: f32) -> f32 {
+        let last = self.bins_db.len().saturating_sub(1);
+        if last == 0 || self.sample_rate <= 0.0 {
+            return SPECTRUM_FLOOR;
+        }
+        let bin = |index: usize| finite(self.bins_db[index.min(last)], SPECTRUM_FLOOR);
+        let position = |frequency: f32| {
+            (frequency / (self.sample_rate * 0.5) * last as f32).clamp(0.0, last as f32)
+        };
+        let half = 2f32.powf(self.smoothing_octaves.max(0.0) * 0.5);
+        let first = position(frequency / half).ceil() as usize;
+        let end = position(frequency * half).floor() as usize;
+        let db = if first <= end {
+            let power: f32 = (first..=end)
+                .map(|index| 10f32.powf(bin(index) / 10.0))
+                .sum();
+            10.0 * (power / (end - first + 1) as f32).max(1e-12).log10()
+        } else {
+            let at = position(frequency);
+            let low = at.floor() as usize;
+            bin(low) + (bin(low + 1) - bin(low)) * at.fract()
+        };
+        db + self.tilt_db_per_octave * (frequency.max(1.0) / 1000.0).log2()
+    }
+}
+
+/// Fills between a trace and a horizontal line. A mesh, because the area is
+/// not convex and feathered strips would show their seams.
+fn fill_to(painter: &Painter, trace: &[Pos2], y: f32, color: Color32) {
+    let mut mesh = egui::Mesh::default();
+    for (index, point) in trace.iter().enumerate() {
+        mesh.colored_vertex(*point, color);
+        mesh.colored_vertex(pos2(point.x, y), color);
+        if index > 0 {
+            let at = 2 * index as u32;
+            mesh.add_triangle(at - 2, at - 1, at);
+            mesh.add_triangle(at - 1, at, at + 1);
+        }
+    }
+    painter.add(Shape::mesh(mesh));
+}
 
 fn paint_spectrum(painter: &Painter, rect: Rect, spectrum: Spectrum<'_>, alpha: f32) {
     if spectrum.bins_db.len() < 2 {
         return;
     }
     let colors = theme::palette(painter.ctx());
-    let bins = spectrum.bins_db.len();
-    let nyquist = spectrum.sample_rate * 0.5;
     let columns = (rect.width() / 2.0).max(2.0) as usize;
     let mut points = Vec::with_capacity(columns + 2);
     points.push(pos2(rect.left(), rect.bottom()));
     for column in 0..=columns {
         let fraction = column as f32 / columns as f32;
-        let frequency = fraction_frequency(fraction);
-        let bin = ((frequency / nyquist) * (bins - 1) as f32).round() as usize;
-        let db =
-            finite(spectrum.bins_db[bin.min(bins - 1)], SPECTRUM_FLOOR).clamp(SPECTRUM_FLOOR, 0.0);
+        let db = spectrum
+            .level_db(fraction_frequency(fraction))
+            .clamp(SPECTRUM_FLOOR, 0.0);
         points.push(pos2(
             rect.left() + rect.width() * fraction,
             rect.bottom() - rect.height() * (db - SPECTRUM_FLOOR) / -SPECTRUM_FLOOR,
         ));
     }
     points.push(pos2(rect.right(), rect.bottom()));
-    painter.add(Shape::convex_polygon(
-        points.clone(),
+    fill_to(
+        painter,
+        &points[1..=columns + 1],
+        rect.bottom(),
         colors.muted.gamma_multiply(alpha),
-        Stroke::NONE,
-    ));
+    );
     painter.add(Shape::line(
         points[1..=columns + 1].to_vec(),
         Stroke::new(1.0_f32, colors.muted.gamma_multiply(alpha * 2.5)),
@@ -147,21 +208,47 @@ pub struct FrequencyCurve<'a> {
 
 /// A draggable node: a band, a cutoff or a marker on the response.
 #[derive(Clone, Copy, Debug)]
-pub struct FrequencyNode {
+pub struct FrequencyNode<'a> {
     pub frequency: f32,
     pub gain_db: f32,
     pub selected: bool,
     pub color: Option<Color32>,
     /// False for nodes that only move along the frequency axis (cutoffs).
     pub gain_editable: bool,
+    /// Printed at the node; its position among the nodes, from 1, when `None`.
+    pub label: Option<&'a str>,
+    /// A node that is switched off is drawn hollow and can still be moved.
+    pub enabled: bool,
+    /// The node's values in words ("1.20 kHz  +3.5 dB  Q 1.40"), shown beside
+    /// it while it is hovered, dragged or focused.
+    pub readout: Option<&'a str>,
+}
+
+impl FrequencyNode<'_> {
+    /// An enabled, unselected node that moves along both axes.
+    pub fn new(frequency: f32, gain_db: f32) -> Self {
+        Self {
+            frequency,
+            gain_db,
+            selected: false,
+            color: None,
+            gain_editable: true,
+            label: None,
+            enabled: true,
+            readout: None,
+        }
+    }
 }
 
 pub struct FrequencyPlot<'a> {
     pub curves: &'a [FrequencyCurve<'a>],
     pub spectrum: Option<Spectrum<'a>>,
-    pub nodes: &'a [FrequencyNode],
+    pub nodes: &'a [FrequencyNode<'a>],
     /// The gain axis runs from −`range_db` to +`range_db`.
     pub range_db: f32,
+    /// How far a node's gain can be dragged; a node beyond the axis is drawn
+    /// at its edge. Equal to `range_db` when the axis shows the whole range.
+    pub limit_db: f32,
     pub size: Vec2,
 }
 
@@ -176,28 +263,66 @@ pub struct FrequencyPlotOutput {
     pub response: Response,
     pub drags: Vec<NodeDrag>,
     pub clicked: Option<usize>,
+    pub double_clicked: Option<usize>,
+    /// The node under the pointer and the wheel notches turned over it. A
+    /// surrounding scroll area stays still while the pointer is on a node.
+    pub scrolled: Option<(usize, f32)>,
+    /// The node the pointer is dragging.
+    pub dragging: Option<usize>,
+    /// Each node's own response, in node order, for context menus.
+    pub nodes: Vec<Response>,
 }
 
-/// Log-frequency magnitude graph. Nodes move to the pointer (relative at
-/// one tenth speed with Shift) or by arrow keys when focused; devices also
-/// show each node's numbers as knobs, so dragging is never the only way.
+const NODE_RADIUS: f32 = 5.0;
+
+/// Wheel notches turned this frame.
+fn wheel_notches(ui: &Ui) -> f32 {
+    ui.input(|input| {
+        input
+            .events
+            .iter()
+            .map(|event| match event {
+                egui::Event::MouseWheel { unit, delta, .. } => match unit {
+                    egui::MouseWheelUnit::Line => delta.y,
+                    // A wheel notch scrolls about this many points.
+                    egui::MouseWheelUnit::Point => delta.y / 50.0,
+                    egui::MouseWheelUnit::Page => delta.y * 10.0,
+                },
+                _ => 0.0,
+            })
+            .sum()
+    })
+}
+
+/// Log-frequency magnitude graph. Nodes follow the pointer from where they
+/// were grabbed (one tenth as far with Shift) or move by arrow keys when
+/// focused; devices also show each node's numbers as dials, so dragging is
+/// never the only way. Where nodes overlap, the selected one is on top.
 pub fn frequency_plot(ui: &mut Ui, plot: &FrequencyPlot<'_>) -> FrequencyPlotOutput {
     let (rect, response) = frame(ui, plot.size, Sense::hover());
     let colors = theme::palette(ui.ctx());
     let range = plot.range_db.max(1.0);
+    let limit = plot.limit_db.max(range);
     let inner = rect.shrink(1.0);
     let gain_y = |db: f32| inner.center().y - inner.height() * 0.5 * (db / range).clamp(-1.0, 1.0);
-    let mut drags = Vec::new();
-    let mut clicked = None;
-    let mut union = response.clone();
-    let fine = ui.input(|input| if input.modifiers.shift { 0.1 } else { 1.0 });
-    for (index, node) in plot.nodes.iter().enumerate() {
-        let center = pos2(
+    let center_of = |node: &FrequencyNode<'_>| {
+        pos2(
             inner.left() + inner.width() * frequency_fraction(node.frequency),
             gain_y(node.gain_db),
-        );
+        )
+    };
+    let mut drags = Vec::new();
+    let (mut clicked, mut double_clicked, mut scrolled, mut dragging) = (None, None, None, None);
+    let mut union = response.clone();
+    let fine = ui.input(|input| if input.modifiers.shift { 0.1 } else { 1.0 });
+    // The last widget registered at a point takes the pointer there.
+    let mut order: Vec<usize> = (0..plot.nodes.len()).collect();
+    order.sort_by_key(|index| plot.nodes[*index].selected);
+    let mut hits: Vec<Option<Response>> = vec![None; plot.nodes.len()];
+    for index in order {
+        let node = &plot.nodes[index];
         let hit = ui.interact(
-            Rect::from_center_size(center, Vec2::splat(tokens::HIT_TARGET)),
+            Rect::from_center_size(center_of(node), Vec2::splat(tokens::HIT_TARGET)),
             response.id.with(("node", index)),
             Sense::click_and_drag(),
         );
@@ -205,18 +330,26 @@ pub fn frequency_plot(ui: &mut Ui, plot: &FrequencyPlot<'_>) -> FrequencyPlotOut
             clicked = Some(index);
             hit.request_focus();
         }
+        if hit.double_clicked() {
+            double_clicked = Some(index);
+        }
         // A focused node is a parameter control: Undo/Redo still reach the song.
         crate::parameter_focus::register_parameter_history_focus(&hit);
         let mut next = (node.frequency, node.gain_db);
-        if hit.dragged() {
-            if fine < 1.0 {
-                let delta = hit.drag_delta();
-                next.0 *= (FREQUENCY_MAX / FREQUENCY_MIN).powf(delta.x / inner.width() * fine);
-                next.1 -= delta.y / inner.height() * 2.0 * range * fine;
-            } else if let Some(pointer) = hit.interact_pointer_pos() {
-                next.0 = fraction_frequency((pointer.x - inner.left()) / inner.width());
-                next.1 = (inner.center().y - pointer.y) / (inner.height() * 0.5) * range;
+        if hit.dragged_by(egui::PointerButton::Primary) {
+            dragging = Some(index);
+            let delta = hit.drag_delta();
+            next.0 *= (FREQUENCY_MAX / FREQUENCY_MIN).powf(delta.x / inner.width() * fine);
+            next.1 -= delta.y / inner.height() * 2.0 * range * fine;
+        }
+        if hit.hovered() {
+            let notches = wheel_notches(ui);
+            if notches != 0.0 {
+                scrolled = Some((index, notches));
             }
+            // On every frame over the node: egui spreads a notch over the
+            // frames that follow it.
+            ui.input_mut(|input| input.smooth_scroll_delta = Vec2::ZERO);
         }
         if hit.has_focus() {
             ui.input_mut(|input| {
@@ -243,7 +376,7 @@ pub fn frequency_plot(ui: &mut Ui, plot: &FrequencyPlot<'_>) -> FrequencyPlotOut
         }
         let next = (
             next.0.clamp(FREQUENCY_MIN, FREQUENCY_MAX),
-            next.1.clamp(-range, range),
+            next.1.clamp(-limit, limit),
         );
         if next != (node.frequency, node.gain_db) {
             drags.push(NodeDrag {
@@ -252,8 +385,10 @@ pub fn frequency_plot(ui: &mut Ui, plot: &FrequencyPlot<'_>) -> FrequencyPlotOut
                 gain_db: next.1,
             });
         }
-        union = union.union(hit);
+        union = union.union(hit.clone());
+        hits[index] = Some(hit);
     }
+    let hits: Vec<Response> = hits.into_iter().flatten().collect();
     if !drags.is_empty() {
         union.mark_changed();
     }
@@ -286,10 +421,14 @@ pub fn frequency_plot(ui: &mut Ui, plot: &FrequencyPlot<'_>) -> FrequencyPlotOut
                 &format!("{db:+.0}"),
             );
         }
+        // Curves run past the axis at high gains; the frame cuts them.
+        let clipped = painter.with_clip_rect(inner);
         for curve in plot.curves {
             if curve.db.len() < 2 {
                 continue;
             }
+            let y =
+                |db: f32| inner.center().y - inner.height() * 0.5 * (db / range).clamp(-2.0, 2.0);
             let points: Vec<Pos2> = curve
                 .db
                 .iter()
@@ -297,22 +436,19 @@ pub fn frequency_plot(ui: &mut Ui, plot: &FrequencyPlot<'_>) -> FrequencyPlotOut
                 .map(|(index, db)| {
                     pos2(
                         inner.left() + inner.width() * index as f32 / (curve.db.len() - 1) as f32,
-                        gain_y(finite(*db, 0.0)),
+                        y(finite(*db, 0.0)),
                     )
                 })
                 .collect();
             if curve.emphasis {
-                let mut fill = points.clone();
-                fill.push(pos2(inner.right(), gain_y(0.0)));
-                fill.push(pos2(inner.left(), gain_y(0.0)));
-                painter.add(Shape::Path(egui::epaint::PathShape {
-                    points: fill,
-                    closed: true,
-                    fill: colors.accent.gamma_multiply(0.12),
-                    stroke: egui::epaint::PathStroke::NONE,
-                }));
+                fill_to(
+                    &clipped,
+                    &points,
+                    gain_y(0.0),
+                    colors.accent.gamma_multiply(0.12),
+                );
             }
-            painter.add(Shape::line(
+            clipped.add(Shape::line(
                 points,
                 Stroke::new(
                     if curve.emphasis { 2.0_f32 } else { 1.0_f32 },
@@ -325,30 +461,86 @@ pub fn frequency_plot(ui: &mut Ui, plot: &FrequencyPlot<'_>) -> FrequencyPlotOut
             ));
         }
         for (index, node) in plot.nodes.iter().enumerate() {
-            let center = pos2(
-                inner.left() + inner.width() * frequency_fraction(node.frequency),
-                gain_y(node.gain_db),
-            );
+            let center = center_of(node);
             let color = node.color.unwrap_or(colors.accent);
-            painter.circle_filled(center, if node.selected { 6.5 } else { 5.0 }, color);
+            let radius = if node.selected {
+                NODE_RADIUS + 1.5
+            } else {
+                NODE_RADIUS
+            };
+            if node.enabled {
+                painter.circle_filled(center, radius, color);
+            } else {
+                painter.circle_filled(center, radius, colors.bg);
+            }
             painter.circle_stroke(
                 center,
-                if node.selected { 6.5 } else { 5.0 },
+                radius,
                 Stroke::new(
                     1.5_f32,
-                    if node.selected {
+                    if !node.enabled {
+                        colors.muted
+                    } else if node.selected {
                         colors.text
                     } else {
                         colors.bg
                     },
                 ),
             );
-            label(
-                painter,
-                center + vec2(0.0, -10.0),
-                Align2::CENTER_BOTTOM,
-                &format!("{}", index + 1),
+            // Above the node, or below it where the frame is too close.
+            let above = center.y - 10.0 - tokens::FONT_SMALL > inner.top();
+            let name = node
+                .label
+                .map_or_else(|| format!("{}", index + 1), str::to_owned);
+            let galley = painter.layout_no_wrap(
+                name,
+                TextRole::Note.font(),
+                if node.selected {
+                    colors.text
+                } else {
+                    colors.muted
+                },
             );
+            // A node at the frame's edge keeps its whole name inside.
+            let half = galley.size().x * 0.5;
+            let x = center
+                .x
+                .clamp(inner.left() + half + 2.0, inner.right() - half - 2.0);
+            let y = if above {
+                center.y - 10.0 - galley.size().y
+            } else {
+                center.y + 10.0
+            };
+            painter.galley(pos2(x - half, y), galley, colors.text);
+        }
+        for (node, hit) in plot.nodes.iter().zip(&hits) {
+            let Some(readout) = node.readout else {
+                continue;
+            };
+            if !(hit.hovered() || hit.dragged() || hit.has_focus()) {
+                continue;
+            }
+            let center = center_of(node);
+            let galley =
+                painter.layout_no_wrap(readout.to_owned(), TextRole::Note.font(), colors.text);
+            let size = galley.size() + vec2(2.0 * tokens::SPACE_XS, tokens::SPACE_XS);
+            let gap = NODE_RADIUS + tokens::SPACE_SM;
+            // Right of the node, or left of it where the frame is too close.
+            let left = if center.x + gap + size.x <= inner.right() {
+                center.x + gap
+            } else {
+                center.x - gap - size.x
+            };
+            let top = (center.y - size.y * 0.5).clamp(inner.top(), inner.bottom() - size.y);
+            let bubble = Rect::from_min_size(pos2(left.max(inner.left()), top), size);
+            painter.rect(
+                bubble,
+                tokens::RADIUS,
+                colors.raised,
+                Stroke::new(tokens::BORDER_WIDTH, colors.line),
+                StrokeKind::Inside,
+            );
+            painter.galley(bubble.center() - galley.size() * 0.5, galley, colors.text);
         }
     }
     describe(
@@ -364,6 +556,10 @@ pub fn frequency_plot(ui: &mut Ui, plot: &FrequencyPlot<'_>) -> FrequencyPlotOut
         response: union,
         drags,
         clicked,
+        double_clicked,
+        scrolled,
+        dragging,
+        nodes: hits,
     }
 }
 
