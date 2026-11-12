@@ -6,7 +6,7 @@ A reference for composing, recording, editing, mixing, and saving in Rill.
 
 ## First session
 
-The initial session contains an original generated audio loop. Rill includes a built-in synth, **R1 Mini**, and the **R1 Filter**, **R1 Equalizer**, **R1 Saturator**, **R1 Compressor**, **R1 Modulator** and **R1 Spacer** effects. A new MIDI track starts with R1 Mini, so its notes are audible at once; choose a plug-in instrument to replace it. Use **File → New** to start empty. Press **Space** to play or pause.
+The initial session contains an original generated audio loop. Rill includes a built-in synth, **R1 Mini**, a sample player, **R1 Sampler**, and the **R1 Filter**, **R1 Equalizer**, **R1 Saturator**, **R1 Compressor**, **R1 Modulator** and **R1 Spacer** effects. A new MIDI track starts with R1 Mini, so its notes are audible at once; choose a plug-in instrument to replace it. Use **File → New** to start empty. Press **Space** to play or pause.
 
 An empty song offers three starting points: **Choose instrument…** opens your
 installed sounds, **Import audio or MIDI…** brings in a recording or sequence,
@@ -598,6 +598,12 @@ To duck a track under another (a pad under a kick), add R1 Compressor to the tra
 - **Duck**, one in each section, turns that section down while the track itself is loud, so echoes and reverb fill the gaps instead of covering the sound. **Mix** blends the effect with the dry signal; on a send, use the **Send Echo** or **Send Hall** preset, which are effect only.
 
 The picture shows what you will hear over time: every repeat as a bar (left above the line, right below), blurred as Diffusion smears it, and the reverb as a wedge that narrows to nothing where it has died away, with a darker wedge inside for the highs, which Damping and Color shorten. While a Duck is in use, **E** and **R** at the right edge show how far the echo and the reverb are turned down. Drag **T** to set the echo's time and level, **F** for Feedback, **P** for Pre-delay and the reverb's level, and **D** for Decay; double-click a handle to reset it.
+
+## R1 Sampler
+
+**R1 Sampler** plays one recording across the keyboard. Give a MIDI track R1 Sampler from **Window → Device browser → Built-in (R1)**, open **Window → Instrument**, and choose **Load sample…** or drop a WAV, MP3, FLAC or OGG file on the panel's waveform. The file is imported like any audio, saved with the project, and loading it is one Undo step; **Clear** empties the sampler again. To play an audio clip already in the song, right-click it and choose **Use as sampler instrument**: Rill adds a MIDI track right below, named after the clip, whose R1 Sampler holds the clip's source recording (without the clip's trims, gain, fades or warp). It never replaces another track's instrument; use **Load sample…** there.
+
+Keys play the recording at their interval from **Root key** (C4 unless you change it; turn **Key track** off to play it at its own pitch everywhere). Drag the Start, End and loop markers on the waveform or turn their knobs. **Loop** is Off, Forward (with a seam **Crossfade**), Ping-pong or One-shot, which plays to End however short the note. The filter is off until you switch it on in its card's title. Recordings larger than 32 MiB once decoded (about three minutes of stereo at 48 kHz) are refused with a message; a missing sample file stops playback like a missing audio clip until it is found or cleared.
 
 ## Plug-in instruments and effects
 

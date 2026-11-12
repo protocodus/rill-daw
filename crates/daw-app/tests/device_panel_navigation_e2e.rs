@@ -39,9 +39,7 @@ fn open_project(app: &mut Harness) -> u64 {
     let mut project = Project::new();
     let synth = project.add_midi_track("Synth");
     let track = project.track_mut(synth).unwrap();
-    track.instrument = Instrument::Builtin {
-        device: "r1-mini".into(),
-    };
+    track.instrument = Instrument::builtin("r1-mini");
     track.clips.push(Clip::midi(
         "Pattern",
         0.0,

@@ -14,6 +14,26 @@ use std::sync::Arc;
 mod panels;
 mod pictures;
 
+/// What a sample slot of a device holds, as its panel shows it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SampleSummary {
+    pub name: String,
+    pub seconds: f32,
+    /// Min and max of each column of the waveform, −1 to 1; empty while the
+    /// host has not read the recording.
+    pub peaks: Vec<(f32, f32)>,
+}
+
+/// What a panel asks of its host for a sample slot.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SampleRequest {
+    /// Choose a file with the host's file dialog.
+    Pick,
+    /// A file dropped on the panel.
+    File(std::path::PathBuf),
+    Clear,
+}
+
 /// The panel's view of the parameter owner.
 pub trait DeviceHost {
     /// Normalized 0–1.
@@ -63,6 +83,12 @@ pub trait DeviceHost {
     }
     /// Opens the host's routing view for this device.
     fn route_sidechain(&mut self) {}
+    /// What sample slot `slot` holds; `None` while it is empty.
+    fn sample(&self, _slot: u32) -> Option<&SampleSummary> {
+        None
+    }
+    /// Loads or clears a sample slot, as one Undo step.
+    fn request_sample(&mut self, _slot: u32, _request: SampleRequest) {}
 }
 
 /// Per-panel UI state the host keeps between frames.
@@ -280,6 +306,9 @@ fn picture(
             pictures::modulation(ui, *height, host, state);
         }
         Some(panels::Picture::Space) => pictures::space(ui, host, state),
+        Some(panels::Picture::Sample { height }) => {
+            pictures::sample(ui, descriptor, *height, host, state);
+        }
         None => {}
     }
 }

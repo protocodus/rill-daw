@@ -3,10 +3,10 @@
 //! and reduction meter, a modulation effect's LFO and swept response, and
 //! the echoes and decay of a delay and reverb. Drawn from the device's own
 //! functions and telemetry.
-use crate::{DeviceHost, PanelState, WHEEL_NOTCHES, panels};
+use crate::{DeviceHost, PanelState, SampleRequest, WHEEL_NOTCHES, panels};
 use daw_devices::{
-    HISTORY_COLUMNS, HISTORY_RATE, ParamSpec, Telemetry,
-    devices::{compressor, modulator, saturator, spacer},
+    DeviceDescriptor, HISTORY_COLUMNS, HISTORY_RATE, ParamSpec, Telemetry,
+    devices::{compressor, modulator, sampler, saturator, spacer},
 };
 use egui::Ui;
 
@@ -825,5 +825,113 @@ pub(crate) fn space(ui: &mut Ui, host: &mut dyn DeviceHost, state: &mut PanelSta
             [(id, value)] => host.set_value(id, value),
             _ => host.set_values(&edit),
         }
+    }
+}
+
+/// R1 Sampler: the recording with its start, end and loop markers, which
+/// drag like their knobs, and a playhead for every voice. Above it the
+/// recording's name and the buttons that load or clear it; empty, it offers
+/// to load one. A file dropped on it loads.
+pub(crate) fn sample(
+    ui: &mut Ui,
+    descriptor: &DeviceDescriptor,
+    height: f32,
+    host: &mut dyn DeviceHost,
+    state: &mut PanelState,
+) {
+    use sampler::*;
+    let share = |id: u32, host: &dyn DeviceHost| {
+        descriptor
+            .parameter(id)
+            .map_or(0.0, |spec| spec.to_plain(host.value(id) as f32) / 100.0)
+    };
+    let summary = host.sample(0).cloned();
+    let mut request = None;
+    daw_ui::parameter_row(ui, |ui| {
+        match &summary {
+            Some(summary) => {
+                daw_ui::text::label(ui, &summary.name);
+                daw_ui::text::note(ui, format!("{:.2} s", summary.seconds));
+            }
+            None => {
+                daw_ui::text::note(ui, "No sample");
+            }
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if summary.is_some() && daw_ui::button(ui, "Clear").clicked() {
+                request = Some(SampleRequest::Clear);
+            }
+            if daw_ui::button(ui, "Load sample…").clicked() {
+                request = Some(SampleRequest::Pick);
+            }
+        });
+    });
+    ui.add_space(daw_ui::tokens::SPACE_XS);
+    let settings = panels::sampler_settings(&|id| host.value(id));
+    let playheads: Vec<f32> = live(ui, host.telemetry().as_ref(), state)
+        .map(|telemetry| {
+            (0..MAX_VOICES)
+                .map(|voice| telemetry.value(TELEMETRY_PLAYHEADS + voice))
+                .filter(|at| (0.0..=1.0).contains(at))
+                .collect()
+        })
+        .unwrap_or_default();
+    let empty = Vec::new();
+    let data = daw_ui::SampleViewData {
+        peaks: summary.as_ref().map_or(&empty, |summary| &summary.peaks),
+        start: share(START, host),
+        end: share(END, host),
+        loop_range: settings
+            .loop_mode
+            .loops()
+            .then(|| (share(LOOP_START, host), share(LOOP_END, host))),
+        playheads: &playheads,
+    };
+    let size = egui::vec2(ui.available_width(), height);
+    // The response also covers the markers' handles, which reach past it.
+    let view = egui::Rect::from_min_size(ui.cursor().min, size);
+    let output = daw_ui::sample_view(ui, &data, size);
+    #[cfg(test)]
+    state.picture_rects.push(view);
+    if summary.is_none() {
+        // Empty: the view itself offers the recording it waits for.
+        let center = view.center();
+        let button = egui::Rect::from_center_size(
+            center - egui::vec2(0.0, daw_ui::tokens::SPACE_SM),
+            egui::vec2(160.0, daw_ui::tokens::CONTROL_HEIGHT),
+        );
+        if ui
+            .put(button, daw_ui::button_widget("Load sample…"))
+            .clicked()
+        {
+            request = Some(SampleRequest::Pick);
+        }
+        ui.put(
+            egui::Rect::from_center_size(
+                center + egui::vec2(0.0, daw_ui::tokens::CONTROL_HEIGHT),
+                egui::vec2(size.x, daw_ui::tokens::CONTROL_HEIGHT),
+            ),
+            egui::Label::new(
+                egui::RichText::new("or drop an audio file here")
+                    .color(daw_ui::theme::palette(ui.ctx()).muted),
+            ),
+        );
+    }
+    for (marker, at) in output.drags {
+        let id = match marker {
+            daw_ui::SampleMarker::Start => START,
+            daw_ui::SampleMarker::End => END,
+            daw_ui::SampleMarker::LoopStart => LOOP_START,
+            daw_ui::SampleMarker::LoopEnd => LOOP_END,
+        };
+        if let Some(spec) = descriptor.parameter(id) {
+            host.set_value(id, f64::from(spec.to_normalized(at * 100.0)));
+        }
+    }
+    if let Some(path) = output.files.into_iter().next() {
+        request = Some(SampleRequest::File(path));
+    }
+    if let Some(request) = request {
+        host.request_sample(0, request);
     }
 }

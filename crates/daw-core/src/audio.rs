@@ -9,10 +9,7 @@ impl crate::Project {
         let canonical_destination = std::fs::canonicalize(destination).ok();
         let destination_file = same_file::Handle::from_path(destination).ok();
         for track in &self.tracks {
-            for clip in &track.clips {
-                let crate::ClipContent::Audio { path, .. } = &clip.content else {
-                    continue;
-                };
+            for path in track.audio_paths() {
                 let canonical_match = canonical_destination.as_ref().is_some_and(|destination| {
                     std::fs::canonicalize(path).is_ok_and(|source| source == *destination)
                 });
@@ -49,6 +46,14 @@ impl AudioData {
             "WAV has invalid channel count or sample rate"
         );
         Ok(f64::from(reader.duration()) / f64::from(spec.sample_rate))
+    }
+
+    /// The bytes a WAV takes decoded to 32-bit floats, from its header.
+    pub fn wav_decoded_bytes(path: impl AsRef<Path>) -> Result<u64> {
+        let path = path.as_ref();
+        let reader =
+            hound::WavReader::open(path).with_context(|| format!("Open WAV {}", path.display()))?;
+        Ok(u64::from(reader.len()) * std::mem::size_of::<f32>() as u64)
     }
 
     /// Decode at most 512 MiB of samples. Streaming long assets is a separate

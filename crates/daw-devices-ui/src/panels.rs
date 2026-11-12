@@ -1,7 +1,9 @@
 //! Per-device layout rules. A device without an entry here gets the generic
 //! layout: one section per parameter group, every control visible.
 use daw_devices::DeviceDescriptor;
-use daw_devices::devices::{compressor, equalizer, filter, mini, modulator, saturator, spacer};
+use daw_devices::devices::{
+    compressor, equalizer, filter, mini, modulator, sampler, saturator, spacer,
+};
 use daw_ui::{Glyph, ToggleFace};
 
 pub type Values<'a> = &'a dyn Fn(u32) -> f64;
@@ -162,6 +164,9 @@ pub enum Picture {
     Modulation { height: f32 },
     /// Echoes and a reverb's decay over time.
     Space,
+    /// The recording of sample slot 0 with its markers and the voices
+    /// playing it.
+    Sample { height: f32 },
 }
 
 impl Layout {
@@ -462,7 +467,161 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
         layout.visible = |id, values| applies(id, &mini_settings(values));
         layout.keep_inactive = true;
     }
+    if descriptor.id == sampler::DESCRIPTOR.id {
+        layout = sampler_layout(layout);
+    }
     layout
+}
+
+/// R1 Sampler on R1 Mini's grid of equal cells, in signal order: the
+/// recording over the whole width, then what of it plays (its region, loop
+/// and pitch) beside the filter; the filter and amplifier envelopes with the
+/// output; modulation and the voices.
+fn sampler_layout(mut layout: Layout) -> Layout {
+    use Slot::{Control as C, Faders};
+    use sampler::*;
+    layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
+    layout.cells = true;
+    layout.picture = Some(Picture::Sample { height: 120.0 });
+    layout.picture_place = PicturePlace::Above;
+    let mut filter = cells(
+        "Filter",
+        0,
+        4,
+        &[
+            &[C(FILTER_TYPE, 3), C(CUTOFF, 1)],
+            &[
+                C(FILTER_SLOPE, 1),
+                C(RESONANCE, 1),
+                C(FILTER_ENV, 1),
+                C(FILTER_KEY_TRACKING, 1),
+            ],
+        ],
+    );
+    filter.enable = Some(FILTER_ON);
+    layout.sections = vec![
+        cells(
+            "Sample",
+            0,
+            3,
+            &[
+                &[C(START, 1), C(END, 1), C(REVERSE, 1)],
+                &[C(ROOT, 1), C(FINE, 1), C(GAIN, 1)],
+            ],
+        ),
+        cells(
+            "Loop",
+            0,
+            3,
+            &[
+                &[C(LOOP_MODE, 3)],
+                &[C(LOOP_START, 1), C(LOOP_END, 1), C(CROSSFADE, 1)],
+            ],
+        ),
+        cells(
+            "Pitch",
+            0,
+            2,
+            &[
+                &[C(TRANSPOSE, 1), C(KEY_TRACKING, 1)],
+                &[C(BEND_RANGE, 1), C(GLIDE, 1)],
+            ],
+        ),
+        filter,
+        cells(
+            "Filter envelope",
+            1,
+            4,
+            &[&[
+                Faders(&[FENV_ATTACK, FENV_DECAY, FENV_SUSTAIN, FENV_RELEASE], 3),
+                Faders(&[VELOCITY_CUTOFF], 1),
+            ]],
+        ),
+        cells(
+            "Amp envelope",
+            1,
+            6,
+            &[&[
+                Faders(
+                    &[
+                        AENV_ATTACK,
+                        AENV_HOLD,
+                        AENV_DECAY,
+                        AENV_SUSTAIN,
+                        AENV_RELEASE,
+                    ],
+                    5,
+                ),
+                Faders(&[VELOCITY_LEVEL], 1),
+            ]],
+        ),
+        cells("Output", 1, 2, &[&[Faders(&[PAN, VOLUME], 2)]]),
+        cells(
+            "LFO",
+            2,
+            8,
+            &[&[
+                C(LFO_SHAPE, 2),
+                C(LFO_RATE, 1),
+                C(LFO_SYNC, 1),
+                C(LFO_PITCH, 1),
+                C(LFO_CUTOFF, 1),
+                C(LFO_LEVEL, 1),
+                C(LFO_PAN, 1),
+            ]],
+        ),
+        cells("Voices", 2, 4, &[&[C(VOICE_MODE, 3), C(VOICES, 1)]]),
+    ];
+    layout.captions = &[
+        (VELOCITY_CUTOFF, "Velocity"),
+        (VELOCITY_LEVEL, "Velocity"),
+        (FILTER_KEY_TRACKING, "Key track"),
+        (KEY_TRACKING, "Key track"),
+        (LOOP_MODE, "Mode"),
+        (LOOP_START, "Start"),
+        (LOOP_END, "End"),
+        (FILTER_SLOPE, "Slope"),
+        (FILTER_TYPE, "Type"),
+        (VOICE_MODE, "Mode"),
+        (LFO_SHAPE, "Shape"),
+        (LFO_RATE, "Rate"),
+        (LFO_SYNC, "Sync"),
+        (LFO_PITCH, "Pitch"),
+        (LFO_CUTOFF, "Cutoff"),
+        (LFO_LEVEL, "Level"),
+        (LFO_PAN, "Pan"),
+        // As engraved on hardware; five full names do not fit side by side.
+        (FENV_ATTACK, "A"),
+        (FENV_DECAY, "D"),
+        (FENV_SUSTAIN, "S"),
+        (FENV_RELEASE, "R"),
+        (AENV_ATTACK, "A"),
+        (AENV_HOLD, "H"),
+        (AENV_DECAY, "D"),
+        (AENV_SUSTAIN, "S"),
+        (AENV_RELEASE, "R"),
+    ];
+    // Four loop names do not fit side by side in the Loop card, nor three
+    // filter names beside Cutoff: the modes wrap two by two and the filter
+    // types draw their response, named on hover, as R1 EQ's band types do.
+    layout.toggle_columns = &[(FILTER_SLOPE, 1), (LOOP_MODE, 2)];
+    layout.faces = &[Faces {
+        ids: &[FILTER_TYPE],
+        faces: &[
+            (ToggleFace::Glyph(Glyph::LowPass), "Low-pass"),
+            (ToggleFace::Glyph(Glyph::HighPass), "High-pass"),
+            (ToggleFace::Glyph(Glyph::BandPass), "Band-pass"),
+        ],
+        segment_width: 34.0,
+    }];
+    layout.hero = Some(CUTOFF);
+    layout.visible = |id, values| applies(id, &sampler_settings(values));
+    layout.keep_inactive = true;
+    layout
+}
+
+pub(crate) fn sampler_settings(values: Values<'_>) -> sampler::Settings {
+    sampler::Settings::from_normalized(|id| values(id) as f32)
 }
 
 /// The six nodes of the equalizer's picture, low to high; the Bands table

@@ -28,6 +28,9 @@ struct Request {
     session: u64,
     paths: Vec<PathBuf>,
     target: Option<u64>,
+    /// A built-in instrument's track and sample slot that takes the one
+    /// file instead of a clip.
+    sample: Option<(u64, u32)>,
     beat: f64,
     scratch: PathBuf,
 }
@@ -396,6 +399,23 @@ impl DawApp {
         target: Option<u64>,
         beat: f64,
     ) {
+        self.queue_import(paths, target, None, beat);
+    }
+
+    /// Decodes `path` like any import, then loads it into sample slot `slot`
+    /// of the built-in instrument on `track`.
+    pub(crate) fn queue_sample_import(&mut self, path: PathBuf, track: u64, slot: u32) {
+        let beat = self.cursor;
+        self.queue_import(vec![path], None, Some((track, slot)), beat);
+    }
+
+    fn queue_import(
+        &mut self,
+        paths: Vec<PathBuf>,
+        target: Option<u64>,
+        sample: Option<(u64, u32)>,
+        beat: f64,
+    ) {
         let result = (|| -> Result<()> {
             ensure!(
                 !paths.is_empty() && paths.len() <= MAX_FILES,
@@ -434,6 +454,7 @@ impl DawApp {
                 session: self.song_session.id,
                 paths,
                 target,
+                sample,
                 beat,
                 scratch: self.settings.scratch_dir.clone(),
             });
@@ -544,6 +565,9 @@ impl DawApp {
             request.session == self.song_session.id,
             "Import belongs to a replaced document"
         );
+        if let Some((track, slot)) = request.sample {
+            return self.commit_sample_import(track, slot, batch);
+        }
         if let Some(target) = request.target {
             ensure!(
                 self.project
@@ -624,6 +648,34 @@ impl DawApp {
                 batch.files.len(),
                 if batch.files.len() == 1 { "" } else { "s" }
             );
+        }
+        Ok(())
+    }
+
+    fn commit_sample_import(&mut self, track: u64, slot: u32, mut batch: Batch) -> Result<()> {
+        let file = batch.files.first_mut().context("Nothing was decoded")?;
+        let path = file
+            .path
+            .to_str()
+            .context("Managed audio folder is not valid Unicode; choose another Storage folder before importing")?
+            .to_owned();
+        self.flush_pending_edit();
+        // Known before the commit, so the panel draws the waveform at once.
+        self.audio_files.insert(path.clone(), file.source.clone());
+        if let Some(preview) = file.preview.take() {
+            self.waveforms.insert(path.clone(), preview);
+        }
+        let name = file.name.clone();
+        let sample = daw_core::DeviceSample {
+            slot,
+            path,
+            name: name.clone(),
+        };
+        self.set_device_sample(track, slot, Some(sample))
+            .map_err(|error| anyhow::anyhow!(error.message))?;
+        batch.assets.retained = true;
+        if !self.error {
+            self.status = format!("Loaded sample {name}");
         }
         Ok(())
     }

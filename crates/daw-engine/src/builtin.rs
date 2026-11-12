@@ -1,13 +1,16 @@
 //! In-process hosting of Rill's built-in devices, with failure containment at
 //! the device boundary. See `docs/R1_DEVICES.md#engine-daw-engine`.
-use anyhow::{Result, bail};
-use daw_devices::{Device, Event, EventKind, ProcessContext, StereoIo};
+use anyhow::{Context, Result, bail};
+use daw_devices::{Device, Event, EventKind, ProcessContext, SampleData, StereoIo};
 use daw_plugins::{
     ExpressiveController as Controller, ExpressiveMidiData as Data,
     ExpressiveMidiMessage as Message, ExpressiveVelocity as Velocity, MidiMessage,
 };
+use std::collections::HashMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::{Arc, Mutex};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex, OnceLock, PoisonError, Weak};
+use std::time::SystemTime;
 
 /// The live telemetry of every built-in device of the sounding graph, by
 /// track and effect slot (`None`: the track's instrument). The render worker
@@ -17,6 +20,53 @@ pub(crate) type DeviceTelemetry = Mutex<TelemetryList>;
 
 /// Bounds the per-block event list so translation never allocates.
 const MAX_EVENTS: usize = 4096;
+
+type SampleKey = (PathBuf, u64, Option<SystemTime>);
+
+/// Decodes the recording at `path` for a device's sample slot, off the audio
+/// thread. Graph preparations share one decode per file while any graph
+/// holds it, so a parameter edit does not rebuild the mip-maps. Recordings
+/// over [`SampleData::MAX_BYTES`] decoded are refused.
+pub(crate) fn load_sample(path: &str) -> Result<Arc<SampleData>> {
+    static CACHE: OnceLock<Mutex<HashMap<SampleKey, Weak<SampleData>>>> = OnceLock::new();
+    let canonical = std::fs::canonicalize(path).context("The sample file is missing")?;
+    let metadata = canonical.metadata()?;
+    let key = (canonical, metadata.len(), metadata.modified().ok());
+    let cache = CACHE.get_or_init(Default::default);
+    let cached = cache
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(&key)
+        .and_then(Weak::upgrade);
+    if let Some(sample) = cached {
+        return Ok(sample);
+    }
+    let audio = daw_core::AudioData::load_wav_with_limit(&key.0, SampleData::MAX_BYTES)
+        .with_context(|| {
+            format!(
+                "Samples are limited to {} MiB decoded",
+                SampleData::MAX_BYTES / (1024 * 1024)
+            )
+        })?;
+    let channels = audio.channels;
+    let planar: Vec<Vec<f32>> = (0..channels.min(2))
+        .map(|channel| {
+            audio
+                .samples
+                .iter()
+                .skip(channel)
+                .step_by(channels)
+                .copied()
+                .collect()
+        })
+        .collect();
+    let slices: Vec<&[f32]> = planar.iter().map(Vec::as_slice).collect();
+    let sample = Arc::new(SampleData::new(audio.sample_rate as f32, &slices));
+    let mut cache = cache.lock().unwrap_or_else(PoisonError::into_inner);
+    cache.retain(|_, sample| sample.strong_count() > 0);
+    cache.insert(key, Arc::downgrade(&sample));
+    Ok(sample)
+}
 
 pub(crate) struct BuiltinDevice {
     device: Box<dyn Device>,
@@ -42,6 +92,11 @@ impl BuiltinDevice {
             device,
             events: Vec::with_capacity(MAX_EVENTS),
         })
+    }
+
+    /// Called during graph preparation only: a device may rebuild state.
+    pub(crate) fn set_sample(&mut self, slot: u32, sample: Option<Arc<SampleData>>) {
+        self.device.set_sample(slot, sample);
     }
 
     pub(crate) fn name(&self) -> &'static str {

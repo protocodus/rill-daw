@@ -2,7 +2,7 @@
 //! native plugin snapshots are still acknowledged before saving or swapping a project.
 use crate::{app::DawApp, settings::Settings};
 use anyhow::Result;
-use daw_core::{AudioData, AudioFile, ClipContent, Project};
+use daw_core::{AudioData, AudioFile, Project};
 use eframe::egui;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -27,11 +27,8 @@ impl From<Project> for LoadedProject {
         let paths: HashSet<_> = project
             .tracks
             .iter()
-            .flat_map(|track| &track.clips)
-            .filter_map(|clip| match &clip.content {
-                ClipContent::Audio { path, .. } => Some(path.clone()),
-                _ => None,
-            })
+            .flat_map(daw_core::Track::audio_paths)
+            .map(str::to_owned)
             .collect();
         let mut waveforms = HashMap::new();
         let mut audio_files = HashMap::new();

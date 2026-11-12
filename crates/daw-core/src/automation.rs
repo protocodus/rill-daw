@@ -1,7 +1,10 @@
 //! Parameter automation in arrangement beats. Curves contain normalized values;
 //! stable track/effect/bus IDs keep targets independent of channel ordering.
 
-use crate::{EffectSlot, Instrument, MAX_BEAT, Project, Send, Track, TrackKind, new_id};
+use crate::{
+    DeviceSample, EffectSlot, Instrument, MAX_BEAT, MAX_DEVICE_SAMPLES, Project, Send, Track,
+    TrackKind, new_id,
+};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, ops::RangeInclusive};
@@ -616,6 +619,48 @@ impl Project {
         }
         candidate.validate()?;
         *self = candidate;
+        Ok(())
+    }
+
+    /// Loads a recording into its slot of the track's built-in instrument,
+    /// replacing what the slot held. Parameters stay as they are.
+    pub fn load_device_sample(&mut self, track: u64, sample: DeviceSample) -> Result<()> {
+        self.set_device_sample(track, sample.slot, Some(sample))
+    }
+
+    /// Empties a sample slot of the track's built-in instrument.
+    pub fn clear_device_sample(&mut self, track: u64, slot: u32) -> Result<()> {
+        self.set_device_sample(track, slot, None)
+    }
+
+    fn set_device_sample(
+        &mut self,
+        track: u64,
+        slot: u32,
+        sample: Option<DeviceSample>,
+    ) -> Result<()> {
+        ensure!(
+            (slot as usize) < MAX_DEVICE_SAMPLES,
+            "Sample slot {slot} is out of range"
+        );
+        let channel = self.track_mut(track).context("Track not found")?;
+        let Instrument::Builtin { samples, .. } = &mut channel.instrument else {
+            bail!("Only a built-in instrument plays samples");
+        };
+        let previous = samples.clone();
+        samples.retain(|sample| sample.slot != slot);
+        if let Some(sample) = sample {
+            samples.push(sample);
+            samples.sort_by_key(|sample| sample.slot);
+        }
+        if let Err(error) = self.validate() {
+            if let Some(Instrument::Builtin { samples, .. }) =
+                self.track_mut(track).map(|channel| &mut channel.instrument)
+            {
+                *samples = previous;
+            }
+            return Err(error);
+        }
         Ok(())
     }
 

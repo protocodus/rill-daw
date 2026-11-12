@@ -192,6 +192,15 @@ enum Command {
         #[serde(default)]
         header: bool,
     },
+    /// System files dropped at a window position, wherever that is: a
+    /// panel's sample view as much as the arrangement.
+    DropAt {
+        paths: Vec<PathBuf>,
+        x: f32,
+        y: f32,
+        #[serde(default = "wait_by_default")]
+        wait: bool,
+    },
     WaitAudioImport {
         #[serde(default = "project_timeout")]
         timeout_ms: u64,
@@ -1457,6 +1466,36 @@ impl Harness {
                 wait,
                 header,
             } => self.drop_files(paths, track, beat, wait, header)?,
+            Command::DropAt { paths, x, y, wait } => {
+                let pos = Pos2::new(x, y);
+                self.frame(RawInput {
+                    events: vec![Event::PointerMoved(pos)],
+                    hovered_files: paths
+                        .iter()
+                        .map(|path| egui::HoveredFile {
+                            path: Some(path.clone()),
+                            ..Default::default()
+                        })
+                        .collect(),
+                    ..Default::default()
+                });
+                self.frame(RawInput {
+                    events: vec![Event::PointerMoved(pos)],
+                    dropped_files: paths
+                        .into_iter()
+                        .map(|path| egui::DroppedFile {
+                            path: Some(path),
+                            ..Default::default()
+                        })
+                        .collect(),
+                    ..Default::default()
+                });
+                self.settle();
+                if wait {
+                    self.wait_audio_import(300_000)?;
+                }
+                ensure!(!self.app.error, "{}", self.app.status);
+            }
             Command::WaitAudioImport { timeout_ms } => self.wait_audio_import(timeout_ms)?,
             Command::Freeze { track, clips, wait } => {
                 self.app.request_freeze(track, clips);

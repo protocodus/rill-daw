@@ -8,8 +8,10 @@ R1 Compressor, R1 Modulator, R1 Spacer), and R1 Mini as the default
 instrument of new MIDI tracks. R1 Spacer follows the owner's specification
 of 2026-11-12 (three reverb models, three echo models, each with Color,
 Diffusion, Duck and, for the reverb, Seed), which replaced the roadmap's
-first version before it shipped. R1 Maxi, R1 Sampler and R1 Drums are not
-implemented yet. This document proposes the
+first version before it shipped. Step 5 is in place except R1 Drums: the
+sample plumbing (model, bundling, engine, tools, app) and R1 Sampler, with
+the departures listed under [R1 Sampler](#r1-sampler). R1 Maxi and R1 Drums
+are not implemented yet. This document proposes the
 architecture, the shared UI additions and the per-device specifications for
 Rill's first built-in instruments and effects. Implementation follows in
 separate changes. The review answers are recorded in
@@ -160,8 +162,13 @@ pub fn create(id: &str) -> Option<Box<dyn Device>>;
   the events it already prepares for hosted instruments; kinds a device does
   not use are ignored.
 - `ProcessContext` carries tempo and beat position for synced delays and LFOs.
-- `SampleData` is decoded stereo `f32` at its source rate. The engine supplies
-  it from its existing decoded-source cache; devices never read files.
+- `SampleData` is up to two channels at their source rate, each held as a
+  band-limited mip-map (`daw_dsp::resample::MipMap`), built once off the
+  audio thread. The engine decodes each sample file during graph preparation
+  (at most 32 MiB of decoded PCM, `SampleData::MAX_BYTES`) and shares one
+  decode per file between preparations while any graph holds it; devices
+  never read files. A missing or unreadable sample fails the preparation, as
+  a missing audio clip does.
 - `Telemetry` is the lock-free path from the audio instance to its panel:
   atomics for scalars (gain reduction, input/output peak, effective cutoff,
   LFO phase, up to 32 voice playheads) and a fixed 16,384-frame ring of the
@@ -263,8 +270,16 @@ pub enum Effect {
     Vst3 { path, class_id },
     Builtin { device: String },                                // new
 }
-pub struct DeviceSample { pub slot: u32, pub path: String }
+pub struct DeviceSample { pub slot: u32, pub path: String, pub name: String }
 ```
+
+As built, `DeviceSample` also has a `name` (the clip's or file's name, at
+most 256 characters): bundling renames the file, so the panel could not show
+it otherwise. A built-in instrument holds at most 16 samples, one per slot
+(0 – 15); both fields default when absent, so earlier projects load
+unchanged. `Project::load_device_sample` and `clear_device_sample` change the
+samples without touching parameters, and the typed `SongEdit::SetDeviceSample`
+loads an audio clip's source by clip reference: no edit takes a path.
 
 - An explicit variant instead of a pseudo-path in `Vst3` (the Audio Unit
   locator approach): built-ins have no bundle, never go through path checks,
@@ -1713,6 +1728,59 @@ like clip media.
 **Panel** (610 points): `sample_view` across the top with draggable start,
 end and loop markers and live voice playheads; rows for Sample/Loop,
 Filter + envelope, Amp envelope, LFO; `keyboard_strip` showing the root key.
+
+**As built** (43 parameters, IDs in `devices/sampler.rs`). Where it departs
+from the table above:
+
+- *Interpolator.* Not the toolkit's 16-tap `SincTable`, which leaves aliasing
+  near −40 dB when transposing up. `daw_dsp::resample` keeps the recording as
+  a mip-map of up to seven 2:1 levels (111-tap Kaiser half-band, β 8.6) and
+  reads the level `floor(log2 step)` with a 48-tap Kaiser sinc (β 8, 256
+  phases blended linearly, eight kernels an octave, cutoff 0.9 of the level's
+  Nyquist over the remaining step). Measured: passband flat within 0.001 dB
+  to 0.4 of the output rate, aliasing −90 to −99 dB at every step up to 120.
+  Transposition is limited to a step of 120 (about +83 semitones).
+- *Filter on/off.* The filter is a switch, off by default, so a loaded
+  recording sounds as it is; its parameters show disabled while it is off.
+  It is the Clean SVF (`daw_dsp::CleanShape`), with no latency.
+- *Loop.* The forward crossfade reads what lies before the loop start (as
+  hardware samplers do), limited to what is there and to the loop's length.
+  Ping-pong has no crossfade: it turns at the ends. One-shot plays from Start
+  to End whatever the key does, so Release does not apply there.
+- *End.* Playback that reaches End, or an End marker moved behind the
+  playhead, fades out over 2 ms instead of stopping on a click.
+- *Pitch.* Root key is a note name (C4 = 60) and applies only with Key
+  tracking; without it every key plays the recording at its own pitch.
+  Bend range and Glide stand in the Pitch card.
+- *Amp envelope.* Adds Hold (`Adsr::set_hold`); 1 ms and below is no hold.
+- *Telemetry.* Voice count, LFO phase, the first voice's cutoff, and one
+  playhead per voice (32), as a share of the recording; `TELEMETRY_VALUES`
+  grew from 32 to 48 for it.
+- *Panel.* `POPUP_WIDTH_LG` on R1 Mini's twelve-cell grid, in signal order:
+  the recording over the full width (name, length, **Load sample…**,
+  **Clear**); Sample, Loop, Pitch and Filter (with its switch in the title);
+  Filter envelope, Amp envelope (five faders) and Output (Pan and Volume
+  faders); LFO and Voices. The four loop modes wrap two by two, and the
+  filter types draw their response (named on hover), since their names do
+  not fit side by side in the card. No `keyboard_strip`: the panel keyboard of every
+  instrument already plays it, and Root key reads as a note name. The empty
+  view shows **Load sample…** and takes a dropped file. Library drops wait
+  for a Library of samples.
+- *Use as sampler instrument* always adds a new MIDI track right below the
+  clip's, named after the clip, whose R1 Sampler holds the clip's source
+  recording (not its edits: trims, gain, fades, reverse and warp stay with
+  the clip) at the default settings, root C4. It never replaces the
+  instrument of another track; **Load sample…** on that track's panel does.
+- *Tools.* `set_device_sample` (current-song) loads an audio clip's source
+  into a slot by `clip_id`, or clears it with `clear: true`; it takes no
+  path. A file from disk loads through the application profile's
+  `document_action` import with the `track_id` (and `slot`) of the sampler's
+  track, through the same import worker as File → Import.
+
+CPU (`devices_bench`, 48 kHz, 256-frame blocks, a four-second stereo
+recording, looped; one machine, not a guarantee): 8 voices 161 µs per block
+(3.0 % of real time), with the filter 177 µs (3.3 %), with the filter and LFO
+to pitch and cutoff 199 µs (3.7 %); 32 voices with the filter 362 µs (6.8 %).
 
 ### R1 Drums
 

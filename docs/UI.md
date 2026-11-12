@@ -1512,7 +1512,7 @@ when a long span crowds them into one corner. The
 view knows no parameters: R1 Spacer maps the handles to Time or Division,
 Feedback, Pre-delay, Decay and the two levels.
 
-The other plots: `spectrum`, `scope`, `wavetable_view` and `sample_view` (draggable start, end and loop markers). They take plain data and own no audio state.
+The other plots: `spectrum`, `scope`, `wavetable_view` and `sample_view` (draggable start, end and loop markers; it takes a sample or file dropped on it). They take plain data and own no audio state.
 
 ### Panels ([`device_panel.rs`](../crates/daw-ui/src/device_panel.rs))
 

@@ -240,11 +240,21 @@ fn save_with_options(
                 absolute_plugin(path, &base);
             }
         }
-        for clip in &mut track.clips {
+        let clips = track
+            .clips
+            .iter_mut()
+            .filter_map(|clip| match &mut clip.content {
+                ClipContent::Audio { path, .. } => Some(path),
+                ClipContent::Midi { .. } => None,
+            });
+        let samples = track
+            .instrument
+            .samples_mut()
+            .iter_mut()
+            .map(|s| &mut s.path);
+        // Instrument samples are bundled like audio clips.
+        for path in clips.chain(samples) {
             check_cancelled(cancel)?;
-            let ClipContent::Audio { path, .. } = &mut clip.content else {
-                continue;
-            };
             let source =
                 fs::canonicalize(&*path).with_context(|| format!("Collect audio asset {path}"))?;
             if let Some((name, _)) = names.get(&source) {
@@ -484,15 +494,13 @@ pub(crate) fn load(
     let project = envelope.project;
     project.validate()?;
     let mut required = HashSet::new();
-    for track in &project.tracks {
-        for clip in &track.clips {
-            if let ClipContent::Audio { path, .. } = &clip.content {
-                ensure!(
-                    asset_name(path) && names.contains(path),
-                    "Missing or unsafe bundled audio reference: {path}"
-                );
-                required.insert(path.clone());
-            }
+    for track in project.channels() {
+        for path in track.audio_paths() {
+            ensure!(
+                asset_name(path) && names.contains(path),
+                "Missing or unsafe bundled audio reference: {path}"
+            );
+            required.insert(path.to_owned());
         }
     }
     ensure!(

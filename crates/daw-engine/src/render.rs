@@ -1871,7 +1871,9 @@ impl Renderer {
                     local_tail += (plugin.tail_samples() as u64).min(sample_rate as u64 * 30);
                     (Processor::Vst(Box::new(plugin)), latency)
                 }
-                Instrument::Builtin { device } if enabled && track.kind == TrackKind::Midi => {
+                Instrument::Builtin { device, samples }
+                    if enabled && track.kind == TrackKind::Midi =>
+                {
                     // An ID this version does not know stays silent.
                     match crate::builtin::BuiltinDevice::create(
                         device,
@@ -1879,7 +1881,21 @@ impl Renderer {
                         BLOCK,
                         &track.instrument_parameters,
                     ) {
-                        Some(device) => {
+                        Some(mut device) => {
+                            // Like an audio clip's, a missing or unreadable
+                            // recording fails the preparation.
+                            for sample in samples {
+                                check_cancelled()?;
+                                let data = crate::builtin::load_sample(&sample.path).with_context(
+                                    || {
+                                        format!(
+                                            "Loading the sample of {} ({})",
+                                            track.name, sample.path
+                                        )
+                                    },
+                                )?;
+                                device.set_sample(sample.slot, Some(data));
+                            }
                             local_tail +=
                                 (device.tail_samples() as u64).min(sample_rate as u64 * 30);
                             let latency = device.latency_samples();

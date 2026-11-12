@@ -446,6 +446,11 @@ pub fn song_edit_schema() -> Value {
         ["track"]
     );
     add!(
+        "set_device_sample",
+        json!({"track":channel_reference(),"slot":{"type":"integer","minimum":0,"maximum":15,"description":"Sample slot of the built-in instrument; R1 Sampler has slot 0."},"clip":nullable(reference())}),
+        ["track"]
+    );
+    add!(
         "remove_insert",
         json!({"track":channel_reference(),"effect":id()}),
         ["track", "effect"]
@@ -790,6 +795,14 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
             ),
         ),
         (
+            "set_device_sample",
+            "Load the source recording of an audio clip of the current song into a sample slot of the Rill built-in instrument on a MIDI track (R1 Sampler has slot 0), or empty the slot with clear: true. Recordings over 32 MiB decoded are refused. No path is accepted; to load a file, import it with document_action and this track_id. One Undo step.",
+            object(
+                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"slot":{"type":"integer","minimum":0,"maximum":15},"clip_id":id(),"clear":boolean()}),
+                &["session_id", "expected_revision", "track_id"],
+            ),
+        ),
+        (
             "list_device_presets",
             "List the factory and user presets of the Rill built-in device on a track's instrument or an insert: name, category, tags, description and source. query filters by any of those.",
             object(
@@ -917,9 +930,9 @@ pub fn application_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "document_action",
-            "Use the application's guarded New/Open/Save/Save As/Import/Export/Recover pipeline. Paths are accepted only by this explicitly privileged application tool. Unsaved edits are preserved unless discard_unsaved is true. Import beat uses zero-based quarter-note beats. Export writes the mix to path as format wav (default, 32-bit float), flac (24-bit default), ogg (quality 0-10, default 5) or mp3 (bitrate_kbps 128/192/256/320, default 192, sample rates up to 48000); sample_rate overrides the audio setup rate. With stems=true, path is an existing folder that receives one file per channel named '<song> - NN <channel>.<ext>' (channels: track ids, default every audio/instrument track; buses and folders may be named), each the song with only that channel audible, all the same length; include_mix adds the full mix, through_master keeps Master processing on each stem, and existing files fail the call unless replace_existing is true. Export runs in the background: the result lists the files it will write, and document_status is pending until they are complete.",
+            "Use the application's guarded New/Open/Save/Save As/Import/Export/Recover pipeline. Paths are accepted only by this explicitly privileged application tool. Unsaved edits are preserved unless discard_unsaved is true. Import beat uses zero-based quarter-note beats; importing audio with the track_id of a MIDI track whose Rill built-in instrument plays samples loads the file into its sample slot (slot, default 0) as one Undo step instead. Export writes the mix to path as format wav (default, 32-bit float), flac (24-bit default), ogg (quality 0-10, default 5) or mp3 (bitrate_kbps 128/192/256/320, default 192, sample rates up to 48000); sample_rate overrides the audio setup rate. With stems=true, path is an existing folder that receives one file per channel named '<song> - NN <channel>.<ext>' (channels: track ids, default every audio/instrument track; buses and folders may be named), each the song with only that channel audible, all the same length; include_mix adds the full mix, through_master keeps Master processing on each stem, and existing files fail the call unless replace_existing is true. Export runs in the background: the result lists the files it will write, and document_status is pending until they are complete.",
             object(
-                json!({"action":choices(&["new","open","save","save_as","import","export","recover"]),"path":string(),"discard_unsaved":boolean(),"beat":number(),"track_id":id(),"include_tails":boolean(),
+                json!({"action":choices(&["new","open","save","save_as","import","export","recover"]),"path":string(),"discard_unsaved":boolean(),"beat":number(),"track_id":id(),"slot":{"type":"integer","minimum":0,"maximum":15},"include_tails":boolean(),
                     "format":choices(&["wav","flac","ogg","mp3"]),"bit_depth":choices_int(&[16,24,32]),"quality":{"type":"integer","minimum":0,"maximum":10},
                     "bitrate_kbps":choices_int(&[128,192,256,320]),"sample_rate":{"type":"integer","minimum":8000,"maximum":192000},
                     "stems":boolean(),"channels":array(id(),512),"include_mix":boolean(),"through_master":boolean(),"replace_existing":boolean()}),
