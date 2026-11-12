@@ -156,6 +156,9 @@ pub struct Playhead {
     position: f64,
     /// In a ping-pong loop, on its way back.
     backward: bool,
+    /// Gain of the fade before the end marker; it falls no faster than the
+    /// fade allows, also when the marker moves behind the playhead.
+    level: f64,
     done: bool,
 }
 
@@ -164,6 +167,7 @@ impl Playhead {
         Self {
             position: region.start,
             backward: false,
+            level: 1.0,
             done: region.end <= region.start,
         }
     }
@@ -178,10 +182,9 @@ impl Playhead {
         region.recording(self.position)
     }
 
-    /// What to read now. `fade` is how many steps before the end marker the
-    /// voice starts to fade out, so a cut at the end does not click.
+    /// What to read now.
     #[inline]
-    pub fn reads(&self, region: &Region, step: f64, fade: f64) -> Reads {
+    pub fn reads(&self, region: &Region) -> Reads {
         let position = self.position;
         let mut reads = Reads {
             first: (region.recording(position), 1.0),
@@ -199,33 +202,47 @@ impl Playhead {
                 );
             }
             Some(_) => {}
-            None => {
-                let steps = (region.end - position) / step.max(1e-9);
-                if steps < fade {
-                    reads.first.1 = (steps / fade).max(0.0) as f32;
-                }
-            }
+            None => reads.first.1 = self.level as f32,
         }
         reads
     }
 
-    /// Moves on by `step` samples of the recording.
+    /// Moves on by `step` samples of the recording. Without a loop, the
+    /// last `fade` steps before the end marker fade out, so the end does not
+    /// click; the voice is done when the fade is.
     #[inline]
-    pub fn advance(&mut self, region: &Region, step: f64) {
+    pub fn advance(&mut self, region: &Region, step: f64, fade: f64) {
         let Some(looped) = region.looped else {
             self.position += step;
-            if self.position >= region.end {
-                self.done = true;
-            }
+            let (target, drop) = if fade > 0.0 {
+                (
+                    ((region.end - self.position) / step.max(1e-9) / fade).clamp(0.0, 1.0),
+                    1.0 / fade,
+                )
+            } else {
+                (f64::from(self.position < region.end), 1.0)
+            };
+            self.level = target.max(self.level - drop);
+            // Steps of 1/fade do not add up to exactly 1.
+            self.done = self.level <= 1e-9;
             return;
         };
+        self.level = 1.0;
         let length = looped.end - looped.start;
         if looped.ping_pong {
-            self.position += if self.backward { -step } else { step };
-            // A step longer than the loop folds more than once.
             // Before the loop, a voice plays on toward it.
-            if self.position >= looped.end || (self.backward && self.position < looped.start) {
-                let phase = (self.position - looped.start).rem_euclid(2.0 * length);
+            if !self.backward && self.position + step < looped.end {
+                self.position += step;
+            } else {
+                // Unfolded, the loop is one cycle of 2 × length there and back;
+                // a step longer than the loop folds more than once.
+                let offset = self.position - looped.start;
+                let unfolded = if self.backward {
+                    2.0 * length - offset
+                } else {
+                    offset
+                } + step;
+                let phase = unfolded.rem_euclid(2.0 * length);
                 self.backward = phase > length;
                 self.position = looped.start
                     + if self.backward {
@@ -240,11 +257,6 @@ impl Playhead {
                 self.position = looped.start + (self.position - looped.start).rem_euclid(length);
             }
         }
-    }
-
-    /// Ends the voice now (its end marker moved behind it).
-    pub fn past_end(&self, region: &Region) -> bool {
-        region.looped.is_none() && self.position >= region.end
     }
 }
 
@@ -270,7 +282,7 @@ mod tests {
         (0..steps)
             .map(|_| {
                 let at = playhead.position(region);
-                playhead.advance(region, step);
+                playhead.advance(region, step, 0.0);
                 at
             })
             .collect()
@@ -291,18 +303,35 @@ mod tests {
             assert_eq!(playhead.position(&region), 128.0);
             let mut steps = 0;
             while !playhead.is_done() {
-                playhead.advance(&region, 1.5);
+                playhead.advance(&region, 1.5, 10.0);
                 steps += 1;
             }
             assert_eq!(steps, 86, "{mode:?}");
             // The last steps fade out, the rest plays at full level.
             let mut playhead = Playhead::new(&region);
-            assert_eq!(playhead.reads(&region, 1.5, 10.0).first.1, 1.0);
+            assert_eq!(playhead.reads(&region).first.1, 1.0);
             for _ in 0..82 {
-                playhead.advance(&region, 1.5);
+                playhead.advance(&region, 1.5, 10.0);
             }
-            let gain = playhead.reads(&region, 1.5, 10.0).first.1;
+            let gain = playhead.reads(&region).first.1;
             assert!(gain > 0.0 && gain < 0.5, "{gain}");
+            // An end marker moved behind the playhead fades it as fast, no faster.
+            let mut playhead = Playhead::new(&region);
+            playhead.advance(&region, 1.5, 10.0);
+            let shortened = Region::new(
+                1024,
+                &Markers {
+                    start: 0.125,
+                    end: 0.0,
+                    ..markers(mode)
+                },
+            );
+            let mut gains = Vec::new();
+            while !playhead.is_done() {
+                playhead.advance(&shortened, 1.5, 10.0);
+                gains.push(playhead.reads(&shortened).first.1);
+            }
+            assert_eq!(gains.len(), 10, "{gains:?}");
         }
     }
 
@@ -350,9 +379,9 @@ mod tests {
         assert!(positions[750..].iter().all(|at| *at >= 500.0));
         // Steps longer than the loop fold back into it.
         let mut playhead = Playhead::new(&region);
-        playhead.advance(&region, 333.0);
+        playhead.advance(&region, 333.0, 0.0);
         for _ in 0..100 {
-            playhead.advance(&region, 333.0);
+            playhead.advance(&region, 333.0, 0.0);
             let at = playhead.position(&region);
             assert!((500.0..=750.0).contains(&at), "{at}");
         }
@@ -376,13 +405,13 @@ mod tests {
             let mut playhead = Playhead::new(&region);
             (0..20_000)
                 .map(|_| {
-                    let reads = playhead.reads(&region, 1.0, 0.0);
+                    let reads = playhead.reads(&region);
                     let (gains, value) = (
                         reads.first.1.powi(2) + reads.second.1.powi(2),
                         reads.first.1 as f64 * tone(reads.first.0)
                             + reads.second.1 as f64 * tone(reads.second.0),
                     );
-                    playhead.advance(&region, 1.0);
+                    playhead.advance(&region, 1.0, 0.0);
                     (gains, value)
                 })
                 .collect::<Vec<_>>()
@@ -411,7 +440,7 @@ mod tests {
             },
         );
         let playhead = Playhead::new(&region);
-        assert_eq!(playhead.reads(&region, 1.0, 0.0).second.1, 0.0);
+        assert_eq!(playhead.reads(&region).second.1, 0.0);
     }
 
     #[test]
@@ -429,7 +458,7 @@ mod tests {
             assert_eq!(region.loop_range(), None);
             let mut playhead = Playhead::new(&region);
             for _ in 0..10_001 {
-                playhead.advance(&region, 1.0);
+                playhead.advance(&region, 1.0, 0.0);
             }
             assert!(playhead.is_done());
         }

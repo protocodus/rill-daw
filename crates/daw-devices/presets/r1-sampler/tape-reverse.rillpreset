@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "device": "r1-sampler",
+  "name": "Tape Reverse",
+  "author": "Rill",
+  "category": "Effects",
+  "tags": [
+    "reverse",
+    "wow"
+  ],
+  "description": "The recording backward with a swelling attack and a slow pitch wobble, like a reversed tape.",
+  "parameters": {
+    "sample.reverse": true,
+    "aenv.attack": 60.0,
+    "aenv.release": 500.0,
+    "lfo.rate": 0.7,
+    "lfo.shape": "Sine",
+    "lfo.pitch": 0.15,
+    "filter.on": true,
+    "filter.cutoff": 7000.0
+  }
+}

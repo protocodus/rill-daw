@@ -1,0 +1,31 @@
+{
+  "format": 1,
+  "device": "r1-sampler",
+  "name": "Soft Pad",
+  "author": "Rill",
+  "category": "Pad",
+  "tags": [
+    "slow",
+    "wide",
+    "loop"
+  ],
+  "description": "Slow attack and release over a crossfaded loop, a gentle 24 dB low-pass and a slow drift across the stereo field.",
+  "parameters": {
+    "loop.mode": "Forward",
+    "loop.start": 35.0,
+    "loop.end": 80.0,
+    "loop.crossfade": 200.0,
+    "filter.on": true,
+    "filter.slope": "24 dB",
+    "filter.cutoff": 2600.0,
+    "filter.resonance": 5.0,
+    "filter.keytrack": 50.0,
+    "aenv.attack": 700.0,
+    "aenv.release": 1800.0,
+    "lfo.rate": 0.3,
+    "lfo.shape": "Triangle",
+    "lfo.pan": 35.0,
+    "lfo.level": 10.0,
+    "voice.velocity": 30.0
+  }
+}

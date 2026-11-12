@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "device": "r1-sampler",
+  "name": "Default",
+  "author": "Rill",
+  "category": "Basic",
+  "description": "The recording as it is, across the keyboard from its root key, with the filter off.",
+  "parameters": {}
+}

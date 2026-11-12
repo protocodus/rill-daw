@@ -2,8 +2,9 @@
 //! writing these tests again. See `docs/R1_DEVICES.md#verification`.
 use daw_devices::{
     Device, DeviceDescriptor, DeviceKind, Event, EventKind, ParamRange, Preset, ProcessContext,
-    StereoIo, factory_presets, registry,
+    SampleData, StereoIo, factory_presets, registry,
 };
+use std::sync::{Arc, OnceLock};
 use std::{
     alloc::{GlobalAlloc, Layout, System},
     cell::Cell,
@@ -66,9 +67,33 @@ impl Lcg {
     }
 }
 
+/// A stereo recording at another rate than the tests run at, so a device
+/// with sample slots plays something that moves its whole voice path.
+fn recording() -> Arc<SampleData> {
+    static RECORDING: OnceLock<Arc<SampleData>> = OnceLock::new();
+    Arc::clone(RECORDING.get_or_init(|| {
+        let mut noise = Lcg(77);
+        let (left, right): (Vec<f32>, Vec<f32>) = (0..22_050)
+            .map(|n| {
+                let t = n as f32 / 44_100.0;
+                let decay = (-3.0 * t).exp();
+                let tone = (std::f32::consts::TAU * 220.0 * t).sin();
+                (
+                    decay * (0.6 * tone + 0.2 * (noise.next() - 0.5)),
+                    decay * (0.6 * tone - 0.2 * (noise.next() - 0.5)),
+                )
+            })
+            .unzip();
+        Arc::new(SampleData::new(44_100.0, &[&left, &right]))
+    }))
+}
+
 fn prepared(descriptor: &DeviceDescriptor) -> Box<dyn Device> {
     let mut device = (descriptor.create)();
     device.prepare(RATE, BLOCK);
+    for slot in 0..descriptor.sample_slots {
+        device.set_sample(slot, Some(recording()));
+    }
     device
 }
 

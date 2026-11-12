@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "device": "r1-sampler",
+  "name": "Plucked Keys",
+  "author": "Rill",
+  "category": "Keys",
+  "tags": [
+    "pluck",
+    "velocity"
+  ],
+  "description": "A low-pass that opens on the attack and closes fast, and a decaying amplifier: any tone becomes a pluck.",
+  "parameters": {
+    "filter.on": true,
+    "filter.cutoff": 700.0,
+    "filter.resonance": 20.0,
+    "filter.env": 3.5,
+    "filter.keytrack": 60.0,
+    "filter.velocity": 1.5,
+    "fenv.attack": 0.5,
+    "fenv.decay": 260.0,
+    "fenv.sustain": 0.0,
+    "fenv.release": 300.0,
+    "aenv.attack": 0.5,
+    "aenv.decay": 900.0,
+    "aenv.sustain": 0.0,
+    "aenv.release": 300.0,
+    "voice.velocity": 75.0
+  }
+}

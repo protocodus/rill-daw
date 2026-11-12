@@ -3,9 +3,10 @@ use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering::Relaxed};
 /// Frames kept for scopes and spectra: a third of a second at 48 kHz, so a
 /// spectrum resolves 6 Hz and still has a dozen bins below 100 Hz.
 pub const TELEMETRY_FRAMES: usize = 16_384;
-/// Device-defined live values (effective cutoff, gain reduction, LFO phase…).
-/// Each device documents which index means what.
-pub const TELEMETRY_VALUES: usize = 16;
+/// Device-defined live values (effective cutoff, gain reduction, LFO phase,
+/// a sampler's 32 voice playheads…). Each device documents which index
+/// means what.
+pub const TELEMETRY_VALUES: usize = 48;
 
 /// Columns of level history: 8 s at [`HISTORY_RATE`].
 pub const HISTORY_COLUMNS: usize = 512;

@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-sampler",
+  "name": "One-Shot Hit",
+  "author": "Rill",
+  "category": "Drums",
+  "tags": [
+    "one-shot",
+    "percussive"
+  ],
+  "description": "Plays the whole recording on every key press however short, louder with velocity: for hits and stabs.",
+  "parameters": {
+    "loop.mode": "One-shot",
+    "aenv.attack": 0.5,
+    "voice.velocity": 85.0,
+    "voice.volume": -3.0
+  }
+}
