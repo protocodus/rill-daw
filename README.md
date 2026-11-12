@@ -37,7 +37,7 @@ Get a development build for your platform. These links serve the latest successf
 
 **Installing:** extract the download ZIP, then the platform archive inside it. Keep the application and `daw-plugin-host` helper together; keep the macOS app bundle intact. Each package includes a SHA-256 checksum and installation notes. Builds are unsigned and macOS builds are not notarized. macOS requires version 11 or newer; Linux requires glibc 2.35 or newer. See [platform requirements and installation](docs/RELEASING.md).
 
-**Sound out of the box:** Rill includes its own [R1 synth and filter](#built-in-devices) and an original audio drum loop to try immediately. Add VST3, CLAP, LV2 and AU instruments and effects whenever you like.
+**Sound out of the box:** Rill includes its own [three instruments and six effects](#built-in-devices) (synth, sampler, drums, filter, equalizer, saturator, compressor, modulator and echo/reverb) and an original audio drum loop to try immediately. Add VST3, CLAP, LV2 and AU instruments and effects whenever you like.
 
 Build artifacts expire after 14 days. If a link is unavailable, visit the [successful main builds](https://github.com/protocodus/rill-daw/actions/workflows/ci.yml?query=branch%3Amain+is%3Asuccess) and open a run's **Artifacts** section; GitHub sign-in is required for that route. A newer build can be in progress while the links serve an earlier successful version.
 
@@ -150,7 +150,7 @@ Rendered from the current `main` by CI on every build ([`scripts/capture-screens
 
 ## Built-in devices
 
-Rill ships its own instruments and effects, so a new song makes sound before any plug-in is installed. Find them in **Window → Device browser** under **Built-in (R1)**. Each has factory presets, automation on every control, and tools the AI assistant can use in plain units.
+Rill ships its own instruments and effects, so a new song makes sound before any plug-in is installed. Find them in **Window → Device browser** under **Built-in (R1)**. Each has factory presets, a Random button that varies every control by 1, 10 or 100 %, automation on every control, and tools the AI assistant can use in plain units.
 
 | Device | What it does |
 | --- | --- |
@@ -164,7 +164,7 @@ Rill ships its own instruments and effects, so a new song makes sound before any
 | ![R1 Modulator panel](artifacts/readme-r1-modulator.png) **R1 Modulator** · effect | Chorus, flanger and phaser with one set of controls and a Clean or Analog character. The panel shows the LFO beside the comb or notches it sweeps, with the live position of each channel; drag the Center handle in the plot or the LFO itself. Up to four chorus voices, two to twelve phaser stages, tempo sync from eight bars to a sixteenth, and a level that stays put while you turn Mix and Feedback. |
 | ![R1 Spacer panel](artifacts/readme-r1-spacer.png) **R1 Spacer** · effect | Echo and reverb in one device, in series or in parallel. The echo is a clean Digital delay, a bucket-brigade BBD line whose clock sets its tone, or a Tape with a modelled transport, each with up to four heads, diffusion and a Color of its own, synced to the song or free, mono, ping-pong or wide. The reverb is a Studio, a Room or a Hall, three algorithms for three sizes, with a decay time that is exactly what the knob says and a Seed for 32 different spaces of the same size. Drag time, feedback, pre-delay and decay in the picture of the repeats and the tail, and let each section's Duck clear it out of the way while the track plays. |
 
-The full design, including the devices still to come, is in [R1 built-in devices](docs/R1_DEVICES.md).
+The full design, including the R1 Maxi synth still to come, is in [R1 built-in devices](docs/R1_DEVICES.md).
 
 ### Preset compatibility tests
 
