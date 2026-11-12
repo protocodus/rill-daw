@@ -1,6 +1,6 @@
 use super::*;
 use daw_devices::{
-    devices::{compressor, equalizer, filter, mini, modulator, sampler, saturator, spacer},
+    devices::{compressor, drums, equalizer, filter, mini, modulator, sampler, saturator, spacer},
     registry,
 };
 use egui::{Event, Modifiers, PointerButton, Pos2, pos2, vec2};
@@ -25,6 +25,8 @@ struct TableHost {
     routed: usize,
     tempo: Option<f64>,
     sample: Option<SampleSummary>,
+    /// What the other slots hold.
+    samples: HashMap<u32, SampleSummary>,
     sample_requests: Vec<(u32, SampleRequest)>,
 }
 
@@ -92,7 +94,10 @@ impl DeviceHost for TableHost {
         self.routed += 1;
     }
     fn sample(&self, slot: u32) -> Option<&SampleSummary> {
-        self.sample.as_ref().filter(|_| slot == 0)
+        match slot {
+            0 => self.sample.as_ref(),
+            _ => self.samples.get(&slot),
+        }
     }
     fn request_sample(&mut self, slot: u32, request: SampleRequest) {
         self.sample_requests.push((slot, request));
@@ -1876,4 +1881,244 @@ fn faders_on_a_row_of_one_line_keep_the_travel_of_two() {
             "{id}: {fader:?}"
         );
     }
+}
+
+#[test]
+fn drums_places_every_parameter_once_across_its_pads() {
+    assert_eq!(
+        panel_width(&drums::DESCRIPTOR),
+        daw_ui::tokens::POPUP_WIDTH_LG + daw_ui::DEVICE_FRAME_INSET
+    );
+    // The kit's Volume stands beside the pads; each pad's own in the cards.
+    let mut ids = vec![drums::VOLUME];
+    for pad in 0..drums::PADS {
+        let layout = panels::layout_for(&drums::DESCRIPTOR, pad);
+        assert!(layout.cells && layout.keep_inactive);
+        // Twelve cells, every line filled: no holes.
+        let spans: u32 = layout.sections.iter().map(|s| u32::from(s.span)).sum();
+        assert_eq!(spans, 12);
+        for section in &layout.sections {
+            let fill = |line: &Vec<panels::Slot>| {
+                line.iter()
+                    .map(|slot| match slot {
+                        panels::Slot::Control(_, cells)
+                        | panels::Slot::Blank(cells)
+                        | panels::Slot::Faders(_, cells)
+                        | panels::Slot::Swap(_, cells) => u32::from(*cells),
+                    })
+                    .sum::<u32>()
+            };
+            for line in &section.lines {
+                assert_eq!(fill(line), u32::from(section.span), "{}", section.title);
+                assert!(
+                    !line
+                        .iter()
+                        .any(|slot| matches!(slot, panels::Slot::Blank(_)))
+                );
+            }
+            for id in section.ids() {
+                assert_eq!(drums::pad_of(id).map(|(of, _)| of), Some(pad), "{id}");
+            }
+        }
+        ids.extend(layout.sections.iter().flat_map(|section| section.ids()));
+    }
+    let count = ids.len();
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(count, ids.len(), "placed twice");
+    assert_eq!(ids.len(), drums::DESCRIPTOR.parameters.len());
+}
+
+/// The left edge and width of the twelve columns the drum panel's cards
+/// share, from the pads and the recording at either end of the top row.
+fn drum_columns(panel: &Panel) -> (f32, f32) {
+    let margin = daw_ui::card(&panel.ctx).total_margin();
+    let (grid, view) = (panel.state.picture_rects[0], panel.state.picture_rects[1]);
+    let left = grid.left() - margin.left;
+    let width = view.right() + margin.right - left;
+    let gap = daw_ui::tokens::SPACE_SM;
+    (left, (width - 11.0 * gap) / 12.0)
+}
+
+#[test]
+fn drums_controls_stay_inside_their_cards() {
+    for pad in [0, 15] {
+        let mut panel = Panel::new(&drums::DESCRIPTOR);
+        panel.state.pad = pad;
+        panel.frame(vec![]);
+        panel.frame(vec![]);
+        let (origin, column) = drum_columns(&panel);
+        let gap = daw_ui::tokens::SPACE_SM;
+        let layout = panels::layout_for(&drums::DESCRIPTOR, pad);
+        let mut first = 0u8;
+        for section in &layout.sections {
+            let span = f32::from(section.span);
+            let left = origin + f32::from(first) * (column + gap);
+            let right = left + span * column + (span - 1.0) * gap;
+            first += section.span;
+            for id in section.ids() {
+                let rects: Vec<_> = panel
+                    .state
+                    .control_rects
+                    .iter()
+                    .filter(|(c, _)| *c == id)
+                    .collect();
+                assert_eq!(rects.len(), 1, "{id} drawn once");
+                let rect = rects[0].1;
+                assert!(
+                    rect.left() >= left - 0.5 && rect.right() <= right + 0.5,
+                    "{} parameter {id}: {rect:?} outside {left}..{right}",
+                    section.title
+                );
+            }
+        }
+        // The kit's Volume inside the kit card, beside the pads.
+        let volume = panel.cell(drums::VOLUME);
+        let kit_right = origin + 5.0 * column + 4.0 * gap;
+        assert!(volume.left() >= panel.state.picture_rects[0].right());
+        assert!(volume.right() <= kit_right + 0.5, "{volume:?}");
+    }
+}
+
+/// Where pad `pad` (0–15) of the grid is: bottom row first.
+fn drum_pad(panel: &Panel, pad: usize) -> Pos2 {
+    let grid = panel.state.picture_rects[0];
+    let gap = daw_ui::tokens::SPACE_SM;
+    let cell = vec2(
+        (grid.width() - 3.0 * gap) / 4.0,
+        (grid.height() - 3.0 * gap) / 4.0,
+    );
+    let (column, row) = ((pad % 4) as f32, (3 - pad / 4) as f32);
+    grid.min + vec2(column * (cell.x + gap), row * (cell.y + gap)) + cell * 0.5
+}
+
+#[test]
+fn drums_pad_click_selects_and_auditions_the_pad() {
+    let mut panel = Panel::new(&drums::DESCRIPTOR);
+    assert_eq!(panel.state.pad, 0);
+    panel.click(drum_pad(&panel, 6), 1);
+    assert_eq!(panel.state.pad, 6);
+    let notes: Vec<_> = panel
+        .host
+        .auditions
+        .iter()
+        .map(|audition| audition.map(|(note, _)| note))
+        .collect();
+    assert_eq!(notes, vec![Some(drums::FIRST_NOTE + 6), None]);
+    // The cards now show pad 7, and the click changed no value.
+    let shown = |id: u32| panel.state.control_rects.iter().any(|(at, _)| *at == id);
+    assert!(shown(drums::id(6, drums::START)));
+    assert!(!shown(drums::id(0, drums::START)));
+    assert_eq!(panel.host.values, panel.host.defaults);
+}
+
+#[test]
+fn drums_file_dropped_on_a_pad_loads_into_that_pad() {
+    let mut panel = Panel::new(&drums::DESCRIPTOR);
+    let at = drum_pad(&panel, 15);
+    let ctx = panel.ctx.clone();
+    let _ = ctx.run(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 1000.0))),
+            events: vec![Event::PointerMoved(at)],
+            dropped_files: vec![egui::DroppedFile {
+                path: Some("/tmp/crash.wav".into()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+        |ctx| {
+            // In a scope, as the other frames draw it.
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.scope(|ui| show(ui, &drums::DESCRIPTOR, &mut panel.host, &mut panel.state));
+            });
+        },
+    );
+    assert_eq!(
+        panel.host.sample_requests,
+        vec![(15, SampleRequest::File("/tmp/crash.wav".into()))]
+    );
+    assert_eq!(panel.state.pad, 15, "the drop selects the pad");
+    // Load sample… asks for the selected pad's slot.
+    panel.frame(vec![]);
+    let view = panel.state.picture_rects[1];
+    panel.click(view.center() - vec2(0.0, daw_ui::tokens::SPACE_SM), 1);
+    assert_eq!(panel.host.sample_requests[1], (15, SampleRequest::Pick));
+}
+
+#[test]
+fn drums_markers_drag_the_selected_pads_start_and_end() {
+    let mut panel = Panel::new(&drums::DESCRIPTOR);
+    panel.host.samples.insert(
+        3,
+        SampleSummary {
+            name: "Clap".into(),
+            seconds: 0.5,
+            peaks: vec![(-0.5, 0.5); 128],
+        },
+    );
+    panel.state.pad = 3;
+    panel.frame(vec![]);
+    let inner = panel.state.picture_rects[1].shrink(1.0);
+    let at = |share: f32| pos2(inner.left() + inner.width() * share, inner.center().y);
+    panel.drag(at(0.0), at(0.2));
+    assert!((panel.plain(drums::id(3, drums::START)) - 20.0).abs() < 0.5);
+    assert_eq!(panel.plain(drums::id(0, drums::START)), 0.0);
+}
+
+#[test]
+fn drums_readouts_say_what_a_pad_does() {
+    let layout = panels::layout_for(&drums::DESCRIPTOR, 2);
+    let mut host = TableHost::new(&drums::DESCRIPTOR);
+    let readout = |host: &TableHost, id: u32| (layout.readout)(id, &|id| host.value(id));
+    let set = |host: &mut TableHost, offset: u32, plain: f32| {
+        let id = drums::id(2, offset);
+        let spec = drums::DESCRIPTOR.parameter(id).unwrap();
+        host.values.insert(id, f64::from(spec.to_normalized(plain)));
+    };
+    let id = |offset| drums::id(2, offset);
+    assert_eq!(readout(&host, id(drums::HOLD)).as_deref(), Some("Full"));
+    assert_eq!(readout(&host, id(drums::FILTER)).as_deref(), Some("Off"));
+    assert_eq!(readout(&host, id(drums::CHOKE)), None);
+    set(&mut host, drums::FILTER, -50.0);
+    assert!(
+        readout(&host, id(drums::FILTER))
+            .unwrap()
+            .starts_with("LP ")
+    );
+    set(&mut host, drums::FILTER, 100.0);
+    assert_eq!(
+        readout(&host, id(drums::FILTER)).as_deref(),
+        Some("HP 10.0 kHz")
+    );
+    set(&mut host, drums::LEVEL, drums::LEVEL_OFF_DB);
+    assert_eq!(readout(&host, id(drums::LEVEL)).as_deref(), Some("−∞ dB"));
+    set(&mut host, drums::CHOKE, 2.0);
+    assert_eq!(readout(&host, id(drums::CHOKE)).as_deref(), Some("Group 2"));
+    set(&mut host, drums::HOLD, 100.0);
+    assert_eq!(readout(&host, id(drums::HOLD)), None);
+}
+
+#[test]
+fn drums_disable_what_does_not_apply_in_place() {
+    let mut panel = Panel::new(&drums::DESCRIPTOR);
+    // No filter, no pitch envelope and a hold as long as the recording.
+    for offset in [drums::RESONANCE, drums::ENV_DECAY, drums::DECAY] {
+        assert!(
+            panel.state.disabled.contains(&drums::id(0, offset)),
+            "{offset}"
+        );
+    }
+    let resonance = panel.cell(drums::id(0, drums::RESONANCE));
+    panel.set(drums::id(0, drums::FILTER), 30.0);
+    panel.set(drums::id(0, drums::TRIGGER), 1.0);
+    panel.frame(vec![]);
+    let disabled = &panel.state.disabled;
+    assert!(!disabled.contains(&drums::id(0, drums::RESONANCE)));
+    assert!(!disabled.contains(&drums::id(0, drums::DECAY)));
+    assert_eq!(
+        panel.cell(drums::id(0, drums::RESONANCE)),
+        resonance,
+        "nothing moves"
+    );
 }

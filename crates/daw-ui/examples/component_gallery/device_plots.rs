@@ -306,6 +306,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
                 end: state.sample.1,
                 loop_range: Some((0.3, 0.7)),
                 playheads: &[0.45],
+                envelope: &[0.0, 1.0, 1.0, 0.8, 0.55, 0.35, 0.2, 0.1, 0.05, 0.0],
             },
             egui::vec2(377.0, 120.0),
         );

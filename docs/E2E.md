@@ -292,6 +292,16 @@ clip's context menu adds a MIDI track below it that plays the clip at its
 pitch from C4, undone in one step. Run with
 `cargo test --locked -p daw-app --test sampler_e2e`.
 
+`drums_e2e` loads recordings onto R1 Drums pads with `set_device_sample`
+and its `slot` (slot 16 is refused) and checks in exported audio that each
+pad's note plays its own recording at its own pitch and that the other pads
+stay silent; without a choke group a second hi-hat leaves the first ringing,
+and with both in group 1 it cuts it. It then opens the panel, clicks a pad
+by its sample's name to select it, and drops a file on that pad: the file
+loads into that pad's slot only, adds no track, is one **Load sample** step,
+and the pad's note plays it. Run with
+`cargo test --locked -p daw-app --test drums_e2e`.
+
 `device_frame_e2e` opens R1 Spacer with one lane following and one held by
 hand: the name and presets share the frame's bar above every section and the
 body repeats neither, both automation states show on their controls, and

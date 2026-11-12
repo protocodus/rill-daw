@@ -6,7 +6,7 @@
 use crate::{DeviceHost, PanelState, SampleRequest, WHEEL_NOTCHES, panels};
 use daw_devices::{
     DeviceDescriptor, HISTORY_COLUMNS, HISTORY_RATE, ParamSpec, Telemetry,
-    devices::{compressor, modulator, sampler, saturator, spacer},
+    devices::{compressor, drums, modulator, sampler, saturator, spacer},
 };
 use egui::Ui;
 
@@ -886,6 +886,7 @@ pub(crate) fn sample(
             .loops()
             .then(|| (share(LOOP_START, host), share(LOOP_END, host))),
         playheads: &playheads,
+        envelope: &[],
     };
     let size = egui::vec2(ui.available_width(), height);
     // The response also covers the markers' handles, which reach past it.
@@ -933,5 +934,215 @@ pub(crate) fn sample(
     }
     if let Some(request) = request {
         host.request_sample(0, request);
+    }
+}
+
+/// Width of the kit's Volume fader cell beside the pads.
+const KIT_FADER_CELL: f32 = 60.0;
+/// Points of the envelope drawn over a pad's recording.
+const ENVELOPE_POINTS: usize = 96;
+
+/// R1 Drums: the kit card holds the sixteen pads, bottom row first as on a
+/// drum controller, with the kit's Volume beside them; a click selects a
+/// pad and sounds it, and an audio file dropped on a pad loads into it. The
+/// selected pad's card shows its recording with its start and end markers,
+/// which drag like their knobs, the amplifier envelope over it and the
+/// latest hit's playhead.
+pub(crate) fn drums(
+    ui: &mut Ui,
+    descriptor: &DeviceDescriptor,
+    height: f32,
+    layout: &panels::Layout,
+    host: &mut dyn DeviceHost,
+    state: &mut PanelState,
+) {
+    use drums::*;
+    let pad = state.pad.min(PADS - 1);
+    let telemetry = live(ui, host.telemetry().as_ref(), state);
+    let settings = panels::drums_settings(&|id| host.value(id));
+    let summaries: Vec<Option<crate::SampleSummary>> = (0..PADS)
+        .map(|slot| host.sample(slot as u32).cloned())
+        .collect();
+    let cells = [
+        daw_ui::GridCell {
+            span: 5,
+            framed: true,
+        },
+        daw_ui::GridCell {
+            span: 7,
+            framed: true,
+        },
+    ];
+    let mut request: Option<(usize, SampleRequest)> = None;
+    let mut edits: Vec<(u32, f64)> = Vec::new();
+    daw_ui::grid_row_cells(ui, &cells, |ui, index| {
+        if index == 0 {
+            daw_ui::device_section_title(ui, "Kit");
+            ui.add_space(daw_ui::tokens::SPACE_XS);
+            // The card's width, which a row's own would not tell yet.
+            let width = ui.available_width();
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                let views: [daw_ui::PadView; PADS] = std::array::from_fn(|index| daw_ui::PadView {
+                    name: summaries[index]
+                        .as_ref()
+                        .map_or("", |summary| summary.name.as_str()),
+                    loaded: summaries[index].is_some(),
+                    activity: telemetry
+                        .as_ref()
+                        .map_or(0.0, |telemetry| telemetry.value(TELEMETRY_ACTIVITY + index)),
+                    muted: settings.pads[index].mute,
+                });
+                let size = egui::vec2(width - KIT_FADER_CELL - daw_ui::tokens::SPACE_SM, height);
+                #[cfg(test)]
+                state
+                    .picture_rects
+                    .push(egui::Rect::from_min_size(ui.cursor().min, size));
+                let output = daw_ui::pad_grid(ui, &views, pad, size);
+                if let Some((index, velocity)) = output.pressed {
+                    host.audition(Some((FIRST_NOTE + index as u8, velocity)));
+                } else if output.released.is_some() {
+                    host.audition(None);
+                }
+                if let Some(index) = output.selected {
+                    state.pad = index;
+                }
+                if let Some((index, path)) = output.files {
+                    request = Some((index, SampleRequest::File(path)));
+                }
+                ui.add_space(daw_ui::tokens::SPACE_SM);
+                if let Some(spec) = descriptor.parameter(VOLUME) {
+                    // The caption and value take their lines; the fader the rest.
+                    let text =
+                        ui.fonts_mut(|fonts| fonts.row_height(&daw_ui::control_caption_font()));
+                    let cell = crate::Cell {
+                        width: KIT_FADER_CELL,
+                        natural: KIT_FADER_CELL,
+                        height: height - 2.0 * text - 2.0 * ui.spacing().item_spacing.y,
+                        lead: 0.0,
+                        fader: true,
+                    };
+                    crate::control(ui, descriptor, spec, host, state, cell, layout);
+                }
+            });
+            return;
+        }
+        let summary = summaries[pad].as_ref();
+        let ids = |offset: u32| id(pad, offset);
+        let title = format!("Pad {}", pad + 1);
+        daw_ui::device_section_title(ui, &title);
+        ui.add_space(daw_ui::tokens::SPACE_XS);
+        let top = ui.cursor().min.y;
+        // One control line, level with the pads' top row.
+        let line = egui::vec2(ui.available_width(), daw_ui::tokens::CONTROL_HEIGHT);
+        ui.allocate_ui_with_layout(
+            line,
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                match summary {
+                    Some(summary) => {
+                        daw_ui::text::label(ui, &summary.name);
+                        daw_ui::text::note(ui, format!("{:.2} s", summary.seconds));
+                    }
+                    None => {
+                        daw_ui::text::note(ui, "No sample");
+                    }
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if summary.is_some() && daw_ui::button(ui, "Clear").clicked() {
+                        request = Some((pad, SampleRequest::Clear));
+                    }
+                    if daw_ui::button(ui, "Load sample…").clicked() {
+                        request = Some((pad, SampleRequest::Pick));
+                    }
+                });
+            },
+        );
+        ui.add_space(daw_ui::tokens::SPACE_XS);
+        let pad_settings = &settings.pads[pad];
+        let playheads: Vec<f32> = telemetry
+            .as_ref()
+            .map(|telemetry| telemetry.value(TELEMETRY_PLAYHEADS + pad))
+            .filter(|at| (0.0..=1.0).contains(at))
+            .into_iter()
+            .collect();
+        // The envelope over the stretch of the recording a hit plays, at
+        // the pad's pitch.
+        let envelope: Vec<f32> = summary
+            .map(|summary| {
+                let seconds = summary.seconds * (pad_settings.end - pad_settings.start).abs()
+                    / 2f32.powf(pad_settings.pitch / 12.0);
+                let mut levels: Vec<f32> = (0..ENVELOPE_POINTS)
+                    .map(|point| {
+                        let at = seconds * point as f32 / (ENVELOPE_POINTS - 1) as f32;
+                        pad_settings.envelope(at)
+                    })
+                    .collect();
+                if pad_settings.reverse {
+                    levels.reverse();
+                }
+                levels
+            })
+            .unwrap_or_default();
+        let empty = Vec::new();
+        let data = daw_ui::SampleViewData {
+            peaks: summary.map_or(&empty, |summary| &summary.peaks),
+            start: pad_settings.start,
+            end: pad_settings.end,
+            loop_range: None,
+            playheads: &playheads,
+            envelope: &envelope,
+        };
+        let size = egui::vec2(
+            ui.available_width(),
+            (height - (ui.cursor().min.y - top)).max(daw_ui::tokens::CONTROL_HEIGHT),
+        );
+        let view = egui::Rect::from_min_size(ui.cursor().min, size);
+        let output = daw_ui::sample_view(ui, &data, size);
+        #[cfg(test)]
+        state.picture_rects.push(view);
+        if summary.is_none() {
+            // Empty: the view itself offers the recording it waits for.
+            let center = view.center();
+            let button = egui::Rect::from_center_size(
+                center - egui::vec2(0.0, daw_ui::tokens::SPACE_SM),
+                egui::vec2(160.0, daw_ui::tokens::CONTROL_HEIGHT),
+            );
+            if ui
+                .put(button, daw_ui::button_widget("Load sample…"))
+                .clicked()
+            {
+                request = Some((pad, SampleRequest::Pick));
+            }
+            ui.put(
+                egui::Rect::from_center_size(
+                    center + egui::vec2(0.0, daw_ui::tokens::CONTROL_HEIGHT),
+                    egui::vec2(size.x, daw_ui::tokens::CONTROL_HEIGHT),
+                ),
+                egui::Label::new(
+                    egui::RichText::new("or drop an audio file here or on a pad")
+                        .color(daw_ui::theme::palette(ui.ctx()).muted),
+                ),
+            );
+        }
+        for (marker, at) in output.drags {
+            let id = match marker {
+                daw_ui::SampleMarker::Start => ids(START),
+                daw_ui::SampleMarker::End => ids(END),
+                _ => continue,
+            };
+            if let Some(spec) = descriptor.parameter(id) {
+                edits.push((id, f64::from(spec.to_normalized(at * 100.0))));
+            }
+        }
+        if let Some(path) = output.files.into_iter().next() {
+            request = Some((pad, SampleRequest::File(path)));
+        }
+    });
+    for (id, value) in edits {
+        host.set_value(id, value);
+    }
+    if let Some((slot, request)) = request {
+        host.request_sample(slot as u32, request);
     }
 }

@@ -126,9 +126,9 @@ pub(crate) struct InstrumentUi {
     pub(crate) device_panel: daw_devices_ui::PanelState,
     /// Read once per editor owner and after a save, not every frame.
     user_presets: Option<Vec<daw_devices::Preset>>,
-    /// What the instrument's sample slot 0 holds, by path, as its panel
-    /// draws it; rebuilt when the recording or its waveform changes.
-    sample: Option<(String, daw_devices_ui::SampleSummary)>,
+    /// What each of the instrument's sample slots holds, by path, as its
+    /// panel draws it; rebuilt when a recording or its waveform changes.
+    samples: Vec<Option<(String, daw_devices_ui::SampleSummary)>>,
 }
 
 /// Lets a built-in device panel read the project and collects what it asks
@@ -147,7 +147,7 @@ struct PanelHost<'a> {
     wheels: Option<(f32, f32)>,
     /// The panel asked for the routing of its sidechain input.
     route: bool,
-    sample: Option<&'a daw_devices_ui::SampleSummary>,
+    samples: &'a [Option<(String, daw_devices_ui::SampleSummary)>],
     sample_request: Option<(u32, daw_devices_ui::SampleRequest)>,
 }
 
@@ -259,7 +259,10 @@ impl daw_devices_ui::DeviceHost for PanelHost<'_> {
         self.route = true;
     }
     fn sample(&self, slot: u32) -> Option<&daw_devices_ui::SampleSummary> {
-        self.sample.filter(|_| slot == 0)
+        self.samples
+            .get(slot as usize)?
+            .as_ref()
+            .map(|(_, summary)| summary)
     }
     fn request_sample(&mut self, slot: u32, request: daw_devices_ui::SampleRequest) {
         self.sample_request = Some((slot, request));
@@ -1437,9 +1440,12 @@ impl DawApp {
                                 .clone();
                             let mut panel = std::mem::take(&mut self.instrument_ui.device_panel);
                             if descriptor.sample_slots > 0 && target.effect.is_none() {
-                                self.refresh_sample_summary(target.track);
+                                self.refresh_sample_summaries(
+                                    target.track,
+                                    descriptor.sample_slots,
+                                );
                             }
-                            let summary = self.instrument_ui.sample.take();
+                            let summaries = std::mem::take(&mut self.instrument_ui.samples);
                             let mut host = PanelHost {
                                 app: &*self,
                                 target,
@@ -1452,7 +1458,7 @@ impl DawApp {
                                 audition: None,
                                 wheels: None,
                                 route: false,
-                                sample: summary.as_ref().map(|(_, summary)| summary),
+                                samples: &summaries,
                                 sample_request: None,
                             };
                             daw_devices_ui::show(ui, descriptor, &mut host, &mut panel);
@@ -1469,7 +1475,7 @@ impl DawApp {
                             device_requests =
                                 Some((host.updates, host.batch, host.navigation, host.saved));
                             self.instrument_ui.device_panel = panel;
-                            self.instrument_ui.sample = summary;
+                            self.instrument_ui.samples = summaries;
                             if let Some(error) = &self.instrument_ui.error {
                                 daw_ui::text::bounded_block(
                                     ui,
@@ -1742,21 +1748,27 @@ impl DawApp {
         }
     }
 
-    /// Keeps the panel's picture of sample slot 0 in step with the project
-    /// and the waveform cache.
-    fn refresh_sample_summary(&mut self, track: u64) {
+    /// Keeps the panel's pictures of the instrument's `slots` sample slots
+    /// in step with the project and the waveform cache.
+    fn refresh_sample_summaries(&mut self, track: u64, slots: u32) {
+        self.instrument_ui.samples.resize(slots as usize, None);
+        for slot in 0..slots {
+            self.refresh_sample_summary(track, slot);
+        }
+    }
+
+    fn refresh_sample_summary(&mut self, track: u64, slot: u32) {
+        let index = slot as usize;
         let Some(sample) = self
             .project
             .track(track)
-            .and_then(|track| track.instrument.sample(0))
+            .and_then(|track| track.instrument.sample(slot))
         else {
-            self.instrument_ui.sample = None;
+            self.instrument_ui.samples[index] = None;
             return;
         };
         let audio = self.waveforms.get(&sample.path);
-        let current = self
-            .instrument_ui
-            .sample
+        let current = self.instrument_ui.samples[index]
             .as_ref()
             .is_some_and(|(path, summary)| {
                 *path == sample.path && (audio.is_none() || !summary.peaks.is_empty())
@@ -1791,7 +1803,7 @@ impl DawApp {
                 .map(|audio| sample_peaks(audio, SAMPLE_PEAKS))
                 .unwrap_or_default(),
         };
-        self.instrument_ui.sample = Some((sample.path.clone(), summary));
+        self.instrument_ui.samples[index] = Some((sample.path.clone(), summary));
     }
 
     /// Both the parameter browser and native context menu resolve against the

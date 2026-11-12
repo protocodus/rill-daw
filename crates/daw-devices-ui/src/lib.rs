@@ -106,6 +106,8 @@ pub struct PanelState {
     pub performance_rects: Option<[egui::Rect; 3]>,
     /// The selected response node and table column.
     pub selected: Option<usize>,
+    /// The pad whose controls a drum panel shows, 0–15.
+    pub pad: usize,
     /// The response's gain axis while a node is dragged, so the axis does
     /// not rescale under the pointer.
     held_range: Option<f32>,
@@ -238,7 +240,7 @@ pub fn show(
     host: &mut dyn DeviceHost,
     state: &mut PanelState,
 ) {
-    let layout = panels::layout(descriptor);
+    let layout = panels::layout_for(descriptor, state.pad);
     ui.set_width(panel_width(descriptor).min(ui.available_width()));
     #[cfg(test)]
     {
@@ -308,6 +310,9 @@ fn picture(
         Some(panels::Picture::Space) => pictures::space(ui, host, state),
         Some(panels::Picture::Sample { height }) => {
             pictures::sample(ui, descriptor, *height, host, state);
+        }
+        Some(panels::Picture::Drums { height }) => {
+            pictures::drums(ui, descriptor, *height, layout, host, state);
         }
         None => {}
     }

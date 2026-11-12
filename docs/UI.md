@@ -1416,7 +1416,7 @@ arrow keys), and canvas handles use the 21-point `HIT_TARGET`.
 | `quiet_automation_indicators` | Called on a `Ui` whose controls stand close together (table cells): their automation indicators appear only while a lane exists, is being read or is overridden, never as idle rings. The context menu still offers **Automate**. |
 | `xy_pad` | Two normalized parameters; a press jumps, further motion is relative, Shift is fine, arrow keys nudge. |
 | `envelope_editor` | ADSR with hold and per-segment curves from plain `EnvelopeShape`; returns `EnvelopeEdit`s. |
-| `pad_grid`, `keyboard_strip` | 4×4 audition pads (click height sets velocity; `SampleDrop` payloads can be dropped on them) and a keyboard. |
+| `pad_grid`, `keyboard_strip` | 4×4 audition pads, bottom row first, each with its number and sample name (below the number where it fits, else beside it; the whole name on hover), dimmed and marked **M** while muted (click height sets velocity; `SampleDrop` payloads and files from the system can be dropped on a pad, which takes the file so nothing behind imports it) and a keyboard. |
 | `wheel` | Pitch (`bipolar`, springs back to center) and mod wheels. Every instrument panel carries both. |
 | `mod_source_chip`, `mod_slot_row` | Draggable modulation source and one row of the matrix. |
 
@@ -1512,7 +1512,7 @@ when a long span crowds them into one corner. The
 view knows no parameters: R1 Spacer maps the handles to Time or Division,
 Feedback, Pre-delay, Decay and the two levels.
 
-The other plots: `spectrum`, `scope`, `wavetable_view` and `sample_view` (draggable start, end and loop markers; it takes a sample or file dropped on it). They take plain data and own no audio state.
+The other plots: `spectrum`, `scope`, `wavetable_view` and `sample_view` (draggable start, end and loop markers, an optional amplifier envelope drawn from start to end; it takes a sample or file dropped on it). They take plain data and own no audio state.
 
 ### Panels ([`device_panel.rs`](../crates/daw-ui/src/device_panel.rs))
 

@@ -8,10 +8,10 @@ R1 Compressor, R1 Modulator, R1 Spacer), and R1 Mini as the default
 instrument of new MIDI tracks. R1 Spacer follows the owner's specification
 of 2026-11-12 (three reverb models, three echo models, each with Color,
 Diffusion, Duck and, for the reverb, Seed), which replaced the roadmap's
-first version before it shipped. Step 5 is in place except R1 Drums: the
-sample plumbing (model, bundling, engine, tools, app) and R1 Sampler, with
-the departures listed under [R1 Sampler](#r1-sampler). R1 Maxi and R1 Drums
-are not implemented yet. This document proposes the
+first version before it shipped. Step 5 is in place: the sample plumbing
+(model, bundling, engine, tools, app), R1 Sampler and R1 Drums, with the
+departures listed under [R1 Sampler](#r1-sampler) and [R1 Drums](#r1-drums).
+R1 Maxi is not implemented yet. This document proposes the
 architecture, the shared UI additions and the per-device specifications for
 Rill's first built-in instruments and effects. Implementation follows in
 separate changes. The review answers are recorded in
@@ -1825,6 +1825,77 @@ Decay, Filter, Drive, Gain, Pan.
 Rill ships no factory samples. An empty pad shows **Drop a sample** and the
 empty Sampler shows **Load sample…**; a kit preset can bring its own samples
 ([Presets](#presets)).
+
+**As built** (305 parameters: the kit's Volume, ID 1, and nineteen per pad
+in pad `n`'s block from `32 n`, IDs and keys `pad1.start` … `pad16.mute` in
+`devices/drums.rs`). Where it departs from the table above:
+
+- *Resonance.* A nineteenth pad parameter, 0 – 100 % (Q 0.707 to about 8),
+  for the filter: a sweep without it cannot peak the way drum filters are
+  used on hats and toms. It does nothing while the filter is at its centre.
+- *Names.* The pad's level is **Volume** (key `padN.volume`, −60 – +12 dB,
+  −60 is −∞), like every other device's output level; the kit's is
+  **Volume** (−36 – +6 dB, default −6 dB). The group of a pad's parameters
+  is "Pad N", so lanes and tools read "Pad 3 Pitch".
+- *Envelope.* Attack 0.1 – 100 ms; Hold 1 ms – 2 s, where the top of the
+  range (shown **Full**) holds for as long as the recording plays; Decay
+  5 ms – 10 s, default 300 ms, applying only after a shorter Hold or, with
+  Gate, after the note's release. With Hold at Full a one-shot plays the
+  whole recording between Start and End, as drum modules do by default.
+  Envelope decay and Env decay are exponential (−40 dB over the time set).
+- *Filter.* `daw_dsp::sweep_mix`: one SVF per pad after its hits are summed,
+  not one per hit, so a full kit costs sixteen filters, not sixty-four. Left
+  of centre a low-pass from 20 kHz down to 40 Hz, right of it a high-pass
+  from 20 Hz up to 10 kHz; within 8 % of the centre the mix crossfades from
+  the dry signal so the sweep has no step, and at the centre the filter is
+  bypassed and reset.
+- *Drive.* `daw_dsp::Drive`: the antiderivative anti-aliased algebraic
+  sigmoid (`Adaa1`) at 1× instead of the Saturator's Transistor model at 2×,
+  so a pad adds no latency and drive costs almost nothing; the output gain
+  falls with the square root of the input gain and the dry mix fades out over
+  the first 1.5 dB, so turning Drive up from 0 is smooth. Per pad, after the
+  filter.
+- *Velocity.* Level = 1 − a + a·v², a the Velocity amount: the square law of
+  drum modules, at 80 % by default.
+- *Voices.* Four hits of one pad overlap; a fifth fades the oldest over 5 ms.
+  Six slots per pad leave room for hits fading out. A pad in a choke group,
+  or set to Gate, also fades its own earlier hits, as hi-hats do.
+- *Ends.* A hit reaching End fades over 2 ms, like the Sampler's.
+- *Pitch bend and sustain* do not apply: a pad plays its recording as tuned.
+- *Randomize* leaves each pad's Start, End, Reverse, Mute and Choke group
+  alone (the new `DeviceDescriptor::fixed_on_roll`), and every level as
+  before; a roll changes how pads sound, not which recording plays or which
+  pads cut each other.
+- *Telemetry.* Per pad the loudest envelope of its hits (the pad flash) and
+  the playhead of its latest hit; the number of hits sounding.
+- *Panel.* `POPUP_WIDTH_LG` on the twelve-column grid. On top a **Kit**
+  card (five columns) with the pads, bottom row first, and the kit's Volume
+  fader, and the selected pad's card (seven columns): its sample's name and
+  length, **Load sample…** and **Clear**, and its `sample_view` with Start
+  and End markers, the amp envelope over the waveform at the pad's pitch and
+  the latest hit's playhead. Below, the selected pad's controls on equal
+  cells, in its signal order, two full lines with no hole: **Playback**
+  (Start, End, Reverse; Trigger, Choke), **Pitch** (Pitch, Fine; Env, Decay),
+  **Amp envelope** (Attack, Hold and Decay faders and a Velocity fader) and
+  **Filter & output** (Filter, Resonance, Drive; Volume, Pan, Mute). Choke
+  stands with Trigger, since both decide how a hit ends; it is a detented
+  dial (five groups are too many for toggles in one cell). A click on a pad
+  selects it and sounds it at a velocity from where it is hit; a file
+  dropped on a pad loads into that pad; the instrument keyboard below starts
+  at pad 1. An empty pad reads **Empty**; a muted one is dimmed and marked
+  **M**. A long name is cut and shown whole on hover. No pad context menu
+  yet (Copy/Paste pad, Swap with…).
+- *Tools.* No new tools: `set_device_sample` and `document_action` import
+  take `slot` 0 – 15 for R1 Drums.
+
+CPU (`devices_bench`, 48 kHz, 256-frame blocks, a one-second stereo hit at
+44.1 kHz on every pad; one machine, not a guarantee): all sixteen pads hit
+together once a second, so about sixteen hits always sound, 260 – 330 µs per
+block (5 – 6 % of real time); the same with every pad's filter, resonance,
+drive and pitch envelope on, 330 – 400 µs (6 – 7.5 %); a busy pattern of
+sixteenth notes at 120 BPM with chokes (12.5 hits sounding on average),
+230 – 270 µs (4.3 – 5 %). About 65 ns per hit and output sample, most of it
+the 48-tap read.
 
 ## Verification
 
