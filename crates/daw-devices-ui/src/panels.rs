@@ -64,6 +64,9 @@ pub struct Table {
     pub captions: &'static [&'static str],
     /// Width of the caption column.
     pub caption_width: f32,
+    /// Space between the lines, chosen so the table is as tall as the
+    /// cards beside it.
+    pub line_gap: f32,
 }
 
 impl Section {
@@ -289,26 +292,50 @@ pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
     if descriptor.id == filter::DESCRIPTOR.id {
         use filter::*;
         // The filter on top, its character before its frequency; below it
-        // the modulation sources, and the output last.
+        // the modulation sources, and the output last. Eleven cells hold
+        // both rows without a hole.
+        use Slot::Control as C;
         layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
+        layout.cells = true;
         layout.sections = vec![
-            section(
+            cells(
                 "Filter",
                 0,
-                12,
-                &[&[MODEL, TYPE, SLOPE, CUTOFF, RESONANCE, DRIVE, MORPH]],
+                11,
+                &[&[
+                    C(MODEL, 2),
+                    C(TYPE, 4),
+                    C(SLOPE, 1),
+                    C(CUTOFF, 1),
+                    C(RESONANCE, 1),
+                    C(DRIVE, 1),
+                    C(MORPH, 1),
+                ]],
             ),
-            section(
+            cells(
                 "LFO",
                 1,
                 6,
-                &[&[LFO_RATE, LFO_SYNC, LFO_SHAPE, LFO_DEPTH, LFO_STEREO]],
+                &[&[
+                    C(LFO_SHAPE, 2),
+                    C(LFO_RATE, 1),
+                    C(LFO_SYNC, 1),
+                    C(LFO_DEPTH, 1),
+                    C(LFO_STEREO, 1),
+                ]],
             ),
-            section("Envelope", 1, 4, &[&[ENV_AMOUNT, ENV_ATTACK, ENV_RELEASE]]),
-            section("Output", 1, 2, &[&[MIX, OUTPUT]]),
+            cells(
+                "Envelope",
+                1,
+                3,
+                &[&[C(ENV_AMOUNT, 1), C(ENV_ATTACK, 1), C(ENV_RELEASE, 1)]],
+            ),
+            cells("Output", 1, 2, &[&[C(MIX, 1), C(OUTPUT, 1)]]),
         ];
         layout.hero = Some(CUTOFF);
         layout.toggle_columns = &[(SLOPE, 1)];
+        // A control that leaves with the model would move its neighbours.
+        layout.keep_inactive = true;
         layout.visible = |id, values| applies(id, &filter_settings(values));
         layout.options =
             |id, values| (id == TYPE).then(|| type_options(filter_settings(values).model));
@@ -353,9 +380,9 @@ pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
     if descriptor.id == mini::DESCRIPTOR.id {
         use mini::*;
         // A hardware front panel on one grid of equal cells, twelve to a
-        // row, in signal order: the sources, their mix and the master
-        // controls; the filter and the two envelopes; modulation and the
-        // voices. Every row breaks after its eighth cell. Both oscillators
+        // row, in signal order: the sources, their mix and how the voices
+        // play them; the filter and the two envelopes; modulation, and the
+        // volume last. Every row breaks after its eighth cell. Both oscillators
         // share their columns, so the second one's extra controls stand
         // out; an envelope is four faders, read as its shape, and a fifth
         // for how much velocity drives it.
@@ -396,11 +423,11 @@ pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
                 ],
             ),
             cells(
-                "Master",
+                "Voices",
                 0,
                 2,
                 &[
-                    &[C(VOLUME, 1), C(GLIDE, 1)],
+                    &[C(VOICES, 1), C(GLIDE, 1)],
                     &[C(BEND_RANGE, 1), C(DRIFT, 1)],
                 ],
             ),
@@ -450,7 +477,7 @@ pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
                     C(LFO_WHEEL, 1),
                 ]],
             ),
-            cells("Voices", 2, 4, &[&[C(VOICE_MODE, 3), C(VOICES, 1)]]),
+            cells("Master", 2, 4, &[&[C(VOICE_MODE, 3), C(VOLUME, 1)]]),
         ];
         layout.toggle_columns = &[
             (OSC1_MODEL, 1),
@@ -838,6 +865,8 @@ fn equalizer_layout(mut layout: Layout) -> Layout {
                 // need theirs: "20.00 kHz" beside its arc is 88 points of 98.
                 captions: &["", "", "Freq", "Gain", "Q"],
                 caption_width: 36.0,
+                // Five lines as tall as Global's two lines of controls.
+                line_gap: 22.0,
             }),
             enable: None,
             choice: None,
@@ -851,7 +880,6 @@ fn equalizer_layout(mut layout: Layout) -> Layout {
         (BANDS[2] + BAND_ON, "3"),
         (BANDS[3] + BAND_ON, "4"),
         (LP_ON, "LP"),
-        (AUTO_GAIN, "Auto gain"),
     ];
     layout.faces = &[
         Faces {
@@ -946,24 +974,29 @@ fn formatted(descriptor: &DeviceDescriptor, like: u32, plain: f32) -> Option<Str
 }
 
 fn saturator_layout(mut layout: Layout) -> Layout {
+    use Slot::Control as C;
     use saturator::*;
-    // The curve and what it adds on top; below, in the order of the signal:
-    // the model and how hard it is hit, what colours it, then the cost
-    // setting and the output. The wide panel: at the narrow width two rows
-    // of cards leave the picture 110 points.
+    // The curve and what it adds on top; below, twelve cells in the order
+    // of the signal: what is kept clean and how hard the rest is driven,
+    // the shaper with its oversampling, then what follows it.
     layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
+    layout.cells = true;
     layout.sections = vec![
-        section(
-            "Saturation",
+        cells("Drive", 0, 2, &[&[C(FOCUS, 1), C(DRIVE, 1)]]),
+        cells(
+            "Shaper",
             0,
             6,
-            &[&[MODEL, DRIVE, CHARACTER, TONE, FOCUS]],
+            &[&[C(MODEL, 3), C(CHARACTER, 1), C(QUALITY, 2)]],
         ),
-        section("Quality", 0, 2, &[&[QUALITY]]),
-        section("Output", 0, 4, &[&[AUTO_GAIN, MIX, OUTPUT]]),
+        cells(
+            "Output",
+            0,
+            4,
+            &[&[C(AUTO_GAIN, 1), C(TONE, 1), C(MIX, 1), C(OUTPUT, 1)]],
+        ),
     ];
     layout.hero = Some(DRIVE);
-    layout.leds = &[(AUTO_GAIN, "Auto gain")];
     // What Character does in each model.
     layout.mode_captions = &[(CHARACTER, MODEL, &["Hardness", "Bias", "Compress"])];
     layout.readout = |id, values| match id {
@@ -984,13 +1017,22 @@ fn saturator_layout(mut layout: Layout) -> Layout {
 fn compressor_layout(mut layout: Layout) -> Layout {
     use Slot::Control as C;
     use compressor::*;
-    // One row of four cards on a grid of twelve cells, read as the signal
-    // and the convention go: the style; threshold, ratio and knee over the
-    // timing; the detector's own path, kept small; makeup and output last.
+    // One row of four cards on a grid of eleven cells, read as the signal
+    // goes: the style; what the detector hears; threshold, ratio and knee
+    // over the timing; makeup and output last.
     layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
     layout.cells = true;
     layout.sections = vec![
-        cells("Mode", 0, 4, &[&[C(MODE, 4)], &[C(CHARACTER, 4)]]),
+        cells("Mode", 0, 3, &[&[C(MODE, 3)], &[C(CHARACTER, 3)]]),
+        cells(
+            "Sidechain",
+            0,
+            2,
+            &[
+                &[C(SIDECHAIN, 2)],
+                &[C(SIDECHAIN_HIGH_PASS, 1), C(STEREO_LINK, 1)],
+            ],
+        ),
         cells(
             "Dynamics",
             0,
@@ -1006,15 +1048,6 @@ fn compressor_layout(mut layout: Layout) -> Layout {
             ],
         ),
         cells(
-            "Sidechain",
-            0,
-            2,
-            &[
-                &[C(SIDECHAIN, 2)],
-                &[C(SIDECHAIN_HIGH_PASS, 1), C(STEREO_LINK, 1)],
-            ],
-        ),
-        cells(
             "Output",
             0,
             2,
@@ -1025,9 +1058,14 @@ fn compressor_layout(mut layout: Layout) -> Layout {
         ),
     ];
     layout.toggle_columns = &[(SIDECHAIN, 1)];
-    layout.leds = &[(AUTO_RELEASE, "Auto"), (AUTO_MAKEUP, "Auto")];
-    // The card names the sidechain already.
-    layout.captions = &[(SIDECHAIN_HIGH_PASS, "High-pass"), (STEREO_LINK, "Link")];
+    // The card names the sidechain already, and each Auto stands beside the
+    // knob it takes over.
+    layout.captions = &[
+        (SIDECHAIN_HIGH_PASS, "High-pass"),
+        (STEREO_LINK, "Link"),
+        (AUTO_RELEASE, "Auto"),
+        (AUTO_MAKEUP, "Auto"),
+    ];
     // In front of a limiter the same value is the gain that drives it.
     layout.mode_captions = &[(MAKEUP, MODE, &["Makeup", "Gain", "Makeup"])];
     layout.visible = |id, values| applies(id, &compressor_settings(values));
@@ -1111,7 +1149,6 @@ fn modulator_layout(mut layout: Layout) -> Layout {
         ],
         segment_width: 34.0,
     }];
-    layout.leds = &[(SYNC, "Sync")];
     layout.dials = &[DIVISION, STAGES];
     // The card and the mode name the rest.
     layout.captions = &[
@@ -1238,11 +1275,11 @@ fn spacer_layout(mut layout: Layout) -> Layout {
         ],
         segment_width: 48.0,
     }];
-    layout.leds = &[(ECHO_SYNC, "Sync")];
     layout.dials = &[ECHO_DIVISION, ECHO_TAPS];
     layout.steppers = &[SEED];
     // The cards name the section.
     layout.captions = &[
+        (ECHO_SYNC, "Sync"),
         (ECHO_TIME, "Time"),
         (ECHO_DIVISION, "Division"),
         (ECHO_FEEDBACK, "Feedback"),
