@@ -2014,3 +2014,25 @@ fn frequency_plot_draws_bands_spans_and_markers_without_changing_its_size() {
     });
     assert_eq!(used.size(), vec2(610.0, 200.0));
 }
+
+#[test]
+fn a_device_frame_bar_grows_to_hold_presets_on_two_rows() {
+    let ctx = themed();
+    let (mut bar_bottom, mut body_top) = (0.0, 0.0);
+    for _ in 0..3 {
+        run(&ctx, vec![], |ui| {
+            let mut frame = ui::device_frame(ui, "R1 Filter");
+            // Stands in for a preset group that wrapped onto a second row.
+            bar_bottom = frame
+                .bar
+                .allocate_exact_size(vec2(80.0, 90.0), egui::Sense::hover())
+                .0
+                .bottom();
+            body_top = frame.body(ui, |ui| ui.min_rect().top());
+        });
+    }
+    assert!(
+        body_top > bar_bottom,
+        "the body starts below the bar's contents ({body_top} <= {bar_bottom})"
+    );
+}
