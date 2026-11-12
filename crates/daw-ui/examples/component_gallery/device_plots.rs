@@ -328,6 +328,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
                     right: if repeat % 2 == 0 { level } else { 0.0 },
                     thin: false,
                     faint: false,
+                    // A diffused echo: each repeat smears further.
+                    blur_seconds: 0.012 * repeat as f32,
                 }
             })
             .chain([0.012, 0.021, 0.034].map(|seconds| DelayTap {
@@ -336,6 +338,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
                 right: 0.15,
                 thin: true,
                 faint: false,
+                blur_seconds: 0.0,
             }))
             .collect();
         let output = ui::delay_view(
@@ -347,12 +350,15 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
                         start_seconds: pre_delay,
                         start_db: -9.0,
                         decay_seconds: decay,
+                        // The top of a damped tail is gone sooner.
+                        inner_decay_seconds: Some(decay * 0.4),
                         faint: false,
                     },
                     DelayTail {
                         start_seconds: time + pre_delay,
                         start_db: level - 9.0,
                         decay_seconds: decay,
+                        inner_decay_seconds: None,
                         faint: true,
                     },
                 ],
@@ -379,7 +385,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
                         vertical: false,
                     },
                 ],
-                reduction_db: Some((6.0, 24.0)),
+                reductions: &[(6.0, 24.0, "E"), (3.0, 12.0, "R")],
                 size: egui::vec2(377.0, 144.0),
             },
         );

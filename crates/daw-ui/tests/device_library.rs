@@ -607,6 +607,7 @@ fn every_visualization_renders_without_overflow() {
                         right: 0.5,
                         thin: false,
                         faint: false,
+                        blur_seconds: 0.05,
                     },
                     // Degenerate input must not panic.
                     ui::DelayTap {
@@ -615,19 +616,30 @@ fn every_visualization_renders_without_overflow() {
                         right: -1.0,
                         thin: true,
                         faint: true,
+                        blur_seconds: f32::NAN,
                     },
                 ],
-                tails: &[ui::DelayTail {
-                    start_seconds: 0.0,
-                    start_db: -6.0,
-                    decay_seconds: 1.0,
-                    faint: false,
-                }],
+                tails: &[
+                    ui::DelayTail {
+                        start_seconds: 0.0,
+                        start_db: -6.0,
+                        decay_seconds: 1.0,
+                        inner_decay_seconds: Some(0.4),
+                        faint: false,
+                    },
+                    ui::DelayTail {
+                        start_seconds: 0.0,
+                        start_db: -6.0,
+                        decay_seconds: 1.0,
+                        inner_decay_seconds: Some(f32::NAN),
+                        faint: true,
+                    },
+                ],
                 grid: &[(0.5, "2")],
                 span_seconds: 1.0,
                 floor_db: -60.0,
                 handles: &[],
-                reduction_db: Some((f32::NAN, 0.0)),
+                reductions: &[(f32::NAN, 0.0, "E"), (30.0, 24.0, "R")],
                 size,
             },
         );
@@ -1527,6 +1539,144 @@ fn section_header_is_as_tall_as_the_title_and_its_lamp_flips() {
 }
 
 #[test]
+fn section_header_choice_picks_a_model_and_keeps_the_lamp_apart() {
+    let ctx = themed();
+    let state = std::cell::Cell::new((true, 0_usize));
+    let rects = std::cell::Cell::new((Rect::NOTHING, Rect::NOTHING, 0.0));
+    let events = std::cell::Cell::new((0, 0));
+    let frame = |input: Vec<Event>| {
+        run(&ctx, input, |ui| {
+            ui.set_width(300.0);
+            ui.spacing_mut().item_spacing.y = 0.0;
+            let plain = ui::device_section_title(ui, "Output").rect.height();
+            let (mut on, mut model) = state.get();
+            let (lamp, choice) = ui::device_section_header_choice(
+                ui,
+                "Echo",
+                Some(&mut on),
+                &mut model,
+                &["Digital", "BBD", "Tape"],
+            );
+            state.set((on, model));
+            rects.set((lamp.rect, choice.rect, plain));
+            let (flips, picks) = events.get();
+            events.set((
+                flips + usize::from(lamp.changed()),
+                picks + usize::from(choice.changed()),
+            ));
+        })
+    };
+    let used = frame(vec![]);
+    let (lamp, choice, plain) = rects.get();
+    // Right-aligned on the title line, clear of the name, above the rule.
+    assert!((choice.right() - used.right()).abs() < 0.5, "{choice:?}");
+    assert!(lamp.right() + 8.0 < choice.left(), "{lamp:?} {choice:?}");
+    assert!(choice.bottom() < used.bottom());
+    assert!(used.height() - plain > plain, "taller than a plain title");
+    // The last third of the track is the third option.
+    click(choice.right_center() - vec2(8.0, 0.0), 1, &mut |events| {
+        frame(events);
+    });
+    assert_eq!(state.get(), (true, 2));
+    click(lamp.left_center() + vec2(5.0, 0.0), 1, &mut |events| {
+        frame(events);
+    });
+    assert_eq!(state.get(), (false, 2));
+    assert_eq!(events.get(), (1, 1));
+}
+
+#[test]
+fn variation_stepper_steps_wraps_and_rolls_another_value() {
+    let ctx = themed();
+    let value = std::cell::Cell::new(1);
+    let range = std::cell::Cell::new((1, 32));
+    let rect = std::cell::Cell::new(Rect::NOTHING);
+    let changes = std::cell::Cell::new(0);
+    let mut frame = |events: Vec<Event>| {
+        run(&ctx, events, |ui| {
+            let (low, high) = range.get();
+            let mut next = value.get();
+            let response = ui::variation_stepper(ui, &mut next, low..=high, "seed");
+            value.set(next);
+            rect.set(response.rect);
+            changes.set(changes.get() + usize::from(response.changed()));
+        });
+    };
+    frame(vec![]);
+    let track = rect.get();
+    assert_eq!(track.size(), ui::VARIATION_STEPPER_SIZE);
+    // Three equal buttons; a knob's 75-point cell holds them.
+    assert!(track.width() <= 67.0);
+    let at = |index: f32| {
+        pos2(
+            track.left() + track.width() * (index + 0.5) / 3.0,
+            track.center().y,
+        )
+    };
+    click(at(2.0), 2, &mut frame);
+    assert_eq!(value.get(), 3);
+    click(at(0.0), 3, &mut frame);
+    assert_eq!(value.get(), 32, "previous wraps below the first");
+    click(at(2.0), 1, &mut frame);
+    assert_eq!(value.get(), 1, "next wraps above the last");
+    assert_eq!(changes.get(), 6);
+    // The die never lands on the value it left, and stays in the range.
+    for _ in 0..20 {
+        let before = value.get();
+        click(at(1.0), 1, &mut frame);
+        assert_ne!(value.get(), before);
+        assert!((1..=32).contains(&value.get()));
+    }
+    // A range of one has nowhere to go, and a value is not moved unasked.
+    range.set((4, 4));
+    value.set(7);
+    click(at(1.0), 1, &mut frame);
+    click(at(2.0), 1, &mut frame);
+    assert_eq!(value.get(), 7);
+}
+
+#[test]
+fn delay_view_keeps_its_points_with_reduction_bars_and_blurred_taps() {
+    let ctx = themed();
+    let rects = std::cell::RefCell::new(Vec::new());
+    for reductions in [&[][..], &[(6.0, 24.0, "E"), (3.0, 12.0, "R")][..]] {
+        run(&ctx, vec![], |ui| {
+            let view = ui::DelayView {
+                taps: &[ui::DelayTap {
+                    seconds: 0.5,
+                    left: 0.5,
+                    right: 0.0,
+                    thin: false,
+                    faint: false,
+                    blur_seconds: 0.04,
+                }],
+                tails: &[ui::DelayTail {
+                    start_seconds: 0.1,
+                    start_db: -9.0,
+                    decay_seconds: 1.8,
+                    inner_decay_seconds: Some(0.6),
+                    faint: false,
+                }],
+                grid: &[],
+                span_seconds: 2.0,
+                floor_db: -60.0,
+                handles: &[],
+                reductions,
+                size: vec2(400.0, 175.0),
+            };
+            let rect = ui::delay_view(ui, &view).response.rect;
+            // The bars stand inside the frame: time and level map as without.
+            rects
+                .borrow_mut()
+                .push((rect, ui::delay_point(&view, rect, 1.0, -30.0, true)));
+        });
+    }
+    let rects = rects.borrow();
+    assert_eq!(rects[0], rects[1]);
+    assert_eq!(rects[0].0.size(), vec2(400.0, 175.0));
+}
+
+#[test]
 fn value_menu_lists_its_options_and_reports_the_pick() {
     let ctx = themed();
     let picked = std::cell::Cell::new(None);
@@ -1584,7 +1734,7 @@ fn delay(ui: &mut egui::Ui, handle: (f32, f32), below: bool) -> (Rect, ui::Delay
             horizontal: true,
             vertical: true,
         }],
-        reduction_db: None,
+        reductions: &[],
         size: vec2(400.0, 175.0),
     };
     let output = ui::delay_view(ui, &view);
@@ -1616,7 +1766,7 @@ fn delay_handle_follows_the_pointer_in_seconds_and_decibels() {
             span_seconds: 2.0,
             floor_db: -60.0,
             handles: &[],
-            reduction_db: None,
+            reductions: &[],
             size: vec2(400.0, 175.0),
         };
         let at = ui::delay_point(&view, rect, 0.5, -12.0, below);
@@ -1666,7 +1816,7 @@ fn delay_handle_keeps_moves_a_stepped_value_swallows_and_takes_arrow_keys() {
         span_seconds: 2.0,
         floor_db: -60.0,
         handles: &[],
-        reduction_db: None,
+        reductions: &[],
         size: vec2(400.0, 175.0),
     };
     let at = ui::delay_point(&view, rect.get(), 0.5, -12.0, false);
@@ -1715,7 +1865,7 @@ fn delay_handles_that_crowd_into_one_place_keep_a_target_each() {
                     handle(0.75, -14.0, "F"),
                     handle(0.02, -9.0, "P"),
                 ],
-                reduction_db: None,
+                reductions: &[],
                 size: vec2(400.0, 175.0),
             },
         );

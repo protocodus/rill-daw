@@ -5,12 +5,11 @@
   "author": "Rill",
   "category": "Send",
   "tags": ["send"],
-  "description": "For a return track: wet only.",
+  "description": "Echo for a return track: wet only.",
   "parameters": {
     "reverb.on": false,
-    "mix": 100.0,
-    "echo.level": 0.0,
-    "echo.division": "1/4",
-    "echo.feedback": 40.0
+    "echo.model": "Digital",
+    "echo.division": "1/8 D",
+    "mix": 100.0
   }
 }

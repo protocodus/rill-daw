@@ -59,6 +59,17 @@ fn label(painter: &Painter, at: Pos2, align: Align2, text: &str) -> Rect {
     )
 }
 
+/// [`label`] on a patch of the plot's background, where marks run under
+/// it.
+fn backed_label(painter: &Painter, at: Pos2, align: Align2, text: &str) -> Rect {
+    let colors = theme::palette(painter.ctx());
+    let galley = painter.layout_no_wrap(text.to_owned(), TextRole::Note.font(), colors.muted);
+    let rect = align.anchor_size(at, galley.size());
+    painter.rect_filled(rect.expand(1.0), 1.0, colors.bg);
+    painter.galley(rect.min, galley, colors.muted);
+    rect
+}
+
 fn describe(response: &Response, ui: &Ui, text: String) {
     response.widget_info(|| WidgetInfo::labeled(WidgetType::Other, ui.is_enabled(), text.clone()));
 }
@@ -1767,6 +1778,9 @@ pub struct DelayTap {
     pub thin: bool,
     /// Drawn dimmed: something that does not sound now.
     pub faint: bool,
+    /// Seconds the tap is smeared over on either side of its time, drawn as
+    /// a glow that fades away from the bar: a diffused echo.
+    pub blur_seconds: f32,
 }
 
 /// A decay that is a straight line in decibels, mirrored about the axis.
@@ -1776,6 +1790,9 @@ pub struct DelayTail {
     pub start_db: f32,
     /// Seconds for 60 dB of decay.
     pub decay_seconds: f32,
+    /// The same for a part of the sound that decays faster (the top of a
+    /// damped reverb): a second wedge inside the first.
+    pub inner_decay_seconds: Option<f32>,
     /// Filled lightly and without an outline: a tail that follows an echo,
     /// or one that does not sound now.
     pub faint: bool,
@@ -1812,9 +1829,9 @@ pub struct DelayView<'a> {
     /// The level of the centre line, below zero.
     pub floor_db: f32,
     pub handles: &'a [DelayHandle<'a>],
-    /// A gain reduction now and the reduction that fills the bar, in dB:
-    /// a thin bar at the right edge.
-    pub reduction_db: Option<(f32, f32)>,
+    /// Gain reductions: each one now, the reduction that fills its bar, in
+    /// dB, and the letter that names it. Thin bars at the right edge.
+    pub reductions: &'a [(f32, f32, &'a str)],
     pub size: Vec2,
 }
 
@@ -1843,6 +1860,9 @@ pub struct DelayViewOutput {
 /// Height of the strip under a [`DelayView`]'s plot that holds the time
 /// labels, clear of the right channel's bars.
 const DELAY_LABELS: f32 = tokens::FONT_SMALL + tokens::SPACE_XS;
+
+/// Width of one gain reduction bar of a [`DelayView`].
+const REDUCTION_BAR: f32 = 6.0;
 
 /// The plot area of a [`DelayView`] drawn in `rect`.
 fn delay_area(rect: Rect) -> Rect {
@@ -2032,20 +2052,34 @@ pub fn delay_view(ui: &mut Ui, view: &DelayView<'_>) -> DelayViewOutput {
                 continue;
             }
             let top = point(tail.start_seconds, tail.start_db, false);
-            // Unclamped: a tail may end beyond the span; the frame cuts it.
-            let end = tail.start_seconds + tail.decay_seconds * (tail.start_db - floor) / 60.0;
-            let tip = pos2(area.left() + area.width() * end / span, axis);
             let bottom = pos2(top.x, 2.0 * axis - top.y);
+            let fill = colors
+                .muted
+                .gamma_multiply(if tail.faint { 0.08 } else { 0.2 });
+            // Unclamped: a tail may end beyond the span; the frame cuts it.
+            let tip = |decay: f32| {
+                let end = tail.start_seconds + decay * (tail.start_db - floor) / 60.0;
+                pos2(area.left() + area.width() * end / span, axis)
+            };
+            let outer = tip(tail.decay_seconds);
             clipped.add(Shape::convex_polygon(
-                vec![top, tip, bottom],
-                colors
-                    .muted
-                    .gamma_multiply(if tail.faint { 0.08 } else { 0.2 }),
+                vec![top, outer, bottom],
+                fill,
                 Stroke::NONE,
             ));
+            if let Some(inner) = tail
+                .inner_decay_seconds
+                .filter(|inner| *inner > 0.0 && *inner < tail.decay_seconds)
+            {
+                clipped.add(Shape::convex_polygon(
+                    vec![top, tip(inner), bottom],
+                    fill,
+                    Stroke::NONE,
+                ));
+            }
             if !tail.faint {
                 clipped.add(Shape::line(
-                    vec![top, tip, bottom],
+                    vec![top, outer, bottom],
                     Stroke::new(1.0_f32, colors.muted),
                 ));
             }
@@ -2057,28 +2091,54 @@ pub fn delay_view(ui: &mut Ui, view: &DelayView<'_>) -> DelayViewOutput {
                 if gain.is_finite() && gain > 0.0 {
                     let top = point(tap.seconds, 20.0 * gain.log10(), below);
                     if top.y != axis && tap.seconds <= span {
-                        painter.line_segment(
-                            [pos2(top.x, axis), top],
-                            Stroke::new(
-                                width,
-                                if tap.thin {
-                                    colors.muted.gamma_multiply(strength)
-                                } else {
-                                    colors.accent.gamma_multiply(strength * shade)
-                                },
-                            ),
-                        );
+                        let color = if tap.thin {
+                            colors.muted.gamma_multiply(strength)
+                        } else {
+                            colors.accent.gamma_multiply(strength * shade)
+                        };
+                        let blur = area.width() * finite(tap.blur_seconds, 0.0) / span;
+                        if blur >= 1.0 {
+                            // Strongest at the bar, gone at either end.
+                            let mut glow = egui::Mesh::default();
+                            let lit = color.gamma_multiply(0.45);
+                            for (x, color) in [
+                                (top.x - blur, Color32::TRANSPARENT),
+                                (top.x, lit),
+                                (top.x + blur, Color32::TRANSPARENT),
+                            ] {
+                                glow.colored_vertex(pos2(x, axis), color);
+                                glow.colored_vertex(pos2(x, top.y), color);
+                            }
+                            glow.add_triangle(0, 1, 2);
+                            glow.add_triangle(1, 2, 3);
+                            glow.add_triangle(2, 3, 4);
+                            glow.add_triangle(3, 4, 5);
+                            clipped.add(Shape::mesh(glow));
+                        }
+                        painter.line_segment([pos2(top.x, axis), top], Stroke::new(width, color));
                     }
                 }
             }
         }
-        if let Some((now, most)) = view.reduction_db {
+        // Each bar under its letter, the last one at the edge.
+        let bars = view.reductions.len() as f32 * (REDUCTION_BAR + tokens::SPACE_XS);
+        for (index, (now, most, name)) in view.reductions.iter().enumerate() {
+            let right = area.right()
+                - (view.reductions.len() - 1 - index) as f32 * (REDUCTION_BAR + tokens::SPACE_XS);
             let bar = Rect::from_min_max(
-                pos2(area.right() - tokens::SPACE_XS, area.top()),
-                area.right_bottom(),
+                pos2(right - REDUCTION_BAR, area.top() + DELAY_LABELS),
+                pos2(right, area.bottom()),
+            );
+            // The letter is wider than its bar: it ends with it, inside
+            // the frame.
+            backed_label(
+                painter,
+                pos2(bar.right(), area.top() + 1.0),
+                Align2::RIGHT_TOP,
+                name,
             );
             painter.rect_filled(bar, 1.0, colors.control_fill);
-            let share = (finite(now, 0.0) / most.max(1.0)).clamp(0.0, 1.0);
+            let share = (finite(*now, 0.0) / most.max(1.0)).clamp(0.0, 1.0);
             painter.rect_filled(
                 Rect::from_min_max(bar.min, pos2(bar.right(), bar.top() + bar.height() * share)),
                 1.0,
@@ -2087,19 +2147,15 @@ pub fn delay_view(ui: &mut Ui, view: &DelayView<'_>) -> DelayViewOutput {
         }
         // The level scale stands at the right, where the picture has
         // decayed: the left edge is where the handles start.
-        let scale = area.right()
-            - if view.reduction_db.is_some() {
-                tokens::SPACE_XS + 3.0
-            } else {
-                3.0
-            };
-        label(
+        let scale = area.right() - bars - 3.0;
+        // Late repeats reach the right edge and run under the scale.
+        backed_label(
             painter,
             pos2(scale, area.top() + 1.0),
             Align2::RIGHT_TOP,
             "0 dB",
         );
-        label(
+        backed_label(
             painter,
             pos2(scale, axis - 1.0),
             Align2::RIGHT_BOTTOM,

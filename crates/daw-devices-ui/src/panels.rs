@@ -48,6 +48,9 @@ pub struct Section {
     pub table: Option<Table>,
     /// The toggle that switches the section, drawn as a lamp in its title.
     pub enable: Option<u32>,
+    /// The choice of the section's model, drawn as toggle buttons at the
+    /// right end of its title line. Every card of a row has one or none.
+    pub choice: Option<u32>,
 }
 
 /// A card of like values in equal columns, one slot per column on every
@@ -69,6 +72,7 @@ impl Section {
             .flatten()
             .flat_map(|slot| slot.ids().iter().copied())
             .chain(self.enable)
+            .chain(self.choice)
     }
 }
 
@@ -91,6 +95,10 @@ pub struct Layout {
     pub toggle_columns: &'static [(u32, usize)],
     /// Whether a control does anything in the current mode.
     pub visible: fn(u32, Values<'_>) -> bool,
+    /// Whether a parameter is the one its [`Slot::Swap`] shows, where that
+    /// is not simply the first that does something: a slot whose whole
+    /// card is switched off still shows the one in use.
+    pub swap: fn(u32, Values<'_>) -> bool,
     /// What happens to a control that does nothing: hidden, or, on a dense
     /// panel whose cards would otherwise reflow, disabled in its place.
     pub keep_inactive: bool,
@@ -124,6 +132,11 @@ pub struct Layout {
     /// one edit: the new value of the control, and the values as they are.
     /// Presets, automation, tools and Undo never ask.
     pub companions: fn(u32, f64, Values<'_>) -> Vec<(u32, f64)>,
+    /// Whole numbers drawn as `daw_ui::variation_stepper` instead of a
+    /// knob: a numbered variation, where no value is more than another.
+    pub steppers: &'static [u32],
+    /// What hover says about a control whose meaning follows the mode.
+    pub hint: fn(u32, Values<'_>) -> Option<&'static str>,
 }
 
 /// Where a panel shows its picture.
@@ -240,6 +253,7 @@ fn section(title: &'static str, row: usize, span: u8, lines: &[&[u32]]) -> Secti
         span,
         table: None,
         enable: None,
+        choice: None,
     }
 }
 
@@ -251,6 +265,7 @@ fn cells(title: &'static str, row: usize, span: u8, lines: &[&[Slot]]) -> Sectio
         span,
         table: None,
         enable: None,
+        choice: None,
     }
 }
 
@@ -521,6 +536,7 @@ fn equalizer_layout(mut layout: Layout) -> Layout {
                 caption_width: 36.0,
             }),
             enable: None,
+            choice: None,
         },
         section("Global", 0, 4, &[&[MODE, ANALYZER], &[AUTO_GAIN, OUTPUT]]),
     ];
@@ -844,37 +860,42 @@ fn spacer_layout(mut layout: Layout) -> Layout {
     use spacer::*;
     // The display with the controls of the whole device beside it, as on
     // delays and reverbs; below it the two sections side by side in the
-    // order of the signal, each closed by its Level. Two rows of two-line
-    // cards under a picture of the full width would not fit the window.
+    // order of the signal, each with its model on the title line and
+    // twelve cells: time and loop, structure, tone, then Duck and Level.
+    // Every control applies in every model, so nothing moves on a change.
     layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
     layout.cells = true;
     layout.picture = Some(Picture::Space);
-    layout.picture_place = PicturePlace::Row { row: 0, span: 6 };
+    layout.picture_place = PicturePlace::Row { row: 0, span: 7 };
     layout.sections = vec![
         cells(
             "Output",
             0,
-            6,
-            &[&[C(ROUTING, 3), C(DUCK, 1), C(MIX, 1), C(OUTPUT, 1)]],
+            5,
+            // Two cells do not hold "Echo → Reverb" beside "Parallel".
+            &[&[C(ROUTING, 3), C(MIX, 1), C(OUTPUT, 1)]],
         ),
         Section {
             enable: Some(ECHO_ON),
+            choice: Some(ECHO_MODEL),
             ..cells(
                 "Echo",
                 1,
                 6,
                 &[
                     &[
-                        C(ECHO_TYPE, 3),
                         C(ECHO_SYNC, 1),
                         Swap(&[ECHO_TIME, ECHO_DIVISION], 1),
                         C(ECHO_FEEDBACK, 1),
+                        C(ECHO_TAPS, 1),
+                        C(ECHO_STEREO, 2),
                     ],
                     &[
-                        C(ECHO_STEREO, 2),
-                        C(ECHO_LOW_CUT, 1),
-                        C(ECHO_HIGH_CUT, 1),
+                        C(ECHO_DIFFUSION, 1),
+                        C(ECHO_COLOR, 1),
                         C(ECHO_WOBBLE, 1),
+                        C(ECHO_LOW_CUT, 1),
+                        C(ECHO_DUCK, 1),
                         C(ECHO_LEVEL, 1),
                     ],
                 ],
@@ -882,31 +903,32 @@ fn spacer_layout(mut layout: Layout) -> Layout {
         },
         Section {
             enable: Some(REVERB_ON),
+            choice: Some(REVERB_MODEL),
             ..cells(
                 "Reverb",
                 1,
                 6,
                 &[
                     &[
-                        C(REVERB_TYPE, 2),
                         C(PRE_DELAY, 1),
                         C(SIZE, 1),
                         C(DECAY, 1),
                         C(DAMPING, 1),
-                    ],
-                    &[
-                        C(REVERB_LOW_CUT, 1),
-                        C(REVERB_HIGH_CUT, 1),
                         C(DIFFUSION, 1),
                         C(MOVEMENT, 1),
+                    ],
+                    &[
+                        C(SEED, 1),
+                        C(REVERB_COLOR, 1),
+                        C(REVERB_LOW_CUT, 1),
                         C(WIDTH, 1),
+                        C(REVERB_DUCK, 1),
                         C(REVERB_LEVEL, 1),
                     ],
                 ],
             )
         },
     ];
-    layout.toggle_columns = &[(REVERB_TYPE, 2)];
     layout.faces = &[Faces {
         ids: &[ECHO_STEREO],
         faces: &[
@@ -917,39 +939,78 @@ fn spacer_layout(mut layout: Layout) -> Layout {
         segment_width: 48.0,
     }];
     layout.leds = &[(ECHO_SYNC, "Sync")];
-    layout.dials = &[ECHO_DIVISION];
+    layout.dials = &[ECHO_DIVISION, ECHO_TAPS];
+    layout.steppers = &[SEED];
     // The cards name the section.
     layout.captions = &[
-        (ECHO_TYPE, "Type"),
         (ECHO_TIME, "Time"),
         (ECHO_DIVISION, "Division"),
         (ECHO_FEEDBACK, "Feedback"),
+        (ECHO_TAPS, "Taps"),
         (ECHO_STEREO, "Stereo"),
-        (ECHO_LOW_CUT, "Low cut"),
-        (ECHO_HIGH_CUT, "High cut"),
+        (ECHO_DIFFUSION, "Diffusion"),
+        (ECHO_COLOR, "Color"),
         (ECHO_WOBBLE, "Wobble"),
+        (ECHO_LOW_CUT, "Low cut"),
+        (ECHO_DUCK, "Duck"),
         (ECHO_LEVEL, "Level"),
-        (REVERB_TYPE, "Type"),
+        (REVERB_COLOR, "Color"),
         (REVERB_LOW_CUT, "Low cut"),
-        (REVERB_HIGH_CUT, "High cut"),
+        (REVERB_DUCK, "Duck"),
         (REVERB_LEVEL, "Level"),
     ];
     layout.visible = |id, values| applies(id, &spacer_settings(values));
+    layout.swap = |id, values| match id {
+        ECHO_TIME => !spacer_settings(values).echo_sync,
+        ECHO_DIVISION => spacer_settings(values).echo_sync,
+        _ => false,
+    };
     layout.keep_inactive = true;
     layout.readout = |id, values| {
         let settings = spacer_settings(values);
-        let (bottom, top) = (values(id) <= 0.0, values(id) >= 1.0);
+        let bottom = values(id) <= 0.0;
         let off = match id {
             ECHO_LEVEL | REVERB_LEVEL if bottom => return Some("−∞ dB".into()),
-            DUCK | REVERB_LOW_CUT => bottom,
-            REVERB_HIGH_CUT => top,
-            // Tape and bucket-brigade loops keep their own band limits: a
-            // cut at the end of its range still filters there.
-            ECHO_LOW_CUT => bottom && settings.echo_type == EchoType::Digital,
-            ECHO_HIGH_CUT => top && settings.echo_type != EchoType::Analog,
+            SEED => return Some(format!("#{}", settings.reverb.seed)),
+            DECAY if settings.reverb.decay_seconds < 1.0 => {
+                return Some(format!("{:.0} ms", settings.reverb.decay_seconds * 1000.0));
+            }
+            // In Digital, Color is the corner of the cut in the loop.
+            ECHO_COLOR if settings.echo.model == EchoModel::Digital => {
+                return Some(
+                    match daw_devices::dsp::echo::digital_cut_hz(settings.echo.color, RESPONSE_RATE)
+                    {
+                        Some(hz) => format!("{:.1} kHz", hz / 1000.0),
+                        None => "Off".into(),
+                    },
+                );
+            }
+            ECHO_DUCK | REVERB_DUCK | REVERB_LOW_CUT => bottom,
+            // Bucket-brigade and tape loops must not pass DC: their low
+            // cut still filters at the end of its range.
+            ECHO_LOW_CUT => bottom && settings.echo.model == EchoModel::Digital,
             _ => false,
         };
         off.then(|| "Off".into())
+    };
+    // Color and Wobble are each model's own.
+    layout.hint = |id, values| {
+        let model = spacer_settings(values).echo.model;
+        Some(match (id, model) {
+            (ECHO_COLOR, EchoModel::Digital) => "High cut of the repeats: darker left, open right",
+            (ECHO_COLOR, EchoModel::Bbd) => {
+                "Clock rate: fewer, noisier stages left; more, cleaner right"
+            }
+            (ECHO_COLOR, EchoModel::Tape) => {
+                "Tape and heads: worn and hot left, fresh and clean right"
+            }
+            (ECHO_WOBBLE, EchoModel::Digital) => "Slow drift of the time",
+            (ECHO_WOBBLE, EchoModel::Bbd) => "Clock drift",
+            (ECHO_WOBBLE, EchoModel::Tape) => "Wow, flutter and drift",
+            (REVERB_COLOR, _) => "Tone of the reverb: dark left, bright right",
+            (SEED, _) => "Another room of the same size and decay",
+            _ => return None,
+        })
     };
     layout
 }
@@ -999,6 +1060,7 @@ fn generic(descriptor: &DeviceDescriptor) -> Layout {
                 span: 1,
                 table: None,
                 enable: None,
+                choice: None,
             }),
         }
     }
@@ -1011,6 +1073,7 @@ fn generic(descriptor: &DeviceDescriptor) -> Layout {
         cells: false,
         toggle_columns: &[],
         visible: |_, _| true,
+        swap: |_, _| false,
         keep_inactive: false,
         options: |_, _| None,
         faces: &[],
@@ -1022,5 +1085,7 @@ fn generic(descriptor: &DeviceDescriptor) -> Layout {
         picture_place: PicturePlace::Above,
         dials: &[],
         companions: |_, _, _| Vec::new(),
+        steppers: &[],
+        hint: |_, _| None,
     }
 }

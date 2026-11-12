@@ -5,15 +5,15 @@
   "author": "Rill",
   "category": "Reverb",
   "tags": ["pad", "choir"],
-  "description": "Very long and dark.",
+  "description": "Very long, moving tail.",
   "parameters": {
     "echo.on": false,
-    "reverb.type": "Hall",
+    "reverb.model": "Hall",
     "reverb.size": 100.0,
-    "reverb.decay": 9.0,
-    "reverb.pre_delay": 35.0,
-    "reverb.damping": 60.0,
+    "reverb.decay": 7.0,
+    "reverb.damping": 30.0,
     "reverb.movement": 40.0,
-    "reverb.width": 130.0
+    "reverb.low_cut": 150.0,
+    "reverb.seed": 3
   }
 }

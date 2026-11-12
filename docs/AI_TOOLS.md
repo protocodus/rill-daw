@@ -98,12 +98,19 @@ replaces `rate`.
 
 R1 Spacer (`rill:r1-spacer`) is an echo and a reverb: `echo.on` and
 `reverb.on` switch the sections, `routing` is `"Echo → Reverb"` or
-`"Parallel"`. With `echo.sync` on (the default) the echo's time is
-`echo.division` (`"1/8 D"`, `"1/4"`, `"1/8 T"`) and `echo.time` is ignored;
-set `echo.sync` to `false` to use `echo.time` (`"250 ms"`). As an insert
-keep `mix` low (the default is 30 %); on a send bus set `mix` to 100 %, or
-load the **Send Echo** or **Send Hall** preset. `duck` lowers the effect
-while the track itself is loud.
+`"Parallel"`. `echo.model` is `"Digital"`, `"BBD"` or `"Tape"` and
+`reverb.model` is `"Studio"`, `"Room"` or `"Hall"` (small to large; a model
+change moves no other parameter). With `echo.sync` on (the default) the
+echo's time is `echo.division` (`"1/8 D"`, `"1/4"`, `"1/8 T"`) and
+`echo.time` is ignored; set `echo.sync` to `false` to use `echo.time`
+(`"250 ms"`). `echo.taps` adds heads for rhythms (`"Single"`, `"Double"`,
+`"Triple"`, `"Quad"`, `"Dotted"`, `"Swing"`, `"Gallop"`, `"Golden"`).
+`echo.color` and `reverb.color` run from −100 % (dark) to 100 % (bright),
+`echo.diffusion` smears the repeats, and `reverb.seed` (1 – 32) picks
+another space of the same size and decay. As an insert keep `mix` low (the
+default is 30 %); on a send bus set `mix` to 100 %, or load the **Send
+Echo** or **Send Hall** preset. `echo.duck` and `reverb.duck` lower each
+section while the track itself is loud.
 
 To duck one track under another (a pad under a kick), insert R1 Compressor
 (`rill:r1-compressor`) on the track to be ducked, set its `sidechain`

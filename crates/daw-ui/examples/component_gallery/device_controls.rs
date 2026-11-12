@@ -22,6 +22,8 @@ pub struct State {
     selected_band: usize,
     division: usize,
     section_on: bool,
+    model: usize,
+    seed: i32,
 }
 
 impl Default for State {
@@ -51,6 +53,8 @@ impl Default for State {
             selected_band: 1,
             division: 3,
             section_on: true,
+            model: 0,
+            seed: 1,
         }
     }
 }
@@ -117,6 +121,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
                     state.division = picked;
                 }
             });
+            // One of a numbered set of variations, under its number.
+            ui.vertical(|ui| {
+                ui::variation_stepper(ui, &mut state.seed, 1..=32, "seed");
+                ui::text::note(ui, format!("#{}", state.seed));
+            });
         });
         ui::wheel(ui, &mut state.pitch, true, "Pitch", egui::vec2(34.0, 120.0));
         ui::wheel(
@@ -179,7 +188,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
     ui.add_space(tokens::SPACE_LG);
     ui::text::note(
         ui,
-        "grid_row_cells · device_section_header: a bare picture cell beside a card with an enable lamp",
+        "grid_row_cells · device_section_header_choice: a bare picture cell beside a card with an enable lamp and its model",
     );
     ui.add_space(tokens::SPACE_SM);
     ui.scope(|ui| {
@@ -238,7 +247,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
 }
 
 /// A picture as a bare cell beside a card whose title carries the section's
-/// enable lamp: `grid_row_cells` and `device_section_header`.
+/// enable lamp and its model: `grid_row_cells` and
+/// `device_section_header_choice`.
 pub fn picture_row(ui: &mut egui::Ui, state: &mut State) {
     let cells = [
         ui::GridCell {
@@ -257,7 +267,14 @@ pub fn picture_row(ui: &mut egui::Ui, state: &mut State) {
             ui::scope(ui, &[0.0, 0.6, 0.0, -0.6, 0.0], false, size);
             return;
         }
-        ui::device_section_header(ui, "Echo", Some(&mut state.section_on));
+        // The section's model on its title line.
+        ui::device_section_header_choice(
+            ui,
+            "Echo",
+            Some(&mut state.section_on),
+            &mut state.model,
+            &["Digital", "BBD", "Tape"],
+        );
         ui.add_space(tokens::SPACE_XS);
         ui.add_enabled_ui(state.section_on, |ui| {
             ui.horizontal(|ui| {

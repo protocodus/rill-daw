@@ -1,55 +1,65 @@
 //! R1 Spacer: an echo and a reverb in one device, in series or in parallel,
-//! with the wet signal ducked by the dry input. Both sections are shared
+//! each ducked by the dry input by its own amount. Both sections are shared
 //! kernels; this module maps the parameters, routes, gates, ducks and mixes.
 //! See `docs/R1_DEVICES.md#r1-spacer`.
 use super::param;
 use crate::dsp::echo::{self, EchoKernel, EchoSettings};
 use crate::dsp::reverb::{self, EARLY_TAPS, ReverbKernel, ReverbSettings};
-use crate::dsp::{Ballistics, CurveKind, GainComputer, LinearRamp, Smoothed, db_to_gain};
+use crate::dsp::{
+    Ballistics, CurveKind, GainComputer, LinearRamp, SlidingMax, Smoothed, db_to_gain,
+};
 use crate::{
     Device, DeviceDescriptor, DeviceKind, Event, ParamRange, ParamSpec, ProcessContext, StereoIo,
     Telemetry,
 };
 use std::sync::Arc;
 
-pub use crate::dsp::{EchoStereo, EchoType, ReverbType};
+pub use crate::dsp::{EchoModel, EchoStereo, ReverbModel, TapPattern};
 
 pub const ECHO_ON: u32 = 1;
-pub const ECHO_TYPE: u32 = 2;
+pub const ECHO_MODEL: u32 = 2;
 pub const ECHO_SYNC: u32 = 3;
 pub const ECHO_TIME: u32 = 4;
 pub const ECHO_DIVISION: u32 = 5;
 pub const ECHO_FEEDBACK: u32 = 6;
 pub const ECHO_STEREO: u32 = 7;
 pub const ECHO_LOW_CUT: u32 = 8;
-pub const ECHO_HIGH_CUT: u32 = 9;
+pub const ECHO_COLOR: u32 = 9;
 pub const ECHO_WOBBLE: u32 = 10;
 pub const ECHO_LEVEL: u32 = 11;
+pub const ECHO_TAPS: u32 = 12;
+pub const ECHO_DIFFUSION: u32 = 13;
+pub const ECHO_DUCK: u32 = 14;
 pub const ROUTING: u32 = 20;
-pub const DUCK: u32 = 21;
 pub const MIX: u32 = 30;
 pub const OUTPUT: u32 = 31;
 pub const REVERB_ON: u32 = 40;
-pub const REVERB_TYPE: u32 = 41;
+pub const REVERB_MODEL: u32 = 41;
 pub const PRE_DELAY: u32 = 42;
 pub const SIZE: u32 = 43;
 pub const DECAY: u32 = 44;
 pub const DAMPING: u32 = 45;
 pub const REVERB_LOW_CUT: u32 = 46;
-pub const REVERB_HIGH_CUT: u32 = 47;
+pub const REVERB_COLOR: u32 = 47;
 pub const DIFFUSION: u32 = 48;
 pub const MOVEMENT: u32 = 49;
 pub const WIDTH: u32 = 50;
 pub const REVERB_LEVEL: u32 = 51;
+pub const SEED: u32 = 52;
+pub const REVERB_DUCK: u32 = 53;
 
-/// Telemetry value slots: the duck's reduction now in dB, the echo time in
-/// effect in seconds (after sync), and the tempo it was derived from.
+/// Telemetry value slots: the duck's reduction now in dB at full depth (a
+/// section is reduced by this times its Duck), the echo time in effect in
+/// seconds (after sync), and the tempo it was derived from.
 pub const TELEMETRY_DUCK: usize = 0;
 pub const TELEMETRY_TIME: usize = 1;
 pub const TELEMETRY_TEMPO: usize = 2;
 pub const TELEMETRY_SAMPLE_RATE: usize = 3;
 
-pub const ECHO_TYPES: &[&str] = &["Digital", "Tape", "Analog"];
+pub const ECHO_MODELS: &[&str] = &["Digital", "BBD", "Tape"];
+pub const ECHO_TAP_PATTERNS: &[&str] = &[
+    "Single", "Double", "Triple", "Quad", "Dotted", "Swing", "Gallop", "Golden",
+];
 pub const ECHO_STEREOS: &[&str] = &["Mono", "Ping-pong", "Wide"];
 /// Shortest first; D is dotted, T a triplet.
 pub const DIVISIONS: &[&str] = &[
@@ -57,7 +67,8 @@ pub const DIVISIONS: &[&str] = &[
     "1/4", "1/2 T", "1/4 D", "1/2", "1/1 T", "1/2 D", "1/1", "1/1 D",
 ];
 pub const ROUTINGS: &[&str] = &["Echo → Reverb", "Parallel"];
-pub const REVERB_TYPES: &[&str] = &["Room", "Chamber", "Hall", "Plate"];
+pub const REVERB_MODELS: &[&str] = &["Studio", "Room", "Hall"];
+pub const SEEDS: (i32, i32) = (1, 32);
 
 /// A level parameter at its minimum is silence, not −60 dB.
 pub const SILENT_DB: f32 = -60.0;
@@ -145,12 +156,20 @@ const fn toggle(
 }
 
 const PERCENT: (f32, f32) = (0.0, 100.0);
+const BIPOLAR: (f32, f32) = (-100.0, 100.0);
 const LEVEL: (f32, f32) = (SILENT_DB, 0.0);
 
 /// In signal order: Echo, Reverb, Output.
-pub static PARAMETERS: [ParamSpec; 27] = [
+pub static PARAMETERS: [ParamSpec; 31] = [
     toggle(ECHO_ON, "echo.on", "Echo on", "Echo", 1.0),
-    choice(ECHO_TYPE, "echo.type", "Echo type", "Echo", ECHO_TYPES, 0.0),
+    choice(
+        ECHO_MODEL,
+        "echo.model",
+        "Echo model",
+        "Echo",
+        ECHO_MODELS,
+        0.0,
+    ),
     toggle(ECHO_SYNC, "echo.sync", "Echo sync", "Echo", 1.0),
     log(
         ECHO_TIME,
@@ -179,12 +198,47 @@ pub static PARAMETERS: [ParamSpec; 27] = [
         35.0,
     ),
     choice(
+        ECHO_TAPS,
+        "echo.taps",
+        "Echo taps",
+        "Echo",
+        ECHO_TAP_PATTERNS,
+        0.0,
+    ),
+    choice(
         ECHO_STEREO,
         "echo.stereo",
         "Echo stereo",
         "Echo",
         ECHO_STEREOS,
         1.0,
+    ),
+    linear(
+        ECHO_DIFFUSION,
+        "echo.diffusion",
+        "Echo diffusion",
+        "Echo",
+        "%",
+        PERCENT,
+        0.0,
+    ),
+    linear(
+        ECHO_COLOR,
+        "echo.color",
+        "Echo color",
+        "Echo",
+        "%",
+        BIPOLAR,
+        0.0,
+    ),
+    linear(
+        ECHO_WOBBLE,
+        "echo.wobble",
+        "Echo wobble",
+        "Echo",
+        "%",
+        PERCENT,
+        0.0,
     ),
     log(
         ECHO_LOW_CUT,
@@ -195,19 +249,10 @@ pub static PARAMETERS: [ParamSpec; 27] = [
         (20.0, 2000.0),
         120.0,
     ),
-    log(
-        ECHO_HIGH_CUT,
-        "echo.high_cut",
-        "Echo high cut",
-        "Echo",
-        "Hz",
-        (500.0, 20_000.0),
-        8000.0,
-    ),
     linear(
-        ECHO_WOBBLE,
-        "echo.wobble",
-        "Echo wobble",
+        ECHO_DUCK,
+        "echo.duck",
+        "Echo duck",
         "Echo",
         "%",
         PERCENT,
@@ -224,11 +269,11 @@ pub static PARAMETERS: [ParamSpec; 27] = [
     ),
     toggle(REVERB_ON, "reverb.on", "Reverb on", "Reverb", 1.0),
     choice(
-        REVERB_TYPE,
-        "reverb.type",
-        "Reverb type",
+        REVERB_MODEL,
+        "reverb.model",
+        "Reverb model",
         "Reverb",
-        REVERB_TYPES,
+        REVERB_MODELS,
         2.0,
     ),
     linear(
@@ -259,24 +304,6 @@ pub static PARAMETERS: [ParamSpec; 27] = [
         PERCENT,
         40.0,
     ),
-    log(
-        REVERB_LOW_CUT,
-        "reverb.low_cut",
-        "Reverb low cut",
-        "Reverb",
-        "Hz",
-        (20.0, 1000.0),
-        100.0,
-    ),
-    log(
-        REVERB_HIGH_CUT,
-        "reverb.high_cut",
-        "Reverb high cut",
-        "Reverb",
-        "Hz",
-        (1000.0, 20_000.0),
-        12_000.0,
-    ),
     linear(
         DIFFUSION,
         "reverb.diffusion",
@@ -295,6 +322,36 @@ pub static PARAMETERS: [ParamSpec; 27] = [
         PERCENT,
         25.0,
     ),
+    param(
+        SEED,
+        "reverb.seed",
+        "Seed",
+        "Reverb",
+        "",
+        ParamRange::Integer {
+            min: SEEDS.0,
+            max: SEEDS.1,
+        },
+        1.0,
+    ),
+    linear(
+        REVERB_COLOR,
+        "reverb.color",
+        "Reverb color",
+        "Reverb",
+        "%",
+        BIPOLAR,
+        0.0,
+    ),
+    log(
+        REVERB_LOW_CUT,
+        "reverb.low_cut",
+        "Reverb low cut",
+        "Reverb",
+        "Hz",
+        (20.0, 1000.0),
+        100.0,
+    ),
     linear(
         WIDTH,
         "reverb.width",
@@ -303,6 +360,15 @@ pub static PARAMETERS: [ParamSpec; 27] = [
         "%",
         (0.0, 150.0),
         100.0,
+    ),
+    linear(
+        REVERB_DUCK,
+        "reverb.duck",
+        "Reverb duck",
+        "Reverb",
+        "%",
+        PERCENT,
+        0.0,
     ),
     linear(
         REVERB_LEVEL,
@@ -314,7 +380,6 @@ pub static PARAMETERS: [ParamSpec; 27] = [
         -9.0,
     ),
     choice(ROUTING, "routing", "Routing", "Output", ROUTINGS, 0.0),
-    linear(DUCK, "duck", "Duck", "Output", "%", PERCENT, 0.0),
     linear(MIX, "mix", "Mix", "Output", "%", PERCENT, 30.0),
     linear(
         OUTPUT,
@@ -340,11 +405,14 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-spacer/slapback.rillpreset"),
         include_str!("../../presets/r1-spacer/ping-pong-eighths.rillpreset"),
         include_str!("../../presets/r1-spacer/tape-echo.rillpreset"),
-        include_str!("../../presets/r1-spacer/analog-dub.rillpreset"),
+        include_str!("../../presets/r1-spacer/multi-head.rillpreset"),
+        include_str!("../../presets/r1-spacer/bbd-dub.rillpreset"),
         include_str!("../../presets/r1-spacer/wide-doubler.rillpreset"),
-        include_str!("../../presets/r1-spacer/small-room.rillpreset"),
-        include_str!("../../presets/r1-spacer/drum-chamber.rillpreset"),
-        include_str!("../../presets/r1-spacer/vocal-plate.rillpreset"),
+        include_str!("../../presets/r1-spacer/diffused-repeats.rillpreset"),
+        include_str!("../../presets/r1-spacer/vocal-booth.rillpreset"),
+        include_str!("../../presets/r1-spacer/drum-room.rillpreset"),
+        include_str!("../../presets/r1-spacer/live-room.rillpreset"),
+        include_str!("../../presets/r1-spacer/dark-chamber.rillpreset"),
         include_str!("../../presets/r1-spacer/large-hall.rillpreset"),
         include_str!("../../presets/r1-spacer/cathedral.rillpreset"),
         include_str!("../../presets/r1-spacer/echo-into-hall.rillpreset"),
@@ -362,29 +430,25 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Settings {
     pub echo_on: bool,
-    pub echo_type: EchoType,
     pub echo_sync: bool,
     /// The Time knob; see [`echo_seconds`] for the time in effect.
     pub echo_time_seconds: f32,
     /// Index into [`DIVISIONS`].
     pub echo_division: usize,
-    /// 0–1.
-    pub echo_feedback: f32,
-    pub echo_stereo: EchoStereo,
-    pub echo_low_cut_hz: f32,
-    pub echo_high_cut_hz: f32,
-    /// 0–1.
-    pub echo_wobble: f32,
+    /// What the echo is given but for its time; see [`Settings::echo`].
+    pub echo: EchoSettings,
+    /// 0–1: how much of the duck the echo takes.
+    pub echo_duck: f32,
     /// Linear gain; 0 at the bottom of the range.
     pub echo_level: f32,
     pub reverb_on: bool,
     pub reverb: ReverbSettings,
+    /// 0–1.
+    pub reverb_duck: f32,
     /// Linear gain; 0 at the bottom of the range.
     pub reverb_level: f32,
     /// The echo feeds the reverb; otherwise both hear only the input.
     pub series: bool,
-    /// 0–1.
-    pub duck: f32,
     /// 0–1.
     pub mix: f32,
     pub output_db: f32,
@@ -401,47 +465,51 @@ impl Settings {
             let spec = DESCRIPTOR.parameter(id).expect("spacer parameter");
             spec.to_plain(value(id))
         };
+        let echo_time_seconds = plain(ECHO_TIME) / 1000.0;
         Self {
             echo_on: plain(ECHO_ON) >= 0.5,
-            echo_type: match plain(ECHO_TYPE) as usize {
-                0 => EchoType::Digital,
-                1 => EchoType::Tape,
-                _ => EchoType::Analog,
-            },
             echo_sync: plain(ECHO_SYNC) >= 0.5,
-            echo_time_seconds: plain(ECHO_TIME) / 1000.0,
+            echo_time_seconds,
             echo_division: (plain(ECHO_DIVISION) as usize).min(DIVISIONS.len() - 1),
-            echo_feedback: plain(ECHO_FEEDBACK) / 100.0,
-            echo_stereo: match plain(ECHO_STEREO) as usize {
-                0 => EchoStereo::Mono,
-                1 => EchoStereo::PingPong,
-                _ => EchoStereo::Wide,
+            echo: EchoSettings {
+                model: match plain(ECHO_MODEL) as usize {
+                    0 => EchoModel::Digital,
+                    1 => EchoModel::Bbd,
+                    _ => EchoModel::Tape,
+                },
+                seconds: echo_time_seconds,
+                feedback: plain(ECHO_FEEDBACK) / 100.0,
+                stereo: match plain(ECHO_STEREO) as usize {
+                    0 => EchoStereo::Mono,
+                    1 => EchoStereo::PingPong,
+                    _ => EchoStereo::Wide,
+                },
+                taps: TapPattern::ALL[(plain(ECHO_TAPS) as usize).min(TapPattern::ALL.len() - 1)],
+                diffusion: plain(ECHO_DIFFUSION) / 100.0,
+                color: plain(ECHO_COLOR) / 100.0,
+                wobble: plain(ECHO_WOBBLE) / 100.0,
+                low_cut_hz: plain(ECHO_LOW_CUT),
             },
-            echo_low_cut_hz: plain(ECHO_LOW_CUT),
-            echo_high_cut_hz: plain(ECHO_HIGH_CUT),
-            echo_wobble: plain(ECHO_WOBBLE) / 100.0,
+            echo_duck: plain(ECHO_DUCK) / 100.0,
             echo_level: level_gain(plain(ECHO_LEVEL)),
             reverb_on: plain(REVERB_ON) >= 0.5,
             reverb: ReverbSettings {
-                kind: match plain(REVERB_TYPE) as usize {
-                    0 => ReverbType::Room,
-                    1 => ReverbType::Chamber,
-                    2 => ReverbType::Hall,
-                    _ => ReverbType::Plate,
-                },
+                model: ReverbModel::ALL
+                    [(plain(REVERB_MODEL) as usize).min(ReverbModel::ALL.len() - 1)],
                 size: plain(SIZE) / 100.0,
                 decay_seconds: plain(DECAY),
                 pre_delay_seconds: plain(PRE_DELAY) / 1000.0,
                 damping: plain(DAMPING) / 100.0,
-                low_cut_hz: plain(REVERB_LOW_CUT),
-                high_cut_hz: plain(REVERB_HIGH_CUT),
                 diffusion: plain(DIFFUSION) / 100.0,
                 movement: plain(MOVEMENT) / 100.0,
+                seed: plain(SEED).round().clamp(SEEDS.0 as f32, SEEDS.1 as f32) as u32,
+                color: plain(REVERB_COLOR) / 100.0,
+                low_cut_hz: plain(REVERB_LOW_CUT),
                 width: plain(WIDTH) / 100.0,
             },
+            reverb_duck: plain(REVERB_DUCK) / 100.0,
             reverb_level: level_gain(plain(REVERB_LEVEL)),
             series: plain(ROUTING) < 0.5,
-            duck: plain(DUCK) / 100.0,
             mix: plain(MIX) / 100.0,
             output_db: plain(OUTPUT),
         }
@@ -450,13 +518,8 @@ impl Settings {
     /// What the echo kernel is given at a tempo.
     pub fn echo(&self, tempo: f64) -> EchoSettings {
         EchoSettings {
-            kind: self.echo_type,
             seconds: echo_seconds(self, tempo),
-            feedback: self.echo_feedback,
-            stereo: self.echo_stereo,
-            low_cut_hz: self.echo_low_cut_hz,
-            high_cut_hz: self.echo_high_cut_hz,
-            wobble: self.echo_wobble,
+            ..self.echo
         }
     }
 }
@@ -480,8 +543,8 @@ pub fn applies(id: u32, settings: &Settings) -> bool {
         ECHO_ON | REVERB_ON => true,
         ECHO_TIME => settings.echo_on && !settings.echo_sync,
         ECHO_DIVISION => settings.echo_on && settings.echo_sync,
-        ECHO_TYPE..=ECHO_LEVEL => settings.echo_on,
-        REVERB_TYPE..=REVERB_LEVEL => settings.reverb_on,
+        ECHO_MODEL..=ECHO_DUCK => settings.echo_on,
+        REVERB_MODEL..=REVERB_DUCK => settings.reverb_on,
         ROUTING => settings.echo_on && settings.reverb_on,
         _ => true,
     }
@@ -504,10 +567,11 @@ pub fn decay_seconds_at(settings: &Settings, hz: f32, sample_rate: f32) -> f32 {
     reverb::decay_seconds_at(&settings.reverb, hz, sample_rate)
 }
 
-/// The reverb's early reflections per channel, as
-/// `(seconds after the pre-delay, gain)`.
+/// What the reverb gives first, per channel, as
+/// `(seconds after the pre-delay, gain)`: it moves with the model, the
+/// size and the seed.
 pub fn early_taps(settings: &Settings, out: &mut [[(f32, f32); EARLY_TAPS]; 2]) {
-    reverb::early_taps(settings.reverb.kind, settings.reverb.size, out);
+    reverb::early_taps(&settings.reverb, out);
 }
 
 /// The duck: full reduction from −12 dBFS of input, a soft start at −42.
@@ -520,6 +584,9 @@ const DUCK_CURVE: GainComputer = GainComputer {
 pub const DUCK_RANGE_DB: f32 = 24.0;
 const DUCK_RISE_MS: f32 = 8.0;
 const DUCK_FALL_MS: f32 = 300.0;
+/// The detector holds its peak this long, so a low note's cycles do not
+/// ripple the gain.
+const DUCK_HOLD_SECONDS: f32 = 0.005;
 const GATE_SECONDS: f32 = 0.05;
 const ROUTING_SECONDS: f32 = 0.02;
 /// Input is held to ±36 dBFS: a feedback line would keep anything larger,
@@ -575,8 +642,10 @@ pub struct Spacer {
     reverb_level: Smoothed,
     /// 1 while the echo feeds the reverb.
     series: LinearRamp,
+    hold: SlidingMax,
     duck: Ballistics,
-    duck_amount: Smoothed,
+    echo_duck: Smoothed,
+    reverb_duck: Smoothed,
     mix: Smoothed,
     /// Dry and wet gain of the equal-power mix.
     mix_gains: (f32, f32),
@@ -623,8 +692,10 @@ impl Spacer {
             echo_level: Smoothed::new(settings.echo_level),
             reverb_level: Smoothed::new(settings.reverb_level),
             series: LinearRamp::new(1.0),
+            hold: SlidingMax::default(),
             duck: Ballistics::default(),
-            duck_amount: Smoothed::new(settings.duck),
+            echo_duck: Smoothed::new(settings.echo_duck),
+            reverb_duck: Smoothed::new(settings.reverb_duck),
             mix: Smoothed::new(settings.mix),
             mix_gains: mix_gains(settings.mix),
             output: Smoothed::new(db_to_gain(settings.output_db)),
@@ -655,7 +726,8 @@ impl Spacer {
             self.series
                 .set_target(series, self.samples(ROUTING_SECONDS));
         }
-        self.duck_amount.set_target(settings.duck);
+        self.echo_duck.set_target(settings.echo_duck);
+        self.reverb_duck.set_target(settings.reverb_duck);
         self.mix.set_target(settings.mix);
         self.output.set_target(db_to_gain(settings.output_db));
     }
@@ -673,7 +745,10 @@ impl Device for Spacer {
         self.reverb.prepare(rate);
         self.echo_level.set_time(20.0, rate);
         self.reverb_level.set_time(20.0, rate);
-        self.duck_amount.set_time(20.0, rate);
+        self.echo_duck.set_time(20.0, rate);
+        self.reverb_duck.set_time(20.0, rate);
+        self.hold
+            .allocate((DUCK_HOLD_SECONDS * rate).ceil() as usize);
         self.duck.set_times(DUCK_RISE_MS, DUCK_FALL_MS, rate);
         self.mix.set_time(5.0, rate);
         self.output.set_time(5.0, rate);
@@ -714,17 +789,23 @@ impl Device for Spacer {
             });
 
             // Keyed from the dry input, so tails rise when the source stops.
-            let amount = self.duck_amount.next_value();
-            let duck = if amount > 0.0 || self.duck.value() > 0.0 {
-                let level = input[0].abs().max(input[1].abs()).max(1e-6);
+            let amounts = [self.echo_duck.next_value(), self.reverb_duck.next_value()];
+            let mut duck = [1.0; 2];
+            if amounts[0] > 0.0 || amounts[1] > 0.0 || self.duck.value() > 0.0 {
+                let level = self
+                    .hold
+                    .process(input[0].abs().max(input[1].abs()))
+                    .max(1e-6);
                 let reduction = DUCK_CURVE
                     .reduction_db(20.0 * level.log10())
-                    .min(DUCK_RANGE_DB)
-                    * amount;
-                db_to_gain(-self.duck.process(reduction))
-            } else {
-                1.0
-            };
+                    .min(DUCK_RANGE_DB);
+                let envelope = self.duck.process(reduction);
+                for (gain, amount) in duck.iter_mut().zip(amounts) {
+                    if amount > 0.0 {
+                        *gain = db_to_gain(-envelope * amount);
+                    }
+                }
+            }
 
             let echo_level = self.echo_level.next_value();
             let mut echo = [0.0; 2];
@@ -737,6 +818,8 @@ impl Device for Spacer {
                 }
             }
 
+            // The reverb hears the echo before its duck: the reverb's own
+            // duck governs the wash.
             let series = self.series.next();
             let reverb_level = self.reverb_level.next_value();
             let mut reverb = [0.0; 2];
@@ -758,7 +841,7 @@ impl Device for Spacer {
             let (dry_gain, wet_gain) = self.mix_gains;
             let output = self.output.next_value();
             for (channel, sample) in [&mut *left, &mut *right].into_iter().enumerate() {
-                let wet = (echo[channel] + reverb[channel]) * duck;
+                let wet = echo[channel] * duck[0] + reverb[channel] * duck[1];
                 sample[index] = (dry_gain * input[channel] + wet_gain * wet) * output;
             }
         }
@@ -778,8 +861,11 @@ impl Device for Spacer {
         self.echo_level.snap();
         self.reverb_level.snap();
         self.series.snap();
+        self.hold
+            .set_window((DUCK_HOLD_SECONDS * self.sample_rate).ceil() as usize, 0.0);
         self.duck.reset();
-        self.duck_amount.snap();
+        self.echo_duck.snap();
+        self.reverb_duck.snap();
         self.mix.snap();
         self.mix_gains = mix_gains(self.mix.value());
         self.output.snap();
@@ -788,14 +874,22 @@ impl Device for Spacer {
     fn tail_samples(&self) -> u32 {
         let settings = decode(&self.values);
         let echo = if settings.echo_on {
-            echo::tail_seconds(&settings.echo(self.tempo))
+            // The engine asks before the first block, when the tempo is
+            // still unknown: a synced echo answers for its longest time.
+            let seconds = if settings.echo_sync {
+                echo::MAX_SECONDS
+            } else {
+                settings.echo_time_seconds
+            };
+            echo::tail_seconds(&EchoSettings {
+                seconds,
+                ..settings.echo
+            })
         } else {
             0.0
         };
-        // The early taps and diffusers, and the bass, which may ring for up
-        // to twice Decay.
         let reverb = if settings.reverb_on {
-            settings.reverb.pre_delay_seconds + 0.15 + 2.0 * settings.reverb.decay_seconds
+            reverb::tail_seconds(&settings.reverb)
         } else {
             0.0
         };

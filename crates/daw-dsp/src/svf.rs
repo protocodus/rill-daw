@@ -390,10 +390,85 @@ impl Shelf1 {
     }
 }
 
+/// A [`Shelf1`] that reaches new coefficients in a straight line over a
+/// number of samples: an absorption or a level that follows a control
+/// without a step. On the way between two shelves that never gain it never
+/// gains either, so it is safe inside a feedback loop.
+#[derive(Clone, Debug, Default)]
+pub struct ShelfGlide {
+    shelf: Shelf1,
+    target: [f32; 3],
+    step: [f32; 3],
+    left: u32,
+}
+
+impl ShelfGlide {
+    /// Moves to the other section's coefficients over `samples` (at once
+    /// with 0) and keeps the state.
+    pub fn set(&mut self, other: &Shelf1, samples: u32) {
+        let now = [self.shelf.big_g, self.shelf.low_gain, self.shelf.high_gain];
+        self.target = [other.big_g, other.low_gain, other.high_gain];
+        self.left = samples;
+        if samples == 0 {
+            self.shelf.set(other);
+        } else {
+            self.step =
+                std::array::from_fn(|index| (self.target[index] - now[index]) / samples as f32);
+        }
+    }
+
+    /// Clears the state; the coefficients stay as they are.
+    pub fn reset(&mut self) {
+        self.shelf.reset();
+    }
+
+    #[inline]
+    pub fn process(&mut self, input: f32) -> f32 {
+        if self.left > 0 {
+            self.left -= 1;
+            let [big_g, low, high] = if self.left == 0 {
+                // Exactly, not by the sum of the steps.
+                self.target
+            } else {
+                [
+                    self.shelf.big_g + self.step[0],
+                    self.shelf.low_gain + self.step[1],
+                    self.shelf.high_gain + self.step[2],
+                ]
+            };
+            (self.shelf.big_g, self.shelf.low_gain, self.shelf.high_gain) = (big_g, low, high);
+        }
+        self.shelf.process(input)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::prewarp;
+
+    #[test]
+    fn a_gliding_shelf_arrives_exactly_and_without_a_step() {
+        let mut shelf = ShelfGlide::default();
+        shelf.set(&Shelf1::with_gains(0.2, 0.1, 0.05), 0);
+        assert_eq!(shelf.process(0.0), 0.0);
+        let target = Shelf1::with_gains(0.5, 0.9, 0.7);
+        shelf.set(&target, 32);
+        let mut last = shelf.process(1.0);
+        for _ in 0..400 {
+            let out = shelf.process(1.0);
+            // A constant input: the low gain alone, moving by a 32nd of
+            // the way at most (and the pole settling).
+            assert!((out - last).abs() < 0.1, "{last} to {out}");
+            last = out;
+        }
+        assert!((last - 0.9).abs() < 1e-4, "{last}");
+        let (glided, direct) = (&shelf.shelf, &target);
+        assert_eq!(
+            (glided.big_g, glided.low_gain, glided.high_gain),
+            (direct.big_g, direct.low_gain, direct.high_gain)
+        );
+    }
 
     const RATE: f32 = 48_000.0;
 

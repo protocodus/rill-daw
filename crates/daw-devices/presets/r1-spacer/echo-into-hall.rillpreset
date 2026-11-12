@@ -3,14 +3,15 @@
   "device": "r1-spacer",
   "name": "Echo Into Hall",
   "author": "Rill",
-  "category": "Combined",
+  "category": "Space",
   "tags": ["lead", "vocal"],
-  "description": "Repeats dissolving in a hall.",
+  "description": "Tape repeats washing into a hall.",
   "parameters": {
+    "echo.model": "Tape",
     "echo.division": "1/4",
     "echo.feedback": 40.0,
-    "reverb.decay": 2.8,
-    "reverb.size": 70.0,
-    "reverb.level": -8.0
+    "reverb.model": "Hall",
+    "reverb.decay": 2.5,
+    "routing": "Echo → Reverb"
   }
 }

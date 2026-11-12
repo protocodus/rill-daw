@@ -1400,6 +1400,7 @@ arrow keys), and canvas handles use the 21-point `HIT_TARGET`.
 | `labeled_knob` | Caption, dial and value in a fixed cell (`KnobSize::Dense` 34, `Standard` 48, `Hero` 64). Clicking the value types a number. The context menu offers **Reset**, **Type value…**, **Automate** (or **Show automation lane**) and, with `.mod_sources`, **Modulate with …**. `show` returns `automate` and `modulate_with`; the host creates the lane or routing. |
 | `segmented`, `stepped_selector`, `toggle_led` | Two to four options as toggle buttons (falls back to a drop-down), longer lists, and section enables. |
 | `value_menu` | A value line in the action colour that opens a menu of a choice's options and returns the picked index. It stands under a dial with one detent per option (`Knob::step_by`), where a list is too long for toggle buttons and the place is one cell wide: the dial steps through the options, the menu reaches any of them with two clicks. As tall as a knob's value line. |
+| `variation_stepper` | Picks one of a numbered set of equally good variations (a reverb's seed, a round-robin layer): previous, a die that jumps to any other one, next, as three 21-point buttons in one track (`VARIATION_STEPPER_SIZE`, 63 by 25 points), which fits a knob's cell. Previous and next wrap around the range. The value is a whole number the caller owns, so presets and automation hold it; print it on the value line below ("#7"). The response is `changed` when a button moved the value. Use it instead of a knob where no value is more than another; do not give it a double-click Reset, since two quick clicks are two steps. |
 | `inline_knob` | A knob for a table of parameters: a mini arc with its value beside it on one 21-point line, the whole cell one hit target. The line's caption stands once, in the table's caption column, and the name is the accessible label. Same gestures as every knob (relative drag, Shift for fine, double-click to reset, arrow keys, right-click menu, click the value to type). `.width` fixes the cell so lines share columns; `inline_knob_width` measures a value text. |
 | `glyph_toggle` | A toggle group whose segments show a drawn shape (`ToggleFace::Glyph`: bell, shelves, notch, pass filters, LFO waves; `Glyph::Wander` is a smooth irregular wave for a random LFO that does not step, where `Glyph::SampleHold` would misdescribe it) or a short text (`ToggleFace::Text`, such as 12, 24, 48) in equal segments of a given width. Each option carries its full name for hover and screen readers. Use it where option names do not fit the column; plain `toggle_group` everywhere else. |
 | `column_highlight` | Paints the selection mark behind one column of a table: call it with the column's rectangle before drawing the cells. |
@@ -1479,10 +1480,14 @@ right over `span_seconds`; level is in decibels from 0 dB at the outer
 edges to `floor_db` on the centre line, the left channel above it and the
 right below, so an exponential decay is a straight line. `taps`
 (`DelayTap`: time, left and right gain, `thin` for reflections, `faint`
-for a part that is switched off) are bars from the centre line; `tails`
-(`DelayTail`: start time and level, decay time for 60 dB, `faint`) are
-filled wedges mirrored about it; `grid` is lines with labels (seconds or
-beats); `reduction_db` is a thin gain-reduction bar at the right edge. The
+for a part that is switched off, `blur_seconds` for a glow that fades to
+either side of a diffused echo) are bars from the centre line; `tails`
+(`DelayTail`: start time and level, decay time for 60 dB, an optional
+`inner_decay_seconds` for a second wedge inside the first, such as the top
+of a damped reverb, `faint`) are filled wedges mirrored about it; `grid` is
+lines with labels (seconds or beats); `reductions` are thin gain-reduction
+bars at the right edge, each with its value now, the value that fills it
+and a letter above it ("E", "R"). The
 level scale is printed at the right, where the picture has decayed.
 `handles` (`DelayHandle`: time, level, `below` for the right channel's
 side, a letter, a hover `readout`, and which of `horizontal` and `vertical`
@@ -1513,6 +1518,12 @@ tracked capitals over a rule that separates it from the controls;
 `device_section_header` is the same heading with a lamp in front for a
 section that can be switched off (lamp and title are one click target, and
 the heading is as tall as the plain one, so cards line up);
+`device_section_header_choice` adds the choice of the section's model
+(Digital, BBD, Tape) as toggle buttons at the right end of the same line,
+which keeps the card's own lines for its controls. It is taller than the
+plain heading, so give it to every card of a row or to none; while the
+section's lamp is off the choice stays in place, disabled. It returns the
+heading's response and the choice's;
 `control_caption` names one control in sentence-case text in the full text
 color, so the two levels never read alike. Built-in device cards use the same
 pair.

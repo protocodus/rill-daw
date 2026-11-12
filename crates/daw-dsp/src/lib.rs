@@ -28,13 +28,16 @@ mod shaper;
 mod smooth;
 mod svf;
 
-pub use allpass::{Allpass1, AllpassChain, DelayAllpass};
+pub use allpass::{AbsorbentAllpass, Allpass1, AllpassChain, DelayAllpass};
 pub use biquad::Biquad;
 pub use complex::Complex;
 pub use cutoff::CutoffGlide;
-pub use delay::{DelayLine, FadeTap, StaticDelay};
+pub use delay::{AllpassInterp, DelayLine, FadeTap, SincTable, StaticDelay, glide_length};
 pub use dynamics::{Ballistics, Compander, CurveKind, GainComputer, ProgramRelease};
-pub use echo::{EchoKernel, EchoSettings, EchoStereo, EchoType};
+pub use echo::{
+    BucketFilter, BucketLine, EchoKernel, EchoModel, EchoSettings, EchoStereo, TapPattern,
+    TapeTransport,
+};
 pub use envelope::{Adsr, Stage};
 pub use filter::{FilterKernel, FilterModel, FilterShape, FilterType, LatencyDelay};
 pub use follower::EnvelopeFollower;
@@ -45,17 +48,18 @@ pub use modulation::{ModulationKernel, ModulationMode, ModulationSettings};
 pub use nonlinear::{Ladder, SallenKey, soft_limit, tanh_fast};
 pub use oscillator::{Drift, Oscillator, OscillatorModel, SubOscillator, Waveform};
 pub use oversample::{HalfBand, OversampleFactor, Oversampler, Oversampler2x};
-pub use random::Random;
+pub use random::{Random, hash32};
 pub use real::Real;
 pub use reverb::{
-    Fdn16, ReverbKernel, ReverbSettings, ReverbType, absorption_shelf, hadamard16, nearest_prime,
+    DiffuserStep, Fdn, ReverbKernel, ReverbModel, ReverbSettings, absorption_shelf, butterflies,
+    hadamard, nearest_prime,
 };
 pub use shaper::{
     Adaa1, AdaaCentered, AlgebraicSigmoid, AntialiasedShaper, BoundedCubic, BoundedSquare,
     DroopCorrector, HyperbolicClip, Shape,
 };
 pub use smooth::{LinearRamp, Smoothed};
-pub use svf::{OnePole, Shelf1, Svf, SvfMix, SvfMixRamp, SvfOutputs};
+pub use svf::{OnePole, Shelf1, ShelfGlide, Svf, SvfMix, SvfMixRamp, SvfOutputs};
 
 /// Below this, filter states are flushed to zero so decays never reach
 /// denormal numbers.

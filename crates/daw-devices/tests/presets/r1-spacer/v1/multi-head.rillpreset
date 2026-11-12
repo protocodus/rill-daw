@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Multi-Head",
+  "author": "Rill",
+  "category": "Echo",
+  "tags": ["guitar", "synth"],
+  "description": "Three tape heads make a rhythm of every repeat.",
+  "parameters": {
+    "reverb.on": false,
+    "echo.model": "Tape",
+    "echo.division": "1/2",
+    "echo.taps": "Triple",
+    "echo.feedback": 40.0,
+    "echo.wobble": 20.0,
+    "echo.stereo": "Wide"
+  }
+}

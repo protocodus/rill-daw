@@ -133,29 +133,33 @@ r1-modulator 26 low_cut "Wet low cut" log 20 500
 r1-modulator 30 mix "Mix" linear 0 100
 r1-modulator 31 output "Output" linear -24 24
 r1-spacer 1 echo.on "Echo on" toggle
-r1-spacer 2 echo.type "Echo type" choice Digital|Tape|Analog
+r1-spacer 2 echo.model "Echo model" choice Digital|BBD|Tape
 r1-spacer 3 echo.sync "Echo sync" toggle
 r1-spacer 4 echo.time "Echo time" log 1 2000
 r1-spacer 5 echo.division "Echo division" choice 1/32 T|1/32|1/16 T|1/32 D|1/16|1/8 T|1/16 D|1/8|1/4 T|1/8 D|1/4|1/2 T|1/4 D|1/2|1/1 T|1/2 D|1/1|1/1 D
 r1-spacer 6 echo.feedback "Echo feedback" linear 0 100
+r1-spacer 12 echo.taps "Echo taps" choice Single|Double|Triple|Quad|Dotted|Swing|Gallop|Golden
 r1-spacer 7 echo.stereo "Echo stereo" choice Mono|Ping-pong|Wide
-r1-spacer 8 echo.low_cut "Echo low cut" log 20 2000
-r1-spacer 9 echo.high_cut "Echo high cut" log 500 20000
+r1-spacer 13 echo.diffusion "Echo diffusion" linear 0 100
+r1-spacer 9 echo.color "Echo color" linear -100 100
 r1-spacer 10 echo.wobble "Echo wobble" linear 0 100
+r1-spacer 8 echo.low_cut "Echo low cut" log 20 2000
+r1-spacer 14 echo.duck "Echo duck" linear 0 100
 r1-spacer 11 echo.level "Echo level" linear -60 0
 r1-spacer 40 reverb.on "Reverb on" toggle
-r1-spacer 41 reverb.type "Reverb type" choice Room|Chamber|Hall|Plate
+r1-spacer 41 reverb.model "Reverb model" choice Studio|Room|Hall
 r1-spacer 42 reverb.pre_delay "Pre-delay" linear 0 250
 r1-spacer 43 reverb.size "Size" linear 0 100
 r1-spacer 44 reverb.decay "Decay" log 0.1 20
 r1-spacer 45 reverb.damping "Damping" linear 0 100
-r1-spacer 46 reverb.low_cut "Reverb low cut" log 20 1000
-r1-spacer 47 reverb.high_cut "Reverb high cut" log 1000 20000
 r1-spacer 48 reverb.diffusion "Diffusion" linear 0 100
 r1-spacer 49 reverb.movement "Movement" linear 0 100
+r1-spacer 52 reverb.seed "Seed" integer 1 32
+r1-spacer 47 reverb.color "Reverb color" linear -100 100
+r1-spacer 46 reverb.low_cut "Reverb low cut" log 20 1000
 r1-spacer 50 reverb.width "Width" linear 0 150
+r1-spacer 53 reverb.duck "Reverb duck" linear 0 100
 r1-spacer 51 reverb.level "Reverb level" linear -60 0
 r1-spacer 20 routing "Routing" choice Echo → Reverb|Parallel
-r1-spacer 21 duck "Duck" linear 0 100
 r1-spacer 30 mix "Mix" linear 0 100
 r1-spacer 31 output "Output" linear -24 24

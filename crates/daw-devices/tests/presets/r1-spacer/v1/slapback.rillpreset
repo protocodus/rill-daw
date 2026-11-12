@@ -8,11 +8,11 @@
   "description": "One short tape repeat.",
   "parameters": {
     "reverb.on": false,
-    "echo.type": "Tape",
+    "echo.model": "Tape",
     "echo.sync": false,
-    "echo.time": 95.0,
-    "echo.feedback": 8.0,
+    "echo.time": 110.0,
+    "echo.feedback": 0.0,
     "echo.stereo": "Mono",
-    "echo.level": -4.0
+    "echo.color": -20.0
   }
 }

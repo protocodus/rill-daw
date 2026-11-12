@@ -3,13 +3,12 @@
   "device": "r1-spacer",
   "name": "Ducked Space",
   "author": "Rill",
-  "category": "Combined",
+  "category": "Space",
   "tags": ["vocal", "lead"],
-  "description": "Stays out of the source's way.",
+  "description": "Echo and hall that clear for the source and rise when it stops.",
   "parameters": {
-    "duck": 70.0,
-    "echo.division": "1/8 D",
-    "echo.feedback": 45.0,
-    "reverb.decay": 2.2
+    "echo.duck": 60.0,
+    "reverb.duck": 60.0,
+    "mix": 40.0
   }
 }

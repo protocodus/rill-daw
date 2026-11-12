@@ -216,18 +216,26 @@ impl Compander {
     /// Largest gain of the compressor and attenuation of the expander: below
     /// it the pair is linear, and silence stays silence.
     pub const MAX_GAIN: f32 = 32.0;
-    const TIME_MS: f32 = 10.0;
+    /// A fast rise keeps the burst short that an onset out of silence
+    /// sends into the line at the compressor's largest gain.
+    const RISE_MS: f32 = 1.0;
+    const FALL_MS: f32 = 10.0;
 
     pub fn prepare(&mut self, sample_rate: f32) {
         self.compress
-            .set_times(Self::TIME_MS, Self::TIME_MS, sample_rate);
+            .set_times(Self::RISE_MS, Self::FALL_MS, sample_rate);
         self.expand
-            .set_times(Self::TIME_MS, Self::TIME_MS, sample_rate);
+            .set_times(Self::RISE_MS, Self::FALL_MS, sample_rate);
     }
 
     pub fn reset(&mut self) {
         self.compress.reset();
         self.expand.reset();
+    }
+
+    /// The compressor's envelope: the level of what it has put out.
+    pub fn envelope(&self) -> f32 {
+        self.compress.value()
     }
 
     /// Divides by the envelope of its own output so far (a feedback
@@ -541,10 +549,12 @@ mod tests {
                 20.0 * (1.0 + worst / amplitude).log10() < 0.1,
                 "{level_db} dB: error {worst}"
             );
-            // 2:1 around the reference: the stored peak is √(A·R/(2/π)).
-            let expected = (amplitude * Compander::REFERENCE * std::f32::consts::FRAC_PI_2).sqrt();
+            // 2:1 around the reference: the stored peak is √(A·R/e), with
+            // an envelope `e` between the mean (2/π) and the peak of what
+            // is stored.
+            let expected = (amplitude * Compander::REFERENCE * 1.25).sqrt();
             assert!(
-                (20.0 * (stored / expected).log10()).abs() < 0.5,
+                (20.0 * (stored / expected).log10()).abs() < 1.0,
                 "{level_db} dB: stored {stored}, expected {expected}"
             );
         }

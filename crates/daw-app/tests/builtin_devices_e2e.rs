@@ -1066,6 +1066,35 @@ fn r1_spacer_rings_longer_with_decay_and_feedback_and_switches_from_its_panel() 
     assert!(long > short + 20.0, "short {short}, long {long}");
     assert!(long > -60.0, "{long}");
 
+    // Duck: the reverb gives way while the source plays and comes back
+    // once it has stopped.
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"mix","value":"100 %"}]),
+    );
+    let playing = |app: &mut Harness| level_between(app, 1.0, 2.0);
+    let (open, open_tail) = (playing(&mut app), tail(&mut app));
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"reverb.duck","value":"100 %"}]),
+    );
+    let (ducked, ducked_tail) = (playing(&mut app), tail(&mut app));
+    assert!(ducked < open - 12.0, "open {open}, ducked {ducked}");
+    assert!(
+        (ducked_tail - open_tail).abs() < 1.0,
+        "{open_tail} {ducked_tail}"
+    );
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"reverb.duck","value":"0 %"},{"parameter":"mix","value":"50 %"}]),
+    );
+
     // Echo alone: one repeat is over by then; Feedback keeps them coming.
     set_parameters(
         &mut app,
@@ -1118,7 +1147,7 @@ fn r1_spacer_rings_longer_with_decay_and_feedback_and_switches_from_its_panel() 
     // The panel: each section's title is its switch.
     open_effect_editor(&mut app, "Pad tone", "Routing");
     let state = app.inspect();
-    use daw_devices::devices::spacer::REVERB_ON;
+    use daw_devices::devices::spacer::{ECHO_MODEL, REVERB_MODEL, REVERB_ON, SEED};
     assert_eq!(stored(&state, REVERB_ON), Some(1.0), "{}", state["project"]);
     let off = click_top(&mut app, "REVERB");
     assert_eq!(stored(&off, REVERB_ON), Some(0.0), "{}", off["project"]);
@@ -1127,16 +1156,78 @@ fn r1_spacer_rings_longer_with_decay_and_feedback_and_switches_from_its_panel() 
     let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(undone["project"], state["project"]);
 
+    // Beside the title stands the section's model. A studio is dense at
+    // once; a hall of this size first sends a few reflections.
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"mix","value":"100 %"},{"parameter":"reverb.pre_delay","value":"0 ms"}]),
+    );
+    let hall = app.inspect();
+    assert_eq!(stored(&hall, REVERB_MODEL), Some(1.0));
+    let onset = |app: &mut Harness| level_between(app, 0.0, 0.1);
+    let (hall_onset, hall_tail) = (onset(&mut app), tail(&mut app));
+    let studio = click_top(&mut app, "Studio");
+    assert_eq!(stored(&studio, REVERB_MODEL), Some(0.0));
+    assert_eq!(studio["history"]["undo"][0], "Effect parameter");
+    let studio_onset = onset(&mut app);
+    assert!(
+        studio_onset > hall_onset + 3.0,
+        "hall {hall_onset}, studio {studio_onset}"
+    );
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], hall["project"]);
+
+    // Seed: another hall of the same size and decay. The stepper stands
+    // over its number; its right button is Next.
+    let number = label_center(&hall, "#1");
+    let next = app.command(json!({"command":"pointer","phase":"click",
+        "x":number.0 + 21.0,"y":number.1 - 34.0}));
+    let seed = stored(&next, SEED).unwrap();
+    assert!((seed - 1.0 / 31.0).abs() < 1e-6, "{seed}");
+    assert!(visible(&next, "#2"), "{}", next["visible_labels"]);
+    let other_tail = tail(&mut app);
+    assert!(other_tail != hall_tail, "another room");
+    assert!(
+        (other_tail - hall_tail).abs() < 3.0,
+        "{hall_tail} {other_tail}"
+    );
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], hall["project"]);
+
+    // The echo's model: a hot, worn tape squashes a repeat that the
+    // digital line returns as it was.
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"reverb.on","value":false},{"parameter":"echo.on","value":true},
+            {"parameter":"echo.feedback","value":"0 %"},{"parameter":"echo.stereo","value":"Mono"},
+            {"parameter":"echo.color","value":"-100 %"}]),
+    );
+    let digital = app.inspect();
+    assert_eq!(stored(&digital, ECHO_MODEL), Some(0.0));
+    // The one repeat of the tone's last quarter second.
+    let repeat = |app: &mut Harness| level_between(app, 2.0, 2.5);
+    let clean = repeat(&mut app);
+    let tape = click_top(&mut app, "Tape");
+    assert_eq!(stored(&tape, ECHO_MODEL), Some(1.0));
+    assert_eq!(tape["history"]["undo"][0], "Effect parameter");
+    let squashed = repeat(&mut app);
+    assert!(squashed < clean - 1.0, "digital {clean}, tape {squashed}");
+    assert!(squashed > clean - 12.0, "digital {clean}, tape {squashed}");
+
     // Save and reopen: the same device, the same sound.
-    let saved = tail(&mut app);
+    let saved = repeat(&mut app);
     let path = app.directory.path().join("spaced.rill");
     app.command(json!({"command":"save","path":path}));
     let reopened = app.command(json!({"command":"open","path":path}));
     assert_eq!(
         reopened["project"]["tracks"][0]["inserts"],
-        state["project"]["tracks"][0]["inserts"]
+        tape["project"]["tracks"][0]["inserts"]
     );
-    let again = tail(&mut app);
+    let again = repeat(&mut app);
     assert!((again - saved).abs() < 0.1, "{saved} {again}");
     app.quit();
 }

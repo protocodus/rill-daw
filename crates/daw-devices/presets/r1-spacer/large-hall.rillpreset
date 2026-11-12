@@ -5,14 +5,12 @@
   "author": "Rill",
   "category": "Reverb",
   "tags": ["strings", "piano"],
-  "description": "Long concert hall.",
+  "description": "Concert hall.",
   "parameters": {
     "echo.on": false,
-    "reverb.type": "Hall",
-    "reverb.size": 85.0,
-    "reverb.decay": 3.8,
-    "reverb.pre_delay": 25.0,
-    "reverb.damping": 45.0,
-    "reverb.high_cut": 8000.0
+    "reverb.model": "Hall",
+    "reverb.size": 70.0,
+    "reverb.decay": 2.8,
+    "reverb.pre_delay": 25.0
   }
 }

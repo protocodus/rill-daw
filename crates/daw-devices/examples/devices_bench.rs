@@ -11,20 +11,48 @@ const RATE: f32 = 48_000.0;
 const BLOCK: usize = 256;
 const BLOCKS: usize = 4000;
 
-/// The settings whose cost differs: `(label, parameter, choice)`.
-fn variants(id: &str) -> Vec<(&'static str, u32, usize)> {
+/// The settings whose cost differs: a label and the plain values to set.
+fn variants(id: &str) -> Vec<(String, Vec<(u32, f32)>)> {
     let choices = |parameter: u32, labels: &'static [&'static str]| {
         labels
             .iter()
             .enumerate()
-            .map(|(choice, label)| (*label, parameter, choice))
+            .map(|(choice, label)| (label.to_string(), vec![(parameter, choice as f32)]))
             .collect()
     };
     match id {
         "r1-saturator" => choices(saturator::QUALITY, saturator::QUALITIES),
         "r1-compressor" => choices(compressor::CHARACTER, compressor::CHARACTERS),
         "r1-modulator" => choices(modulator::MODE, modulator::MODES),
-        "r1-spacer" => choices(spacer::ECHO_TYPE, spacer::ECHO_TYPES),
+        "r1-spacer" => {
+            // Each model alone, and the device as inserted.
+            let section = |name: &str, other: u32, model: u32, labels: &'static [&'static str]| {
+                labels
+                    .iter()
+                    .enumerate()
+                    .map(|(choice, label)| {
+                        (
+                            format!("{name} {label}"),
+                            vec![(other, 0.0), (model, choice as f32)],
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            };
+            let mut lines = vec![("Default".to_string(), Vec::new())];
+            lines.extend(section(
+                "Echo",
+                spacer::REVERB_ON,
+                spacer::ECHO_MODEL,
+                spacer::ECHO_MODELS,
+            ));
+            lines.extend(section(
+                "Reverb",
+                spacer::ECHO_ON,
+                spacer::REVERB_MODEL,
+                spacer::REVERB_MODELS,
+            ));
+            lines
+        }
         _ => Vec::new(),
     }
 }
@@ -33,20 +61,22 @@ fn main() {
     for descriptor in registry() {
         let variants = variants(descriptor.id);
         if variants.is_empty() {
-            measure(descriptor, "", None);
+            measure(descriptor, "", &[]);
         }
-        for (label, parameter, choice) in variants {
-            measure(descriptor, label, Some((parameter, choice as f32)));
+        for (label, settings) in variants {
+            measure(descriptor, &label, &settings);
         }
     }
 }
 
-fn measure(descriptor: &daw_devices::DeviceDescriptor, label: &str, setting: Option<(u32, f32)>) {
+fn measure(descriptor: &daw_devices::DeviceDescriptor, label: &str, settings: &[(u32, f32)]) {
     let mut device = (descriptor.create)();
     device.prepare(RATE, BLOCK);
-    if let Some((id, plain)) = setting {
-        let spec = descriptor.parameter(id).expect("a parameter of the device");
-        device.set_parameter(id, spec.to_normalized(plain));
+    for (id, plain) in settings {
+        let spec = descriptor
+            .parameter(*id)
+            .expect("a parameter of the device");
+        device.set_parameter(*id, spec.to_normalized(*plain));
     }
     let chord: Vec<Event> = [48.0, 52.0, 55.0, 59.0, 60.0, 64.0, 67.0, 71.0]
         .into_iter()

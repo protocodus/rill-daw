@@ -503,11 +503,11 @@ const DEFAULT_TEMPO: f64 = 120.0;
 
 /// The Feedback that gives a loop gain: the inverse of `echo::loop_gain`,
 /// which rises with Feedback.
-fn feedback_for(kind: spacer::EchoType, gain: f32) -> f32 {
+fn feedback_for(model: spacer::EchoModel, gain: f32) -> f32 {
     let (mut low, mut high) = (0.0_f32, 1.0_f32);
     for _ in 0..16 {
         let middle = 0.5 * (low + high);
-        if daw_devices::dsp::echo::loop_gain(kind, middle) < gain {
+        if daw_devices::dsp::echo::loop_gain(model, middle) < gain {
             low = middle;
         } else {
             high = middle;
@@ -516,8 +516,10 @@ fn feedback_for(kind: spacer::EchoType, gain: f32) -> f32 {
     0.5 * (low + high)
 }
 
-/// R1 Spacer: the echoes and the reverb's decay over time, on a decibel
-/// axis, left above the line and right below. Handles: T on the first echo
+/// R1 Spacer: every head of the echoes, blurred as Diffusion smears them,
+/// the reverb's first reflections and its decay at 1 kHz with the faster
+/// one at 8 kHz inside it, over time on a decibel axis, left above the line
+/// and right below. Handles: T on the first echo
 /// (Time or Division, and Echo level), F on the second (Feedback), P where
 /// the reverb starts (Pre-delay and Reverb level), D where it has decayed
 /// (Decay). The knobs below are the same values. Fills the space it is given.
@@ -526,25 +528,33 @@ pub(crate) fn space(ui: &mut Ui, host: &mut dyn DeviceHost, state: &mut PanelSta
     let settings = panels::spacer_settings(&|id| host.value(id));
     let spec = |id: u32| DESCRIPTOR.parameter(id).expect("spacer parameter");
     let plain = |id: u32| spec(id).to_plain(host.value(id) as f32);
-    let playing = live(ui, host.telemetry().as_ref(), state);
+    let telemetry = host.telemetry();
+    let playing = live(ui, telemetry.as_ref(), state);
     let value = |slot: usize| playing.as_ref().map(|telemetry| telemetry.value(slot));
-    let tempo = value(TELEMETRY_TEMPO)
-        .map(f64::from)
+    // Tempo and sample rate are settings, not levels: they hold while
+    // nothing plays, and the song's tempo before the device has run.
+    let last = |slot: usize| telemetry.as_ref().map(|telemetry| telemetry.value(slot));
+    let tempo = host
+        .tempo()
+        .or(last(TELEMETRY_TEMPO).map(f64::from))
         .filter(|tempo| *tempo >= 1.0)
         .unwrap_or(DEFAULT_TEMPO);
-    let rate = value(TELEMETRY_SAMPLE_RATE)
+    let rate = last(TELEMETRY_SAMPLE_RATE)
         .filter(|rate| *rate >= 8000.0)
         .unwrap_or(panels::RESPONSE_RATE);
     let time = echo_seconds(&settings, tempo);
     let (echo_db, reverb_db) = (plain(ECHO_LEVEL), plain(REVERB_LEVEL));
     let pre_delay = settings.reverb.pre_delay_seconds;
     let decay = decay_seconds_at(&settings, 1000.0, rate);
+    // What Damping and Color leave of the top.
+    let decay_high = decay_seconds_at(&settings, 8000.0, rate);
     // Where the tail has fallen to the picture's floor.
     let tail_end = pre_delay + decay * (reverb_db - SPACE_FLOOR_DB).max(0.0) / 60.0;
 
-    let mut echoes = [(0.0, 0.0, 0.0); 16];
+    let mut echoes = [(0.0, 0.0, 0.0); 32];
     let count = echo_taps(&settings, tempo, &mut echoes);
     let echoes = &echoes[..count];
+    let smear = daw_devices::dsp::echo::smear_seconds(&settings.echo(tempo));
     let mut taps: Vec<daw_ui::DelayTap> = echoes
         .iter()
         .map(|(seconds, left, right)| daw_ui::DelayTap {
@@ -553,6 +563,8 @@ pub(crate) fn space(ui: &mut Ui, host: &mut dyn DeviceHost, state: &mut PanelSta
             right: *right,
             thin: false,
             faint: !settings.echo_on,
+            // Every pass through the loop smears a repeat further.
+            blur_seconds: smear * (seconds / time.max(1e-3) - 1e-3).ceil().max(1.0),
         })
         .collect();
     let mut early = [[(0.0, 0.0); daw_devices::dsp::reverb::EARLY_TAPS]; 2];
@@ -566,6 +578,7 @@ pub(crate) fn space(ui: &mut Ui, host: &mut dyn DeviceHost, state: &mut PanelSta
                 right: if channel == 1 { gain } else { 0.0 },
                 thin: true,
                 faint: !settings.reverb_on,
+                blur_seconds: 0.0,
             }
         }));
     }
@@ -573,6 +586,7 @@ pub(crate) fn space(ui: &mut Ui, host: &mut dyn DeviceHost, state: &mut PanelSta
         start_seconds: pre_delay,
         start_db: reverb_db,
         decay_seconds: decay,
+        inner_decay_seconds: Some(decay_high),
         faint: !settings.reverb_on,
     }];
     if settings.series && settings.echo_on && settings.reverb_on {
@@ -585,6 +599,7 @@ pub(crate) fn space(ui: &mut Ui, host: &mut dyn DeviceHost, state: &mut PanelSta
                     start_seconds: seconds + pre_delay,
                     start_db: reverb_db + 20.0 * left.max(*right).max(1e-6).log10(),
                     decay_seconds: decay,
+                    inner_decay_seconds: None,
                     faint: true,
                 }),
         );
@@ -640,7 +655,7 @@ pub(crate) fn space(ui: &mut Ui, host: &mut dyn DeviceHost, state: &mut PanelSta
     } else {
         ECHO_TIME
     });
-    let gain = daw_devices::dsp::echo::loop_gain(settings.echo_type, settings.echo_feedback);
+    let gain = daw_devices::dsp::echo::loop_gain(settings.echo.model, settings.echo.feedback);
     let readouts = [
         format!(
             "{} {} · Level {}",
@@ -686,7 +701,7 @@ pub(crate) fn space(ui: &mut Ui, host: &mut dyn DeviceHost, state: &mut PanelSta
                 ..handle(
                     2.0 * time,
                     echo_db + 20.0 * gain.max(1e-6).log10(),
-                    settings.echo_stereo == EchoStereo::PingPong,
+                    settings.echo.stereo == EchoStereo::PingPong,
                     "F",
                     (false, true),
                 )
@@ -714,12 +729,16 @@ pub(crate) fn space(ui: &mut Ui, host: &mut dyn DeviceHost, state: &mut PanelSta
         }
     }
     let drawn: Vec<daw_ui::DelayHandle> = handles.iter().map(|(handle, _)| *handle).collect();
-    let duck = (settings.duck > 0.0).then(|| {
-        (
-            value(TELEMETRY_DUCK).unwrap_or(0.0),
-            DUCK_RANGE_DB * settings.duck,
-        )
-    });
+    // What each section is turned down by now, on the scale of a full duck.
+    let envelope = value(TELEMETRY_DUCK).unwrap_or(0.0);
+    let reductions: Vec<(f32, f32, &str)> = [
+        (settings.echo_on, settings.echo_duck, "E"),
+        (settings.reverb_on, settings.reverb_duck, "R"),
+    ]
+    .into_iter()
+    .filter(|(on, amount, _)| *on && *amount > 0.0)
+    .map(|(_, amount, name)| (envelope * amount, DUCK_RANGE_DB, name))
+    .collect();
     let output = daw_ui::delay_view(
         ui,
         &daw_ui::DelayView {
@@ -729,7 +748,7 @@ pub(crate) fn space(ui: &mut Ui, host: &mut dyn DeviceHost, state: &mut PanelSta
             span_seconds: span,
             floor_db: SPACE_FLOOR_DB,
             handles: &drawn,
-            reduction_db: duck,
+            reductions: &reductions,
             size: ui.available_size(),
         },
     );
@@ -761,7 +780,7 @@ pub(crate) fn space(ui: &mut Ui, host: &mut dyn DeviceHost, state: &mut PanelSta
     let at_level = |spec: &ParamSpec, db: f32| match spec.id {
         ECHO_FEEDBACK => {
             let gain = 10f32.powf((db - echo_db) / 20.0).min(2.0);
-            normalized(spec, 100.0 * feedback_for(settings.echo_type, gain))
+            normalized(spec, 100.0 * feedback_for(settings.echo.model, gain))
         }
         _ => normalized(spec, db),
     };

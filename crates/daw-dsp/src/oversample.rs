@@ -239,7 +239,7 @@ impl Oversampler {
     }
 }
 
-fn bessel_i0(x: f64) -> f64 {
+pub(crate) fn bessel_i0(x: f64) -> f64 {
     let mut sum = 1.0;
     let mut term = 1.0;
     for k in 1..50 {

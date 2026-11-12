@@ -3,15 +3,14 @@
   "device": "r1-spacer",
   "name": "Parallel Wash",
   "author": "Rill",
-  "category": "Combined",
+  "category": "Space",
   "tags": ["pad", "keys"],
-  "description": "Echo and hall side by side.",
+  "description": "Echo and room side by side.",
   "parameters": {
     "routing": "Parallel",
-    "echo.type": "Tape",
-    "echo.division": "1/2",
-    "echo.feedback": 30.0,
-    "reverb.decay": 4.0,
-    "reverb.movement": 50.0
+    "echo.model": "Digital",
+    "echo.division": "1/8 D",
+    "reverb.model": "Room",
+    "reverb.decay": 1.4
   }
 }

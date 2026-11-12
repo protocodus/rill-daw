@@ -71,7 +71,7 @@ pub struct LinearRamp<T: Real = f32> {
 }
 
 impl<T: Real> LinearRamp<T> {
-    pub fn new(value: T) -> Self {
+    pub const fn new(value: T) -> Self {
         Self {
             current: value,
             target: value,
