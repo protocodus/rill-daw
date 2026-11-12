@@ -195,13 +195,17 @@ impl Oversampler {
         match self.factor {
             OversampleFactor::X2 => out[..2].copy_from_slice(&first),
             OversampleFactor::X4 => {
-                for (pair, sample) in out.chunks_exact_mut(2).zip(first) {
+                for (pair, sample) in out.as_chunks_mut::<2>().0.iter_mut().zip(first) {
                     pair.copy_from_slice(&self.second.upsample(sample));
                 }
             }
             OversampleFactor::X8 => {
-                for (quad, sample) in out.chunks_exact_mut(4).zip(first) {
-                    for (pair, sample) in quad.chunks_exact_mut(2).zip(self.second.upsample(sample))
+                for (quad, sample) in out.as_chunks_mut::<4>().0.iter_mut().zip(first) {
+                    for (pair, sample) in quad
+                        .as_chunks_mut::<2>()
+                        .0
+                        .iter_mut()
+                        .zip(self.second.upsample(sample))
                     {
                         pair.copy_from_slice(&self.third.upsample(sample));
                     }
@@ -222,8 +226,8 @@ impl Oversampler {
             ],
             OversampleFactor::X8 => {
                 let mut quad = [0.0; 4];
-                for (slot, pair) in quad.iter_mut().zip(input.chunks_exact(2)) {
-                    *slot = self.third.downsample([pair[0], pair[1]]);
+                for (slot, pair) in quad.iter_mut().zip(input.as_chunks::<2>().0) {
+                    *slot = self.third.downsample(*pair);
                 }
                 [
                     self.second.downsample([quad[0], quad[1]]),
