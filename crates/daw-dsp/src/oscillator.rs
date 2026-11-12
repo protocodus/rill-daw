@@ -391,35 +391,48 @@ impl Oscillator {
             self.correct_pulse(width, from, to, at_sample, increment);
             return;
         }
-        let edge = match waveform {
-            Waveform::Saw | Waveform::Pulse => None,
-            Waveform::Triangle | Waveform::Sine => Some(self.phase_at(0.5)),
+        self.correct_point(waveform, width, 1.0, from, to, at_sample, increment);
+        if matches!(waveform, Waveform::Triangle | Waveform::Sine) {
+            let edge = self.phase_at(0.5);
+            self.correct_point(waveform, width, edge, from, to, at_sample, increment);
+            self.correct_point(waveform, width, edge + 1.0, from, to, at_sample, increment);
+        }
+    }
+
+    /// Corrects the breakpoint at phase `point` (unwrapped, below two
+    /// cycles) if the phase crosses it between `from` and `to`.
+    #[expect(clippy::too_many_arguments)]
+    #[inline]
+    fn correct_point(
+        &mut self,
+        waveform: Waveform,
+        width: f32,
+        point: f32,
+        from: f32,
+        to: f32,
+        at_sample: f32,
+        increment: f32,
+    ) {
+        if !(from < point && point <= to) {
+            return;
+        }
+        let before = ((at_sample - point) / increment).clamp(0.0, 1.0);
+        let wrapped = wrap(point);
+        let left = self.shape(
+            waveform,
+            if wrapped == 0.0 { 1.0 } else { wrapped - 1e-6 },
+            width,
+        );
+        let right = self.shape(waveform, wrapped + 1e-6, width);
+        let (jump, kink) = match waveform {
+            Waveform::Saw => (-2.0 * self.level, right.1 - left.1),
+            _ => (0.0, right.1 - left.1),
         };
-        for point in [Some(1.0), edge, edge.map(|e| e + 1.0)]
-            .into_iter()
-            .flatten()
-        {
-            if !(from < point && point <= to) {
-                continue;
-            }
-            let before = ((at_sample - point) / increment).clamp(0.0, 1.0);
-            let wrapped = point % 1.0;
-            let left = self.shape(
-                waveform,
-                if wrapped == 0.0 { 1.0 } else { wrapped - 1e-6 },
-                width,
-            );
-            let right = self.shape(waveform, wrapped + 1e-6, width);
-            let (jump, kink) = match waveform {
-                Waveform::Saw => (-2.0 * self.level, right.1 - left.1),
-                _ => (0.0, right.1 - left.1),
-            };
-            if jump != 0.0 {
-                self.corrector.step(before, jump);
-            }
-            if kink != 0.0 {
-                self.corrector.ramp(before, kink * increment);
-            }
+        if jump != 0.0 {
+            self.corrector.step(before, jump);
+        }
+        if kink != 0.0 {
+            self.corrector.ramp(before, kink * increment);
         }
     }
 
@@ -474,7 +487,7 @@ impl Oscillator {
             let before = before.clamp(0.0, 1.0);
             let reset_at = start + increment * (1.0 - before);
             self.correct(waveform, width, start, reset_at, end, increment);
-            let wrapped_at = reset_at % 1.0;
+            let wrapped_at = wrap(reset_at);
             let left = self.shape(waveform, wrapped_at, width);
             let right = self.shape(waveform, 0.0, width);
             self.corrector.step(before, right.0 - left.0);
@@ -486,12 +499,19 @@ impl Oscillator {
             if end >= 1.0 {
                 wrapped = Some(((end - 1.0) / increment.max(1e-9)).clamp(0.0, 1.0));
             }
-            self.phase = end % 1.0;
+            self.phase = wrap(end);
         }
         self.last_edge = (waveform == Waveform::Pulse).then(|| self.phase_at(width));
         let naive = self.shape(waveform, self.phase, width).0;
         (self.corrector.push(naive), wrapped)
     }
+}
+
+/// A phase below two cycles, within its cycle: what `% 1.0` gives, without
+/// the library call a float remainder is.
+#[inline]
+fn wrap(phase: f32) -> f32 {
+    if phase >= 1.0 { phase - 1.0 } else { phase }
 }
 
 /// Triangle from the ramp by full-wave rectification, and its slope.

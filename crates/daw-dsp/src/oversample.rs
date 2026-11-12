@@ -3,8 +3,41 @@
 //! Linear phase, so an oversampled path can be summed with a delayed linear
 //! one without combing.
 
-const RING: usize = 64;
+/// Samples a stage's filter reaches back, at the lower rate.
+const SPAN: usize = 32;
 const MAX_HALF: usize = 16;
+
+/// The last [`SPAN`] samples of a stream, readable as one slice: each is
+/// written twice, a span apart, so the window never wraps.
+#[derive(Clone, Debug)]
+struct History {
+    samples: [f32; 2 * SPAN],
+    cursor: usize,
+}
+
+impl History {
+    const fn new() -> Self {
+        Self {
+            samples: [0.0; 2 * SPAN],
+            cursor: 0,
+        }
+    }
+
+    #[inline]
+    fn push(&mut self, sample: f32) {
+        self.cursor = (self.cursor + 1) % SPAN;
+        self.samples[self.cursor] = sample;
+        self.samples[self.cursor + SPAN] = sample;
+    }
+
+    /// Oldest first; the sample pushed last is the last one.
+    #[inline]
+    fn window(&self) -> &[f32; SPAN] {
+        self.samples[self.cursor + 1..self.cursor + 1 + SPAN]
+            .try_into()
+            .expect("a window of SPAN samples")
+    }
+}
 
 /// One half-band stage of `TAPS` taps (4k + 3, at most 63): doubles or halves
 /// the rate. Up- and down-sampling together delay the signal by `TAPS − 1`
@@ -14,10 +47,10 @@ pub struct HalfBand<const TAPS: usize> {
     /// The nonzero taps before the center (0.5): every even index. The other
     /// half mirrors them.
     even: [f32; MAX_HALF],
-    up: [f32; RING],
-    down: [f32; RING],
-    up_cursor: usize,
-    down_cursor: usize,
+    up: History,
+    /// The older and the newer sample of each pair going down: the taps
+    /// meet only the older ones, the center only a newer one.
+    down: [History; 2],
 }
 
 /// The 63-tap stage, wide enough to be the only one: flat to 18 kHz at
@@ -42,7 +75,7 @@ impl Oversampler2x {
 impl<const TAPS: usize> HalfBand<TAPS> {
     const CENTER: usize = TAPS / 2;
     const HALF: usize = {
-        assert!(TAPS % 4 == 3 && TAPS < RING);
+        assert!(TAPS % 4 == 3 && TAPS <= 2 * SPAN);
         Self::CENTER.div_ceil(2)
     };
     /// Up plus down, in samples at the upper rate.
@@ -61,16 +94,28 @@ impl<const TAPS: usize> HalfBand<TAPS> {
         }
         Self {
             even,
-            up: [0.0; RING],
-            down: [0.0; RING],
-            up_cursor: 0,
-            down_cursor: 0,
+            up: History::new(),
+            down: [History::new(), History::new()],
         }
     }
 
     pub fn reset(&mut self) {
-        self.up = [0.0; RING];
-        self.down = [0.0; RING];
+        self.up = History::new();
+        self.down = [History::new(), History::new()];
+    }
+
+    /// Σ tap·(sample + its mirror) over the lower-rate samples the taps
+    /// meet, the last of `window` being the newest. The taps are symmetric,
+    /// so each pair folds into one multiply; four running sums let the
+    /// products add up side by side instead of in one chain.
+    #[inline]
+    fn taps(&self, window: &[f32; SPAN]) -> f32 {
+        let newest = &window[SPAN - 1 - Self::CENTER..];
+        let mut sums = [0.0_f32; 4];
+        for (index, &tap) in self.even[..Self::HALF].iter().enumerate() {
+            sums[index % 4] += tap * (newest[Self::CENTER - index] + newest[index]);
+        }
+        (sums[0] + sums[1]) + (sums[2] + sums[3])
     }
 
     /// One sample in, two at twice the rate out, oldest first.
@@ -80,32 +125,21 @@ impl<const TAPS: usize> HalfBand<TAPS> {
         // samples (scaled by 2 for unity gain), and each output phase uses the
         // taps that meet them. The second phase sits on an input sample and
         // only the center tap (0.5) reaches it.
-        self.up_cursor = (self.up_cursor + 1) % RING;
-        self.up[self.up_cursor] = 2.0 * input;
-        let at = |delay: usize| self.up[(self.up_cursor + RING - delay) % RING];
-        // The taps are symmetric, so fold each pair into one multiply.
-        let mut between = 0.0;
-        for (delay, &tap) in self.even[..Self::HALF].iter().enumerate() {
-            between += tap * (at(delay) + at(Self::CENTER - delay));
-        }
-        [between, 0.5 * at(Self::CENTER / 2)]
+        self.up.push(2.0 * input);
+        let window = self.up.window();
+        [self.taps(window), 0.5 * window[SPAN - 1 - Self::CENTER / 2]]
     }
 
     /// Two samples in, one at half the rate out.
     #[inline]
     pub fn downsample(&mut self, input: [f32; 2]) -> f32 {
-        for sample in input {
-            self.down_cursor = (self.down_cursor + 1) % RING;
-            self.down[self.down_cursor] = sample;
-        }
+        self.down[0].push(input[0]);
+        self.down[1].push(input[1]);
         // Filter output for the older sample of the pair, which lands on an
-        // integer delay at the lower rate.
-        let at = |delay: usize| self.down[(self.down_cursor + RING - 1 - delay) % RING];
-        let mut sum = 0.5 * at(Self::CENTER);
-        for (index, &tap) in self.even[..Self::HALF].iter().enumerate() {
-            sum += tap * (at(2 * index) + at(2 * (Self::CENTER - index)));
-        }
-        sum
+        // integer delay at the lower rate. The center tap meets the newer
+        // sample of an earlier pair.
+        let center = self.down[1].window()[SPAN - 1 - Self::CENTER.div_ceil(2)];
+        self.taps(self.down[0].window()) + 0.5 * center
     }
 }
 
