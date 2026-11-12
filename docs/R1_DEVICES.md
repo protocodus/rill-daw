@@ -239,7 +239,7 @@ One format, one browser and one set of tools for every device.
   search), `load_device_preset` and `store_device_preset`. Saving takes a name
   and writes only into the user preset directory, never to an arbitrary path.
 
-The shared `preset_group` in every panel header is one bordered group, set
+The shared `preset_group` on the bar of every device frame is one bordered group, set
 apart from the device's own controls: the current preset name with a modified
 marker in a menu of all presets, previous/next, Save as… and Reset. The
 `preset_browser` (search, category and tag filters, Factory/User, favorites)
@@ -515,18 +515,21 @@ handle uses the 21-point `HIT_TARGET`.
 | `mod_source_chip` and `mod_slot_row` | Draggable modulation source; one row of the matrix (source, destination, amount, remove). | Dropping a chip on a knob reports `(source, destination)`; a context menu on any modulatable knob offers the same without dragging. |
 | `preset_bar` and `preset_browser` | Preset name with modified marker, previous/next; searchable browser with category and tag filters, Factory/User, favorites, Save as…, Reset. | Part of `device_panel`; identical for every device. See [Presets](#presets). |
 | `generic_device_panel` | Complete panel generated from a descriptor: one `device_section` per parameter group, a knob, selector or toggle per parameter according to its range. | The fallback for a device without a custom panel, and the proof that the grammar below is enough. Takes plain parameter rows, so `daw-ui` still does not depend on `daw-devices`. |
-| `device_panel` and `device_section` | Panel frame: name, preset bar, bypass, input/output meters, optional Mix and Output knobs; titled sections with spacing instead of nested outlines. | Gives all ten devices one header and one rhythm. |
+| `device_frame` | The frame every device sits in: thick rounded border, a colored bar on top with the name at the left and the presets at the right. | `device_frame(ui, name)` returns the bar to draw the presets into, then `.body(ui, …)` draws the device. |
+| `device_panel` and `device_section` | Generated panel in a `device_frame`: preset bar in the frame's bar, then bypass, input/output meters, optional Mix and Output knobs; titled sections with spacing instead of nested outlines. | Gives all ten devices one header and one rhythm. |
+| `automated` and `AutomationMark` | Shows a parameter's automation on the control itself. | Inside `automated(ui, mark, …)` the value takes the color: knob arc and pointer, fader travel, chosen option, lit lamp or switch, a drop-down's frame. Orange while the lane drives it; red while a hand overrides it, with an orange ghost where the lane is (a tick on a knob or fader, a dashed outline on an option, lamp or switch); neutral while bypassed. Nothing marks a control without a lane. |
 
 ### Panel grammar
 
 Every device panel follows the same rules, so the set reads as one product
 and a new device has little to decide:
 
-1. **Frame.** `device_panel`: name at the left, `preset_bar` in the middle,
-   then bypass and input/output meters. Effects end the header with Mix and
-   Output; instruments with Volume. No device draws its own header.
-2. **Width.** 610 points (`POPUP_WIDTH_MD`) or 987 points (`POPUP_WIDTH_LG`),
-   nothing in between. No panel scrolls; a device that does not fit uses
+1. **Frame.** Every device sits in one `device_frame`: a thick rounded
+   border, and a bar in the border's color across the top with the device's
+   name at the left and its `preset_group` at the right. The body never
+   repeats the name or the presets. No device draws its own header.
+2. **Width.** 610 points (`POPUP_WIDTH_MD`) or 987 points (`POPUP_WIDTH_LG`)
+   inside the frame, nothing in between; the frame adds `DEVICE_FRAME_INSET`. No panel scrolls; a device that does not fit uses
    pages (`tab_choice`) in the header.
 3. **Picture first.** One main visualization at the top shows what the device
    is doing, and is directly editable where that makes sense (drag the EQ

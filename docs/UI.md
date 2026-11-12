@@ -456,12 +456,19 @@ Endpoint formatting retains small ranges instead of rounding both ends to zero.
 Stored values outside an editing range are preserved, visibly marked as outside
 the range, and reported exactly in the stored-value tooltip. Slider and knob
 numeric readouts discard stale native text when a sibling rail or dial changes
-the value, while preserving an unchanged typing draft. Every automatable control carries `paint_automation_indicator`, a small corner
-dot: a faint ring before a lane exists, then the state color (compact dials use
-it alongside their colored arc). `automation_indicators` reports them for host
-diagnostics. A slider's
-automation glyph sits beside its handle: **A** for Read, **!** for Overridden,
-and a muted dash for Bypassed, without covering the center index or captions.
+the value, while preserving an unchanged typing draft. An automated control
+shows its automation in its own value (`automated` with an `AutomationMark`):
+the knob's arc and pointer, the fader's travel, the chosen option, the lit
+lamp or switch, or a drop-down's frame turn orange while the lane drives the
+control. While a hand overrides it they turn red, and an orange ghost marks
+where the lane is: a tick on a knob or fader, a dashed outline on an option,
+lamp or switch. A bypassed lane leaves the control neutral, and a control
+without a lane carries no mark. `paint_automation_indicator` records every
+automatable control for `automation_indicators` (host diagnostics) without
+painting. Controls that do not draw their value this way (sliders, numeric
+fields) keep an outline in the state color and a glyph beside the handle:
+**A** for Read, **!** for Overridden, and a muted dash for Bypassed, without
+covering the center index or captions.
 
 `knob` / `Knob::new` provides a 270-degree rotary control with a shared numeric
 editor. Detailed dials retain minimum/maximum captions and a visible value index;
@@ -1509,9 +1516,15 @@ The other plots: `spectrum`, `scope`, `wavetable_view` and `sample_view` (dragga
 
 ### Panels ([`device_panel.rs`](../crates/daw-ui/src/device_panel.rs))
 
-`device_panel` is the one frame: name, `preset_bar`, bypass, meters and the
-dense Mix/Output (effects) or Volume (instruments) knobs; width is
-`DevicePanelWidth::Medium` (610) or `Large` (987), and a panel never scrolls.
+`device_frame` is the one frame every device sits in: a thick rounded border
+and a bar in the border's color (`Palette::device`) with the device's name at
+the left and its presets at the right; nothing in the body repeats them.
+`device_frame(ui, name)` returns the bar (`DeviceFrame::bar`) to draw the
+`preset_group` into, and `DeviceFrame::body` draws the device under it,
+`DEVICE_FRAME_INSET` narrower. `device_panel` builds on it: `preset_bar` in
+the bar, then bypass, meters and the dense Mix/Output (effects) or Volume
+(instruments) knobs; width is `DevicePanelWidth::Medium` (610) or `Large`
+(987), and a panel never scrolls.
 `device_section` titles a group with a word and spacing instead of an outline.
 Its heading, `device_section_title`, sets the name on top in small, dimmed,
 tracked capitals over a rule that separates it from the controls;

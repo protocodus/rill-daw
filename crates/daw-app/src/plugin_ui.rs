@@ -201,6 +201,13 @@ impl daw_devices_ui::DeviceHost for PanelHost<'_> {
             .automation_control_state(self.automation_target(id))
             .map(|(lane, state, _)| (lane, state))
     }
+    fn lane_value(&self, id: u32) -> Option<f64> {
+        let (_, lane) = self
+            .app
+            .project
+            .automation_for_target(self.automation_target(id))?;
+        lane.value_at(self.app.cursor).map(f64::from)
+    }
     fn navigate(&mut self, action: daw_ui::AutomationNavigation) {
         self.navigation = Some(action);
     }
@@ -1209,8 +1216,9 @@ impl DawApp {
                 // the screen allows; the window keeps it on screen otherwise.
                 1600.0
             } else if builtin.is_some() {
-                // A device panel shows its response and every control at once.
-                840.0
+                // A device panel shows its response and every control at once,
+                // in its frame.
+                920.0
             } else {
                 400.0
             })

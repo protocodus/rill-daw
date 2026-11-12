@@ -589,25 +589,47 @@ pub fn toggle_led_width(ui: &Ui, label: &str) -> f32 {
 }
 
 /// The lamp of a [`toggle_led`], `diameter` across with its glow.
+/// `mark` lights it in its state color, and rings it in the lane's color
+/// where an overridden lane would switch it the other way.
 pub(crate) fn paint_lamp(
     painter: &egui::Painter,
     center: egui::Pos2,
     diameter: f32,
     on: bool,
     focused: bool,
+    mark: Option<crate::AutomationMark>,
 ) {
     let colors = theme::palette(painter.ctx());
     let radius = diameter * 0.5;
+    let mark = mark.filter(|mark| mark.state != AutomationState::Bypassed);
+    let lit = mark.map_or(colors.accent, |mark| mark.state.color(painter.ctx()));
     if on {
-        painter.circle_filled(center, radius + 2.0, colors.accent.gamma_multiply(0.25));
-        painter.circle_filled(center, radius - 1.0, colors.accent);
+        painter.circle_filled(center, radius + 2.0, lit.gamma_multiply(0.25));
+        painter.circle_filled(center, radius - 1.0, lit);
     } else {
         painter.circle_filled(center, radius - 1.0, colors.control_fill);
         painter.circle_stroke(
             center,
             radius - 1.0,
-            Stroke::new(tokens::BORDER_WIDTH, colors.muted),
+            Stroke::new(tokens::BORDER_WIDTH, mark.map_or(colors.muted, |_| lit)),
         );
+    }
+    if let Some(lane) = mark.and_then(|mark| mark.ghost())
+        && (lane >= 0.5) != on
+    {
+        let ring: Vec<_> = (0..=24)
+            .map(|step| {
+                center
+                    + egui::Vec2::angled(std::f32::consts::TAU * step as f32 / 24.0)
+                        * (radius + 1.5)
+            })
+            .collect();
+        painter.extend(egui::Shape::dashed_line(
+            &ring,
+            Stroke::new(1.0_f32, colors.automation),
+            2.0,
+            2.0,
+        ));
     }
     if focused {
         painter.circle_stroke(
@@ -636,7 +658,15 @@ pub fn toggle_led(ui: &mut Ui, value: &mut bool, label: &str) -> Response {
     }
     if ui.is_rect_visible(rect) {
         let center = egui::pos2(rect.left() + lamp * 0.5, rect.center().y);
-        paint_lamp(ui.painter(), center, lamp, *value, response.has_focus());
+        let mark = crate::automation_mark(ui).filter(|_| ui.is_enabled());
+        paint_lamp(
+            ui.painter(),
+            center,
+            lamp,
+            *value,
+            response.has_focus(),
+            mark,
+        );
         ui.painter().galley(
             egui::pos2(
                 rect.left() + lamp + tokens::SPACE_SM,
@@ -1911,6 +1941,15 @@ pub fn fader(
     if *value != before {
         response.mark_changed();
     }
+    // An explicit state wins; an `automated` scope adds where the lane is.
+    let mark = crate::automation_mark(ui);
+    let automation = automation.or(mark.map(|mark| mark.state));
+    let ghost = mark
+        .filter(|_| automation == Some(AutomationState::Overridden))
+        .and_then(|mark| mark.ghost());
+    if automation.is_some() {
+        crate::automation::register_self_marked(ui.ctx(), response.id);
+    }
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
         let active = if ui.is_enabled() {
@@ -1930,6 +1969,17 @@ pub fn fader(
         rail(top, bottom, colors.line);
         // As soft as the value arc of a `Knob::pointer`.
         rail(y, bottom, active.gamma_multiply(0.7));
+        if let Some(lane) = ghost {
+            // Where the overridden lane is, across the rail.
+            let lane = bottom - travel * lane.clamp(0.0, 1.0) as f32;
+            painter.line_segment(
+                [
+                    egui::pos2(x - cap.x * 0.35, lane),
+                    egui::pos2(x + cap.x * 0.35, lane),
+                ],
+                Stroke::new(2.0_f32, colors.automation),
+            );
+        }
         let cap = Rect::from_center_size(egui::pos2(x, y), cap);
         painter.rect(
             cap,

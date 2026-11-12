@@ -755,10 +755,12 @@ pub fn switch(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Re
             egui::pos2(rect.left() + tokens::SWITCH_WIDTH * 0.5, rect.center().y),
             egui::vec2(tokens::SWITCH_WIDTH, tokens::SWITCH_HEIGHT),
         );
-        let fill = if *value {
-            colors.accent
-        } else {
-            visuals.bg_fill
+        let mark = crate::automation_mark(ui)
+            .filter(|mark| mark.state != crate::AutomationState::Bypassed && ui.is_enabled());
+        let fill = match (*value, mark) {
+            (true, Some(mark)) => mark.state.color(ui.ctx()),
+            (true, None) => colors.accent,
+            (false, _) => visuals.bg_fill,
         };
         ui.painter().add(crate::component_shape(
             ui.painter(),
@@ -790,6 +792,23 @@ pub fn switch(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Re
             egui::Stroke::NONE,
             crate::ComponentMaterial::default(),
         ));
+        // Where an overridden lane would put the thumb.
+        if let Some(lane) = mark.and_then(|mark| mark.ghost())
+            && (lane >= 0.5) != *value
+        {
+            let x = if lane >= 0.5 {
+                track.right() - tokens::SWITCH_HEIGHT * 0.5
+            } else {
+                track.left() + tokens::SWITCH_HEIGHT * 0.5
+            };
+            crate::automation::paint_ghost_frame(
+                ui,
+                egui::Rect::from_center_size(
+                    egui::pos2(x, track.center().y),
+                    egui::Vec2::splat(radius * 2.0),
+                ),
+            );
+        }
         ui.painter().galley(
             egui::pos2(track.right() + gap, rect.center().y - galley.size().y * 0.5),
             galley,
@@ -1165,6 +1184,13 @@ fn toggle_track<T: Copy + PartialEq>(
             crate::ComponentMaterial::default(),
         ));
     }
+    // Under an `automated` scope the chosen option takes the state color and
+    // an overridden lane's option is outlined in the lane's.
+    let mark = crate::automation_mark(ui)
+        .filter(|mark| mark.state != crate::AutomationState::Bypassed && ui.is_enabled());
+    let ghost = mark
+        .and_then(|mark| mark.ghost())
+        .map(|lane| lane.round() as usize);
     let mut changed = false;
     let mut next = rect.min;
     for (index, (((value, face, name), galley), width)) in
@@ -1206,13 +1232,25 @@ fn toggle_track<T: Copy + PartialEq>(
         if ui.is_rect_visible(segment) {
             let thumb = segment.shrink(2.0);
             if selected {
+                let (fill, line) = match mark {
+                    Some(mark) => {
+                        let color = mark.state.color(ui.ctx());
+                        (
+                            crate::automation::blend(colors.control_hover, color, 0.25),
+                            color,
+                        )
+                    }
+                    None => (colors.control_hover, colors.line),
+                };
                 ui.painter().rect(
                     thumb,
                     tokens::RADIUS - 2,
-                    colors.control_hover,
-                    egui::Stroke::new(tokens::BORDER_WIDTH, colors.line),
+                    fill,
+                    egui::Stroke::new(tokens::BORDER_WIDTH, line),
                     egui::StrokeKind::Inside,
                 );
+            } else if ghost == Some(index) {
+                crate::automation::paint_ghost_frame(ui, thumb);
             }
             if button.has_focus() {
                 ui.painter().rect_stroke(
@@ -1251,6 +1289,9 @@ fn toggle_track<T: Copy + PartialEq>(
             }
         }
         response |= button;
+    }
+    if mark.is_some() {
+        crate::automation::register_self_marked(ui.ctx(), response.id);
     }
     if changed {
         response.mark_changed();

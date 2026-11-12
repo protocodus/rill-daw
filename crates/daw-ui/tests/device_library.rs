@@ -1516,7 +1516,7 @@ fn section_header_is_as_tall_as_the_title_and_its_lamp_flips() {
             ui.set_width(300.0);
             ui.spacing_mut().item_spacing.y = 0.0;
             let plain = ui::device_section_title(ui, "Reverb");
-            let lamp = ui::device_section_header(ui, "Echo", Some(&mut on));
+            let lamp = ui::device_section_header(ui, "Echo", Some(&mut on), None);
             heights.set((plain.rect.height(), ui.min_rect().height()));
             flips.set(flips.get() + usize::from(lamp.changed()));
         })
@@ -1556,6 +1556,7 @@ fn section_header_choice_picks_a_model_and_keeps_the_lamp_apart() {
                 Some(&mut on),
                 &mut model,
                 &["Digital", "BBD", "Tape"],
+                [None, None],
             );
             state.set((on, model));
             rects.set((lamp.rect, choice.rect, plain));

@@ -274,6 +274,7 @@ pub fn picture_row(ui: &mut egui::Ui, state: &mut State) {
             Some(&mut state.section_on),
             &mut state.model,
             &["Digital", "BBD", "Tape"],
+            [None, None],
         );
         ui.add_space(tokens::SPACE_XS);
         ui.add_enabled_ui(state.section_on, |ui| {

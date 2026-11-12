@@ -81,30 +81,130 @@ pub fn paint_automation_glow(ui: &Ui, rect: egui::Rect, state: AutomationState) 
     }
 }
 
-/// A small state marker on an existing control. It never adds an overlapping
-/// hit target or changes the native control's layout, focus or accessible name.
+/// What drives a control drawn inside [`automated`]: its lane's state and,
+/// while a hand holds the control elsewhere, where the lane is. `lane` is in
+/// the control's own terms: a knob's or fader's value, the position of a
+/// choice's option in the list it was given, 0 or 1 for a lamp.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AutomationMark {
+    pub state: AutomationState,
+    pub lane: Option<f64>,
+}
+
+impl AutomationMark {
+    /// The lane's position to mark, only while a hand overrides it.
+    pub fn ghost(self) -> Option<f64> {
+        (self.state == AutomationState::Overridden)
+            .then_some(self.lane)
+            .flatten()
+    }
+}
+
+const MARK: &str = "rill_automation_mark";
+
+/// Draws `add` with `mark` on every control in it that shows its value in
+/// color: a knob's arc, a fader's fill, a chosen option, a lit lamp. Orange
+/// while the lane drives the control; red while a hand overrides it, with an
+/// orange ghost where the lane is; neutral while the lane is bypassed.
+/// Widgets the library does not paint itself (a drop-down) take the color
+/// on their frame. Give each automatable control a scope of its own.
+pub fn automated<R>(
+    ui: &mut Ui,
+    mark: Option<AutomationMark>,
+    add: impl FnOnce(&mut Ui) -> R,
+) -> R {
+    let Some(mark) = mark else {
+        return add(ui);
+    };
+    ui.scope(|ui| {
+        let color = mark.state.color(ui.ctx());
+        if mark.state != AutomationState::Bypassed {
+            let visuals = &mut ui.visuals_mut().widgets;
+            for widget in [
+                &mut visuals.inactive,
+                &mut visuals.hovered,
+                &mut visuals.active,
+            ] {
+                widget.bg_stroke = egui::Stroke::new(tokens::BORDER_WIDTH, color);
+                widget.weak_bg_fill = blend(widget.weak_bg_fill, color, 0.18);
+                widget.bg_fill = blend(widget.bg_fill, color, 0.18);
+            }
+        }
+        let id = ui.unique_id().with(MARK);
+        ui.data_mut(|data| data.insert_temp(id, mark));
+        let inner = add(ui);
+        // Only what is drawn inside carries the mark.
+        ui.data_mut(|data| data.remove::<AutomationMark>(id));
+        inner
+    })
+    .inner
+}
+
+/// The mark of the innermost [`automated`] scope `ui` draws in, if any.
+pub fn automation_mark(ui: &Ui) -> Option<AutomationMark> {
+    ui.data(|data| {
+        ui.stack()
+            .iter()
+            .find_map(|frame| data.get_temp::<AutomationMark>(frame.id.with(MARK)))
+    })
+}
+
+/// `base` tinted toward `tint` by `amount` (0–1), opaque.
+pub(crate) fn blend(base: Color32, tint: Color32, amount: f32) -> Color32 {
+    let mix = |a: u8, b: u8| (f32::from(a) + (f32::from(b) - f32::from(a)) * amount).round() as u8;
+    Color32::from_rgb(
+        mix(base.r(), tint.r()),
+        mix(base.g(), tint.g()),
+        mix(base.b(), tint.b()),
+    )
+}
+
+/// A dashed outline in the lane's color: where an overridden lane is.
+pub(crate) fn paint_ghost_frame(ui: &Ui, rect: egui::Rect) {
+    let color = theme::palette(ui.ctx()).automation;
+    let rect = rect.shrink(0.5);
+    let corners = [
+        rect.left_top(),
+        rect.right_top(),
+        rect.right_bottom(),
+        rect.left_bottom(),
+        rect.left_top(),
+    ];
+    ui.painter().extend(egui::Shape::dashed_line(
+        &corners,
+        egui::Stroke::new(1.0_f32, color),
+        3.0,
+        2.0,
+    ));
+}
+
+/// Tells [`paint_automation_control`] that the control drawn under `id`
+/// already shows its automation itself.
+pub(crate) fn register_self_marked(ctx: &egui::Context, id: egui::Id) {
+    let pass = ctx.cumulative_pass_nr();
+    ctx.data_mut(|data| data.insert_temp(id.with(SELF_MARKED), pass));
+}
+
+const SELF_MARKED: &str = "rill_automation_self_marked";
+
+fn self_marked(ctx: &egui::Context, id: egui::Id) -> bool {
+    let pass = ctx.cumulative_pass_nr();
+    ctx.data(|data| data.get_temp::<u64>(id.with(SELF_MARKED))) == Some(pass)
+}
+
+/// The state marker of an existing control. A control that colors its own
+/// value (see [`automated`]) needs nothing more; any other gets an outline
+/// in the state color and a glyph beside its handle. Paint only: it never
+/// adds a hit target or changes layout, focus or the accessible name.
 pub fn paint_automation_control(ui: &Ui, response: &Response, state: AutomationState) {
-    if !ui.is_rect_visible(response.rect) {
-        return;
-    }
-    // Compact rings already encode automation on their value arc. A generic
-    // rectangular badge would put text back inside the text-free control.
-    // Wider caption rows and separate value buttons retain their own markers.
-    if crate::knob_geometry(ui.ctx(), response.id).is_some_and(|knob| {
-        knob.divisions == 0
-            && knob.number == egui::Rect::NOTHING
-            && knob
-                .dial
-                .expand(1.0 / ui.ctx().pixels_per_point())
-                .contains_rect(response.rect)
-    }) {
-        // The knob itself paints the shared ownership glow around its dial;
-        // the corner dot keeps its state readable like every other control.
-        paint_automation_indicator(ui, response.rect, Some(state));
-        return;
-    }
     let rect = response.rect;
     register_automation_indicator(ui.ctx(), Some(state), rect);
+    if self_marked(ui.ctx(), response.id)
+        || automation_mark(ui).is_some()
+        || !ui.is_rect_visible(rect)
+    {
+        return;
+    }
     let color = state.color(ui.ctx());
     paint_automation_glow(ui, rect, state);
     let marker = match state {
@@ -157,41 +257,11 @@ pub fn paint_automation_control(ui: &Ui, response: &Response, state: AutomationS
     );
 }
 
-/// Corner dot every automatable control carries: a faint ring while the
-/// control has no lane, then the state color. Paint only; it adds no hit
-/// target and never changes layout.
+/// Records an automatable control for host diagnostics. Nothing is painted:
+/// a control without a lane looks like any other, and one with a lane shows
+/// it in its own value's color.
 pub fn paint_automation_indicator(ui: &Ui, rect: egui::Rect, state: Option<AutomationState>) {
     register_automation_indicator(ui.ctx(), state, rect);
-    let quiet = state.is_none()
-        && ui.data(|data| {
-            data.get_temp::<bool>(ui.id().with(QUIET_INDICATORS))
-                .is_some()
-        });
-    if quiet || !ui.is_rect_visible(rect) {
-        return;
-    }
-    let radius = 2.5;
-    let center = rect.right_top() + egui::vec2(-radius - 1.0, radius + 1.0);
-    match state {
-        Some(state) => ui
-            .painter()
-            .circle_filled(center, radius, state.color(ui.ctx())),
-        None => ui.painter().circle_stroke(
-            center,
-            radius,
-            egui::Stroke::new(1.0_f32, theme::palette(ui.ctx()).muted.gamma_multiply(0.6)),
-        ),
-    };
-}
-
-const QUIET_INDICATORS: &str = "rill_quiet_automation_indicators";
-
-/// Controls drawn directly in `ui` leave out the faint ring that marks a
-/// control without a lane; a lane's own marker still shows. For the cells
-/// of a dense table, where a ring on every value reads as punctuation.
-/// **Automate** stays in each control's context menu.
-pub fn quiet_automation_indicators(ui: &Ui) {
-    ui.data_mut(|data| data.insert_temp(ui.id().with(QUIET_INDICATORS), true));
 }
 
 #[derive(Clone, Default)]

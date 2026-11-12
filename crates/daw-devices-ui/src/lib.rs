@@ -7,7 +7,7 @@ use daw_devices::{
     DeviceDescriptor, DeviceKind, ParamRange, ParamSpec, Preset, SpectrumAnalyzer, Telemetry,
     factory_presets,
 };
-use daw_ui::{AutomationControl, AutomationNavigation, AutomationState};
+use daw_ui::{AutomationControl, AutomationMark, AutomationNavigation, AutomationState};
 use egui::Ui;
 use std::sync::Arc;
 
@@ -28,6 +28,11 @@ pub trait DeviceHost {
     fn set_values(&mut self, values: &[(u32, f64)]);
     /// The automation lane and its state, when the parameter is automated.
     fn automation(&self, id: u32) -> Option<(u64, AutomationState)>;
+    /// Where the parameter's lane is at the song position, normalized 0–1,
+    /// whatever holds the parameter now. `None` without a lane.
+    fn lane_value(&self, _id: u32) -> Option<f64> {
+        None
+    }
     /// Create, edit, override or resume automation. `Create` carries
     /// [`AutomationControl::DeviceParameter`].
     fn navigate(&mut self, action: AutomationNavigation);
@@ -192,13 +197,14 @@ const CELL_GAP: f32 = daw_ui::tokens::SPACE_SM;
 /// the knob above it and not with the caption below.
 const LINE_GAP: f32 = daw_ui::tokens::SPACE_SM;
 
-/// The panel's width, for the window that hosts it.
+/// The panel's width with its frame, for the window that hosts it.
 pub fn panel_width(descriptor: &DeviceDescriptor) -> f32 {
-    panels::layout(descriptor).width
+    panels::layout(descriptor).width + daw_ui::DEVICE_FRAME_INSET
 }
 
-/// Draws a device's panel: header with presets, the response, then the
-/// sections as cards in signal order, side by side where they share a row.
+/// Draws a device's panel in its frame: name and presets on the bar, the
+/// response, then the sections as cards in signal order, side by side where
+/// they share a row.
 /// Instruments end with an audition keyboard and pitch and mod wheels.
 pub fn show(
     ui: &mut Ui,
@@ -207,7 +213,7 @@ pub fn show(
     state: &mut PanelState,
 ) {
     let layout = panels::layout(descriptor);
-    ui.set_width(layout.width.min(ui.available_width()));
+    ui.set_width(panel_width(descriptor).min(ui.available_width()));
     #[cfg(test)]
     {
         state.control_rects.clear();
@@ -215,39 +221,41 @@ pub fn show(
         state.picture_rects.clear();
         state.disabled.clear();
     }
-    preset_bar(ui, descriptor, host, state);
-    daw_ui::section_gap(ui);
-    if layout.picture_place == panels::PicturePlace::Above && layout.picture.is_some() {
-        picture(ui, descriptor, &layout, host, state);
-        daw_ui::section_gap(ui);
-    }
-    let rows = layout.sections.iter().map(|section| section.row).max();
-    for row in 0..=rows.unwrap_or(0) {
-        let sections: Vec<_> = layout
-            .sections
-            .iter()
-            .filter(|section| section.row == row)
-            .collect();
-        let drawn = if layout.cells {
-            // The picture's columns, when it stands in this row.
-            let beside = match layout.picture_place {
-                panels::PicturePlace::Row { row: place, span } if place == row => Some(span),
-                _ => None,
-            };
-            cell_row(ui, descriptor, &sections, beside, host, state, &layout);
-            true
-        } else {
-            natural_row(ui, descriptor, &sections, host, state, &layout)
-        };
-        if drawn {
-            // The gutter between rows equals the one between cards.
-            ui.add_space((daw_ui::tokens::SPACE_SM - ui.spacing().item_spacing.y).max(0.0));
+    let mut frame = daw_ui::device_frame(ui, descriptor.name);
+    preset_bar(&mut frame.bar, descriptor, host, state);
+    frame.body(ui, |ui| {
+        if layout.picture_place == panels::PicturePlace::Above && layout.picture.is_some() {
+            picture(ui, descriptor, &layout, host, state);
+            daw_ui::section_gap(ui);
         }
-    }
-    if descriptor.kind == DeviceKind::Instrument {
-        daw_ui::section_gap(ui);
-        performance(ui, host, state);
-    }
+        let rows = layout.sections.iter().map(|section| section.row).max();
+        for row in 0..=rows.unwrap_or(0) {
+            let sections: Vec<_> = layout
+                .sections
+                .iter()
+                .filter(|section| section.row == row)
+                .collect();
+            let drawn = if layout.cells {
+                // The picture's columns, when it stands in this row.
+                let beside = match layout.picture_place {
+                    panels::PicturePlace::Row { row: place, span } if place == row => Some(span),
+                    _ => None,
+                };
+                cell_row(ui, descriptor, &sections, beside, host, state, &layout);
+                true
+            } else {
+                natural_row(ui, descriptor, &sections, host, state, &layout)
+            };
+            if drawn {
+                // The gutter between rows equals the one between cards.
+                ui.add_space((daw_ui::tokens::SPACE_SM - ui.spacing().item_spacing.y).max(0.0));
+            }
+        }
+        if descriptor.kind == DeviceKind::Instrument {
+            daw_ui::section_gap(ui);
+            performance(ui, host, state);
+        }
+    });
 }
 
 /// The device's picture, in the space the caller gave it.
@@ -482,6 +490,25 @@ fn cell_row(
     });
 }
 
+/// How a parameter's automation shows on its control: its state, and the
+/// lane's place in the control's own terms, which `position` finds from the
+/// lane's normalized value.
+fn mark(
+    host: &dyn DeviceHost,
+    spec: &ParamSpec,
+    position: impl Fn(f64) -> Option<f64>,
+) -> Option<AutomationMark> {
+    host.automation(spec.id).map(|(_, state)| AutomationMark {
+        state,
+        lane: host.lane_value(spec.id).and_then(position),
+    })
+}
+
+/// A switch's lane as the lamp shows it: on or off.
+fn switch_position(normalized: f64) -> Option<f64> {
+    Some(if normalized >= 0.5 { 1.0 } else { 0.0 })
+}
+
 /// A card's title; with the lamp of the toggle that switches the section
 /// and the choice of its model, where it has them.
 fn section_header(
@@ -508,6 +535,12 @@ fn section_header(
                 enable.is_some().then_some(&mut on),
                 &mut selected,
                 labels,
+                [
+                    enable.and_then(|enable| mark(host, enable, switch_position)),
+                    mark(host, spec, |normalized| {
+                        Some(f64::from(spec.to_plain(normalized as f32).round()))
+                    }),
+                ],
             );
             if choice.changed() {
                 let value = f64::from(spec.to_normalized(selected as f32));
@@ -531,9 +564,12 @@ fn section_header(
             }
             lamp
         }
-        None => {
-            daw_ui::device_section_header(ui, section.title, enable.is_some().then_some(&mut on))
-        }
+        None => daw_ui::device_section_header(
+            ui,
+            section.title,
+            enable.is_some().then_some(&mut on),
+            enable.and_then(|enable| mark(host, enable, switch_position)),
+        ),
     };
     let Some(spec) = enable else {
         return;
@@ -541,10 +577,6 @@ fn section_header(
     if lamp.changed() {
         host.set_value(spec.id, f64::from(u8::from(on)));
     }
-    // The lane marker stands clear of the title.
-    let mut rect = lamp.rect;
-    rect.max.x += LED_MARKER;
-    let lamp = lamp.with_new_rect(rect);
     let navigation = daw_ui::automatable_parameter_context(
         ui,
         &lamp,
@@ -791,9 +823,6 @@ fn control_height(spec: &ParamSpec, layout: &panels::Layout) -> f32 {
     }
 }
 
-/// Room right of a lamp's label for the automation marker.
-const LED_MARKER: f32 = 6.0;
-
 /// The label of a toggle the layout draws as a lamp.
 fn led(spec: &ParamSpec, layout: &panels::Layout) -> Option<&'static str> {
     layout
@@ -822,7 +851,7 @@ fn cell_width(ui: &Ui, spec: &ParamSpec, layout: &panels::Layout) -> f32 {
     };
     let button = egui::TextStyle::Button.resolve(ui.style());
     if let Some(label) = led(spec, layout) {
-        return daw_ui::toggle_led_width(ui, label) + LED_MARKER + CELL_GAP;
+        return daw_ui::toggle_led_width(ui, label) + CELL_GAP;
     }
     // The widest caption the control ever takes, so its cell never changes.
     let caption = match mode_captions(spec, layout) {
@@ -1234,13 +1263,19 @@ fn table_control(
     if !active(spec, host, layout) {
         ui.disable();
     }
-    daw_ui::quiet_automation_indicators(ui);
     let normalized = host.value(spec.id);
     let automation = host.automation(spec.id);
     let control = AutomationControl::DeviceParameter { id: spec.id };
     // The row's caption abbreviates and the column's heading is a number.
     let name = format!("{} {}", spec.group, spec.name);
-    let (response, navigation) = match spec.range {
+    let lane = mark(host, spec, |normalized| {
+        Some(match spec.range {
+            ParamRange::Choice(_) => f64::from(spec.to_plain(normalized as f32).round()),
+            ParamRange::Toggle => f64::from(u8::from(normalized >= 0.5)),
+            _ => normalized,
+        })
+    });
+    let (response, navigation) = daw_ui::automated(ui, lane, |ui| match spec.range {
         ParamRange::Linear { .. } | ParamRange::Log { .. } | ParamRange::Integer { .. } => {
             let mut value = normalized;
             let mut knob = daw_ui::inline_knob(
@@ -1301,7 +1336,7 @@ fn table_control(
                 daw_ui::automatable_parameter_context(ui, &response, control, automation);
             (response, navigation)
         }
-    };
+    });
     let used = response.clicked() || response.drag_started() || response.changed();
     response.on_hover_text(name);
     if let Some(action) = navigation {
@@ -1408,7 +1443,27 @@ fn control(
             if offset > 0.0 {
                 ui.add_space(offset);
             }
-            let navigation = match spec.range {
+            let lane = mark(host, spec, |normalized| {
+                Some(match spec.range {
+                    // A knob over the options turns with the lane.
+                    ParamRange::Choice(_) if dial(spec, layout) => normalized,
+                    ParamRange::Choice(labels) => {
+                        let plain = spec.to_plain(normalized as f32).round() as usize;
+                        if faces(spec, layout).is_some() {
+                            plain as f64
+                        } else {
+                            // The option's place among those offered now.
+                            let offered =
+                                (layout.options)(spec.id, &|id| host.value(id)).unwrap_or(labels);
+                            let label = labels.get(plain)?;
+                            offered.iter().position(|option| option == label)? as f64
+                        }
+                    }
+                    ParamRange::Toggle => f64::from(u8::from(normalized >= 0.5)),
+                    _ => normalized,
+                })
+            });
+            let navigation = daw_ui::automated(ui, lane, |ui| match spec.range {
                 ParamRange::Linear { .. } | ParamRange::Log { .. } | ParamRange::Integer { .. } => {
                     let mut value = normalized;
                     let state = automation.map(|(_, state)| state);
@@ -1610,13 +1665,7 @@ fn control(
                 ParamRange::Toggle => {
                     let mut on = normalized >= 0.5;
                     let response = match led(spec, layout) {
-                        Some(label) => {
-                            let lamp = daw_ui::toggle_led(ui, &mut on, label);
-                            // The lane marker stands clear of the label.
-                            let mut rect = lamp.rect;
-                            rect.max.x += LED_MARKER;
-                            lamp.with_new_rect(rect)
-                        }
+                        Some(label) => daw_ui::toggle_led(ui, &mut on, label),
                         None => daw_ui::switch(ui, &mut on, ""),
                     };
                     if response.changed() {
@@ -1624,7 +1673,7 @@ fn control(
                     }
                     daw_ui::automatable_parameter_context(ui, &response, control, automation)
                 }
-            };
+            });
             if !is_knob(spec) && !dial(spec, layout) {
                 // A value line, empty unless the layout has something to
                 // say there, so every cell of a line is as tall as a knob's
@@ -1667,8 +1716,8 @@ fn control(
     state.control_rects.push((spec.id, _drawn.response.rect));
 }
 
-/// The device's name beside its `daw_ui::preset_group`. Identical for every
-/// device.
+/// The device's `daw_ui::preset_group`, for its frame's bar. Identical for
+/// every device.
 fn preset_bar(
     ui: &mut Ui,
     descriptor: &DeviceDescriptor,
@@ -1731,26 +1780,14 @@ fn preset_bar(
         (count > 0).then(|| (from + offset).rem_euclid(count) as usize)
     };
     let saving = state.save_name.is_some();
-    // As tall as the group, so the name centers on it.
-    let height = daw_ui::tokens::CONTROL_HEIGHT + 2.0 * daw_ui::tokens::SPACE_SM;
-    let action = ui
-        .allocate_ui_with_layout(
-            egui::vec2(ui.available_width(), height),
-            egui::Layout::left_to_right(egui::Align::Center),
-            |ui| {
-                ui.spacing_mut().item_spacing.x = daw_ui::tokens::SPACE_MD;
-                daw_ui::text::subtitle(ui, descriptor.name);
-                daw_ui::preset_group(
-                    ui,
-                    egui::Id::new((descriptor.id, "preset")),
-                    &name,
-                    &choices,
-                    current,
-                    &mut state.save_name,
-                )
-            },
-        )
-        .inner;
+    let action = daw_ui::preset_group(
+        ui,
+        egui::Id::new((descriptor.id, "preset")),
+        &name,
+        &choices,
+        current,
+        &mut state.save_name,
+    );
     if !saving && let Some(draft) = &mut state.save_name {
         // Saving starts from the loaded preset's name.
         *draft = state.preset.clone().unwrap_or_default();
