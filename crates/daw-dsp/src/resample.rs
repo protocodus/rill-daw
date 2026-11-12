@@ -249,7 +249,12 @@ impl MipMap {
 #[inline]
 fn dot(weights: &[f32; TAPS], samples: &[f32; TAPS]) -> f32 {
     let mut sums = [0.0_f32; LANES];
-    for (weights, samples) in weights.chunks_exact(LANES).zip(samples.chunks_exact(LANES)) {
+    for (weights, samples) in weights
+        .as_chunks::<LANES>()
+        .0
+        .iter()
+        .zip(samples.as_chunks::<LANES>().0)
+    {
         for lane in 0..LANES {
             sums[lane] += weights[lane] * samples[lane];
         }
