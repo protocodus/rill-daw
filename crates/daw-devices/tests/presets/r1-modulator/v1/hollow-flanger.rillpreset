@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "device": "r1-modulator",
+  "name": "Hollow Flanger",
+  "author": "Rill",
+  "category": "Flanger",
+  "tags": ["guitar", "synth"],
+  "description": "Negative feedback: hollow, odd harmonics.",
+  "parameters": {
+    "mode": "Flanger",
+    "feedback": -70.0,
+    "rate": 0.3,
+    "depth": 60.0,
+    "center.flanger": 2.5
+  }
+}

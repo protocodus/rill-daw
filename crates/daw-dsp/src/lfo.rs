@@ -7,6 +7,10 @@ pub enum LfoShape {
     Saw,
     Square,
     SampleAndHold,
+    /// A random curve without steps or corners: a new value each cycle,
+    /// reached along a smooth ramp. Not among [`Self::LABELS`], which
+    /// devices persist as a parameter's choices.
+    Smooth,
 }
 
 impl LfoShape {
@@ -30,21 +34,37 @@ pub struct Lfo {
     phase: f64,
     held: f32,
     random: Random,
+    /// [`LfoShape::Smooth`]: the value at the start of this cycle, of the
+    /// next and of the one after.
+    smooth: [f32; 3],
+    /// Its own generator, so the S&H sequence does not depend on it.
+    smooth_random: Random,
 }
 
 impl Lfo {
     pub fn new(seed: u32) -> Self {
-        Self {
+        let mut lfo = Self {
             phase: 0.0,
             held: 0.0,
             random: Random::new(seed),
-        }
+            smooth: [0.0; 3],
+            smooth_random: Random::new(seed ^ 0x9E37_79B9),
+        };
+        lfo.reset();
+        lfo
     }
 
     pub fn reset(&mut self) {
         self.phase = 0.0;
         self.held = 0.0;
         self.random.reset();
+        self.smooth_random.reset();
+        // From rest, so a device that starts with it starts at its centre.
+        self.smooth = [
+            0.0,
+            self.smooth_random.bipolar(),
+            self.smooth_random.bipolar(),
+        ];
     }
 
     pub fn phase(&self) -> f64 {
@@ -65,12 +85,32 @@ impl Lfo {
         if phase.floor() != self.phase.floor() || wrapped < self.phase {
             self.held = self.random.bipolar();
         }
+        if wrapped < self.phase {
+            if self.phase - wrapped > 0.5 {
+                // Into the next cycle: its start is where the last one ended.
+                self.smooth = [self.smooth[1], self.smooth[2], self.smooth_random.bipolar()];
+            } else {
+                // A jump backward (a loop or locate) starts a new curve.
+                self.smooth = [0; 3].map(|_| self.smooth_random.bipolar());
+            }
+        }
         self.phase = wrapped;
     }
 
     /// Value at the current phase plus an offset in cycles (stereo spread).
     #[inline]
     pub fn value(&self, shape: LfoShape, offset: f64) -> f32 {
+        if shape == LfoShape::Smooth {
+            // The offset reaches into the next cycle instead of wrapping,
+            // so an offset channel follows the same curve later.
+            let u = (self.phase + offset.rem_euclid(1.0)) as f32;
+            let (from, to, t) = if u < 1.0 {
+                (self.smooth[0], self.smooth[1], u)
+            } else {
+                (self.smooth[1], self.smooth[2], u - 1.0)
+            };
+            return from + (to - from) * t * t * (3.0 - 2.0 * t);
+        }
         let phase = (self.phase + offset).rem_euclid(1.0) as f32;
         match shape {
             LfoShape::Sine => (std::f32::consts::TAU * phase).sin(),
@@ -83,7 +123,7 @@ impl Lfo {
                     -1.0
                 }
             }
-            LfoShape::SampleAndHold => self.held,
+            LfoShape::SampleAndHold | LfoShape::Smooth => self.held,
         }
     }
 }
@@ -170,6 +210,54 @@ mod tests {
         lfo.reset();
         assert_eq!(lfo.phase(), 0.0);
         assert_eq!(run(&mut lfo), first);
+    }
+
+    #[test]
+    fn smooth_has_no_steps_or_corners_and_replays() {
+        let run = |lfo: &mut Lfo, offset: f64| -> Vec<f32> {
+            (0..5000)
+                .map(|_| {
+                    lfo.advance(0.001);
+                    lfo.value(LfoShape::Smooth, offset)
+                })
+                .collect()
+        };
+        for offset in [0.0, 0.25, 0.5] {
+            let mut lfo = Lfo::new(21);
+            let values = run(&mut lfo, offset);
+            let mut range = (0.0_f32, 0.0_f32);
+            for triple in values.windows(3) {
+                let (before, after) = (triple[1] - triple[0], triple[2] - triple[1]);
+                // The steepest slope of a full swing is 3·10⁻³ per step; the
+                // slope itself changes by at most 12·10⁻⁶.
+                assert!(before.abs() < 3.1e-3, "step {before} at offset {offset}");
+                assert!((after - before).abs() < 2e-5, "corner at offset {offset}");
+                range = (range.0.min(triple[1]), range.1.max(triple[1]));
+            }
+            assert!(range.0 < -0.3 && range.1 > 0.3, "{range:?}");
+            lfo.reset();
+            assert_eq!(run(&mut lfo, offset), values);
+        }
+        // An offset channel is the same curve, later.
+        let mut lfo = Lfo::new(21);
+        let ahead = run(&mut lfo, 0.25);
+        lfo.reset();
+        let plain = run(&mut lfo, 0.0);
+        assert!((ahead[100] - plain[350]).abs() < 1e-5);
+    }
+
+    #[test]
+    fn sample_and_hold_sequence_is_the_one_devices_already_render() {
+        let mut lfo = Lfo::new(0x005E_EDF1);
+        let values: Vec<f32> = (0..4)
+            .map(|_| {
+                lfo.advance(1.0);
+                lfo.value(LfoShape::SampleAndHold, 0.0)
+            })
+            .collect();
+        let mut random = Random::new(0x005E_EDF1);
+        let expected: Vec<f32> = (0..4).map(|_| random.bipolar()).collect();
+        assert_eq!(values, expected);
     }
 
     #[test]

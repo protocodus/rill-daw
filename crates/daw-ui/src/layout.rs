@@ -89,27 +89,67 @@ fn toolbar_with_row_height<R>(
 /// height of the tallest. Rows whose spans add up to the same number share
 /// the grid, so their cards' edges line up like the modules of a hardware
 /// front panel. `cell` draws the contents of cell `index`.
-pub fn grid_row<R>(ui: &mut Ui, spans: &[u8], mut cell: impl FnMut(&mut Ui, usize) -> R) -> Vec<R> {
+pub fn grid_row<R>(ui: &mut Ui, spans: &[u8], cell: impl FnMut(&mut Ui, usize) -> R) -> Vec<R> {
+    let cells: Vec<GridCell> = spans
+        .iter()
+        .map(|span| GridCell {
+            span: *span,
+            framed: true,
+        })
+        .collect();
+    grid_row_cells(ui, &cells, cell)
+}
+
+/// One cell of a [`grid_row_cells`] row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GridCell {
+    /// Width in grid columns.
+    pub span: u8,
+    /// A card. A bare cell has no frame and no margin: its contents take
+    /// the card's whole outer rectangle, as a picture beside cards does.
+    pub framed: bool,
+}
+
+/// A [`grid_row`] whose cells may be bare. Bare cells are laid out after
+/// the cards, so `ui.available_height()` in them is the height of the row;
+/// `cell` is still called once per index and the results come in index order.
+pub fn grid_row_cells<R>(
+    ui: &mut Ui,
+    cells: &[GridCell],
+    mut cell: impl FnMut(&mut Ui, usize) -> R,
+) -> Vec<R> {
     let frame = crate::card(ui.ctx());
     let margin = frame.total_margin();
     let gap = tokens::SPACE_SM;
     let origin = ui.cursor().min;
     let width = ui.available_width();
-    let columns = spans
+    let columns = cells
         .iter()
-        .map(|span| f32::from(*span))
+        .map(|cell| f32::from(cell.span))
         .sum::<f32>()
         .max(1.0);
     let column = (width - gap * (columns - 1.0)).max(0.0) / columns;
+    // Left edge and outer width of every cell.
     let mut x = origin.x;
-    let mut results = Vec::with_capacity(spans.len());
-    let mut cards = Vec::with_capacity(spans.len());
+    let places: Vec<(f32, f32)> = cells
+        .iter()
+        .map(|cell| {
+            let span = f32::from(cell.span);
+            let outer = span * column + (span - 1.0).max(0.0) * gap;
+            let place = (x, outer);
+            x += outer + gap;
+            place
+        })
+        .collect();
+    let mut results: Vec<Option<R>> = cells.iter().map(|_| None).collect();
+    let mut cards = Vec::with_capacity(cells.len());
     let mut height: f32 = 0.0;
-    for (index, span) in spans.iter().enumerate() {
-        let span = f32::from(*span);
-        let outer = span * column + (span - 1.0).max(0.0) * gap;
+    for (index, (left, outer)) in places.iter().enumerate() {
+        if !cells[index].framed {
+            continue;
+        }
         let content = egui::Rect::from_min_size(
-            egui::pos2(x + margin.left, origin.y + margin.top),
+            egui::pos2(left + margin.left, origin.y + margin.top),
             egui::vec2(
                 (outer - margin.sum().x).max(0.0),
                 ui.available_height().max(0.0),
@@ -123,10 +163,35 @@ pub fn grid_row<R>(ui: &mut Ui, spans: &[u8], mut cell: impl FnMut(&mut Ui, usiz
                 .max_rect(content)
                 .layout(egui::Layout::top_down(egui::Align::Min)),
         );
-        results.push(cell(&mut child, index));
+        results[index] = Some(cell(&mut child, index));
         height = height.max(child.min_rect().height());
         cards.push((background, content.min, content.width()));
-        x += outer + gap;
+    }
+    let framed = !cards.is_empty();
+    let mut outer_height = if framed {
+        height + margin.sum().y
+    } else {
+        ui.available_height().max(0.0)
+    };
+    let mut bare_height: f32 = 0.0;
+    for (index, (left, outer)) in places.iter().enumerate() {
+        if cells[index].framed {
+            continue;
+        }
+        let mut child = ui.new_child(
+            egui::UiBuilder::new()
+                .id_salt(("grid_cell", index))
+                .max_rect(egui::Rect::from_min_size(
+                    egui::pos2(*left, origin.y),
+                    egui::vec2(*outer, outer_height),
+                ))
+                .layout(egui::Layout::top_down(egui::Align::Min)),
+        );
+        results[index] = Some(cell(&mut child, index));
+        bare_height = bare_height.max(child.min_rect().height());
+    }
+    if !framed {
+        outer_height = bare_height;
     }
     for (background, min, width) in cards {
         let content = egui::Rect::from_min_size(min, egui::vec2(width, height));
@@ -134,9 +199,9 @@ pub fn grid_row<R>(ui: &mut Ui, spans: &[u8], mut cell: impl FnMut(&mut Ui, usiz
     }
     ui.advance_cursor_after_rect(egui::Rect::from_min_size(
         origin,
-        egui::vec2(width, height + margin.sum().y),
+        egui::vec2(width, outer_height),
     ));
-    results
+    results.into_iter().flatten().collect()
 }
 
 /// A compact visual family of tools. The measured width lets a wrapping toolbar

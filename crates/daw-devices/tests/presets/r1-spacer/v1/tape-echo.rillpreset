@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Tape Echo",
+  "author": "Rill",
+  "category": "Echo",
+  "tags": ["guitar", "keys"],
+  "description": "Warm, wobbling repeats.",
+  "parameters": {
+    "reverb.on": false,
+    "echo.type": "Tape",
+    "echo.division": "1/4",
+    "echo.feedback": 50.0,
+    "echo.wobble": 35.0,
+    "echo.high_cut": 5000.0,
+    "echo.stereo": "Mono"
+  }
+}

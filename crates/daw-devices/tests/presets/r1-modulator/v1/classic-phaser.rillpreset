@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-modulator",
+  "name": "Classic Phaser",
+  "author": "Rill",
+  "category": "Phaser",
+  "tags": ["guitar", "keys"],
+  "description": "Four-stage pedal phaser.",
+  "parameters": {
+    "mode": "Phaser",
+    "character": "Analog",
+    "stages": "4",
+    "feedback": 40.0,
+    "rate": 0.5,
+    "depth": 60.0,
+    "center.phaser": 700.0
+  }
+}

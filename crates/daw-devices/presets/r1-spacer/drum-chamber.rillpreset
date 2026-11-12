@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Drum Chamber",
+  "author": "Rill",
+  "category": "Reverb",
+  "tags": ["drums"],
+  "description": "Dense, short and bright.",
+  "parameters": {
+    "echo.on": false,
+    "reverb.type": "Chamber",
+    "reverb.size": 40.0,
+    "reverb.decay": 0.9,
+    "reverb.pre_delay": 10.0,
+    "reverb.diffusion": 90.0,
+    "reverb.high_cut": 9000.0
+  }
+}

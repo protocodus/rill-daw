@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-modulator",
+  "name": "Wide Chorus",
+  "author": "Rill",
+  "category": "Chorus",
+  "tags": ["pad", "keys"],
+  "description": "Lush stereo thickening.",
+  "parameters": {
+    "voices": 4,
+    "rate": 0.35,
+    "depth": 60.0,
+    "feedback": 0.0,
+    "center.chorus": 14.0,
+    "stereo": 180.0,
+    "low_cut": 120.0
+  }
+}

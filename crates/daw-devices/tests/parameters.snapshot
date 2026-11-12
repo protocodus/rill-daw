@@ -115,3 +115,47 @@ r1-compressor 25 makeup "Makeup" linear -12 24
 r1-compressor 26 auto_makeup "Auto makeup" toggle
 r1-compressor 30 mix "Mix" linear 0 100
 r1-compressor 31 output "Output" linear -24 24
+r1-modulator 1 mode "Mode" choice Chorus|Flanger|Phaser
+r1-modulator 2 character "Character" choice Clean|Analog
+r1-modulator 10 shape "Shape" choice Sine|Triangle|Random
+r1-modulator 11 sync "Sync" toggle
+r1-modulator 12 rate "Rate" log 0.01 20
+r1-modulator 13 division "Division" choice 8 bars|4 bars|2 bars|1 bar|1/2|1/4|1/8|1/16
+r1-modulator 14 depth "Depth" linear 0 100
+r1-modulator 15 stereo "Stereo" linear 0 180
+r1-modulator 20 feedback "Feedback" linear -95 95
+r1-modulator 21 center.chorus "Chorus center" log 5 30
+r1-modulator 22 center.flanger "Flanger center" log 0.1 10
+r1-modulator 23 center.phaser "Phaser center" log 100 8000
+r1-modulator 24 voices "Voices" integer 1 4
+r1-modulator 25 stages "Stages" choice 2|4|6|8|12
+r1-modulator 26 low_cut "Wet low cut" log 20 500
+r1-modulator 30 mix "Mix" linear 0 100
+r1-modulator 31 output "Output" linear -24 24
+r1-spacer 1 echo.on "Echo on" toggle
+r1-spacer 2 echo.type "Echo type" choice Digital|Tape|Analog
+r1-spacer 3 echo.sync "Echo sync" toggle
+r1-spacer 4 echo.time "Echo time" log 1 2000
+r1-spacer 5 echo.division "Echo division" choice 1/32 T|1/32|1/16 T|1/32 D|1/16|1/8 T|1/16 D|1/8|1/4 T|1/8 D|1/4|1/2 T|1/4 D|1/2|1/1 T|1/2 D|1/1|1/1 D
+r1-spacer 6 echo.feedback "Echo feedback" linear 0 100
+r1-spacer 7 echo.stereo "Echo stereo" choice Mono|Ping-pong|Wide
+r1-spacer 8 echo.low_cut "Echo low cut" log 20 2000
+r1-spacer 9 echo.high_cut "Echo high cut" log 500 20000
+r1-spacer 10 echo.wobble "Echo wobble" linear 0 100
+r1-spacer 11 echo.level "Echo level" linear -60 0
+r1-spacer 40 reverb.on "Reverb on" toggle
+r1-spacer 41 reverb.type "Reverb type" choice Room|Chamber|Hall|Plate
+r1-spacer 42 reverb.pre_delay "Pre-delay" linear 0 250
+r1-spacer 43 reverb.size "Size" linear 0 100
+r1-spacer 44 reverb.decay "Decay" log 0.1 20
+r1-spacer 45 reverb.damping "Damping" linear 0 100
+r1-spacer 46 reverb.low_cut "Reverb low cut" log 20 1000
+r1-spacer 47 reverb.high_cut "Reverb high cut" log 1000 20000
+r1-spacer 48 reverb.diffusion "Diffusion" linear 0 100
+r1-spacer 49 reverb.movement "Movement" linear 0 100
+r1-spacer 50 reverb.width "Width" linear 0 150
+r1-spacer 51 reverb.level "Reverb level" linear -60 0
+r1-spacer 20 routing "Routing" choice Echo → Reverb|Parallel
+r1-spacer 21 duck "Duck" linear 0 100
+r1-spacer 30 mix "Mix" linear 0 100
+r1-spacer 31 output "Output" linear -24 24

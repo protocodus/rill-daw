@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Vocal Plate",
+  "author": "Rill",
+  "category": "Reverb",
+  "tags": ["vocal"],
+  "description": "Smooth plate with pre-delay.",
+  "parameters": {
+    "echo.on": false,
+    "reverb.type": "Plate",
+    "reverb.size": 55.0,
+    "reverb.decay": 1.6,
+    "reverb.pre_delay": 40.0,
+    "reverb.damping": 30.0,
+    "reverb.low_cut": 200.0
+  }
+}

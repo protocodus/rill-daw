@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Slapback",
+  "author": "Rill",
+  "category": "Echo",
+  "tags": ["vocal", "guitar"],
+  "description": "One short tape repeat.",
+  "parameters": {
+    "reverb.on": false,
+    "echo.type": "Tape",
+    "echo.sync": false,
+    "echo.time": 95.0,
+    "echo.feedback": 8.0,
+    "echo.stereo": "Mono",
+    "echo.level": -4.0
+  }
+}

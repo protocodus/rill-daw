@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-modulator",
+  "name": "Analog Chorus",
+  "author": "Rill",
+  "category": "Chorus",
+  "tags": ["guitar", "bass"],
+  "description": "Dark bucket-brigade pedal chorus.",
+  "parameters": {
+    "character": "Analog",
+    "voices": 1,
+    "rate": 0.5,
+    "depth": 55.0,
+    "feedback": 0.0,
+    "center.chorus": 10.0,
+    "mix": 50.0
+  }
+}

@@ -3,7 +3,7 @@
 //! measurements on this machine, not guarantees.
 //!
 //! `cargo run --release -p daw-devices --example devices_bench`
-use daw_devices::devices::{compressor, saturator};
+use daw_devices::devices::{compressor, modulator, saturator, spacer};
 use daw_devices::{DeviceKind, Event, EventKind, ProcessContext, StereoIo, registry};
 use std::time::Instant;
 
@@ -23,6 +23,8 @@ fn variants(id: &str) -> Vec<(&'static str, u32, usize)> {
     match id {
         "r1-saturator" => choices(saturator::QUALITY, saturator::QUALITIES),
         "r1-compressor" => choices(compressor::CHARACTER, compressor::CHARACTERS),
+        "r1-modulator" => choices(modulator::MODE, modulator::MODES),
+        "r1-spacer" => choices(spacer::ECHO_TYPE, spacer::ECHO_TYPES),
         _ => Vec::new(),
     }
 }

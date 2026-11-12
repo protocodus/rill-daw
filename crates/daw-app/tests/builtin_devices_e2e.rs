@@ -870,6 +870,277 @@ fn r1_compressor_reduces_limits_and_ducks_under_a_routed_sidechain() {
     app.quit();
 }
 
+/// The level between two beats of the song.
+fn level_between(app: &mut Harness, start: f64, end: f64) -> f64 {
+    let state = song_tool(
+        app,
+        "audio_analyze",
+        json!({"start_beat":start,"end_beat":end}),
+    );
+    state["tool_result"]["result"]["rms_dbfs"]
+        .as_f64()
+        .unwrap_or(-200.0)
+}
+
+/// The stored value of a parameter of the first track's first insert.
+fn stored(state: &Value, id: u32) -> Option<f64> {
+    state["project"]["tracks"][0]["inserts"][0]["parameters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|parameter| parameter["id"] == id)
+        .map(|parameter| parameter["value"].as_f64().unwrap())
+}
+
+#[test]
+fn r1_modulator_combs_sweeps_and_takes_mode_defaults_from_its_panel() {
+    let mut app = Harness::new();
+    let (track, _) = tone_project(&mut app, "modulator.rill", 500.0, false);
+    let dry = level_between(&mut app, 0.5, 2.0);
+    let (assigned, insert) = insert_device(&mut app, track, "R1 Modulator", "r1-modulator");
+
+    let described = song_tool(
+        &mut app,
+        "plugin_describe_parameters",
+        json!({"track_id":track,"insert_id":insert,"query":"center.flanger"}),
+    );
+    let center = &described["tool_result"]["result"]["parameters"][0];
+    assert_eq!(center["key"], "center.flanger", "{described}");
+    assert_eq!(center["unit"], "ms");
+    assert!(described["tool_result"]["result"]["sidechain_input"].is_null());
+
+    // A still flanger is a comb: with 1 ms of delay its first notch sits on
+    // the 500 Hz tone. A tool sets only what it names: Feedback stays at 0.
+    let set = set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"mode","value":"flanger"},{"parameter":"depth","value":"0 %"},
+            {"parameter":"center.flanger","value":"1 ms"},{"parameter":"mix","value":"50 %"}]),
+    );
+    assert_eq!(
+        set["tool_result"]["result"]["parameters"][0]["value"],
+        "Flanger"
+    );
+    assert_eq!(
+        stored(&set, daw_devices::devices::modulator::FEEDBACK),
+        None
+    );
+    let notch = level_between(&mut app, 0.5, 2.0);
+    assert!(notch < dry - 12.0, "dry {dry}, notch {notch}");
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], assigned["project"]);
+    app.command(json!({"command":"key","key":"Z","cmd":true,"shift":true}));
+    // At 2 ms the tone sits on a tooth instead.
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"center.flanger","value":"2 ms"}]),
+    );
+    let tooth = level_between(&mut app, 0.5, 2.0);
+    assert!(tooth > notch + 12.0, "notch {notch}, tooth {tooth}");
+    assert!(tooth > dry - 1.0, "dry {dry}, tooth {tooth}");
+
+    // Depth sweeps the comb across the tone: the level moves in time.
+    let spread = |app: &mut Harness| {
+        let levels: Vec<f64> = (1..4)
+            .map(|quarter| {
+                level_between(app, f64::from(quarter) * 0.5, f64::from(quarter + 1) * 0.5)
+            })
+            .collect();
+        levels.iter().copied().fold(f64::MIN, f64::max)
+            - levels.iter().copied().fold(f64::MAX, f64::min)
+    };
+    let still = spread(&mut app);
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"depth","value":"25 %"},{"parameter":"rate","value":"0.5 Hz"},
+            {"parameter":"center.flanger","value":"1.5 ms"}]),
+    );
+    let swept = spread(&mut app);
+    assert!(
+        still < 1.0 && swept > still + 3.0,
+        "still {still}, swept {swept}"
+    );
+    // Mix at 0 % is the dry signal.
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"mix","value":"0 %"}]),
+    );
+    let bypassed = level_between(&mut app, 0.5, 2.0);
+    assert!((bypassed - dry).abs() < 0.5, "dry {dry}, mix 0 {bypassed}");
+
+    // A factory preset loads in one Undo step.
+    let before = app.inspect();
+    let (id, revision) = session(&before);
+    let loaded = song_tool(
+        &mut app,
+        "load_device_preset",
+        json!({"name":"wide chorus","track_id":track,"insert_id":insert,
+            "session_id":id,"expected_revision":revision}),
+    );
+    assert_eq!(loaded["tool_result"]["result"]["skipped"], json!([]));
+    assert_eq!(loaded["history"]["undo"][0], "Device preset");
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], before["project"]);
+    app.command(json!({"command":"key","key":"Z","cmd":true,"shift":true}));
+
+    // The panel: choosing a mode there also sets that mode's Feedback and
+    // Center, as one step.
+    open_effect_editor(&mut app, "Pad tone", "Character");
+    let state = app.inspect();
+    assert!(visible(&state, "Voices"), "{}", state["visible_labels"]);
+    let phaser = app.click("Phaser");
+    assert!(visible(&phaser, "Stages"), "{}", phaser["visible_labels"]);
+    use daw_devices::devices::modulator::{DESCRIPTOR, FEEDBACK, MODE};
+    assert_eq!(stored(&phaser, MODE), Some(1.0));
+    let feedback = DESCRIPTOR.parameter(FEEDBACK).unwrap();
+    let plain = feedback.to_plain(stored(&phaser, FEEDBACK).unwrap() as f32);
+    assert!((plain - 50.0).abs() < 0.01, "{}", phaser["project"]);
+    assert_eq!(phaser["history"]["undo"][0], "Effect parameter");
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], state["project"]);
+    app.command(json!({"command":"key","key":"Z","cmd":true,"shift":true}));
+
+    // Save and reopen: the same device, the same sound.
+    let saved = level_between(&mut app, 0.5, 2.0);
+    let path = app.directory.path().join("modulated.rill");
+    app.command(json!({"command":"save","path":path}));
+    let reopened = app.command(json!({"command":"open","path":path}));
+    assert_eq!(
+        reopened["project"]["tracks"][0]["inserts"],
+        phaser["project"]["tracks"][0]["inserts"]
+    );
+    let again = level_between(&mut app, 0.5, 2.0);
+    assert!((again - saved).abs() < 0.1, "{saved} {again}");
+    app.quit();
+}
+
+#[test]
+fn r1_spacer_rings_longer_with_decay_and_feedback_and_switches_from_its_panel() {
+    let mut app = Harness::new();
+    let (track, _) = tone_project(&mut app, "spacer.rill", 440.0, false);
+    let dry = level_between(&mut app, 0.0, 2.0);
+    // The tone ends at beat 2; what sounds a second later is the effect.
+    let tail = |app: &mut Harness| level_between(app, 4.0, 5.0);
+    assert!(tail(&mut app) < -90.0);
+    let (assigned, insert) = insert_device(&mut app, track, "R1 Spacer", "r1-spacer");
+
+    let described = song_tool(
+        &mut app,
+        "plugin_describe_parameters",
+        json!({"track_id":track,"insert_id":insert,"query":"reverb.decay"}),
+    );
+    let decay = &described["tool_result"]["result"]["parameters"][0];
+    assert_eq!(decay["key"], "reverb.decay", "{described}");
+    assert_eq!(decay["unit"], "s");
+
+    // Reverb alone: a longer Decay leaves more a second after the sound.
+    let set = set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"echo.on","value":false},{"parameter":"reverb.decay","value":"0.4 s"},
+            {"parameter":"mix","value":"50 %"}]),
+    );
+    assert_eq!(
+        set["tool_result"]["result"]["parameters"][0]["value"],
+        false
+    );
+    let short = tail(&mut app);
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], assigned["project"]);
+    app.command(json!({"command":"key","key":"Z","cmd":true,"shift":true}));
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"reverb.decay","value":"6 s"}]),
+    );
+    let long = tail(&mut app);
+    assert!(long > short + 20.0, "short {short}, long {long}");
+    assert!(long > -60.0, "{long}");
+
+    // Echo alone: one repeat is over by then; Feedback keeps them coming.
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"reverb.on","value":false},{"parameter":"echo.on","value":true},
+            {"parameter":"echo.sync","value":false},{"parameter":"echo.time","value":"250 ms"},
+            {"parameter":"echo.feedback","value":"0 %"}]),
+    );
+    let once = tail(&mut app);
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"echo.feedback","value":"80 %"}]),
+    );
+    let repeating = tail(&mut app);
+    assert!(
+        repeating > once + 20.0,
+        "once {once}, repeating {repeating}"
+    );
+    assert!(repeating > -50.0, "{repeating}");
+    // Mix at 0 % is the dry signal.
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"mix","value":"0 %"}]),
+    );
+    let bypassed = level_between(&mut app, 0.0, 2.0);
+    assert!((bypassed - dry).abs() < 0.5, "dry {dry}, mix 0 {bypassed}");
+    assert!(tail(&mut app) < -90.0);
+
+    // A factory preset loads in one Undo step.
+    let before = app.inspect();
+    let (id, revision) = session(&before);
+    let loaded = song_tool(
+        &mut app,
+        "load_device_preset",
+        json!({"name":"large hall","track_id":track,"insert_id":insert,
+            "session_id":id,"expected_revision":revision}),
+    );
+    assert_eq!(loaded["tool_result"]["result"]["skipped"], json!([]));
+    assert_eq!(loaded["history"]["undo"][0], "Device preset");
+    assert!(tail(&mut app) > -60.0);
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], before["project"]);
+    app.command(json!({"command":"key","key":"Z","cmd":true,"shift":true}));
+
+    // The panel: each section's title is its switch.
+    open_effect_editor(&mut app, "Pad tone", "Routing");
+    let state = app.inspect();
+    use daw_devices::devices::spacer::REVERB_ON;
+    assert_eq!(stored(&state, REVERB_ON), Some(1.0), "{}", state["project"]);
+    let off = click_top(&mut app, "REVERB");
+    assert_eq!(stored(&off, REVERB_ON), Some(0.0), "{}", off["project"]);
+    assert_eq!(off["history"]["undo"][0], "Effect parameter");
+    assert!(tail(&mut app) < -90.0);
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], state["project"]);
+
+    // Save and reopen: the same device, the same sound.
+    let saved = tail(&mut app);
+    let path = app.directory.path().join("spaced.rill");
+    app.command(json!({"command":"save","path":path}));
+    let reopened = app.command(json!({"command":"open","path":path}));
+    assert_eq!(
+        reopened["project"]["tracks"][0]["inserts"],
+        state["project"]["tracks"][0]["inserts"]
+    );
+    let again = tail(&mut app);
+    assert!((again - saved).abs() < 0.1, "{saved} {again}");
+    app.quit();
+}
+
 fn select_card(app: &mut Harness, name: &str) -> Value {
     common::wait_library_device(app, name);
     let state = app.inspect();
@@ -960,7 +1231,14 @@ fn builtin_devices_show_metadata_and_preview_in_the_device_browser() {
     let inserts = app.click("+ Insert");
     assert_eq!(
         inserts["library"]["order"],
-        json!(["R1 Compressor", "R1 Equalizer", "R1 Filter", "R1 Saturator"])
+        json!([
+            "R1 Compressor",
+            "R1 Equalizer",
+            "R1 Filter",
+            "R1 Modulator",
+            "R1 Saturator",
+            "R1 Spacer"
+        ])
     );
     builtin_details(&mut app, "R1 Filter", "rill:r1-filter", false);
     app.quit();

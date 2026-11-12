@@ -6,7 +6,9 @@ pub mod compressor;
 pub mod equalizer;
 pub mod filter;
 pub mod mini;
+pub mod modulator;
 pub mod saturator;
+pub mod spacer;
 
 /// A parameter; continuous ones are modulatable.
 pub(crate) const fn param(

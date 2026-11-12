@@ -1,0 +1,25 @@
+{
+  "format": 1,
+  "device": "r1-modulator",
+  "name": "Every parameter",
+  "description": "Every parameter key of this version, so a removed or renamed key is caught.",
+  "parameters": {
+    "mode": "Phaser",
+    "character": "Analog",
+    "shape": "Random",
+    "sync": true,
+    "rate": 3.4,
+    "division": "1/8",
+    "depth": 72.0,
+    "stereo": 135.0,
+    "feedback": -42.0,
+    "center.chorus": 21.5,
+    "center.flanger": 4.2,
+    "center.phaser": 2300.0,
+    "voices": 3,
+    "stages": "8",
+    "low_cut": 310.0,
+    "mix": 64.0,
+    "output": -9.6
+  }
+}

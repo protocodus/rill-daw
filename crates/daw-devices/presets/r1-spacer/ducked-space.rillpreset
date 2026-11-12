@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Ducked Space",
+  "author": "Rill",
+  "category": "Combined",
+  "tags": ["vocal", "lead"],
+  "description": "Stays out of the source's way.",
+  "parameters": {
+    "duck": 70.0,
+    "echo.division": "1/8 D",
+    "echo.feedback": 45.0,
+    "reverb.decay": 2.2
+  }
+}

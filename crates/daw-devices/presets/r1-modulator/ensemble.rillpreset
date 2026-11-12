@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "device": "r1-modulator",
+  "name": "Ensemble",
+  "author": "Rill",
+  "category": "Chorus",
+  "tags": ["strings", "pad"],
+  "description": "String-machine shimmer.",
+  "parameters": {
+    "character": "Analog",
+    "shape": "Triangle",
+    "voices": 3,
+    "rate": 0.9,
+    "depth": 45.0,
+    "feedback": 0.0,
+    "center.chorus": 9.0,
+    "stereo": 120.0
+  }
+}

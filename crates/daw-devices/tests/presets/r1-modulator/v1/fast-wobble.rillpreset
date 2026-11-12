@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-modulator",
+  "name": "Fast Wobble",
+  "author": "Rill",
+  "category": "Phaser",
+  "tags": ["keys", "guitar"],
+  "description": "Fast, shallow and wide.",
+  "parameters": {
+    "mode": "Phaser",
+    "stages": "2",
+    "feedback": -30.0,
+    "rate": 4.0,
+    "depth": 30.0,
+    "center.phaser": 1500.0,
+    "stereo": 180.0
+  }
+}

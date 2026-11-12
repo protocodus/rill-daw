@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Parallel Wash",
+  "author": "Rill",
+  "category": "Combined",
+  "tags": ["pad", "keys"],
+  "description": "Echo and hall side by side.",
+  "parameters": {
+    "routing": "Parallel",
+    "echo.type": "Tape",
+    "echo.division": "1/2",
+    "echo.feedback": 30.0,
+    "reverb.decay": 4.0,
+    "reverb.movement": 50.0
+  }
+}

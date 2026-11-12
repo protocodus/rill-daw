@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Large Hall",
+  "author": "Rill",
+  "category": "Reverb",
+  "tags": ["strings", "piano"],
+  "description": "Long concert hall.",
+  "parameters": {
+    "echo.on": false,
+    "reverb.type": "Hall",
+    "reverb.size": 85.0,
+    "reverb.decay": 3.8,
+    "reverb.pre_delay": 25.0,
+    "reverb.damping": 45.0,
+    "reverb.high_cut": 8000.0
+  }
+}

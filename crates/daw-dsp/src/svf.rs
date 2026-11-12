@@ -299,7 +299,7 @@ pub struct Shelf1 {
 impl Default for Shelf1 {
     /// Passes its input unchanged.
     fn default() -> Self {
-        Self::new(1.0, 1.0, 1.0)
+        Self::with_gains(1.0, 1.0, 1.0)
     }
 }
 
@@ -309,7 +309,9 @@ fn warp(hz: f32, sample_rate: f32) -> f32 {
 }
 
 impl Shelf1 {
-    fn new(k: f32, low_gain: f32, high_gain: f32) -> Self {
+    /// From the bilinear pole variable `k = tan(π·f/fs)` and the gains at DC
+    /// and at the top.
+    pub fn with_gains(k: f32, low_gain: f32, high_gain: f32) -> Self {
         Self {
             big_g: k / (1.0 + k),
             low_gain,
@@ -323,7 +325,7 @@ impl Shelf1 {
     /// warped frequencies).
     pub fn shelf(zero_hz: f32, pole_hz: f32, sample_rate: f32) -> Self {
         let (zero, pole) = (warp(zero_hz, sample_rate), warp(pole_hz, sample_rate));
-        Self::new(pole, 1.0, pole / zero)
+        Self::with_gains(pole, 1.0, pole / zero)
     }
 
     /// The exact digital inverse of [`Self::shelf`] with the same arguments:
@@ -331,23 +333,28 @@ impl Shelf1 {
     /// pair is the identity at any sample rate.
     pub fn inverse_shelf(zero_hz: f32, pole_hz: f32, sample_rate: f32) -> Self {
         let (zero, pole) = (warp(zero_hz, sample_rate), warp(pole_hz, sample_rate));
-        Self::new(zero, 1.0, zero / pole)
+        Self::with_gains(zero, 1.0, zero / pole)
     }
 
     /// Tilt around `pivot_hz`: `−gain_db` at DC, `+gain_db` at the top, 0 dB
     /// at the pivot.
     pub fn tilt(gain_db: f32, pivot_hz: f32, sample_rate: f32) -> Self {
         let a = crate::db_to_gain(gain_db);
-        Self::new(warp(a * pivot_hz, sample_rate), 1.0 / a, a)
+        Self::with_gains(warp(a * pivot_hz, sample_rate), 1.0 / a, a)
     }
 
     /// First-order high-pass; at a few hertz, a DC blocker.
     pub fn high_pass(hz: f32, sample_rate: f32) -> Self {
-        Self::new(warp(hz, sample_rate), 0.0, 1.0)
+        Self::with_gains(warp(hz, sample_rate), 0.0, 1.0)
+    }
+
+    /// First-order low-pass.
+    pub fn low_pass(hz: f32, sample_rate: f32) -> Self {
+        Self::with_gains(warp(hz, sample_rate), 1.0, 0.0)
     }
 
     pub fn low_shelf(gain_db: f32, hz: f32, sample_rate: f32) -> Self {
-        Self::new(warp(hz, sample_rate), crate::db_to_gain(gain_db), 1.0)
+        Self::with_gains(warp(hz, sample_rate), crate::db_to_gain(gain_db), 1.0)
     }
 
     /// Takes the other section's coefficients and keeps the state.

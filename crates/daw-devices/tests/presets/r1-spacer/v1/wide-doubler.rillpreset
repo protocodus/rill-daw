@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Wide Doubler",
+  "author": "Rill",
+  "category": "Echo",
+  "tags": ["vocal", "guitar"],
+  "description": "Thickening without repeats: one tap left, one 3 ms later right.",
+  "parameters": {
+    "reverb.on": false,
+    "echo.sync": false,
+    "echo.time": 25.0,
+    "echo.feedback": 0.0,
+    "echo.stereo": "Wide",
+    "echo.low_cut": 20.0,
+    "echo.high_cut": 12000.0,
+    "echo.level": -3.0
+  }
+}

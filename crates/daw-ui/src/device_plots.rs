@@ -140,6 +140,21 @@ fn fill_to(painter: &Painter, trace: &[Pos2], y: f32, color: Color32) {
     painter.add(Shape::mesh(mesh));
 }
 
+/// Fills between two traces that share their x positions.
+fn fill_between(painter: &Painter, upper: &[Pos2], lower: &[Pos2], color: Color32) {
+    let mut mesh = egui::Mesh::default();
+    for (index, (high, low)) in upper.iter().zip(lower).enumerate() {
+        mesh.colored_vertex(*high, color);
+        mesh.colored_vertex(*low, color);
+        if index > 0 {
+            let at = 2 * index as u32;
+            mesh.add_triangle(at - 2, at - 1, at);
+            mesh.add_triangle(at - 1, at, at + 1);
+        }
+    }
+    painter.add(Shape::mesh(mesh));
+}
+
 fn paint_spectrum(painter: &Painter, rect: Rect, spectrum: Spectrum<'_>, alpha: f32) {
     if spectrum.bins_db.len() < 2 {
         return;
@@ -204,6 +219,17 @@ pub struct FrequencyCurve<'a> {
     pub db: &'a [f32],
     /// The device's own response, drawn in the accent; others are muted.
     pub emphasis: bool,
+    /// The lower edge of a band whose upper edge is `db`, point for point:
+    /// a response with detail finer than a point of width (a comb) is the
+    /// span it covers there, filled, with the line along its top.
+    pub low: Option<&'a [f32]>,
+}
+
+/// A mark on the 0 dB line that only shows: where something stands now.
+#[derive(Clone, Copy, Debug)]
+pub struct FrequencyMarker<'a> {
+    pub frequency: f32,
+    pub label: &'a str,
 }
 
 /// A draggable node: a band, a cutoff or a marker on the response.
@@ -249,6 +275,9 @@ pub struct FrequencyPlot<'a> {
     /// How far a node's gain can be dragged; a node beyond the axis is drawn
     /// at its edge. Equal to `range_db` when the axis shows the whole range.
     pub limit_db: f32,
+    /// Frequency ranges shaded over the whole height: what a sweep covers.
+    pub spans: &'a [(f32, f32)],
+    pub markers: &'a [FrequencyMarker<'a>],
     pub size: Vec2,
 }
 
@@ -398,6 +427,14 @@ pub fn frequency_plot(ui: &mut Ui, plot: &FrequencyPlot<'_>) -> FrequencyPlotOut
         if let Some(spectrum) = plot.spectrum {
             paint_spectrum(painter, inner, spectrum, 0.16);
         }
+        let x_of = |frequency: f32| inner.left() + inner.width() * frequency_fraction(frequency);
+        for (from, to) in plot.spans {
+            painter.rect_filled(
+                Rect::from_x_y_ranges(x_of(*from)..=x_of(*to), inner.y_range()),
+                0.0,
+                colors.muted.gamma_multiply(0.1),
+            );
+        }
         paint_frequency_grid(painter, inner);
         for db in [-range * 0.5, 0.0, range * 0.5] {
             painter.line_segment(
@@ -429,24 +466,30 @@ pub fn frequency_plot(ui: &mut Ui, plot: &FrequencyPlot<'_>) -> FrequencyPlotOut
             }
             let y =
                 |db: f32| inner.center().y - inner.height() * 0.5 * (db / range).clamp(-2.0, 2.0);
-            let points: Vec<Pos2> = curve
-                .db
-                .iter()
-                .enumerate()
-                .map(|(index, db)| {
-                    pos2(
-                        inner.left() + inner.width() * index as f32 / (curve.db.len() - 1) as f32,
-                        y(finite(*db, 0.0)),
-                    )
-                })
-                .collect();
-            if curve.emphasis {
-                fill_to(
-                    &clipped,
-                    &points,
-                    gain_y(0.0),
-                    colors.accent.gamma_multiply(0.12),
-                );
+            let trace = |values: &[f32]| -> Vec<Pos2> {
+                values
+                    .iter()
+                    .enumerate()
+                    .map(|(index, db)| {
+                        pos2(
+                            inner.left() + inner.width() * index as f32 / (values.len() - 1) as f32,
+                            y(finite(*db, 0.0)),
+                        )
+                    })
+                    .collect()
+            };
+            let points = trace(curve.db);
+            let tint = if curve.emphasis {
+                colors.accent
+            } else {
+                colors.muted
+            };
+            match curve.low.filter(|low| low.len() == curve.db.len()) {
+                Some(low) => fill_between(&clipped, &points, &trace(low), tint.gamma_multiply(0.3)),
+                None if curve.emphasis => {
+                    fill_to(&clipped, &points, gain_y(0.0), tint.gamma_multiply(0.12));
+                }
+                None => {}
             }
             clipped.add(Shape::line(
                 points,
@@ -459,6 +502,20 @@ pub fn frequency_plot(ui: &mut Ui, plot: &FrequencyPlot<'_>) -> FrequencyPlotOut
                     },
                 ),
             ));
+        }
+        for marker in plot.markers {
+            let at = pos2(x_of(marker.frequency), gain_y(0.0));
+            painter.line_segment(
+                [at - vec2(0.0, 6.0), at + vec2(0.0, 6.0)],
+                Stroke::new(2.0_f32, colors.text),
+            );
+            // Below the line: a node's name stands above it.
+            label(
+                painter,
+                at + vec2(0.0, 7.0),
+                Align2::CENTER_TOP,
+                marker.label,
+            );
         }
         for (index, node) in plot.nodes.iter().enumerate() {
             let center = center_of(node);
@@ -1374,10 +1431,68 @@ pub fn wavetable_view(ui: &mut Ui, frames: &[&[f32]], position: f32, size: Vec2)
     response
 }
 
-/// One LFO cycle (−1 to 1) with the moving phase marker.
-pub fn lfo_view(ui: &mut Ui, shape: &[f32], phase: Option<f32>, size: Vec2) -> Response {
-    let (rect, response) = frame(ui, size, Sense::hover());
+/// One cycle of an LFO, −1 to 1, sampled evenly over the cycle.
+#[derive(Clone, Copy, Debug)]
+pub struct LfoTrace<'a> {
+    pub samples: &'a [f32],
+    /// The trace the markers ride, in the accent; others are muted (the
+    /// further voices of a chorus).
+    pub emphasis: bool,
+}
+
+/// Where a channel or voice stands in the cycle now.
+#[derive(Clone, Copy, Debug)]
+pub struct LfoMarker<'a> {
+    /// In cycles; wraps.
+    pub phase: f32,
+    /// Printed at the marker: "L", "R". May be empty.
+    pub label: &'a str,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct LfoView<'a> {
+    pub traces: &'a [LfoTrace<'a>],
+    pub markers: &'a [LfoMarker<'a>],
+    /// Whether a horizontal drag is reported, for the caller to turn a rate.
+    pub draggable: bool,
+    pub size: Vec2,
+}
+
+pub struct LfoViewOutput {
+    pub response: Response,
+    /// A horizontal drag this frame in notches, to the right positive; a
+    /// tenth as many with Shift. The caller decides what it turns.
+    pub dragged: Option<f32>,
+    pub double_clicked: bool,
+}
+
+/// Points of horizontal drag for one notch of an [`lfo_view`].
+const LFO_DRAG_NOTCH: f32 = 6.0;
+
+/// LFO cycles with moving phase markers. The markers ride the first
+/// emphasized trace. A draggable view reports horizontal drags and a
+/// double-click; the caller also shows the rate as a dial, so dragging is
+/// never the only way.
+pub fn lfo_view(ui: &mut Ui, view: &LfoView<'_>) -> LfoViewOutput {
+    let sense = if view.draggable {
+        Sense::click_and_drag()
+    } else {
+        Sense::hover()
+    };
+    let (rect, mut response) = frame(ui, view.size, sense);
     let colors = theme::palette(ui.ctx());
+    let mut dragged = None;
+    if view.draggable {
+        response = response.on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
+        if response.dragged_by(egui::PointerButton::Primary) {
+            let fine = ui.input(|input| if input.modifiers.shift { 0.1 } else { 1.0 });
+            let notches = response.drag_delta().x / LFO_DRAG_NOTCH * fine;
+            if notches != 0.0 {
+                dragged = Some(notches);
+                response.mark_changed();
+            }
+        }
+    }
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
         paint_frame(painter, rect, false);
@@ -1386,34 +1501,78 @@ pub fn lfo_view(ui: &mut Ui, shape: &[f32], phase: Option<f32>, size: Vec2) -> R
             [inner.left_center(), inner.right_center()],
             Stroke::new(1.0_f32, colors.grid_bar),
         );
-        let at = |index: usize| {
+        let at = |samples: &[f32], index: usize| {
             pos2(
-                inner.left() + inner.width() * index as f32 / (shape.len() - 1) as f32,
+                inner.left() + inner.width() * index as f32 / (samples.len() - 1) as f32,
                 inner.center().y
-                    - inner.height() * 0.5 * finite(shape[index], 0.0).clamp(-1.0, 1.0),
+                    - inner.height() * 0.5 * finite(samples[index], 0.0).clamp(-1.0, 1.0),
             )
         };
-        if shape.len() >= 2 {
-            painter.add(Shape::line(
-                (0..shape.len()).map(at).collect(),
-                Stroke::new(2.0_f32, colors.accent),
-            ));
-            if let Some(phase) = phase.filter(|phase| phase.is_finite()) {
-                let phase = phase.rem_euclid(1.0);
-                let position = phase * (shape.len() - 1) as f32;
+        // The emphasized traces last, on top of the others.
+        for emphasis in [false, true] {
+            for trace in view
+                .traces
+                .iter()
+                .filter(|trace| trace.emphasis == emphasis && trace.samples.len() >= 2)
+            {
+                painter.add(Shape::line(
+                    (0..trace.samples.len())
+                        .map(|index| at(trace.samples, index))
+                        .collect(),
+                    if emphasis {
+                        Stroke::new(2.0_f32, colors.accent)
+                    } else {
+                        Stroke::new(1.0_f32, colors.muted)
+                    },
+                ));
+            }
+        }
+        let ridden = view
+            .traces
+            .iter()
+            .find(|trace| trace.emphasis)
+            .or(view.traces.first())
+            .map(|trace| trace.samples)
+            .filter(|samples| samples.len() >= 2);
+        if let Some(samples) = ridden {
+            for (index, marker) in view.markers.iter().enumerate() {
+                if !marker.phase.is_finite() {
+                    continue;
+                }
+                let position = marker.phase.rem_euclid(1.0) * (samples.len() - 1) as f32;
                 let low = position.floor() as usize;
-                let high = (low + 1).min(shape.len() - 1);
-                let point = at(low).lerp(at(high), position.fract());
+                let high = (low + 1).min(samples.len() - 1);
+                let point = at(samples, low).lerp(at(samples, high), position.fract());
                 painter.line_segment(
                     [pos2(point.x, inner.top()), pos2(point.x, inner.bottom())],
                     Stroke::new(1.0_f32, colors.muted),
                 );
                 painter.circle_filled(point, 4.0, colors.modulation);
+                // Alternating sides, so two markers at one phase both read.
+                let (offset, align) = if index % 2 == 0 {
+                    (-3.0, Align2::RIGHT_TOP)
+                } else {
+                    (3.0, Align2::LEFT_TOP)
+                };
+                label(
+                    painter,
+                    pos2(point.x + offset, inner.top() - tokens::SPACE_XS),
+                    align,
+                    marker.label,
+                );
             }
         }
     }
-    describe(&response, ui, "LFO shape".into());
-    response
+    describe(
+        &response,
+        ui,
+        format!("LFO shape, {} trace(s)", view.traces.len()),
+    );
+    LfoViewOutput {
+        double_clicked: response.double_clicked(),
+        response,
+        dragged,
+    }
 }
 
 /// Draggable sample markers, in 0 to 1 across the sample.
@@ -1597,80 +1756,418 @@ pub fn sample_view(ui: &mut Ui, data: &SampleViewData<'_>, size: Vec2) -> Sample
     }
 }
 
-/// Echo taps as decaying bars (left above the axis, right below it) over the
-/// reverb's decay envelope.
-pub struct DelayViewData<'a> {
-    /// (time in seconds, left gain, right gain), gains 0 to 1.
-    pub taps: &'a [(f32, f32, f32)],
-    pub decay_seconds: f32,
-    pub pre_delay_seconds: f32,
-    /// The time axis runs from 0 to this.
-    pub span_seconds: f32,
+/// One echo or reflection of a [`DelayView`].
+#[derive(Clone, Copy, Debug)]
+pub struct DelayTap {
+    pub seconds: f32,
+    /// Linear gains, 0 to 1; a channel at 0 draws nothing.
+    pub left: f32,
+    pub right: f32,
+    /// A hairline instead of a bar: an early reflection.
+    pub thin: bool,
+    /// Drawn dimmed: something that does not sound now.
+    pub faint: bool,
 }
 
-pub fn delay_view(ui: &mut Ui, data: &DelayViewData<'_>, size: Vec2) -> Response {
-    let (rect, response) = frame(ui, size, Sense::hover());
+/// A decay that is a straight line in decibels, mirrored about the axis.
+#[derive(Clone, Copy, Debug)]
+pub struct DelayTail {
+    pub start_seconds: f32,
+    pub start_db: f32,
+    /// Seconds for 60 dB of decay.
+    pub decay_seconds: f32,
+    /// Filled lightly and without an outline: a tail that follows an echo,
+    /// or one that does not sound now.
+    pub faint: bool,
+}
+
+/// A draggable point of a [`DelayView`].
+#[derive(Clone, Copy, Debug)]
+pub struct DelayHandle<'a> {
+    pub seconds: f32,
+    pub db: f32,
+    /// On the right channel's side of the axis.
+    pub below: bool,
+    /// Printed at the handle: "T".
+    pub label: &'a str,
+    /// The handle's values in words, shown beside it while it is hovered,
+    /// dragged or focused.
+    pub readout: &'a str,
+    /// Along which axes it moves.
+    pub horizontal: bool,
+    pub vertical: bool,
+}
+
+/// Echoes and decays over time: time runs left to right from 0 to
+/// `span_seconds`, level in decibels from `floor_db` on the centre line to
+/// 0 dB at the outer edges, the left channel above the line and the right
+/// below.
+#[derive(Clone, Copy, Debug)]
+pub struct DelayView<'a> {
+    pub taps: &'a [DelayTap],
+    pub tails: &'a [DelayTail],
+    /// Time lines with their labels: beats, bars or seconds.
+    pub grid: &'a [(f32, &'a str)],
+    pub span_seconds: f32,
+    /// The level of the centre line, below zero.
+    pub floor_db: f32,
+    pub handles: &'a [DelayHandle<'a>],
+    /// A gain reduction now and the reduction that fills the bar, in dB:
+    /// a thin bar at the right edge.
+    pub reduction_db: Option<(f32, f32)>,
+    pub size: Vec2,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DelayDrag {
+    pub index: usize,
+    /// Where the drag puts the handle.
+    pub seconds: f32,
+    pub db: f32,
+}
+
+pub struct DelayViewOutput {
+    pub response: Response,
+    pub drags: Vec<DelayDrag>,
+    /// Arrow keys on a focused handle: its index and steps along time and
+    /// level (a tenth of a step with Shift). The caller sizes the steps.
+    pub nudges: Vec<(usize, f32, f32)>,
+    pub double_clicked: Option<usize>,
+    /// Whether the pointer holds a handle; the caller keeps the time span
+    /// still meanwhile.
+    pub dragging: bool,
+    /// Each handle's own response, in handle order, for context menus.
+    pub handles: Vec<Response>,
+}
+
+/// Height of the strip under a [`DelayView`]'s plot that holds the time
+/// labels, clear of the right channel's bars.
+const DELAY_LABELS: f32 = tokens::FONT_SMALL + tokens::SPACE_XS;
+
+/// The plot area of a [`DelayView`] drawn in `rect`.
+fn delay_area(rect: Rect) -> Rect {
+    let inner = rect.shrink(1.0);
+    Rect::from_min_max(inner.min, inner.max - vec2(0.0, DELAY_LABELS))
+}
+
+/// Where a [`DelayView`] drawn in `rect` puts a time and a level.
+pub fn delay_point(view: &DelayView<'_>, rect: Rect, seconds: f32, db: f32, below: bool) -> Pos2 {
+    let area = delay_area(rect);
+    let span = view.span_seconds.max(0.01);
+    let floor = view.floor_db.min(-1.0);
+    let level = (1.0 - finite(db, floor) / floor).clamp(0.0, 1.0) * area.height() * 0.5;
+    pos2(
+        area.left() + area.width() * (finite(seconds, 0.0) / span).clamp(0.0, 1.0),
+        area.center().y + if below { level } else { -level },
+    )
+}
+
+/// Echo taps, early reflections and reverb tails on a decibel axis, with a
+/// time or beat grid. Handles follow the pointer from where they were
+/// grabbed (a tenth as far with Shift) and take the arrow keys when focused;
+/// the caller maps them to its values and also shows those as dials, so
+/// dragging is never the only way.
+pub fn delay_view(ui: &mut Ui, view: &DelayView<'_>) -> DelayViewOutput {
+    let (rect, response) = frame(ui, view.size, Sense::hover());
     let colors = theme::palette(ui.ctx());
+    let area = delay_area(rect);
+    let span = view.span_seconds.max(0.01);
+    let floor = view.floor_db.min(-1.0);
+    let half = area.height() * 0.5;
+    let axis = area.center().y;
+    let point = |seconds: f32, db: f32, below: bool| delay_point(view, rect, seconds, db, below);
+    let fine = ui.input(|input| if input.modifiers.shift { 0.1 } else { 1.0 });
+    let mut drags = Vec::new();
+    let mut nudges = Vec::new();
+    let (mut double_clicked, mut dragging) = (None, false);
+    let mut union = response.clone();
+    let mut hits = Vec::with_capacity(view.handles.len());
+    // A handle at the edge of the plot stays whole inside it, and its
+    // target inside the frame. One that would lie on an earlier one gives
+    // way to the right: at a long span several crowd into the left edge,
+    // and each keeps its letter and a target of its own.
+    let room = area.shrink(HANDLE_RADIUS);
+    let mut centers: Vec<Pos2> = Vec::with_capacity(view.handles.len());
+    for handle in view.handles {
+        let mut center = point(handle.seconds, handle.db, handle.below);
+        if room.is_positive() {
+            center = center.clamp(room.min, room.max);
+        }
+        while let Some(taken) = centers.iter().find(|taken| {
+            (taken.x - center.x).abs() < tokens::HIT_TARGET
+                && (taken.y - center.y).abs() < tokens::HIT_TARGET
+        }) {
+            // Clear of the other's target and of its letter.
+            let aside = taken.x + tokens::HIT_TARGET + tokens::SPACE_XS;
+            if aside > room.right() {
+                break;
+            }
+            center.x = aside;
+        }
+        centers.push(center);
+    }
+    for (index, handle) in view.handles.iter().enumerate() {
+        let hit = ui
+            .interact(
+                Rect::from_center_size(centers[index], Vec2::splat(tokens::HIT_TARGET))
+                    .intersect(rect),
+                response.id.with(("handle", index)),
+                Sense::click_and_drag(),
+            )
+            .on_hover_cursor(match (handle.horizontal, handle.vertical) {
+                (true, false) => egui::CursorIcon::ResizeHorizontal,
+                (false, true) => egui::CursorIcon::ResizeVertical,
+                _ => egui::CursorIcon::Grab,
+            });
+        if hit.clicked() || hit.drag_started() {
+            hit.request_focus();
+        }
+        if hit.double_clicked() {
+            double_clicked = Some(index);
+        }
+        // A focused handle is a parameter control: Undo/Redo still reach the song.
+        crate::parameter_focus::register_parameter_history_focus(&hit);
+        if hit.dragged_by(egui::PointerButton::Primary) {
+            dragging = true;
+            // Where the pointer has carried the handle since it was
+            // grabbed, kept apart from the handle's value: a value that
+            // moves in steps (a note division) would swallow small moves.
+            let held = if hit.drag_started() {
+                (handle.seconds, handle.db)
+            } else {
+                ui.data(|data| data.get_temp::<(f32, f32)>(hit.id))
+                    .unwrap_or((handle.seconds, handle.db))
+            };
+            // The first frame of a drag also carries what the pointer
+            // moved before the press counted as one.
+            let delta = match (hit.drag_started(), hit.interact_pointer_pos()) {
+                (true, Some(pointer)) => ui
+                    .input(|input| input.pointer.press_origin())
+                    .map_or(hit.drag_delta(), |origin| pointer - origin),
+                _ => hit.drag_delta(),
+            };
+            let side = if handle.below { -1.0 } else { 1.0 };
+            let next = (
+                if handle.horizontal {
+                    (held.0 + delta.x / area.width().max(1.0) * span * fine).clamp(0.0, span)
+                } else {
+                    held.0
+                },
+                if handle.vertical {
+                    (held.1 + side * delta.y / half.max(1.0) * floor * fine).clamp(floor, 0.0)
+                } else {
+                    held.1
+                },
+            );
+            ui.data_mut(|data| data.insert_temp(hit.id, next));
+            if next != (handle.seconds, handle.db) {
+                drags.push(DelayDrag {
+                    index,
+                    seconds: next.0,
+                    db: next.1,
+                });
+            }
+        }
+        if hit.has_focus() {
+            let mut steps = (0.0, 0.0);
+            ui.input_mut(|input| {
+                let mut pressed = |key| {
+                    input.consume_key(egui::Modifiers::NONE, key)
+                        || input.consume_key(egui::Modifiers::SHIFT, key)
+                };
+                for (key, x, y) in [
+                    (egui::Key::ArrowRight, 1.0, 0.0),
+                    (egui::Key::ArrowLeft, -1.0, 0.0),
+                    (egui::Key::ArrowUp, 0.0, 1.0),
+                    (egui::Key::ArrowDown, 0.0, -1.0),
+                ] {
+                    if pressed(key) {
+                        steps.0 += x * fine;
+                        steps.1 += y * fine;
+                    }
+                }
+            });
+            if !handle.horizontal {
+                steps.0 = 0.0;
+            }
+            if !handle.vertical {
+                steps.1 = 0.0;
+            }
+            if steps != (0.0, 0.0) {
+                nudges.push((index, steps.0, steps.1));
+            }
+        }
+        union = union.union(hit.clone());
+        hits.push(hit);
+    }
+    if !drags.is_empty() || !nudges.is_empty() {
+        union.mark_changed();
+    }
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
         paint_frame(painter, rect, false);
-        let inner = rect.shrink2(vec2(tokens::SPACE_SM, tokens::SPACE_SM));
-        let span = data.span_seconds.max(0.01);
-        let x_of = |seconds: f32| inner.left() + inner.width() * (seconds / span).clamp(0.0, 1.0);
-        let axis = inner.center().y;
+        let clipped = painter.with_clip_rect(area);
+        for (seconds, name) in view.grid {
+            if *seconds < 0.0 || *seconds > span {
+                continue;
+            }
+            let x = point(*seconds, floor, false).x;
+            painter.line_segment(
+                [pos2(x, area.top()), pos2(x, area.bottom())],
+                Stroke::new(1.0_f32, colors.grid_minor),
+            );
+            label(
+                painter,
+                pos2(x + 3.0, rect.bottom() - 2.0),
+                Align2::LEFT_BOTTOM,
+                name,
+            );
+        }
         painter.line_segment(
-            [pos2(inner.left(), axis), pos2(inner.right(), axis)],
+            [pos2(area.left(), axis), pos2(area.right(), axis)],
             Stroke::new(1.0_f32, colors.grid_bar),
         );
-        if data.decay_seconds > 0.0 {
-            let start = data.pre_delay_seconds.max(0.0);
-            let mut upper = Vec::new();
-            for step in 0..=80 {
-                let seconds = start + (span - start).max(0.0) * step as f32 / 80.0;
-                let level = (-6.9 * (seconds - start) / data.decay_seconds).exp();
-                upper.push(pos2(x_of(seconds), axis - inner.height() * 0.5 * level));
+        for tail in view.tails {
+            if tail.decay_seconds <= 0.0 || tail.start_db <= floor {
+                continue;
             }
-            let mut shape = upper.clone();
-            shape.extend(
-                upper
-                    .iter()
-                    .rev()
-                    .map(|point| pos2(point.x, 2.0 * axis - point.y)),
-            );
-            painter.add(Shape::convex_polygon(
-                shape,
-                colors.muted.gamma_multiply(0.18),
+            let top = point(tail.start_seconds, tail.start_db, false);
+            // Unclamped: a tail may end beyond the span; the frame cuts it.
+            let end = tail.start_seconds + tail.decay_seconds * (tail.start_db - floor) / 60.0;
+            let tip = pos2(area.left() + area.width() * end / span, axis);
+            let bottom = pos2(top.x, 2.0 * axis - top.y);
+            clipped.add(Shape::convex_polygon(
+                vec![top, tip, bottom],
+                colors
+                    .muted
+                    .gamma_multiply(if tail.faint { 0.08 } else { 0.2 }),
                 Stroke::NONE,
             ));
+            if !tail.faint {
+                clipped.add(Shape::line(
+                    vec![top, tip, bottom],
+                    Stroke::new(1.0_f32, colors.muted),
+                ));
+            }
         }
-        let bar = (inner.width() / 90.0).clamp(2.0, 6.0);
-        for (seconds, left, right) in data.taps {
-            let x = x_of(*seconds);
-            painter.line_segment(
-                [
-                    pos2(x, axis),
-                    pos2(x, axis - inner.height() * 0.5 * left.clamp(0.0, 1.0)),
-                ],
-                Stroke::new(bar, colors.accent),
+        for tap in view.taps {
+            let width: f32 = if tap.thin { 1.0 } else { 3.0 };
+            let strength = if tap.faint { 0.35 } else { 1.0 };
+            for (gain, below, shade) in [(tap.left, false, 1.0), (tap.right, true, 0.6)] {
+                if gain.is_finite() && gain > 0.0 {
+                    let top = point(tap.seconds, 20.0 * gain.log10(), below);
+                    if top.y != axis && tap.seconds <= span {
+                        painter.line_segment(
+                            [pos2(top.x, axis), top],
+                            Stroke::new(
+                                width,
+                                if tap.thin {
+                                    colors.muted.gamma_multiply(strength)
+                                } else {
+                                    colors.accent.gamma_multiply(strength * shade)
+                                },
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+        if let Some((now, most)) = view.reduction_db {
+            let bar = Rect::from_min_max(
+                pos2(area.right() - tokens::SPACE_XS, area.top()),
+                area.right_bottom(),
             );
-            painter.line_segment(
-                [
-                    pos2(x, axis),
-                    pos2(x, axis + inner.height() * 0.5 * right.clamp(0.0, 1.0)),
-                ],
-                Stroke::new(bar, colors.accent.gamma_multiply(0.6)),
+            painter.rect_filled(bar, 1.0, colors.control_fill);
+            let share = (finite(now, 0.0) / most.max(1.0)).clamp(0.0, 1.0);
+            painter.rect_filled(
+                Rect::from_min_max(bar.min, pos2(bar.right(), bar.top() + bar.height() * share)),
+                1.0,
+                colors.accent,
             );
         }
-        label(painter, inner.left_bottom(), Align2::LEFT_BOTTOM, "0");
+        // The level scale stands at the right, where the picture has
+        // decayed: the left edge is where the handles start.
+        let scale = area.right()
+            - if view.reduction_db.is_some() {
+                tokens::SPACE_XS + 3.0
+            } else {
+                3.0
+            };
         label(
             painter,
-            inner.right_bottom(),
-            Align2::RIGHT_BOTTOM,
-            &format!("{span:.1} s"),
+            pos2(scale, area.top() + 1.0),
+            Align2::RIGHT_TOP,
+            "0 dB",
         );
+        label(
+            painter,
+            pos2(scale, axis - 1.0),
+            Align2::RIGHT_BOTTOM,
+            &axis_number(floor, false),
+        );
+        label(
+            painter,
+            pos2(rect.right() - 4.0, rect.bottom() - 2.0),
+            Align2::RIGHT_BOTTOM,
+            &if span < 1.0 {
+                format!("{:.0} ms", span * 1000.0)
+            } else {
+                format!("{span:.0} s")
+            },
+        );
+        for ((handle, hit), center) in view.handles.iter().zip(&hits).zip(centers) {
+            let active = hit.hovered() || hit.dragged() || hit.has_focus();
+            let color = if active { colors.text } else { colors.muted };
+            painter.circle_filled(center, HANDLE_RADIUS, colors.accent);
+            painter.circle_stroke(
+                center,
+                HANDLE_RADIUS,
+                Stroke::new(1.5_f32, if active { colors.text } else { colors.bg }),
+            );
+            let galley =
+                painter.layout_no_wrap(handle.label.to_owned(), TextRole::Note.font(), color);
+            // Beside the handle and away from the axis; left of it at the
+            // right edge.
+            let gap = HANDLE_RADIUS + 3.0;
+            let x = if center.x + gap + galley.size().x <= area.right() {
+                center.x + gap
+            } else {
+                center.x - gap - galley.size().x
+            };
+            let y = if handle.below {
+                (center.y - 2.0).min(area.bottom() - galley.size().y)
+            } else {
+                (center.y + 2.0 - galley.size().y).max(area.top())
+            };
+            painter.galley(pos2(x, y), galley, color);
+            if active && !handle.readout.is_empty() {
+                paint_bubble(
+                    painter,
+                    area,
+                    center + vec2(0.0, if handle.below { 18.0 } else { -18.0 }),
+                    HANDLE_RADIUS + tokens::SPACE_SM,
+                    handle.readout,
+                );
+            }
+        }
     }
-    describe(&response, ui, format!("Echo taps: {}", data.taps.len()));
-    response
+    describe(
+        &union,
+        ui,
+        format!(
+            "Echoes and decay: {} tap(s), {} handle(s)",
+            view.taps.len(),
+            view.handles.len()
+        ),
+    );
+    DelayViewOutput {
+        response: union,
+        drags,
+        nudges,
+        double_clicked,
+        dragging,
+        handles: hits,
+    }
 }
 
 /// Harmonic levels as bars.

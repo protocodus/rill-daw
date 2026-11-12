@@ -1,6 +1,6 @@
 use super::*;
 use daw_devices::{
-    devices::{compressor, equalizer, filter, mini, saturator},
+    devices::{compressor, equalizer, filter, mini, modulator, saturator, spacer},
     registry,
 };
 use egui::{Event, Modifiers, PointerButton, Pos2, pos2, vec2};
@@ -562,6 +562,9 @@ fn equalizer_axis_and_auto_gain_readout_follow_the_values() {
         host.values.insert(id, f64::from(spec.to_normalized(plain)));
     };
     assert_eq!((view.range_db)(&|id| host.value(id)), 12.0);
+    // Nothing is applied while Auto gain is off: its value line is empty.
+    assert_eq!((layout.readout)(AUTO_GAIN, &|id| host.value(id)), None);
+    set(&mut host, AUTO_GAIN, 1.0);
     assert_eq!(
         (layout.readout)(AUTO_GAIN, &|id| host.value(id)).as_deref(),
         Some("+0.0 dB")
@@ -993,4 +996,595 @@ fn compressor_external_sidechain_names_its_source_and_opens_routing() {
     panel.set(MODE, 1.0);
     panel.click(link(&panel), 1);
     assert_eq!(panel.host.routed, 2);
+}
+
+/// Where every control stands, whichever parameter a place shows.
+fn places(panel: &Panel) -> Vec<[i32; 4]> {
+    let mut places: Vec<[i32; 4]> = panel
+        .state
+        .control_rects
+        .iter()
+        .map(|(_, rect)| {
+            [rect.left(), rect.top(), rect.right(), rect.bottom()].map(|edge| edge.round() as i32)
+        })
+        .collect();
+    places.sort_unstable();
+    places
+}
+
+fn disabled(panel: &Panel) -> Vec<u32> {
+    let mut disabled = panel.state.disabled.clone();
+    disabled.sort_unstable();
+    disabled
+}
+
+fn key(key: egui::Key) -> Event {
+    Event::Key {
+        key,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: Modifiers::NONE,
+    }
+}
+
+#[test]
+fn modulator_and_spacer_fit_their_window_in_both_themes() {
+    for descriptor in [&modulator::DESCRIPTOR, &spacer::DESCRIPTOR] {
+        assert_eq!(panel_width(descriptor), daw_ui::tokens::POPUP_WIDTH_LG);
+        for appearance in [
+            daw_ui::theme::Appearance::Light,
+            daw_ui::theme::Appearance::Dark,
+        ] {
+            let mut host = TableHost::new(descriptor);
+            let used = render(
+                descriptor,
+                &mut host,
+                &mut PanelState::default(),
+                appearance,
+            );
+            // As the Equalizer: what the effect window shows without scrolling.
+            assert!(
+                used.height() <= 620.0,
+                "{} is {} points high",
+                descriptor.id,
+                used.height()
+            );
+        }
+        let mut all: Vec<u32> = descriptor.parameters.iter().map(|spec| spec.id).collect();
+        all.sort_unstable();
+        assert_eq!(placed(descriptor), all, "every parameter once");
+    }
+}
+
+#[test]
+fn modulator_controls_keep_their_places_in_every_mode() {
+    use modulator::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let used = panel.frame(vec![]);
+    let before = places(&panel);
+    // Thirteen places for seventeen parameters, none of them empty.
+    assert_eq!(before.len(), 13);
+    for (mode, sync) in [(1.0, 0.0), (2.0, 1.0), (0.0, 1.0), (1.0, 1.0), (2.0, 0.0)] {
+        panel.set(MODE, mode);
+        panel.set(SYNC, sync);
+        assert_eq!(panel.frame(vec![]), used, "mode {mode} sync {sync}");
+        assert_eq!(places(&panel), before, "mode {mode} sync {sync}");
+        let shown: Vec<u32> = panel
+            .state
+            .control_rects
+            .iter()
+            .map(|(id, _)| *id)
+            .collect();
+        let center = [CENTER_CHORUS, CENTER_FLANGER, CENTER_PHASER][mode as usize];
+        assert!(shown.contains(&center));
+        assert!(shown.contains(if sync > 0.5 { &DIVISION } else { &RATE }));
+        // A flanger has neither voices nor stages: Voices stays, disabled.
+        let (count, off) = match mode as usize {
+            0 => (VOICES, vec![]),
+            1 => (VOICES, vec![VOICES]),
+            _ => (STAGES, vec![]),
+        };
+        assert!(shown.contains(&count));
+        assert_eq!(disabled(&panel), off, "mode {mode}");
+    }
+    // The lines start level in all four cards, and a swapped place is the
+    // same place.
+    panel.set(MODE, 0.0);
+    panel.set(SYNC, 0.0);
+    for line in [
+        [MODE, SHAPE, CENTER_CHORUS, MIX],
+        [CHARACTER, RATE, VOICES, OUTPUT],
+    ] {
+        let top = panel.cell(line[0]).top();
+        assert!(line.iter().all(|id| panel.cell(*id).top() == top));
+    }
+    let voices = panel.cell(VOICES);
+    panel.set(MODE, 2.0);
+    assert_eq!(panel.cell(STAGES), voices);
+}
+
+#[test]
+fn modulator_mode_click_sends_the_mode_defaults_as_one_edit() {
+    use modulator::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    panel.set(FEEDBACK, -30.0);
+    panel.set(CENTER_FLANGER, 6.0);
+    // The middle one of the three segments.
+    let mode = panel.cell(MODE).center() + vec2(0.0, 6.0);
+    panel.click(mode, 1);
+    assert_eq!(panel.plain(MODE), 1.0);
+    assert_eq!(
+        panel.host.batch_ids,
+        vec![vec![MODE, FEEDBACK, CENTER_FLANGER]],
+        "one call: one Undo step"
+    );
+    assert!(panel.host.singles.is_empty());
+    assert_eq!(panel.plain(FEEDBACK), 50.0);
+    assert!((panel.plain(CENTER_FLANGER) - 1.5).abs() < 0.01);
+    panel.click(mode + vec2(70.0, 0.0), 1);
+    assert_eq!(panel.plain(MODE), 2.0);
+    assert_eq!(
+        panel.host.batch_ids.last().unwrap(),
+        &vec![MODE, FEEDBACK, CENTER_PHASER, STAGES]
+    );
+    // Any other choice is a plain edit.
+    let character = panel.cell(CHARACTER).center() + vec2(20.0, 6.0);
+    panel.click(character, 1);
+    assert_eq!(panel.plain(CHARACTER), 1.0);
+    assert_eq!(panel.host.singles, vec![CHARACTER]);
+    // A value that arrives any other way brings nothing along.
+    panel.set(FEEDBACK, 10.0);
+    panel.set(MODE, 0.0);
+    assert!((panel.plain(FEEDBACK) - 10.0).abs() < 1e-3);
+}
+
+#[test]
+fn modulator_division_is_a_detented_knob_whose_value_lists_the_options() {
+    use modulator::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    panel.set(SYNC, 1.0);
+    assert_eq!(panel.plain(DIVISION), 3.0);
+    let cell = panel.cell(DIVISION);
+    assert_eq!(cell, panel.cell(DEPTH).translate(vec2(-cell.width(), 0.0)));
+    panel.drag(cell.center(), cell.center() - vec2(0.0, 30.0));
+    let division = panel.plain(DIVISION);
+    assert!(division > 3.0 && division.fract() == 0.0, "{division}");
+    assert!(panel.host.singles.iter().all(|id| *id == DIVISION));
+    panel.click(cell.center(), 2);
+    assert_eq!(panel.plain(DIVISION), 3.0, "a double-click resets");
+    // The value under the knob opens the list.
+    assert!(!egui::Popup::is_any_open(&panel.ctx));
+    panel.click(pos2(cell.center().x, cell.bottom() - 8.0), 1);
+    assert!(egui::Popup::is_any_open(&panel.ctx));
+}
+
+#[test]
+fn modulator_readouts_word_the_values() {
+    use modulator::*;
+    let layout = panels::layout(&DESCRIPTOR);
+    let mut host = TableHost::new(&DESCRIPTOR);
+    let set = |host: &mut TableHost, id: u32, plain: f32| {
+        let spec = DESCRIPTOR.parameter(id).unwrap();
+        host.values.insert(id, f64::from(spec.to_normalized(plain)));
+    };
+    let readout = |host: &TableHost, id: u32| (layout.readout)(id, &|id| host.value(id));
+    assert_eq!(readout(&host, LOW_CUT).as_deref(), Some("Off"));
+    assert_eq!(readout(&host, FEEDBACK).as_deref(), Some("+0 %"));
+    assert_eq!(readout(&host, STEREO).as_deref(), Some("90°"));
+    assert_eq!(readout(&host, VOICES).as_deref(), Some("2 voices"));
+    assert_eq!(readout(&host, STAGES).as_deref(), Some("4 stages"));
+    assert_eq!(readout(&host, RATE), None);
+    set(&mut host, LOW_CUT, 120.0);
+    set(&mut host, FEEDBACK, -70.0);
+    set(&mut host, VOICES, 1.0);
+    assert_eq!(readout(&host, LOW_CUT), None);
+    assert_eq!(readout(&host, FEEDBACK).as_deref(), Some("-70 %"));
+    assert_eq!(readout(&host, VOICES).as_deref(), Some("1 voice"));
+    // Another wording of the same value, which the parameter reads back.
+    let feedback = DESCRIPTOR.parameter(FEEDBACK).unwrap();
+    assert_eq!(feedback.parse("-70 %"), Some(host.value(FEEDBACK) as f32));
+    let spec = |id: u32| DESCRIPTOR.parameter(id).unwrap();
+    for (id, name) in [
+        (CENTER_CHORUS, "Center"),
+        (CENTER_FLANGER, "Center"),
+        (CENTER_PHASER, "Center"),
+        (LOW_CUT, "Low cut"),
+        (FEEDBACK, "Feedback"),
+    ] {
+        assert_eq!(caption(&DESCRIPTOR, spec(id), &host, &layout), name);
+    }
+}
+
+#[test]
+fn modulator_lfo_drag_turns_rate_or_steps_division() {
+    use modulator::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let [lfo, plot] = panel.state.picture_rects[..] else {
+        panic!("the LFO and the response");
+    };
+    assert_eq!(lfo.size(), vec2(208.0, 208.0));
+    assert_eq!(plot.height(), 208.0);
+    assert!(plot.left() > lfo.right());
+    assert!(plot.right() >= panel.cell(OUTPUT).right());
+
+    let rate = panel.plain(RATE);
+    let from = lfo.center();
+    panel.drag(from, from + vec2(60.0, 30.0));
+    assert!(panel.plain(RATE) > rate * 2.0, "{}", panel.plain(RATE));
+    assert!(panel.host.singles.iter().all(|id| *id == RATE));
+    panel.click(from, 2);
+    assert!(
+        (panel.plain(RATE) - rate).abs() < 1e-3,
+        "a double-click resets"
+    );
+
+    panel.set(SYNC, 1.0);
+    panel.host.singles.clear();
+    panel.drag(from, from + vec2(60.0, 0.0));
+    // Sixty points are ten notches: two steps towards shorter divisions.
+    assert_eq!(panel.plain(DIVISION), 5.0);
+    assert_eq!(panel.host.singles, vec![DIVISION, DIVISION]);
+    assert!((panel.plain(RATE) - rate).abs() < 1e-3);
+}
+
+/// Where the Modulator's response draws a frequency on its 0 dB line.
+fn swept(panel: &Panel, frequency: f32) -> Pos2 {
+    let inner = panel.state.picture_rects[1].shrink(1.0);
+    pos2(
+        inner.left() + inner.width() * (frequency / 20.0).ln() / 1000f32.ln(),
+        inner.center().y,
+    )
+}
+
+#[test]
+fn modulator_handle_sets_the_modes_center_and_the_wheel_depth() {
+    use modulator::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    // A chorus at 12 ms: the comb's first tooth is at 83 Hz.
+    let from = swept(&panel, 1000.0 / 12.0);
+    panel.drag(from, from + vec2(40.0, -30.0));
+    let center = panel.plain(CENTER_CHORUS);
+    assert!((7.0..=9.5).contains(&center), "{center}: right is shorter");
+    assert!(panel.host.singles.iter().all(|id| *id == CENTER_CHORUS));
+    assert!(panel.host.batch_ids.is_empty());
+
+    let depth = panel.plain(DEPTH);
+    panel.frame(vec![Event::PointerMoved(swept(&panel, 1000.0 / center))]);
+    panel.frame(vec![]);
+    panel.frame(vec![wheel(4.0)]);
+    panel.frame(vec![]);
+    assert!(
+        (panel.plain(DEPTH) - depth - 10.0).abs() < 0.5,
+        "four notches"
+    );
+    assert_eq!(panel.plain(CENTER_CHORUS), center);
+
+    panel.click(swept(&panel, 1000.0 / center), 2);
+    assert!((panel.plain(CENTER_CHORUS) - 12.0).abs() < 0.01, "reset");
+
+    // A phaser's handle is the stages' corner itself.
+    panel.set(MODE, 2.0);
+    let from = swept(&panel, 800.0);
+    panel.drag(from, from + vec2(50.0, 0.0));
+    assert!(panel.plain(CENTER_PHASER) > 1100.0);
+    assert!((panel.plain(CENTER_CHORUS) - 12.0).abs() < 0.01);
+}
+
+#[test]
+fn modulator_picture_follows_the_playing_device_without_editing() {
+    use modulator::*;
+    for mode in [0.0, 1.0, 2.0] {
+        let mut panel = Panel::new(&DESCRIPTOR);
+        panel.set(MODE, mode);
+        panel.set(VOICES, 4.0);
+        panel.set(FEEDBACK, 80.0);
+        let values = panel.host.values.clone();
+        let telemetry = Arc::new(Telemetry::default());
+        telemetry.set_value(TELEMETRY_SAMPLE_RATE, 44_100.0);
+        telemetry.set_value(TELEMETRY_PHASE, 0.7);
+        telemetry.set_value(TELEMETRY_SWEEP_LEFT, -0.6);
+        telemetry.set_value(TELEMETRY_SWEEP_RIGHT, f32::NAN);
+        let block = vec![0.25; 512];
+        telemetry.record_output(&block, &block);
+        panel.host.telemetry = Some(telemetry);
+        let rects = panel.state.picture_rects.clone();
+        panel.frame(vec![]);
+        assert_eq!(panel.state.picture_rects, rects, "mode {mode}");
+        assert_eq!(panel.host.values, values, "showing edits nothing");
+    }
+}
+
+#[test]
+fn spacer_reverb_type_grid_fits_its_two_cells() {
+    use spacer::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    panel.frame(vec![]);
+    let place = |id: u32| {
+        let rects = &panel.state.control_rects;
+        rects.iter().find(|(control, _)| *control == id).unwrap().1
+    };
+    // A place grows with a control too wide for it and pushes its line
+    // out of the card.
+    let (kind, cell) = (place(REVERB_TYPE), place(PRE_DELAY));
+    assert!((kind.width() - 2.0 * cell.width()).abs() < 0.5, "{kind:?}");
+    assert_eq!(kind.left(), place(REVERB_LOW_CUT).left());
+    let grids = &panel.state.grid_rects;
+    let (_, grid) = grids.iter().find(|(id, _)| *id == REVERB_TYPE).unwrap();
+    assert!(kind.contains_rect(*grid), "{grid:?} in {kind:?}");
+}
+
+#[test]
+fn spacer_controls_keep_their_places_whatever_is_switched() {
+    use spacer::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let used = panel.frame(vec![]);
+    let before = places(&panel);
+    // Twenty-seven parameters in twenty-six places: Time and Division share one.
+    assert_eq!(before.len(), 26);
+    assert_eq!(disabled(&panel), Vec::<u32>::new());
+    let echo: Vec<u32> = vec![
+        ECHO_TYPE,
+        ECHO_SYNC,
+        ECHO_DIVISION,
+        ECHO_FEEDBACK,
+        ECHO_STEREO,
+        ECHO_LOW_CUT,
+        ECHO_HIGH_CUT,
+        ECHO_WOBBLE,
+        ECHO_LEVEL,
+    ];
+    let reverb: Vec<u32> = (REVERB_TYPE..=REVERB_LEVEL).collect();
+    for (echo_on, reverb_on, sync, kind) in [
+        (0.0, 1.0, 1.0, 0.0),
+        (1.0, 0.0, 0.0, 1.0),
+        (0.0, 0.0, 0.0, 2.0),
+        (1.0, 1.0, 0.0, 2.0),
+    ] {
+        panel.set(ECHO_ON, echo_on);
+        panel.set(REVERB_ON, reverb_on);
+        panel.set(ECHO_SYNC, sync);
+        panel.set(ECHO_TYPE, kind);
+        panel.set(REVERB_TYPE, kind);
+        let case = format!("echo {echo_on} reverb {reverb_on} sync {sync}");
+        assert_eq!(panel.frame(vec![]), used, "{case}");
+        assert_eq!(places(&panel), before, "{case}");
+        // A section that is off stays in place, disabled; Routing needs both.
+        let mut off: Vec<u32> = Vec::new();
+        if echo_on < 0.5 {
+            off.extend(echo.iter().copied());
+        }
+        if reverb_on < 0.5 {
+            off.extend(reverb.iter().copied());
+        }
+        if echo_on < 0.5 || reverb_on < 0.5 {
+            off.push(ROUTING);
+        }
+        off.sort_unstable();
+        // Time stands where Division did while the echo is not synced.
+        let shown: Vec<u32> = disabled(&panel)
+            .into_iter()
+            .map(|id| if id == ECHO_TIME { ECHO_DIVISION } else { id })
+            .collect();
+        let mut shown = shown;
+        shown.sort_unstable();
+        assert_eq!(shown, off, "{case}");
+    }
+    // The picture is as tall as the Output card beside it and shares the
+    // edges of the Echo card below.
+    let picture = panel.state.picture_rects[0];
+    let below = panel.cell(ECHO_ON);
+    assert!((picture.left() - below.left()).abs() <= 14.0);
+    assert!(picture.right() < panel.cell(ROUTING).left());
+    assert!(picture.bottom() < below.top());
+    assert!((picture.height() - 175.0).abs() < 12.0, "{picture:?}");
+    // Both sections start their lines level, and Level closes each.
+    for line in [[ECHO_TYPE, REVERB_TYPE], [ECHO_STEREO, REVERB_LOW_CUT]] {
+        assert_eq!(panel.cell(line[0]).top(), panel.cell(line[1]).top());
+    }
+    assert_eq!(panel.cell(ECHO_LEVEL).top(), panel.cell(REVERB_LEVEL).top());
+}
+
+#[test]
+fn spacer_title_lamps_switch_their_sections() {
+    use spacer::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    for id in [ECHO_ON, REVERB_ON] {
+        let lamp = panel.cell(id);
+        assert_eq!(panel.plain(id), 1.0);
+        panel.click(lamp.left_center() + vec2(5.0, 0.0), 1);
+        assert_eq!(panel.plain(id), 0.0);
+        // The name beside the lamp is part of the switch.
+        panel.click(lamp.right_center() - vec2(4.0, 0.0), 1);
+        assert_eq!(panel.plain(id), 1.0);
+    }
+    assert_eq!(
+        panel.host.singles,
+        vec![ECHO_ON, ECHO_ON, REVERB_ON, REVERB_ON]
+    );
+    // A control of a section that is off does not move.
+    panel.set(REVERB_ON, 0.0);
+    let decay = panel.cell(DECAY).center();
+    let before = panel.plain(DECAY);
+    panel.drag(decay, decay - vec2(0.0, 40.0));
+    assert_eq!(panel.plain(DECAY), before);
+}
+
+#[test]
+fn spacer_readouts_say_what_the_ends_of_the_ranges_mean() {
+    use spacer::*;
+    let layout = panels::layout(&DESCRIPTOR);
+    let mut host = TableHost::new(&DESCRIPTOR);
+    let set = |host: &mut TableHost, id: u32, plain: f32| {
+        let spec = DESCRIPTOR.parameter(id).unwrap();
+        host.values.insert(id, f64::from(spec.to_normalized(plain)));
+    };
+    let readout = |host: &TableHost, id: u32| (layout.readout)(id, &|id| host.value(id));
+    for id in [ECHO_LEVEL, REVERB_LEVEL, ECHO_LOW_CUT, REVERB_HIGH_CUT, MIX] {
+        assert_eq!(readout(&host, id), None, "parameter {id}");
+    }
+    assert_eq!(readout(&host, DUCK).as_deref(), Some("Off"));
+    for id in [ECHO_LEVEL, REVERB_LEVEL] {
+        set(&mut host, id, -60.0);
+        assert_eq!(readout(&host, id).as_deref(), Some("−∞ dB"));
+    }
+    set(&mut host, ECHO_LOW_CUT, 20.0);
+    set(&mut host, ECHO_HIGH_CUT, 20_000.0);
+    set(&mut host, REVERB_LOW_CUT, 20.0);
+    set(&mut host, REVERB_HIGH_CUT, 20_000.0);
+    for id in [ECHO_LOW_CUT, ECHO_HIGH_CUT, REVERB_LOW_CUT, REVERB_HIGH_CUT] {
+        assert_eq!(readout(&host, id).as_deref(), Some("Off"), "parameter {id}");
+    }
+    // A tape loop keeps its 20 Hz high-pass; a bucket-brigade line also its
+    // own band limit.
+    set(&mut host, ECHO_TYPE, 1.0);
+    assert_eq!(readout(&host, ECHO_LOW_CUT), None);
+    assert_eq!(readout(&host, ECHO_HIGH_CUT).as_deref(), Some("Off"));
+    set(&mut host, ECHO_TYPE, 2.0);
+    assert_eq!(readout(&host, ECHO_HIGH_CUT), None);
+    let spec = |id: u32| DESCRIPTOR.parameter(id).unwrap();
+    assert_eq!(
+        caption(&DESCRIPTOR, spec(ECHO_LEVEL), &host, &layout),
+        "Level"
+    );
+    assert_eq!(
+        caption(&DESCRIPTOR, spec(REVERB_TYPE), &host, &layout),
+        "Type"
+    );
+    assert_eq!(
+        caption(&DESCRIPTOR, spec(PRE_DELAY), &host, &layout),
+        "Pre-delay"
+    );
+}
+
+/// Where the Spacer's picture draws a time and a level on a span.
+fn echo_point(panel: &Panel, span: f32, seconds: f32, db: f32, below: bool) -> Pos2 {
+    let view = daw_ui::DelayView {
+        taps: &[],
+        tails: &[],
+        grid: &[],
+        span_seconds: span,
+        floor_db: -60.0,
+        handles: &[],
+        reduction_db: None,
+        size: egui::Vec2::ZERO,
+    };
+    daw_ui::delay_point(&view, panel.state.picture_rects[0], seconds, db, below)
+}
+
+#[test]
+fn spacer_echo_handles_set_time_level_and_feedback() {
+    use spacer::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    // A dotted eighth at 120 bpm is 375 ms; six of them need four seconds.
+    let from = echo_point(&panel, 4.0, 0.375, -6.0, false);
+    let to = echo_point(&panel, 4.0, 0.75, -18.0, false);
+    panel.frame(vec![Event::PointerMoved(from)]);
+    panel.frame(vec![button(from, true)]);
+    for step in 1..=4 {
+        panel.frame(vec![Event::PointerMoved(from.lerp(to, step as f32 / 4.0))]);
+        assert_eq!(panel.state.held_span, Some(4.0), "the axis holds still");
+    }
+    panel.frame(vec![button(to, false)]);
+    panel.frame(vec![]);
+    assert_eq!(panel.state.held_span, None);
+    // The division nearest to 750 ms: a dotted quarter.
+    assert_eq!(panel.plain(ECHO_DIVISION), 12.0);
+    assert!((panel.plain(ECHO_LEVEL) + 18.0).abs() < 0.6);
+    assert!(panel.host.singles.is_empty());
+    assert!(
+        panel
+            .host
+            .batch_ids
+            .iter()
+            .all(|ids| ids == &[ECHO_DIVISION, ECHO_LEVEL]),
+        "time and level are one gesture"
+    );
+
+    // Free of the tempo, the same handle is Time.
+    panel.set(ECHO_DIVISION, 9.0);
+    panel.set(ECHO_LEVEL, -6.0);
+    panel.set(ECHO_SYNC, 0.0);
+    let from = echo_point(&panel, 4.0, 0.35, -6.0, false);
+    panel.drag(from, echo_point(&panel, 4.0, 0.6, -6.0, false));
+    assert!((panel.plain(ECHO_TIME) - 600.0).abs() < 15.0);
+    assert!((panel.plain(ECHO_LEVEL) + 6.0).abs() < 0.1);
+
+    // The second echo, on the right in ping-pong: its height is Feedback.
+    panel.set(ECHO_TIME, 350.0);
+    let level = |feedback: f32| -6.0 + 20.0 * (feedback / 100.0).log10();
+    let from = echo_point(&panel, 4.0, 0.7, level(35.0), true);
+    panel.host.singles.clear();
+    panel.drag(from, echo_point(&panel, 4.0, 0.7, level(70.0), true));
+    assert!((panel.plain(ECHO_FEEDBACK) - 70.0).abs() < 2.0);
+    assert!(panel.host.singles.iter().all(|id| *id == ECHO_FEEDBACK));
+    assert!((panel.plain(ECHO_TIME) - 350.0).abs() < 1.0);
+    let at = echo_point(&panel, 4.0, 0.7, level(panel.plain(ECHO_FEEDBACK)), true);
+    panel.click(at, 2);
+    assert_eq!(panel.plain(ECHO_FEEDBACK), 35.0, "a double-click resets");
+}
+
+#[test]
+fn spacer_reverb_handles_set_pre_delay_level_and_decay() {
+    use spacer::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let from = echo_point(&panel, 4.0, 0.015, -9.0, false);
+    panel.drag(from, echo_point(&panel, 4.0, 0.115, -21.0, false));
+    assert!((panel.plain(PRE_DELAY) - 115.0).abs() < 8.0);
+    assert!((panel.plain(REVERB_LEVEL) + 21.0).abs() < 0.6);
+    assert!(
+        panel
+            .host
+            .batch_ids
+            .iter()
+            .all(|ids| ids == &[PRE_DELAY, REVERB_LEVEL])
+    );
+    panel.set(PRE_DELAY, 15.0);
+    panel.set(REVERB_LEVEL, -9.0);
+
+    // The tail has fallen from −9 dB to the floor after 51/60 of Decay.
+    let end = |decay: f32| 0.015 + decay * 51.0 / 60.0;
+    let from = echo_point(&panel, 4.0, end(1.8), -60.0, false);
+    panel.host.singles.clear();
+    panel.drag(from, echo_point(&panel, 4.0, end(3.0), -60.0, false));
+    let decay = panel.plain(DECAY);
+    assert!((decay - 3.0).abs() < 0.1, "{decay}");
+    assert!(panel.host.singles.iter().all(|id| *id == DECAY));
+    // The handle keeps the focus: the arrow keys turn the same value.
+    panel.frame(vec![key(egui::Key::ArrowRight)]);
+    panel.frame(vec![]);
+    assert!(panel.plain(DECAY) > decay);
+    panel.frame(vec![key(egui::Key::ArrowUp)]);
+    assert!(panel.host.singles.iter().all(|id| *id == DECAY));
+
+    // A section that is off shows no handles.
+    panel.set(DECAY, 1.8);
+    panel.set(REVERB_ON, 0.0);
+    let values = panel.host.values.clone();
+    let from = echo_point(&panel, 2.0, end(1.8), -60.0, false);
+    panel.drag(from, from + vec2(60.0, 0.0));
+    assert_eq!(panel.host.values, values);
+}
+
+#[test]
+fn spacer_picture_follows_the_playing_device_without_editing() {
+    use spacer::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    panel.set(DUCK, 70.0);
+    let values = panel.host.values.clone();
+    let telemetry = Arc::new(Telemetry::default());
+    telemetry.set_value(TELEMETRY_SAMPLE_RATE, 96_000.0);
+    telemetry.set_value(TELEMETRY_TEMPO, 60.0);
+    telemetry.set_value(TELEMETRY_DUCK, 12.0);
+    let block = vec![0.25; 512];
+    telemetry.record_output(&block, &block);
+    panel.host.telemetry = Some(telemetry);
+    let rects = panel.state.picture_rects.clone();
+    panel.frame(vec![]);
+    assert_eq!(panel.state.picture_rects, rects);
+    assert_eq!(panel.host.values, values, "showing edits nothing");
+    // At 60 bpm the dotted eighth is 750 ms: T stands there.
+    let from = echo_point(&panel, 8.0, 0.75, -6.0, false);
+    panel.drag(from, from - vec2(0.0, -20.0));
+    assert!(panel.plain(ECHO_LEVEL) < -8.0);
 }

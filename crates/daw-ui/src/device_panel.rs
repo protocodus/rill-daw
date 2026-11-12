@@ -618,8 +618,18 @@ fn group_title(ui: &Ui, title: &str) -> std::sync::Arc<egui::Galley> {
 /// separates it from the controls. Distinct from the sentence-case
 /// [`control_caption`]s under it, so the panel's two levels never read alike.
 pub fn device_section_title(ui: &mut Ui, title: &str) -> Response {
+    device_section_header(ui, title, None)
+}
+
+const HEADER_LAMP: f32 = 11.0;
+
+/// A [`device_section_title`] that switches its section when `enable` is
+/// given: a lamp stands in front of the name, and a click on either flips
+/// it. As tall as the plain title, so cards with and without a lamp share
+/// a row. The response is `changed` when the click flipped the value.
+pub fn device_section_header(ui: &mut Ui, title: &str, enable: Option<&mut bool>) -> Response {
     let galley = group_title(ui, title);
-    let (rect, response) = ui.allocate_exact_size(
+    let (rect, mut response) = ui.allocate_exact_size(
         vec2(
             ui.available_width(),
             galley.size().y + tokens::SPACE_SM + tokens::BORDER_WIDTH,
@@ -627,13 +637,46 @@ pub fn device_section_title(ui: &mut Ui, title: &str) -> Response {
         egui::Sense::hover(),
     );
     let colors = theme::palette(ui.ctx());
-    ui.painter().galley(rect.left_top(), galley, colors.muted);
+    let mut text_left = rect.left();
+    let on = enable.as_deref().copied();
+    if let Some(value) = enable {
+        text_left += HEADER_LAMP + tokens::SPACE_SM;
+        // The lamp and the name; the rest of the line stays free.
+        let target = egui::Rect::from_min_max(
+            rect.left_top(),
+            egui::pos2(
+                text_left + galley.size().x,
+                rect.bottom() - tokens::BORDER_WIDTH,
+            ),
+        );
+        let mut hit = ui.interact(target, response.id.with("enable"), egui::Sense::click());
+        if hit.clicked() {
+            *value = !*value;
+            hit.mark_changed();
+        }
+        crate::device_controls::paint_lamp(
+            ui.painter(),
+            egui::pos2(
+                rect.left() + HEADER_LAMP * 0.5,
+                rect.top() + galley.size().y * 0.5,
+            ),
+            HEADER_LAMP,
+            *value,
+            hit.has_focus(),
+        );
+        response = hit.on_hover_cursor(egui::CursorIcon::PointingHand);
+    }
+    ui.painter()
+        .galley(egui::pos2(text_left, rect.top()), galley, colors.muted);
     ui.painter().hline(
         rect.x_range(),
         rect.bottom() - tokens::BORDER_WIDTH * 0.5,
         egui::Stroke::new(tokens::BORDER_WIDTH, colors.line),
     );
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, title));
+    response.widget_info(|| match on {
+        Some(on) => egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, on, title),
+        None => egui::WidgetInfo::labeled(egui::WidgetType::Label, true, title),
+    });
     response
 }
 

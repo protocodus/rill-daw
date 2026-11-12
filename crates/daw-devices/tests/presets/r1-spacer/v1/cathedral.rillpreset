@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Cathedral",
+  "author": "Rill",
+  "category": "Reverb",
+  "tags": ["pad", "choir"],
+  "description": "Very long and dark.",
+  "parameters": {
+    "echo.on": false,
+    "reverb.type": "Hall",
+    "reverb.size": 100.0,
+    "reverb.decay": 9.0,
+    "reverb.pre_delay": 35.0,
+    "reverb.damping": 60.0,
+    "reverb.movement": 40.0,
+    "reverb.width": 130.0
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device": "r1-modulator",
+  "name": "Deep Phaser",
+  "author": "Rill",
+  "category": "Phaser",
+  "tags": ["pad", "synth"],
+  "description": "Twelve stages, slow.",
+  "parameters": {
+    "mode": "Phaser",
+    "stages": "12",
+    "feedback": 60.0,
+    "rate": 0.1,
+    "depth": 80.0,
+    "center.phaser": 1200.0
+  }
+}

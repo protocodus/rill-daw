@@ -588,6 +588,36 @@ pub fn toggle_led_width(ui: &Ui, label: &str) -> f32 {
             .x
 }
 
+/// The lamp of a [`toggle_led`], `diameter` across with its glow.
+pub(crate) fn paint_lamp(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    diameter: f32,
+    on: bool,
+    focused: bool,
+) {
+    let colors = theme::palette(painter.ctx());
+    let radius = diameter * 0.5;
+    if on {
+        painter.circle_filled(center, radius + 2.0, colors.accent.gamma_multiply(0.25));
+        painter.circle_filled(center, radius - 1.0, colors.accent);
+    } else {
+        painter.circle_filled(center, radius - 1.0, colors.control_fill);
+        painter.circle_stroke(
+            center,
+            radius - 1.0,
+            Stroke::new(tokens::BORDER_WIDTH, colors.muted),
+        );
+    }
+    if focused {
+        painter.circle_stroke(
+            center,
+            radius + 2.0,
+            Stroke::new(tokens::FOCUS_WIDTH, colors.text),
+        );
+    }
+}
+
 /// A section enable: a small lit lamp with a caption.
 pub fn toggle_led(ui: &mut Ui, value: &mut bool, label: &str) -> Response {
     let colors = theme::palette(ui.ctx());
@@ -606,30 +636,7 @@ pub fn toggle_led(ui: &mut Ui, value: &mut bool, label: &str) -> Response {
     }
     if ui.is_rect_visible(rect) {
         let center = egui::pos2(rect.left() + lamp * 0.5, rect.center().y);
-        if *value {
-            ui.painter().circle_filled(
-                center,
-                lamp * 0.5 + 2.0,
-                colors.accent.gamma_multiply(0.25),
-            );
-            ui.painter()
-                .circle_filled(center, lamp * 0.5 - 1.0, colors.accent);
-        } else {
-            ui.painter()
-                .circle_filled(center, lamp * 0.5 - 1.0, colors.control_fill);
-            ui.painter().circle_stroke(
-                center,
-                lamp * 0.5 - 1.0,
-                Stroke::new(tokens::BORDER_WIDTH, colors.muted),
-            );
-        }
-        if response.has_focus() {
-            ui.painter().circle_stroke(
-                center,
-                lamp * 0.5 + 2.0,
-                Stroke::new(tokens::FOCUS_WIDTH, colors.text),
-            );
-        }
+        paint_lamp(ui.painter(), center, lamp, *value, response.has_focus());
         ui.painter().galley(
             egui::pos2(
                 rect.left() + lamp + tokens::SPACE_SM,
@@ -672,6 +679,30 @@ pub fn value_link(ui: &mut Ui, text: &str, attention: bool, max_width: f32) -> R
     }
     response.widget_info(|| WidgetInfo::labeled(WidgetType::Link, ui.is_enabled(), text));
     response
+}
+
+/// A [`value_link`] reading `text`, the current one of `options`, that
+/// lists them all when clicked: the way to pick an option by name under a
+/// detented knob, where a row of toggles or a drop-down has no room.
+/// Returns the option picked this frame.
+pub fn value_menu(
+    ui: &mut Ui,
+    text: &str,
+    options: &[&str],
+    selected: usize,
+    max_width: f32,
+) -> (Response, Option<usize>) {
+    let response = value_link(ui, text, false, max_width);
+    let mut picked = None;
+    egui::Popup::menu(&response).show(|ui| {
+        for (index, option) in options.iter().enumerate() {
+            if crate::selectable(ui, index == selected, *option).clicked() {
+                picked = Some(index);
+                ui.close();
+            }
+        }
+    });
+    (response, picked)
 }
 
 /// Per-axis outcome of an [`xy_pad`] frame.
