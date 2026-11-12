@@ -1063,6 +1063,24 @@ fn a_band_placed_while_off_stays_silent() {
     }
 }
 
+/// The 10 ms fade is 441 samples at 44.1 kHz, so it ends inside a tick.
+#[test]
+fn a_band_switched_off_ends_its_fade_on_the_dry_signal() {
+    let b = BANDS[0];
+    let mut device = device(44_100.0, &[(b + BAND_GAIN, 24.0)]);
+    let input = vec![0.25_f32; 44_100];
+    let boosted = run_mono(&mut *device, &input);
+    assert!(boosted[44_099] > 3.0);
+    set(&mut *device, &[(b + BAND_ON, 0.0)]);
+    let faded = run_mono(&mut *device, &input);
+    let largest_step = faded
+        .windows(2)
+        .map(|pair| (pair[1] - pair[0]).abs())
+        .fold(0.0, f32::max);
+    assert!(largest_step < 0.05, "{largest_step}");
+    assert_eq!(faded[44_099], 0.25);
+}
+
 /// Pink noise from 40 Hz to 16 kHz at −20 dBFS RMS: equal power per octave,
 /// built from sines so that it is the same on every run.
 fn pink(rate: f64, frames: usize) -> Vec<f32> {

@@ -741,10 +741,15 @@ impl Section {
         for (left, right) in left.iter_mut().zip(right) {
             let mix = self.ramp.advance();
             let filtered = [state_left.tick(*left, mix), state_right.tick(*right, mix)];
-            if self.wet.settled() {
+            // A fade can end inside the block, at either end.
+            if self.wet.settled() && self.wet.value() == 1.0 {
                 [*left, *right] = filtered;
             } else {
-                let wet = self.wet.next();
+                let wet = if self.wet.settled() {
+                    self.wet.value()
+                } else {
+                    self.wet.next()
+                };
                 *left += wet * (filtered[0] - *left);
                 *right += wet * (filtered[1] - *right);
             }
