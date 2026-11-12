@@ -903,8 +903,8 @@ with its header:
 
 | Row | Cell (columns of 12) | Line 1 | Line 2 |
 | --- | --- | --- | --- |
-| 1 | Picture (7), without a card | `delay_view` | |
-| 1 | Output (5) | Routing as toggle buttons (three cells); Mix; Output | |
+| 1 | Picture (8), without a card | `delay_view` | |
+| 1 | Output (4) | Routing as stacked toggle buttons (two cells); Mix; Output | |
 | 2 | Echo (6), lamp and model in the title | Sync lamp; Time, or Division while synced, in one cell; Feedback; Taps; Stereo as toggle buttons (Mono, Ping, Wide) | Diffusion; Color; Wobble; Low cut; Duck; Level |
 | 2 | Reverb (6), lamp and model in the title | Pre-delay; Size; Decay; Damping; Diffusion; Movement | Seed; Color; Low cut; Width; Duck; Level |
 

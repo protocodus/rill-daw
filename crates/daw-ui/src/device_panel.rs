@@ -569,7 +569,7 @@ impl<'a> DevicePanel<'a> {
 /// Thickness of a [`device_frame`]'s border.
 pub const DEVICE_FRAME_BORDER: f32 = 3.0;
 /// The width a [`device_frame`] takes from its contents, both sides together.
-pub const DEVICE_FRAME_INSET: f32 = 2.0 * (DEVICE_FRAME_BORDER + tokens::SPACE_SM);
+pub const DEVICE_FRAME_INSET: f32 = 2.0 * (DEVICE_FRAME_BORDER + tokens::PADDING_X);
 const DEVICE_FRAME_RADIUS: u8 = 10;
 
 /// The frame every device sits in, so each one reads as one unit: a thick
@@ -598,7 +598,7 @@ pub fn device_frame(ui: &mut Ui, name: &str) -> DeviceFrame {
     // The preset group and a little air above and below it.
     let bar_height = tokens::CONTROL_HEIGHT + 2.0 * tokens::SPACE_XS + 2.0 * 3.0;
     let bar_rect = egui::Rect::from_min_size(top, vec2(width, bar_height));
-    let inner = bar_rect.shrink2(vec2(tokens::SPACE_SM + DEVICE_FRAME_BORDER, 0.0));
+    let inner = bar_rect.shrink2(vec2(tokens::PADDING_X + DEVICE_FRAME_BORDER, 0.0));
     let mut title = ui.new_child(
         egui::UiBuilder::new()
             .id_salt("device_frame_name")
@@ -652,9 +652,9 @@ impl DeviceFrame {
             .max
             .y
             .max(self.bar.min_rect().bottom() + tokens::SPACE_XS);
-        let side = DEVICE_FRAME_BORDER + tokens::SPACE_SM;
+        let side = DEVICE_FRAME_BORDER + tokens::PADDING_X;
         let body_rect = egui::Rect::from_min_max(
-            egui::pos2(self.top.x + side, bar_rect.bottom() + tokens::SPACE_SM),
+            egui::pos2(self.top.x + side, bar_rect.bottom() + tokens::PADDING_Y),
             egui::pos2(self.top.x + self.width - side, f32::INFINITY),
         );
         let mut child = ui.new_child(
@@ -665,7 +665,7 @@ impl DeviceFrame {
         );
         child.set_width(body_rect.width());
         let inner = body(&mut child);
-        let bottom = child.min_rect().bottom() + side;
+        let bottom = child.min_rect().bottom() + DEVICE_FRAME_BORDER + tokens::PADDING_Y;
         let frame = egui::Rect::from_min_max(self.top, egui::pos2(self.top.x + self.width, bottom));
         ui.allocate_rect(frame, egui::Sense::hover());
         let radius = egui::CornerRadius::same(DEVICE_FRAME_RADIUS);
