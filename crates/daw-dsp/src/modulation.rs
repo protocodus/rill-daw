@@ -506,7 +506,10 @@ impl ModulationKernel {
             _ => self.lfo.advance(increment),
         }
         let phase = self.lfo.phase();
-        let away = (phase - self.expected_phase).rem_euclid(1.0);
+        // Both are phases, so one turn brings the difference into 0..1
+        // without a remainder.
+        let away = phase - self.expected_phase;
+        let away = if away < 0.0 { away + 1.0 } else { away };
         let jumped = self.started && away.min(1.0 - away) > JUMP;
         self.expected_phase = phase + increment;
         if jumped {

@@ -2122,3 +2122,72 @@ fn drums_disable_what_does_not_apply_in_place() {
         "nothing moves"
     );
 }
+
+#[test]
+fn every_cell_grid_fills_its_lines_and_its_rows_share_one_width() {
+    for descriptor in registry() {
+        let layout = panels::layout(descriptor);
+        if !layout.cells {
+            continue;
+        }
+        let mut rows: HashMap<usize, u32> = HashMap::new();
+        if let panels::PicturePlace::Row { row, span } = layout.picture_place {
+            rows.insert(row, u32::from(span));
+        }
+        for section in &layout.sections {
+            *rows.entry(section.row).or_default() += u32::from(section.span);
+            for line in &section.lines {
+                let cells: u32 = line
+                    .iter()
+                    .map(|slot| match slot {
+                        panels::Slot::Control(_, cells)
+                        | panels::Slot::Blank(cells)
+                        | panels::Slot::Faders(_, cells)
+                        | panels::Slot::Swap(_, cells) => u32::from(*cells),
+                    })
+                    .sum();
+                assert_eq!(
+                    cells,
+                    u32::from(section.span),
+                    "{} {}",
+                    descriptor.name,
+                    section.title
+                );
+            }
+        }
+        let widths: Vec<u32> = rows.values().copied().collect();
+        assert!(
+            widths.windows(2).all(|pair| pair[0] == pair[1]),
+            "{}: {rows:?}",
+            descriptor.name
+        );
+    }
+}
+
+#[test]
+fn a_lamp_only_heads_a_table_column() {
+    for descriptor in registry() {
+        let layout = panels::layout(descriptor);
+        for (id, _) in layout.leds {
+            let table = layout
+                .sections
+                .iter()
+                .find(|section| section.ids().any(|placed| placed == *id))
+                .is_some_and(|section| section.table.is_some());
+            assert!(table, "{} parameter {id}", descriptor.name);
+        }
+    }
+}
+
+#[test]
+fn filter_keeps_every_control_in_its_cell_whatever_the_model() {
+    let mut panel = Panel::new(&filter::DESCRIPTOR);
+    let before = places(&panel);
+    assert!(panel.state.disabled.contains(&filter::MORPH));
+    // Vowel has a Morph and neither Type nor Slope.
+    panel.set(filter::MODEL, 8.0);
+    panel.frame(vec![]);
+    assert_eq!(places(&panel), before);
+    assert!(!panel.state.disabled.contains(&filter::MORPH));
+    assert!(panel.state.disabled.contains(&filter::TYPE));
+}

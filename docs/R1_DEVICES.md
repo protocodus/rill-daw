@@ -584,7 +584,7 @@ and a new device has little to decide:
    number only names a variation, a `variation_stepper`. The stages of an
    envelope: `fader`s side by side, read as its shape. Longer lists: a
    drop-down or `stepped_selector`; in a one-cell place of a cell grid, a
-   dial with one detent per option over a `value_menu` (a note division). On/off: `toggle_led`. One hero knob at most per panel (64 points); standard knobs
+   dial with one detent per option over a `value_menu` (a note division). On/off: a captioned `switch` in a cell of its own, with a value line like any other control; a lamp (`toggle_led`) only where it heads something, a card's title or a table's column. One hero knob at most per panel (64 points); standard knobs
    are 48, dense rows 34.
 6. **Color.** Neutral surfaces from the theme; one value-arc color for all
    knobs; orange only for automation, violet only for modulation, pink only
@@ -925,7 +925,7 @@ with its header:
 | --- | --- | --- | --- |
 | 1 | Picture (8), without a card | `delay_view` | |
 | 1 | Output (4) | Routing as stacked toggle buttons (two cells); Mix; Output | |
-| 2 | Echo (6), lamp and model in the title | Sync lamp; Time, or Division while synced, in one cell; Feedback; Taps; Stereo as toggle buttons (Mono, Ping, Wide) | Diffusion; Color; Wobble; Low cut; Duck; Level |
+| 2 | Echo (6), lamp and model in the title | Sync switch; Time, or Division while synced, in one cell; Feedback; Taps; Stereo as toggle buttons (Mono, Ping, Wide) | Diffusion; Color; Wobble; Low cut; Duck; Level |
 | 2 | Reverb (6), lamp and model in the title | Pre-delay; Size; Decay; Damping; Diffusion; Movement | Seed; Color; Low cut; Width; Duck; Level |
 
 Inside each card the order is the signal's: time and loop, structure, tone,
@@ -1129,7 +1129,7 @@ Below it one row of four cards on ten columns, each of two lines of cells
 | Card (columns of 10) | Line 1 | Line 2 |
 | --- | --- | --- |
 | Mode (3) | Mode as toggle buttons | Character as toggle buttons |
-| LFO (3) | Shape as drawn waves (Sine, Triangle, Random); Sync lamp | Rate, or Division while synced, in one cell; Depth; Stereo |
+| LFO (3) | Shape as drawn waves (Sine, Triangle, Random); Sync switch | Rate, or Division while synced, in one cell; Depth; Stereo |
 | Wet (2) | Center, of the mode, in one cell; Feedback | Voices (Chorus) or Stages (Phaser) in one cell, disabled in Flanger; Low cut, reading "Off" at 20 Hz |
 | Output (2) | Mix | Output |
 
@@ -1234,13 +1234,13 @@ the span the signal sweeps lit and its peak as the operating point while the
 device plays; beside it, filling the width, `harmonics_view` with harmonics
 1–10 at the signal's level (without a signal, for a sine at −18 dBFS). Both
 only show; the controls that reshape them stand directly below. One row of
-cards in signal order:
+cards on a grid of twelve cells, in the order of the signal flow above:
 
 | Card (columns of 12) | Controls |
 | --- | --- |
-| Saturation (6) | Model as toggle buttons; Drive, the hero knob; Character, named **Hardness**, **Bias** or **Compress** for the model; Tone; Focus, reading "Off" at 20 Hz |
-| Quality (2) | 2× / 4× / 8× as toggle buttons |
-| Output (4) | Auto gain lamp with what it applies in dB as its value line; Mix; Output |
+| Drive (2) | Focus, reading "Off" at 20 Hz; Drive, the hero knob |
+| Shaper (6) | Model as toggle buttons (three cells); Character, named **Hardness**, **Bias** or **Compress** for the model; Quality, 2× / 4× / 8× as toggle buttons (two cells) |
+| Output (4) | Auto gain switch with what it applies in dB as its value line; Tone; Mix; Output |
 
 The curve is drawn normalized to its largest value: in true units it would
 leave the frame without Auto gain and lie flat with it. The level is what
@@ -1391,15 +1391,17 @@ a sidechain arrived, the rate, and the level history.
 - `reduction_meter`, 48 points: the reduction now, its largest value as a
   line and a number; a click clears the hold.
 
-Below, one row of four cards of two lines each, on a grid of cells so every
-control keeps its place in every mode:
+Below, one row of four cards of two lines each, on a grid of eleven cells
+so every control keeps its place in every mode. The cards read as the
+signal goes: the style, what the detector hears, what it does with it, and
+what follows the gain:
 
-| Card (columns of 12) | Line 1 | Line 2 |
+| Card (columns of 11) | Line 1 | Line 2 |
 | --- | --- | --- |
-| Mode (4) | Mode as toggle buttons | Character as toggle buttons |
-| Dynamics (4) | Threshold, Ratio, Knee, Ceiling | Attack, Release, **Auto** release lamp, Lookahead |
+| Mode (3) | Mode as toggle buttons | Character as toggle buttons |
 | Sidechain (2) | Internal / External, stacked, with the routed source under it | High-pass, Link |
-| Output (2) | Makeup (**Gain** in Limiter mode), **Auto** makeup lamp with what it adds while it is on | Mix, Output |
+| Dynamics (4) | Threshold, Ratio, Knee, Ceiling | Attack, Release, **Auto** release switch, Lookahead |
+| Output (2) | Makeup (**Gain** in Limiter mode), **Auto** makeup switch with what it adds while it is on | Mix, Output |
 
 Value lines say what the device uses where that is not the knob's value:
 Ratio "∞:1" in Limiter mode, the attack or knee a character holds up,
@@ -1466,8 +1468,9 @@ window, and at 610 points of width this one needed 750:
   plot does by dragging.
 - **Global**, beside the table on the last third of the width: Mode
   (Digital, Analog) and Analyzer (Off, Input, Output) on one line, the Auto
-  gain lamp with the compensation it applies and the Output knob on the
-  next.
+  gain switch with the compensation it applies and the Output knob on the
+  next. The table's five lines are spaced to the height of these two, so
+  both cards end on the same line.
 
 The graph is the point of an equalizer, so it has the height; the table
 replaced the first draft's row of knob columns because thirty knobs do not
@@ -1517,10 +1520,14 @@ run at 2×. The same kernel is the filter inside Mini, Maxi and Sampler.
 curve moves with the modulated cutoff from telemetry. Model as a
 `stepped_selector`; hero Cutoff knob; Resonance, Drive, Morph; an LFO
 `device_section` with `lfo_view`; an Envelope section. At 987 points the controls form
-two rows of cards, each on one line. The Filter spans the top (Model, then
-Type and Slope as toggle buttons choose its character, then Cutoff,
-Resonance, Drive and Morph). Below sit its modulation sources, LFO and
-Envelope, and Output (Mix, Output) at the right end.
+two rows of cards on a grid of eleven cells, each on one line. The Filter
+spans the top (Model on two cells, then Type on four and Slope as toggle
+buttons choose its character, then Cutoff, Resonance, Drive and Morph).
+Below sit its modulation sources, LFO (Shape on two cells, Rate, Sync,
+Depth, Stereo, in the order of R1 Mini's and R1 Sampler's) and Envelope
+(Amount, Attack, Release), and Output (Mix, Output) at the right end. A
+control the model does not have (Morph, Slope, Type) or that Sync replaces
+(Rate) stays in its cell, disabled.
 
 ## Instruments
 
@@ -1550,9 +1557,12 @@ layout. Everything is visible at once; about 45 parameters.
 | Voice | Mode, Voices (1 – 8), Glide, Bend range, Drift (0 – 100 %), Volume |
 
 **DSP.** The `daw_dsp` VCO or DCO per oscillator, with hard sync, mixed into
-the shared nonlinear filter kernel, whole voice at 2× oversampling. Modulation
+the shared nonlinear filter kernel, whole voice at 2× oversampling. The
+voices are summed at that rate and one half-band filter brings the sum down:
+the filter is linear, so the sum sounds as eight filters did, and a voice's
+amplifier gain ramps at the doubled rate. Modulation
 runs at a control rate of 8 samples with linear ramps between updates. Eight
-voices take about 5 % of one core in real time (`devices_bench` example). Drift adds a slow, seeded
+voices take about 4 % of one core in real time (`devices_bench` example). Drift adds a slow, seeded
 per-voice random walk to pitch and cutoff so stacked notes do not sound
 static. The mixer can overdrive the filter input, as on the hardware this
 layout comes from.
@@ -1561,16 +1571,17 @@ layout comes from.
 equal cells, twelve to a row, laid out like a hardware front panel; every
 row breaks after its eighth cell:
 
-- **Oscillators, Mixer, Master.** Both oscillators share their columns:
+- **Oscillators, Mixer, Voices.** Both oscillators share their columns:
   Model (VCO over DCO), Wave (two by two), Octave and pulse Width, then what
   only Osc 2 has: Semitones, Detune and Sync. The Mixer is a two-by-two
-  block of levels, each oscillator's beside its line. Master holds Volume,
-  Glide, Bend and Drift.
+  block of levels, each oscillator's beside its line. Voices holds how the
+  voices play them: their count, Glide, Bend and Drift.
 - **Filter, Filter envelope, Amp envelope.** Filter Model beside the hero
   Cutoff, then Resonance, Drive, Envelope amount and Key track. Each
   envelope is four faders, A D S R, and a fifth for its Velocity amount.
-- **LFO, Voices.** The source (Shape, Rate, Sync) and its destinations
-  (Pitch, Cutoff, Width, Mod wheel); Mode (toggle buttons) and Voices.
+- **LFO, Master.** The source (Shape, Rate, Sync) and its destinations
+  (Pitch, Cutoff, Width, Mod wheel); Mode (toggle buttons) and, last on
+  the panel as in the signal, Volume.
 
 A control that does nothing in the current mode (pulse Width on another
 wave, LFO Rate when synced, Voices outside Poly) stays in place, disabled, so
@@ -1930,6 +1941,10 @@ the 48-tap read.
 - No allocation in `process`, using the engine's existing allocation counter.
 - A `devices_bench` example reporting per-device CPU time per block, published
   as measurements, not as guarantees.
+- A `devices_null` example for changes that must not change the sound:
+  `write` renders every factory preset of every device from a fixed
+  performance, `compare` prints each render's residual against the earlier
+  one, its change in level and the largest change of a third-octave band.
 
 **Engine tests:** built-in instrument and insert render, automation of a
 built-in parameter equals the manual value path, latency compensation with

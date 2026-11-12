@@ -1205,8 +1205,6 @@ fn response(
     }
 }
 
-/// Space between the lines of a table card.
-const TABLE_GAP: f32 = daw_ui::tokens::SPACE_SM;
 /// What a table column keeps free beside its widest control.
 const TABLE_CELL_GAP: f32 = 2.0;
 
@@ -1249,7 +1247,7 @@ fn table_body(
     let origin = ui.cursor().min + egui::vec2(table.caption_width, 0.0);
     if let Some(selected) = state.selected.filter(|column| *column < columns) {
         let height =
-            heights.iter().sum::<f32>() + TABLE_GAP * heights.len().saturating_sub(1) as f32;
+            heights.iter().sum::<f32>() + table.line_gap * heights.len().saturating_sub(1) as f32;
         daw_ui::column_highlight(
             ui,
             egui::Rect::from_min_size(
@@ -1261,7 +1259,7 @@ fn table_body(
     }
     for (line, (slots, height)) in section.lines.iter().zip(&heights).enumerate() {
         if line > 0 {
-            ui.add_space(TABLE_GAP);
+            ui.add_space(table.line_gap);
         }
         let (row, _) = ui.allocate_exact_size(
             egui::vec2(ui.available_width(), *height),
@@ -1673,7 +1671,21 @@ fn control(
                                 state.grid_rects.push((spec.id, response.rect));
                                 response
                             }
-                            None => daw_ui::toggle_group(ui, &mut current, &options),
+                            None => {
+                                // A row of names a little wider than its
+                                // cells gives up padding instead of leaving
+                                // the card's margins.
+                                let padding = ui.spacing().button_padding.x;
+                                let names = options.iter().map(|(_, option)| *option);
+                                let over =
+                                    daw_ui::toggle_group_width(ui, names) - (width - CELL_GAP);
+                                ui.spacing_mut().button_padding.x = (padding
+                                    - 0.5 * over.max(0.0) / options.len().max(1) as f32)
+                                    .max(0.0);
+                                let response = daw_ui::toggle_group(ui, &mut current, &options);
+                                ui.spacing_mut().button_padding.x = padding;
+                                response
+                            }
                         };
                         if response.changed() {
                             let value = f64::from(spec.to_normalized(current));

@@ -870,7 +870,6 @@ struct Voice {
     noise: Random,
     coupling: OnePole,
     filter: FilterKernel,
-    downsampler: Oversampler2x,
     amp: Adsr,
     filter_envelope: Adsr,
     cutoff_drift: Drift,
@@ -885,6 +884,9 @@ struct Voice {
     /// A note waiting for this voice's steal fade.
     pending: Option<Pending>,
     fade: f32,
+    /// The amplifier's gain at the previous sample, so it moves in a line
+    /// over the two oversampled steps of the next.
+    gain: f32,
     g: Ramp,
     widths: [Ramp; 2],
     cutoff: f32,
@@ -899,7 +901,6 @@ impl Voice {
             noise: Random::new(seed + 3),
             coupling: OnePole::default(),
             filter: FilterKernel::default(),
-            downsampler: Oversampler2x::new(),
             amp: Adsr::default(),
             filter_envelope: Adsr::default(),
             cutoff_drift: Drift::new(seed + 4),
@@ -910,6 +911,7 @@ impl Voice {
             age: 0,
             pending: None,
             fade: 1.0,
+            gain: 0.0,
             g: Ramp::default(),
             widths: [Ramp::default(); 2],
             cutoff: 1000.0,
@@ -924,7 +926,6 @@ impl Voice {
         self.noise.reset();
         self.coupling = OnePole::default();
         self.filter.reset();
-        self.downsampler.reset();
         self.amp.reset();
         self.filter_envelope.reset();
         self.cutoff_drift.reset();
@@ -933,6 +934,7 @@ impl Voice {
         self.age = 0;
         self.pending = None;
         self.fade = 1.0;
+        self.gain = 0.0;
     }
 
     fn active(&self) -> bool {
@@ -980,8 +982,16 @@ pub struct Mini {
     drive: Smoothed,
     velocity_amp: Smoothed,
     volume: Smoothed,
+    /// Every voice's amplifier works at the oversampled rate, so their sum
+    /// comes down through one filter instead of one per voice.
+    downsampler: Oversampler2x,
+    /// Samples since a voice last sounded, up to [`DOWNSAMPLER_SPAN`].
+    silent: usize,
     telemetry: Arc<Telemetry>,
 }
+
+/// Samples of silence after which the downsampler holds nothing but silence.
+const DOWNSAMPLER_SPAN: usize = Oversampler2x::LATENCY as usize + 1;
 
 impl Default for Mini {
     fn default() -> Self {
@@ -1029,6 +1039,8 @@ impl Mini {
             drive: Smoothed::new(0.0),
             velocity_amp: Smoothed::new(0.0),
             volume: Smoothed::new(0.0),
+            downsampler: Oversampler2x::new(),
+            silent: DOWNSAMPLER_SPAN,
             telemetry: Arc::new(Telemetry::default()),
         };
         mini.prepare(48_000.0, 0);
@@ -1441,6 +1453,7 @@ impl Mini {
                 );
             }
         }
+        let mut mixed = [0.0_f32; 2 * CONTROL];
         for ((voice, signal), _) in self
             .voices
             .iter_mut()
@@ -1448,10 +1461,38 @@ impl Mini {
             .zip(&sounding)
             .filter(|(_, sounding)| **sounding)
         {
-            for (frame, sample) in out.iter_mut().enumerate() {
-                *sample +=
-                    voice.output(frame, [signal[2 * frame], signal[2 * frame + 1]], &context);
+            for (frame, (mixed, signal)) in mixed
+                .as_chunks_mut::<2>()
+                .0
+                .iter_mut()
+                .zip(signal.as_chunks::<2>().0)
+                .take(out.len())
+                .enumerate()
+            {
+                let from = voice.gain;
+                let gain = voice.amplifier(frame, &context);
+                mixed[0] += signal[0] * 0.5 * (from + gain);
+                mixed[1] += signal[1] * gain;
             }
+        }
+        // Only frames after the last sounding span count: the filter must
+        // take its whole length in zeros before it holds nothing of a note.
+        if sounding.contains(&true) {
+            self.silent = 0;
+        }
+        let flushing = self.silent;
+        let makeup = &context.shared.ramps[RAMP_MAKEUP];
+        for (frame, (sample, mixed)) in out.iter_mut().zip(mixed.as_chunks::<2>().0).enumerate() {
+            if flushing + frame >= DOWNSAMPLER_SPAN {
+                break;
+            }
+            *sample = self.downsampler.downsample([
+                mixed[0] * makeup.at(2 * frame),
+                mixed[1] * makeup.at(2 * frame + 1),
+            ]);
+        }
+        if !sounding.contains(&true) {
+            self.silent = (self.silent + out.len()).min(DOWNSAMPLER_SPAN);
         }
         for index in 0..MAX_VOICES {
             let voice = &mut self.voices[index];
@@ -1518,18 +1559,18 @@ impl Voice {
         coupled * ramps[RAMP_DRIVE].at(step)
     }
 
-    /// One base-rate output sample from two filtered oversampled steps.
+    /// The amplifier's gain at one base-rate sample: envelope, velocity
+    /// and the fade of a stolen voice. Advances both envelopes.
     #[inline]
-    fn output(&mut self, frame: usize, filtered: [f32; 2], c: &TickContext) -> f32 {
-        let ramps = &c.shared.ramps;
-        let filtered = self.downsampler.downsample(filtered) * ramps[RAMP_MAKEUP].at(2 * frame);
+    fn amplifier(&mut self, frame: usize, c: &TickContext) -> f32 {
         self.filter_envelope.next_value();
-        let velocity = ramps[RAMP_VELOCITY].at(2 * frame);
+        let velocity = c.shared.ramps[RAMP_VELOCITY].at(2 * frame);
         let gain = self.amp.next_value() * (1.0 - velocity * (1.0 - self.note.velocity));
         if self.pending.is_some() {
             self.fade = (self.fade - c.fade_step).max(0.0);
         }
-        filtered * gain * self.fade
+        self.gain = gain * self.fade;
+        self.gain
     }
 }
 
@@ -1667,6 +1708,8 @@ impl Device for Mini {
         for voice in &mut self.voices {
             voice.reset();
         }
+        self.downsampler.reset();
+        self.silent = DOWNSAMPLER_SPAN;
         self.held_count = 0;
         self.sustain = false;
         self.bend.set_target(0.0);

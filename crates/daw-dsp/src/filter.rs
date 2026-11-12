@@ -180,18 +180,6 @@ fn formants(morph: f32, cutoff: f32) -> [(f32, f32); 3] {
     })
 }
 
-/// Pre-filter saturation of the linear models: identity at 0 dB, blending
-/// into a level-compensated `tanh` as Drive rises.
-#[inline]
-fn soft_drive(input: f32, drive_db: f32) -> f32 {
-    if drive_db <= 0.0 {
-        return input;
-    }
-    let gain = db_to_gain(drive_db);
-    let amount = drive_db / 24.0;
-    input + amount * (tanh_fast(gain * input) / gain.sqrt() - input)
-}
-
 /// Small-signal gain of the drive stage, for the drawn curve.
 fn drive_gain(model: FilterModel, drive_db: f32) -> f32 {
     let gain = db_to_gain(drive_db);
@@ -257,9 +245,44 @@ impl CleanShape {
 /// kernel.
 pub type LatencyDelay = StaticDelay<{ Oversampler2x::LATENCY as usize }>;
 
+/// The value last worked out and what it was worked out from: a setting
+/// that costs a library call per sample and seldom moves is then free while
+/// it rests, and exactly what it was while it moves.
+#[derive(Clone, Copy, Debug)]
+pub struct Memo<K, V> {
+    held: Option<(K, V)>,
+}
+
+impl<K, V> Default for Memo<K, V> {
+    fn default() -> Self {
+        Self { held: None }
+    }
+}
+
+impl<K: Copy + PartialEq, V: Copy> Memo<K, V> {
+    #[inline]
+    pub fn get(&mut self, key: K, value: impl FnOnce(K) -> V) -> V {
+        match self.held {
+            Some((held, value)) if held == key => value,
+            _ => {
+                let value = value(key);
+                self.held = Some((key, value));
+                value
+            }
+        }
+    }
+}
+
 /// One channel of filtering, every model.
 #[derive(Clone, Debug, Default)]
 pub struct FilterKernel {
+    /// The integrator gain of a cutoff and rate.
+    g: Memo<(f32, f32), f32>,
+    /// A drive's gain and its square root.
+    drive: Memo<f32, (f32, f32)>,
+    clean: Memo<(FilterType, bool, f32), CleanShape>,
+    /// Each formant's integrator gain and level, of a morph, cutoff and rate.
+    formants: Memo<(f32, f32, f32), [(f32, f32); 3]>,
     svf: [Svf; 3],
     ladder: Ladder,
     sallen_key: SallenKey,
@@ -305,11 +328,27 @@ impl FilterKernel {
             return self.process_circuit(input, shape, cutoff, resonance, sample_rate);
         }
         let s = shape;
-        let x = soft_drive(input, s.drive_db);
-        let g = prewarp(cutoff, sample_rate);
+        // Saturation before the linear models: the identity at 0 dB,
+        // blending into a level-compensated `tanh` as Drive rises.
+        let x = if s.drive_db <= 0.0 {
+            input
+        } else {
+            let (gain, root) = self.drive_gains(s.drive_db);
+            let amount = s.drive_db / 24.0;
+            input + amount * (tanh_fast(gain * input) / root - input)
+        };
+        let g = self.g.get((cutoff, sample_rate), |(cutoff, rate)| {
+            prewarp(cutoff, rate)
+        });
         let wet = match s.model {
             FilterModel::StateVariable => {
-                let k = 1.0 / clean_q(resonance);
+                let [k, _] = self
+                    .clean
+                    .get(
+                        (FilterType::LowPass, false, resonance),
+                        |(kind, steep, resonance)| CleanShape::new(kind, steep, resonance),
+                    )
+                    .k;
                 let out = self.svf[0].process(x, g, k);
                 if morph < 0.5 {
                     out.low * (1.0 - 2.0 * morph) + out.notch() * 2.0 * morph
@@ -329,14 +368,25 @@ impl FilterKernel {
             }
             FilterModel::Vowel => {
                 let k = vowel_k(resonance);
+                let formants =
+                    self.formants
+                        .get((morph, cutoff, sample_rate), |(morph, cutoff, rate)| {
+                            formants(morph, cutoff)
+                                .map(|(frequency, gain)| (prewarp(frequency, rate), gain))
+                        });
                 let mut sum = 0.0;
-                for (svf, (frequency, gain)) in self.svf.iter_mut().zip(formants(morph, cutoff)) {
-                    sum += gain * k * svf.process(x, prewarp(frequency, sample_rate), k).band;
+                for (svf, (g, gain)) in self.svf.iter_mut().zip(formants) {
+                    sum += gain * k * svf.process(x, g, k).band;
                 }
                 sum
             }
             _ => {
-                let clean = CleanShape::new(s.filter_type, s.steep, resonance);
+                let clean = self.clean.get(
+                    (s.filter_type, s.steep, resonance),
+                    |(filter_type, steep, resonance)| {
+                        CleanShape::new(filter_type, steep, resonance)
+                    },
+                );
                 let (first, rest) = self.svf.split_at_mut(1);
                 clean.process(&mut first[0], &mut rest[0], x, g)
             }
@@ -354,11 +404,23 @@ impl FilterKernel {
         resonance: f32,
         sample_rate: f32,
     ) -> f32 {
-        let gain = db_to_gain(s.drive_db);
-        let g = prewarp(cutoff, 2.0 * sample_rate);
+        let (gain, root) = self.drive_gains(s.drive_db);
+        let g = self.g.get((cutoff, 2.0 * sample_rate), |(cutoff, rate)| {
+            prewarp(cutoff, rate)
+        });
         let upsampled = self.oversampler.upsample(input * gain);
         let filtered = upsampled.map(|x| self.circuit(x, s, g, resonance));
-        self.oversampler.downsample(filtered) / gain.sqrt()
+        self.oversampler.downsample(filtered) / root
+    }
+
+    /// The gain of a drive in dB and its square root, for the level
+    /// compensation.
+    #[inline]
+    fn drive_gains(&mut self, drive_db: f32) -> (f32, f32) {
+        self.drive.get(drive_db, |db| {
+            let gain = db_to_gain(db);
+            (gain, gain.sqrt())
+        })
     }
 
     /// One sample of a saturating circuit model at the oversampled rate, for

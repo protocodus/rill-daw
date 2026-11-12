@@ -328,8 +328,8 @@ pub(super) struct Support {
 impl Support {
     pub fn query(plugin: &VstInstrument) -> Result<Self> {
         let mut support = Self::default();
-        for channel in 0..16 {
-            support.expressions[channel] = plugin.note_expression_defaults(channel as u8)?;
+        for (channel, expressions) in support.expressions.iter_mut().enumerate() {
+            *expressions = plugin.note_expression_defaults(channel as u8)?;
         }
         support.defaults = plugin.expressive_controller_defaults()?;
         support.controllers = support

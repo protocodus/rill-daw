@@ -4,7 +4,9 @@
 //! on every pad, all sixteen together every second, and a busy pattern.
 //! These are measurements on this machine, not guarantees.
 //!
-//! `cargo run --release -p daw-devices --example devices_bench`
+//! `cargo run --release -p daw-devices --example devices_bench [name]`
+//!
+//! With a name, only the devices whose name contains it ("Spacer").
 use daw_devices::devices::{compressor, drums, modulator, sampler, saturator, spacer};
 use daw_devices::{DeviceKind, Event, EventKind, ProcessContext, SampleData, StereoIo, registry};
 use std::sync::Arc;
@@ -95,7 +97,14 @@ fn recording() -> Arc<SampleData> {
 }
 
 fn main() {
+    let only = std::env::args().nth(1);
     for descriptor in registry() {
+        if only
+            .as_ref()
+            .is_some_and(|only| !descriptor.name.contains(only.as_str()))
+        {
+            continue;
+        }
         if descriptor.id == drums::DESCRIPTOR.id {
             measure_drums(descriptor);
             continue;

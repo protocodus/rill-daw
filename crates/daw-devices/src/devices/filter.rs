@@ -1,7 +1,9 @@
 //! R1 Filter: the shared filter kernel with every model, an LFO and an
 //! envelope follower on the cutoff. See `docs/R1_DEVICES.md#r1-filter`.
 use super::param;
-use crate::dsp::filter::{self, FilterKernel, FilterModel, FilterShape, FilterType, LatencyDelay};
+use crate::dsp::filter::{
+    self, FilterKernel, FilterModel, FilterShape, FilterType, LatencyDelay, Memo,
+};
 use crate::dsp::{Complex, EnvelopeFollower, Lfo, LfoShape, Smoothed, db_to_gain};
 use crate::{
     Device, DeviceDescriptor, DeviceKind, Event, ParamRange, ParamSpec, ProcessContext, StereoIo,
@@ -399,6 +401,8 @@ pub struct Filter {
     env_amount: Smoothed,
     lfo: Lfo,
     follower: EnvelopeFollower,
+    /// Each channel's cutoff in Hz, of its place in octaves.
+    hertz: [Memo<f32, f32>; 2],
     telemetry: Arc<Telemetry>,
 }
 
@@ -429,6 +433,7 @@ impl Filter {
             env_amount: Smoothed::new(settings.env_amount),
             lfo: Lfo::new(0x005E_EDF1),
             follower: EnvelopeFollower::default(),
+            hertz: Default::default(),
             telemetry: Arc::new(Telemetry::default()),
         };
         filter.prepare(48_000.0, 0);
@@ -547,7 +552,8 @@ impl Device for Filter {
                     self.lfo.value(s.lfo_shape, stereo * channel as f64)
                 };
                 let octaves = base + lfo_depth * lfo + env_amount * envelope;
-                let cutoff = octaves.exp2().clamp(20.0, 20_000.0);
+                let cutoff = self.hertz[channel]
+                    .get(octaves, |octaves| octaves.exp2().clamp(20.0, 20_000.0));
                 cutoffs[channel] = cutoff;
                 let input = sample[index];
                 let state = &mut self.channels[channel];
