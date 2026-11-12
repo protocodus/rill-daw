@@ -195,6 +195,18 @@ pub fn helper_path() -> Result<PathBuf> {
             return Ok(sibling);
         }
     }
+    // Or, where Cargo builds every package into a folder of its own, in
+    // target/{debug,release}/build/<package>/<hash>/out.
+    if directory.file_name().is_some_and(|name| name == "out")
+        && let Some(build) = directory.ancestors().nth(3)
+        && build.file_name().is_some_and(|name| name == "build")
+        && let Some(profile) = build.parent()
+    {
+        let sibling = profile.join(name);
+        if sibling.is_file() {
+            return Ok(sibling);
+        }
+    }
     anyhow::bail!(
         "Plugin isolation helper is missing. Run cargo build --workspace, or set DAW_PLUGIN_HOST to daw-plugin-host"
     )

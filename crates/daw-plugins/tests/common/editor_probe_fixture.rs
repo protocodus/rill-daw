@@ -289,34 +289,18 @@ impl EditorProbeFixture {
         };
         // Reuse Cargo's exact SDK bindings and dependencies; no network, nested Cargo
         // invocation, C++ SDK, or additional build-tool dependency is needed in CI.
-        let mut deps = std::env::current_exe()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .to_path_buf();
-        if deps.file_name().is_some_and(|name| name == "examples") {
-            deps = deps.parent().unwrap().join("deps");
-        }
-        let mut bindings: Vec<_> = std::fs::read_dir(&deps)
-            .unwrap()
-            .flatten()
+        let deps = dependency_directories();
+        let mut bindings: Vec<_> = deps
+            .iter()
+            .flat_map(|folder| std::fs::read_dir(folder).unwrap().flatten())
             .map(|entry| entry.path())
             .filter(|path| {
-                path.file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .starts_with("libvst3-")
-                    && path
-                        .extension()
-                        .is_some_and(|extension| extension == "rlib")
+                let name = path.file_name().unwrap().to_string_lossy();
+                name.starts_with("libvst3-") && name.ends_with(".rlib")
             })
             .collect();
         bindings.sort_by_key(|path| std::fs::metadata(path).unwrap().modified().unwrap());
-        assert!(
-            !bindings.is_empty(),
-            "Missing VST3 SDK rlib in {}",
-            deps.display()
-        );
+        assert!(!bindings.is_empty(), "Missing VST3 SDK rlib in {deps:?}");
         let mut errors = Vec::new();
         for binding in bindings.iter().rev() {
             let mut compiler =
@@ -330,27 +314,29 @@ impl EditorProbeFixture {
             )) {
                 compiler.args(["-C", "target-feature=+crt-static"]);
             }
-            let output = compiler
-                .args([
-                    "--edition=2024",
-                    "--crate-type=cdylib",
-                    "--crate-name=editor_probe_plugin",
-                    "-C",
-                    if dsp.is_some() {
-                        "opt-level=3"
-                    } else {
-                        "opt-level=1"
-                    },
-                ])
-                .arg(&source)
-                .arg("--extern")
-                .arg(format!("vst3={}", binding.display()))
-                .arg("-L")
-                .arg(format!("dependency={}", deps.display()))
-                .arg("-o")
-                .arg(&binary)
-                .output()
-                .unwrap();
+            let output =
+                compiler
+                    .args([
+                        "--edition=2024",
+                        "--crate-type=cdylib",
+                        "--crate-name=editor_probe_plugin",
+                        "-C",
+                        if dsp.is_some() {
+                            "opt-level=3"
+                        } else {
+                            "opt-level=1"
+                        },
+                    ])
+                    .arg(&source)
+                    .arg("--extern")
+                    .arg(format!("vst3={}", binding.display()))
+                    .args(deps.iter().flat_map(|folder| {
+                        ["-L".into(), format!("dependency={}", folder.display())]
+                    }))
+                    .arg("-o")
+                    .arg(&binary)
+                    .output()
+                    .unwrap();
             if output.status.success() {
                 return Self {
                     path,
@@ -364,4 +350,39 @@ impl EditorProbeFixture {
             errors.join("\n")
         );
     }
+}
+
+/// The folders that hold the rlibs this test was linked with: Cargo's one
+/// `deps` folder, or, where Cargo builds every package into a folder of its
+/// own (`build/<package>/<hash>/out`), each of those.
+fn dependency_directories() -> Vec<PathBuf> {
+    let executable = std::env::current_exe().unwrap();
+    let folder = executable.parent().unwrap();
+    let shared = if folder.file_name().is_some_and(|name| name == "examples") {
+        folder.parent().unwrap().join("deps")
+    } else {
+        folder.to_path_buf()
+    };
+    let per_package = folder.file_name().is_some_and(|name| name == "out");
+    let build = match folder.ancestors().nth(3) {
+        Some(build) if per_package && build.file_name().is_some_and(|name| name == "build") => {
+            build.to_path_buf()
+        }
+        _ if shared.is_dir() => return vec![shared],
+        _ => shared.with_file_name("build"),
+    };
+    let folders = |of: &Path| -> Vec<PathBuf> {
+        std::fs::read_dir(of)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|entry| entry.path())
+            .collect()
+    };
+    folders(&build)
+        .iter()
+        .flat_map(|package| folders(package))
+        .map(|unit| unit.join("out"))
+        .filter(|out| out.is_dir())
+        .collect()
 }

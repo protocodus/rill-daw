@@ -261,8 +261,10 @@ fn main() {
                 continue;
             };
             let reference: Vec<f32> = bytes
-                .chunks_exact(4)
-                .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|bytes| f32::from_le_bytes(*bytes))
                 .collect();
             let residual: Vec<f32> = out.iter().zip(&reference).map(|(a, b)| a - b).collect();
             let null = if residual.iter().all(|s| *s == 0.0) {

@@ -272,9 +272,8 @@ mod tests {
             samples: vec![0.0; 8_388_608],
         };
         let start = 400 * 8192 + 512;
-        for frame in start..start + 256 {
-            audio.samples[frame] =
-                0.5 * (std::f32::consts::TAU * 440.0 * (frame - start) as f32 / 48000.0).sin();
+        for (frame, sample) in audio.samples[start..start + 256].iter_mut().enumerate() {
+            *sample = 0.5 * (std::f32::consts::TAU * 440.0 * frame as f32 / 48000.0).sin();
         }
         let spectrum = compute_audio_spectrogram(&audio).unwrap();
         assert_eq!(spectrum.columns, SPECTROGRAM_MAX_COLUMNS);

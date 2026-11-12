@@ -1230,13 +1230,9 @@ mod tests {
                                     "{label}"
                                 );
                             }
-                            for channel in 0..2 {
-                                for (tap, (branch, element, _)) in
-                                    ring::TAPS[channel].iter().enumerate()
-                                {
-                                    assert!(
-                                        layout.taps[channel][tap] < elements[4 * branch + element]
-                                    );
+                            for (taps, places) in layout.taps.iter().zip(&ring::TAPS) {
+                                for (tap, (branch, element, _)) in places.iter().enumerate() {
+                                    assert!(taps[tap] < elements[4 * branch + element]);
                                 }
                             }
                         }
