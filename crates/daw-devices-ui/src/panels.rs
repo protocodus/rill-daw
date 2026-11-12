@@ -1,12 +1,14 @@
 //! Per-device layout rules. A device without an entry here gets the generic
 //! layout: one section per parameter group, every control visible.
 use daw_devices::DeviceDescriptor;
-use daw_devices::devices::{filter, mini};
+use daw_devices::devices::{equalizer, filter, mini};
+use daw_ui::{Glyph, ToggleFace};
 
 pub type Values<'a> = &'a dyn Fn(u32) -> f64;
 
-/// Drawing only; at other host rates the curve differs only near Nyquist.
-const RESPONSE_RATE: f32 = 48_000.0;
+/// The rate a curve is drawn at when the device does not report its own;
+/// at other host rates the curve differs only near Nyquist.
+pub const RESPONSE_RATE: f32 = 48_000.0;
 
 /// What stands at one place of a section's line.
 #[derive(Clone, Copy)]
@@ -39,6 +41,19 @@ pub struct Section {
     /// Width in columns of `daw_ui::grid_row`; every row's spans add up to
     /// the same number. On a cell grid, also the card's width in cells.
     pub span: u8,
+    /// Whether the card is a table instead of captioned controls.
+    pub table: Option<Table>,
+}
+
+/// A card of like values in equal columns, one slot per column on every
+/// line: continuous values are inline dials, toggles and choices stand bare.
+/// What a line holds is named once, at its left. A click in a column selects
+/// it, together with the response node of the same position.
+pub struct Table {
+    /// The caption of each line; empty where the controls name themselves.
+    pub captions: &'static [&'static str],
+    /// Width of the caption column.
+    pub caption_width: f32,
 }
 
 impl Section {
@@ -75,15 +90,82 @@ pub struct Layout {
     pub keep_inactive: bool,
     /// Choice options that apply in the current mode, when not all do.
     pub options: fn(u32, Values<'_>) -> Option<&'static [&'static str]>,
+    /// Choices drawn as `daw_ui::glyph_toggle` instead of words.
+    pub faces: &'static [Faces],
+    /// Toggles drawn as `daw_ui::toggle_led` with this label instead of a
+    /// captioned switch.
+    pub leds: &'static [(u32, &'static str)],
+    /// Text for the value line of a control that is not a knob.
+    pub readout: fn(u32, Values<'_>) -> Option<String>,
     /// The response curve drawn above the controls.
     pub response: Option<ResponseView>,
 }
 
+/// How the options of some choices look as toggle segments.
+pub struct Faces {
+    pub ids: &'static [u32],
+    /// One per option, in option order, with the name hover reads.
+    pub faces: &'static [(ToggleFace<'static>, &'static str)],
+    pub segment_width: f32,
+}
+
+/// Which telemetry ring a spectrum reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tap {
+    Input,
+    Output,
+}
+
+/// Fills dB values for one node (by index), the frequencies and the rate.
+pub type NodeCurve = fn(Values<'_>, usize, f32, &[f32], &mut [f32]);
+
 pub struct ResponseView {
-    /// Fills dB values for the given frequencies.
-    pub curve: fn(Values<'_>, &[f32], &mut [f32]),
-    /// The frequency parameter whose node moves along the curve's axis.
-    pub node: u32,
+    /// Fills dB values for the given frequencies at the given sample rate.
+    pub curve: fn(Values<'_>, f32, &[f32], &mut [f32]),
+    /// The same for one node alone, drawn muted for the selected node.
+    pub node_curve: Option<NodeCurve>,
+    pub nodes: &'static [NodeView],
+    /// A node's values in words, shown beside it under the pointer.
+    pub readout: Option<fn(usize, Values<'_>) -> String>,
+    /// The spectrum drawn behind the curves, if the device has one switched on.
+    pub spectrum: fn(Values<'_>) -> Option<Tap>,
+    /// The telemetry value that holds the device's sample rate.
+    pub rate_slot: Option<usize>,
+    pub height: f32,
+    /// The gain axis runs from minus to plus this.
+    pub range_db: fn(Values<'_>) -> f32,
+    /// How far a node's gain can be dragged, beyond the axis if need be.
+    pub limit_db: f32,
+}
+
+/// One draggable node of the response and the parameters it edits.
+pub struct NodeView {
+    /// Printed at the node; its number when `None`.
+    pub label: Option<&'static str>,
+    pub frequency: u32,
+    /// The node moves along the frequency axis only without one, and while
+    /// the parameter does not apply.
+    pub gain: Option<u32>,
+    /// What the scroll wheel changes: a continuous value, or a choice it steps.
+    pub wheel: Option<u32>,
+    /// The toggle a double-click flips; the node is hollow while it is off.
+    pub enable: Option<u32>,
+    /// A choice whose options the node's context menu offers.
+    pub menu: Option<u32>,
+}
+
+impl NodeView {
+    pub fn ids(&self) -> impl Iterator<Item = u32> {
+        [
+            self.enable,
+            self.menu,
+            Some(self.frequency),
+            self.gain,
+            self.wheel,
+        ]
+        .into_iter()
+        .flatten()
+    }
 }
 
 fn section(title: &'static str, row: usize, span: u8, lines: &[&[u32]]) -> Section {
@@ -96,6 +178,7 @@ fn section(title: &'static str, row: usize, span: u8, lines: &[&[u32]]) -> Secti
         lines,
         row,
         span,
+        table: None,
     }
 }
 
@@ -105,6 +188,7 @@ fn cells(title: &'static str, row: usize, span: u8, lines: &[&[Slot]]) -> Sectio
         lines: lines.iter().map(|line| line.to_vec()).collect(),
         row,
         span,
+        table: None,
     }
 }
 
@@ -137,13 +221,30 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
         layout.options =
             |id, values| (id == TYPE).then(|| type_options(filter_settings(values).model));
         layout.response = Some(ResponseView {
-            curve: |values, frequencies, out| {
+            curve: |values, rate, frequencies, out| {
                 let settings = filter_settings(values);
                 // The drawn curve is static; the sounding cutoff also moves with the LFO and envelope.
-                response_db(&settings, settings.cutoff, RESPONSE_RATE, frequencies, out);
+                response_db(&settings, settings.cutoff, rate, frequencies, out);
             },
-            node: CUTOFF,
+            node_curve: None,
+            nodes: &[NodeView {
+                label: None,
+                frequency: CUTOFF,
+                gain: None,
+                wheel: None,
+                enable: None,
+                menu: None,
+            }],
+            readout: None,
+            spectrum: |_| None,
+            rate_slot: None,
+            height: 160.0,
+            range_db: |_| 24.0,
+            limit_db: 24.0,
         });
+    }
+    if descriptor.id == equalizer::DESCRIPTOR.id {
+        layout = equalizer_layout(layout);
     }
     if descriptor.id == mini::DESCRIPTOR.id {
         use mini::*;
@@ -275,6 +376,178 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
     layout
 }
 
+/// The six nodes of the equalizer's picture, low to high; the Bands table
+/// has one column for each, in the same order.
+static EQUALIZER_NODES: [NodeView; 6] = {
+    use equalizer::*;
+    const fn band(index: usize, label: &'static str) -> NodeView {
+        NodeView {
+            label: Some(label),
+            frequency: BANDS[index] + BAND_FREQUENCY,
+            gain: Some(BANDS[index] + BAND_GAIN),
+            wheel: Some(BANDS[index] + BAND_Q),
+            enable: Some(BANDS[index] + BAND_ON),
+            menu: Some(BANDS[index] + BAND_TYPE),
+        }
+    }
+    const fn cut(label: &'static str, on: u32, frequency: u32, slope: u32) -> NodeView {
+        NodeView {
+            label: Some(label),
+            frequency,
+            gain: None,
+            wheel: Some(slope),
+            enable: Some(on),
+            menu: Some(slope),
+        }
+    }
+    [
+        cut("HP", HP_ON, HP_FREQUENCY, HP_SLOPE),
+        band(0, "1"),
+        band(1, "2"),
+        band(2, "3"),
+        band(3, "4"),
+        cut("LP", LP_ON, LP_FREQUENCY, LP_SLOPE),
+    ]
+};
+
+/// Width of a Bands column's toggle track: four type glyphs or three slopes.
+const BAND_TRACK: f32 = 84.0;
+
+fn equalizer_layout(mut layout: Layout) -> Layout {
+    use Slot::{Blank, Control as C};
+    use equalizer::*;
+    // The graph is the editor; under it every band's numbers as a table in
+    // the order of the nodes, and beside that what applies to the whole
+    // device. The wide panel, so that all of it shows without scrolling in
+    // the effect window; the graph gains from the width.
+    layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
+    let band = |offset: u32| BANDS.map(|base| C(base + offset, 1));
+    let line = |first: Slot, bands: [Slot; 4], last: Slot| {
+        let mut line = vec![first];
+        line.extend(bands);
+        line.push(last);
+        line
+    };
+    layout.sections = vec![
+        Section {
+            title: "Bands",
+            lines: vec![
+                line(C(HP_ON, 1), band(BAND_ON), C(LP_ON, 1)),
+                line(C(HP_SLOPE, 1), band(BAND_TYPE), C(LP_SLOPE, 1)),
+                line(C(HP_FREQUENCY, 1), band(BAND_FREQUENCY), C(LP_FREQUENCY, 1)),
+                line(Blank(1), band(BAND_GAIN), Blank(1)),
+                line(Blank(1), band(BAND_Q), Blank(1)),
+            ],
+            row: 0,
+            span: 8,
+            table: Some(Table {
+                // "Frequency" would take the room of a column, and the columns
+                // need theirs: "20.00 kHz" beside its arc is 88 points of 98.
+                captions: &["", "", "Freq", "Gain", "Q"],
+                caption_width: 36.0,
+            }),
+        },
+        section("Global", 0, 4, &[&[MODE, ANALYZER], &[AUTO_GAIN, OUTPUT]]),
+    ];
+    layout.leds = &[
+        (HP_ON, "HP"),
+        (BANDS[0] + BAND_ON, "1"),
+        (BANDS[1] + BAND_ON, "2"),
+        (BANDS[2] + BAND_ON, "3"),
+        (BANDS[3] + BAND_ON, "4"),
+        (LP_ON, "LP"),
+        (AUTO_GAIN, "Auto gain"),
+    ];
+    layout.faces = &[
+        Faces {
+            ids: &[
+                BANDS[0] + BAND_TYPE,
+                BANDS[1] + BAND_TYPE,
+                BANDS[2] + BAND_TYPE,
+                BANDS[3] + BAND_TYPE,
+            ],
+            faces: &[
+                (ToggleFace::Glyph(Glyph::Bell), "Bell"),
+                (ToggleFace::Glyph(Glyph::LowShelf), "Low shelf"),
+                (ToggleFace::Glyph(Glyph::HighShelf), "High shelf"),
+                (ToggleFace::Glyph(Glyph::Notch), "Notch"),
+            ],
+            segment_width: BAND_TRACK / 4.0,
+        },
+        Faces {
+            ids: &[HP_SLOPE, LP_SLOPE],
+            faces: &[
+                (ToggleFace::Text("12"), "12 dB/oct"),
+                (ToggleFace::Text("24"), "24 dB/oct"),
+                (ToggleFace::Text("48"), "48 dB/oct"),
+            ],
+            segment_width: BAND_TRACK / 3.0,
+        },
+    ];
+    layout.visible = |id, values| applies(id, &equalizer_settings(values));
+    // A notch's Gain stays in its cell, so the table never moves.
+    layout.keep_inactive = true;
+    layout.readout = |id, values| {
+        if id != AUTO_GAIN {
+            return None;
+        }
+        // What Auto gain applies, printed like Output beside it. The rate
+        // matters only next to Nyquist.
+        let spec = DESCRIPTOR.parameter(OUTPUT)?;
+        let db = auto_gain_db(&equalizer_settings(values), RESPONSE_RATE);
+        Some(spec.format(spec.to_normalized(db)))
+    };
+    layout.response = Some(ResponseView {
+        curve: |values, rate, frequencies, out| {
+            response_db(&equalizer_settings(values), rate, frequencies, out);
+        },
+        node_curve: Some(|values, node, rate, frequencies, out| {
+            band_response_db(&equalizer_settings(values), node, rate, frequencies, out);
+        }),
+        nodes: &EQUALIZER_NODES,
+        readout: Some(|node, values| {
+            let node = &EQUALIZER_NODES[node];
+            let text = |id: u32| {
+                DESCRIPTOR
+                    .parameter(id)
+                    .map(|spec| spec.format(values(id) as f32))
+                    .unwrap_or_default()
+            };
+            let frequency = text(node.frequency);
+            match (node.gain, node.wheel) {
+                (Some(gain), Some(q)) if applies(gain, &equalizer_settings(values)) => {
+                    format!("{frequency}   {}   Q {}", text(gain), text(q))
+                }
+                (Some(_), Some(q)) => format!("{frequency}   Q {}", text(q)),
+                (_, Some(slope)) => format!("{frequency}   {}/oct", text(slope)),
+                _ => frequency,
+            }
+        }),
+        spectrum: |values| match equalizer_settings(values).analyzer {
+            Analyzer::Off => None,
+            Analyzer::Input => Some(Tap::Input),
+            Analyzer::Output => Some(Tap::Output),
+        },
+        rate_slot: Some(TELEMETRY_SAMPLE_RATE),
+        height: 200.0,
+        // Twelve decibels read finely; the axis doubles once a band needs it.
+        range_db: |values| {
+            let settings = equalizer_settings(values);
+            let beyond = settings
+                .bands
+                .iter()
+                .any(|band| band.on && band.kind != BandType::Notch && band.gain_db.abs() > 12.0);
+            if beyond { 24.0 } else { 12.0 }
+        },
+        limit_db: 24.0,
+    });
+    layout
+}
+
+fn equalizer_settings(values: Values<'_>) -> equalizer::Settings {
+    equalizer::Settings::from_normalized(|id| values(id) as f32)
+}
+
 fn mini_settings(values: Values<'_>) -> mini::Settings {
     mini::Settings::from_normalized(|id| values(id) as f32)
 }
@@ -298,6 +571,7 @@ fn generic(descriptor: &DeviceDescriptor) -> Layout {
                 lines: vec![vec![Slot::Control(spec.id, 1)]],
                 row: sections.len(),
                 span: 1,
+                table: None,
             }),
         }
     }
@@ -312,6 +586,9 @@ fn generic(descriptor: &DeviceDescriptor) -> Layout {
         visible: |_, _| true,
         keep_inactive: false,
         options: |_, _| None,
+        faces: &[],
+        leds: &[],
+        readout: |_, _| None,
         response: None,
     }
 }

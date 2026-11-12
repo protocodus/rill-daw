@@ -1,0 +1,14 @@
+{
+  "format": 1,
+  "device": "r1-equalizer",
+  "name": "Low Cut 80",
+  "author": "Rill",
+  "category": "Basic",
+  "tags": ["high-pass", "clean-up"],
+  "description": "Removes rumble below a voice or guitar.",
+  "parameters": {
+    "hp.on": true,
+    "hp.frequency": 80.0,
+    "hp.slope": "24 dB"
+  }
+}

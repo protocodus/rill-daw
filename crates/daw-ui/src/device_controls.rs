@@ -364,6 +364,140 @@ fn paint_centered(ui: &Ui, rect: Rect, role: TextRole, text: &str, color: Color3
     crate::text::paint_single_line(ui.painter(), text_rect, font, color, text);
 }
 
+/// A continuous value on one line: a small arc and, to its right, the value
+/// with its unit. For tables of like values (the bands of an equalizer, the
+/// pads of a drum machine), where a caption above every dial would repeat
+/// the row's name; the caller names the row once and passes that name here
+/// for hover and assistive technology. The whole cell drags, Shift for fine;
+/// arrow keys nudge when focused; double-click resets to the default.
+#[must_use = "Add the knob to a Ui"]
+pub struct InlineKnob<'a> {
+    name: &'a str,
+    value: &'a mut f64,
+    range: RangeInclusive<f64>,
+    text: String,
+    width: Option<f32>,
+    bipolar: bool,
+    taper: Taper,
+    default: Option<f64>,
+    automation: Option<AutomationState>,
+}
+
+/// `text` is the value as it reads, with its unit ("2.50 kHz").
+pub fn inline_knob<'a>(
+    name: &'a str,
+    value: &'a mut f64,
+    range: RangeInclusive<f64>,
+    text: impl Into<String>,
+) -> InlineKnob<'a> {
+    InlineKnob {
+        name,
+        value,
+        range,
+        text: text.into(),
+        width: None,
+        bipolar: false,
+        taper: Taper::Linear,
+        default: None,
+        automation: None,
+    }
+}
+
+/// Space between an [`InlineKnob`]'s arc and its value. The arc keeps a
+/// point of margin of its own.
+const INLINE_GAP: f32 = 4.0;
+
+/// The width an [`inline_knob`] needs to show `text` whole.
+pub fn inline_knob_width(ui: &Ui, text: &str) -> f32 {
+    crate::MINI_KNOB_DIAMETER
+        + INLINE_GAP
+        + ui.painter()
+            .layout_no_wrap(text.to_owned(), TextRole::Note.font(), Color32::PLACEHOLDER)
+            .size()
+            .x
+}
+
+impl InlineKnob<'_> {
+    /// A fixed cell width, so the values of a column start on one line
+    /// whatever they read. Without it the cell fits its text.
+    pub fn width(mut self, width: f32) -> Self {
+        self.width = Some(width);
+        self
+    }
+    pub fn bipolar(mut self) -> Self {
+        self.bipolar = true;
+        self
+    }
+    pub fn taper(mut self, taper: Taper) -> Self {
+        self.taper = taper;
+        self
+    }
+    /// Enables Reset by double-click and from the context menu. A caller
+    /// with a context menu of its own resets on `double_clicked` instead.
+    pub fn default_value(mut self, value: f64) -> Self {
+        self.default = Some(value);
+        self
+    }
+    pub fn automation(mut self, state: Option<AutomationState>) -> Self {
+        self.automation = state;
+        self
+    }
+}
+
+impl egui::Widget for InlineKnob<'_> {
+    fn ui(self, ui: &mut Ui) -> Response {
+        let width = self
+            .width
+            .unwrap_or_else(|| inline_knob_width(ui, &self.text));
+        let mut knob = Knob::new(self.value, self.range)
+            .inline(width)
+            .taper(self.taper)
+            .text(self.name)
+            .automation(self.automation);
+        if self.bipolar {
+            knob = knob.bipolar();
+        }
+        if let Some(default) = self.default {
+            knob = knob.default_value(default);
+        }
+        let response = ui.add(knob);
+        if ui.is_rect_visible(response.rect) {
+            let colors = theme::palette(ui.ctx());
+            let mut text = response.rect;
+            text.min.x += crate::MINI_KNOB_DIAMETER + INLINE_GAP;
+            let color = if response.hovered() || response.dragged() || response.has_focus() {
+                colors.text
+            } else {
+                colors.text.gamma_multiply(0.85)
+            };
+            crate::text::paint_single_line(
+                ui.painter(),
+                text,
+                TextRole::Note.font(),
+                color,
+                &self.text,
+            );
+        }
+        response
+    }
+}
+
+/// Marks the selected column of a table or cell grid: a faint tint with a
+/// rule on top. Call it before drawing the column's contents.
+pub fn column_highlight(ui: &Ui, rect: Rect) {
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
+    let colors = theme::palette(ui.ctx());
+    ui.painter()
+        .rect_filled(rect, tokens::RADIUS, colors.accent.gamma_multiply(0.1));
+    ui.painter().rect_filled(
+        Rect::from_min_size(rect.min, vec2(rect.width(), 2.0)),
+        1.0,
+        colors.accent,
+    );
+}
+
 /// Exclusive choice among two to four short options, as toggle buttons.
 /// Falls back to a drop-down for more, or when they do not fit the width.
 pub fn segmented(ui: &mut Ui, selected: &mut usize, options: &[&str]) -> Response {
@@ -438,13 +572,29 @@ pub fn stepped_selector(ui: &mut Ui, selected: &mut usize, options: &[&str]) -> 
     response
 }
 
+const LED_LAMP: f32 = 13.0;
+
+/// The width a [`toggle_led`] with this label takes.
+pub fn toggle_led_width(ui: &Ui, label: &str) -> f32 {
+    LED_LAMP
+        + tokens::SPACE_SM
+        + ui.painter()
+            .layout_no_wrap(
+                label.to_owned(),
+                TextRole::Label.font(),
+                Color32::PLACEHOLDER,
+            )
+            .size()
+            .x
+}
+
 /// A section enable: a small lit lamp with a caption.
 pub fn toggle_led(ui: &mut Ui, value: &mut bool, label: &str) -> Response {
     let colors = theme::palette(ui.ctx());
     let galley = ui
         .painter()
         .layout_no_wrap(label.to_owned(), TextRole::Label.font(), colors.text);
-    let lamp = 13.0;
+    let lamp = LED_LAMP;
     let size = vec2(
         lamp + tokens::SPACE_SM + galley.size().x,
         tokens::COMPACT_HEIGHT,

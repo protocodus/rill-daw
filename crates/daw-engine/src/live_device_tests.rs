@@ -377,3 +377,33 @@ fn progressive_audio_keeps_playing_and_obsolete_refinement_cannot_replace_newer_
         initial.consumed_frames + 16_384
     );
 }
+
+#[test]
+fn built_in_insert_publishes_its_telemetry_for_the_panel() {
+    let (_directory, mut project, id) = fixture();
+    project
+        .track_mut(id)
+        .unwrap()
+        .inserts
+        .push(daw_core::EffectSlot {
+            id: 7,
+            name: "R1 Equalizer".into(),
+            enabled: true,
+            effect: daw_core::Effect::Builtin {
+                device: "r1-equalizer".into(),
+            },
+            state: Vec::new(),
+            parameters: Vec::new(),
+            inputs: Vec::new(),
+        });
+    let mut engine = engine(&project);
+    wait_for(|| engine.device_telemetry(id, Some(7)).is_some());
+    let telemetry = engine.device_telemetry(id, Some(7)).unwrap();
+    engine.pump_virtual(4096).unwrap();
+    // The analyzer taps what the device heard, at the rate it runs at.
+    wait_for(|| telemetry.output_position() > 0);
+    assert_eq!(telemetry.value(0), 48_000.0);
+    assert!((telemetry.output_peak() - 0.4).abs() < 0.01);
+    assert!(engine.device_telemetry(id, None).is_none());
+    assert!(engine.device_telemetry(id, Some(8)).is_none());
+}

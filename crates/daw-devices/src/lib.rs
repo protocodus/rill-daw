@@ -10,6 +10,7 @@ pub mod devices;
 mod param;
 mod preset;
 mod registry;
+mod spectrum;
 mod telemetry;
 
 pub use daw_dsp as dsp;
@@ -17,4 +18,5 @@ pub use device::*;
 pub use param::*;
 pub use preset::*;
 pub use registry::*;
+pub use spectrum::*;
 pub use telemetry::*;

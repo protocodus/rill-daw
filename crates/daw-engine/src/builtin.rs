@@ -7,6 +7,13 @@ use daw_plugins::{
     ExpressiveMidiMessage as Message, ExpressiveVelocity as Velocity, MidiMessage,
 };
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::{Arc, Mutex};
+
+/// The live telemetry of every built-in device of the sounding graph, by
+/// track and effect slot (`None`: the track's instrument). The render worker
+/// replaces the list when the graph changes; panels look their device up.
+pub(crate) type TelemetryList = Vec<((u64, Option<u64>), Arc<daw_devices::Telemetry>)>;
+pub(crate) type DeviceTelemetry = Mutex<TelemetryList>;
 
 /// Bounds the per-block event list so translation never allocates.
 const MAX_EVENTS: usize = 4096;
@@ -43,6 +50,10 @@ impl BuiltinDevice {
 
     pub(crate) fn latency_samples(&self) -> u32 {
         self.device.latency_samples()
+    }
+
+    pub(crate) fn telemetry(&self) -> Arc<daw_devices::Telemetry> {
+        self.device.telemetry()
     }
 
     pub(crate) fn tail_samples(&self) -> u32 {

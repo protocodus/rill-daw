@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-equalizer",
+  "name": "De-Mud",
+  "author": "Rill",
+  "category": "Mix",
+  "tags": ["low-mid", "clean-up"],
+  "description": "Clears the low mids of a dense track.",
+  "parameters": {
+    "hp.on": true,
+    "hp.frequency": 40.0,
+    "hp.slope": "12 dB",
+    "band2.type": "Bell",
+    "band2.frequency": 280.0,
+    "band2.gain": -3.5,
+    "band2.q": 0.9
+  }
+}

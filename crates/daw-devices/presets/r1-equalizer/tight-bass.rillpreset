@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "device": "r1-equalizer",
+  "name": "Tight Bass",
+  "author": "Rill",
+  "category": "Bass",
+  "tags": ["bass"],
+  "description": "Controlled sub and defined notes.",
+  "parameters": {
+    "hp.on": true,
+    "hp.frequency": 35.0,
+    "hp.slope": "24 dB",
+    "band1.type": "Bell",
+    "band1.frequency": 80.0,
+    "band1.gain": 3.0,
+    "band1.q": 1.0,
+    "band2.type": "Bell",
+    "band2.frequency": 250.0,
+    "band2.gain": -3.0,
+    "band2.q": 1.4,
+    "band3.type": "Bell",
+    "band3.frequency": 900.0,
+    "band3.gain": 2.0,
+    "band3.q": 1.0,
+    "band4.type": "High shelf",
+    "band4.frequency": 5000.0,
+    "band4.gain": -2.0,
+    "lp.on": true,
+    "lp.frequency": 9000.0,
+    "lp.slope": "12 dB"
+  }
+}

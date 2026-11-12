@@ -493,10 +493,7 @@ fn every_visualization_renders_without_overflow() {
     let curve = vec![0.0; 64];
     let peaks = vec![(-0.5, 0.5); 64];
     let used = run(&ctx, vec![], |ui| {
-        let spec = ui::Spectrum {
-            bins_db: &spectrum,
-            sample_rate: 48_000.0,
-        };
+        let spec = ui::Spectrum::new(&spectrum, 48_000.0);
         ui::frequency_plot(
             ui,
             &ui::FrequencyPlot {
@@ -507,6 +504,7 @@ fn every_visualization_renders_without_overflow() {
                 spectrum: Some(spec),
                 nodes: &[],
                 range_db: 12.0,
+                limit_db: 12.0,
                 size,
             },
         );
@@ -577,11 +575,8 @@ fn frequency_node_nudges_with_arrow_keys() {
     let ctx = themed();
     let curve = vec![0.0; 64];
     let nodes = [ui::FrequencyNode {
-        frequency: 1000.0,
-        gain_db: 0.0,
         selected: true,
-        color: None,
-        gain_editable: true,
+        ..ui::FrequencyNode::new(1000.0, 0.0)
     }];
     let size = vec2(610.0, 170.0);
     let mut drags = Vec::new();
@@ -597,6 +592,7 @@ fn frequency_node_nudges_with_arrow_keys() {
                     spectrum: None,
                     nodes: &nodes,
                     range_db: 18.0,
+                    limit_db: 18.0,
                     size,
                 },
             )
@@ -624,4 +620,430 @@ fn frequency_node_nudges_with_arrow_keys() {
     );
     assert_eq!(drags.len(), 1);
     assert!(drags[0].gain_db > 0.0);
+}
+
+fn inline(ui: &mut egui::Ui, value: &mut f64) -> egui::Response {
+    ui.add(
+        ui::inline_knob("Gain", value, -24.0..=24.0, "+24.0 dB")
+            .bipolar()
+            .default_value(0.0)
+            .width(89.0),
+    )
+}
+
+#[test]
+fn inline_knob_is_one_line_and_drags_from_its_value_text() {
+    let ctx = themed();
+    let mut value = 6.0;
+    let used = run(&ctx, vec![], |ui| {
+        inline(ui, &mut value);
+    });
+    assert_eq!(used.size(), vec2(89.0, ui::MINI_KNOB_DIAMETER));
+    assert_eq!(value, 6.0, "drawing leaves the value alone");
+    // Without a width the cell is the arc, the gap and the text.
+    let mut fitted = Rect::NOTHING;
+    let mut needed = 0.0;
+    run(&ctx, vec![], |ui| {
+        needed = ui::inline_knob_width(ui, "+24.0 dB");
+        fitted = ui
+            .add(ui::inline_knob("Gain", &mut 0.0, -24.0..=24.0, "+24.0 dB"))
+            .rect;
+    });
+    assert_eq!(fitted.width(), needed);
+    assert!(needed > ui::MINI_KNOB_DIAMETER && needed <= 89.0);
+
+    // Over the text, well right of the arc.
+    let at = pos2(used.right() - 20.0, used.center().y);
+    let frame = |events: Vec<Event>, value: &mut f64| {
+        run(&ctx, events, |ui| {
+            inline(ui, value);
+        });
+    };
+    frame(vec![Event::PointerMoved(at)], &mut value);
+    frame(button(at, true), &mut value);
+    frame(vec![Event::PointerMoved(at - vec2(0.0, 50.0))], &mut value);
+    let coarse = value - 6.0;
+    assert!(coarse > 0.0, "dragging up over the text raises the value");
+    let shift = Modifiers {
+        shift: true,
+        ..Modifiers::NONE
+    };
+    let _ = ctx.run(
+        RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 900.0))),
+            modifiers: shift,
+            events: vec![Event::PointerMoved(at - vec2(0.0, 100.0))],
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.vertical(|ui| inline(ui, &mut value));
+            });
+        },
+    );
+    let fine = value - 6.0 - coarse;
+    assert!(
+        (fine - coarse * 0.1).abs() < 1e-6,
+        "Shift moves a tenth as far: {fine} against {coarse}"
+    );
+    frame(button(at - vec2(0.0, 100.0), false), &mut value);
+
+    click(at, 2, &mut |events| frame(events, &mut value));
+    assert_eq!(value, 0.0, "a double-click resets to the default");
+    frame(
+        vec![Event::Key {
+            key: egui::Key::ArrowUp,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Modifiers::NONE,
+        }],
+        &mut value,
+    );
+    assert!(value > 0.0, "arrow keys nudge the focused dial");
+}
+
+#[test]
+fn disabled_inline_knob_ignores_the_pointer() {
+    let ctx = themed();
+    let mut value = 6.0;
+    let frame = |events: Vec<Event>, value: &mut f64| {
+        run(&ctx, events, |ui| {
+            ui.add_enabled_ui(false, |ui| inline(ui, value));
+        })
+    };
+    let at = frame(vec![], &mut value).center();
+    frame(vec![Event::PointerMoved(at)], &mut value);
+    frame(button(at, true), &mut value);
+    frame(vec![Event::PointerMoved(at - vec2(0.0, 60.0))], &mut value);
+    frame(button(at - vec2(0.0, 60.0), false), &mut value);
+    assert_eq!(value, 6.0);
+}
+
+#[test]
+fn glyph_toggle_has_equal_segments_and_selects_by_click() {
+    let ctx = themed();
+    let types = [
+        (ui::Glyph::Bell, "Bell"),
+        (ui::Glyph::LowShelf, "Low shelf"),
+        (ui::Glyph::HighShelf, "High shelf"),
+        (ui::Glyph::Notch, "Notch"),
+    ]
+    .map(|(glyph, name)| (glyph, ui::ToggleFace::Glyph(glyph), name));
+    let mut selected = ui::Glyph::Bell;
+    let used = run(&ctx, vec![], |ui| {
+        ui::glyph_toggle(ui, &mut selected, &types, 21.0);
+    });
+    assert_eq!(used.size(), vec2(84.0, ui::tokens::CONTROL_HEIGHT));
+    // The middle of the third segment.
+    let at = pos2(used.left() + 2.5 * 21.0, used.center().y);
+    click(at, 1, &mut |events| {
+        run(&ctx, events, |ui| {
+            ui::glyph_toggle(ui, &mut selected, &types, 21.0);
+        });
+    });
+    assert_eq!(selected, ui::Glyph::HighShelf);
+
+    // Short texts take the same track; no segment is narrower than a target.
+    let slopes = [(12, "12 dB/oct"), (24, "24 dB/oct"), (48, "48 dB/oct")];
+    let faces: Vec<_> = ["12", "24", "48"]
+        .into_iter()
+        .zip(slopes)
+        .map(|(face, (value, name))| (value, ui::ToggleFace::Text(face), name))
+        .collect();
+    let mut slope = 12;
+    let used = run(&ctx, vec![], |ui| {
+        ui::glyph_toggle(ui, &mut slope, &faces, 28.0);
+    });
+    assert_eq!(used.width(), 84.0);
+    click(used.right_center() - vec2(6.0, 0.0), 1, &mut |events| {
+        run(&ctx, events, |ui| {
+            ui::glyph_toggle(ui, &mut slope, &faces, 28.0);
+        });
+    });
+    assert_eq!(slope, 48);
+    let used = run(&ctx, vec![], |ui| {
+        ui::glyph_toggle(ui, &mut slope, &faces, 5.0);
+    });
+    assert_eq!(used.width(), 3.0 * ui::tokens::HIT_TARGET);
+}
+
+#[test]
+fn every_glyph_and_the_column_mark_paint_without_taking_space() {
+    let ctx = themed();
+    let glyphs = [
+        ui::Glyph::Bell,
+        ui::Glyph::LowShelf,
+        ui::Glyph::HighShelf,
+        ui::Glyph::Notch,
+        ui::Glyph::LowPass,
+        ui::Glyph::HighPass,
+        ui::Glyph::BandPass,
+        ui::Glyph::Sine,
+        ui::Glyph::Triangle,
+        ui::Glyph::Saw,
+        ui::Glyph::Square,
+        ui::Glyph::SampleHold,
+    ]
+    .map(|glyph| (glyph, ui::ToggleFace::Glyph(glyph), "Shape"));
+    let used = run(&ctx, vec![], |ui| {
+        let column = Rect::from_min_size(ui.cursor().min, vec2(89.0, 120.0));
+        ui::column_highlight(ui, column);
+        ui::glyph_toggle(ui, &mut ui::Glyph::Sine, &glyphs, 28.0);
+    });
+    assert_eq!(
+        used.size(),
+        vec2(12.0 * 28.0, ui::tokens::CONTROL_HEIGHT),
+        "the column mark is paint only"
+    );
+}
+
+/// A plot of two nodes; returns what the frame reported.
+fn plot_frame(
+    ctx: &Context,
+    events: Vec<Event>,
+    nodes: &[ui::FrequencyNode<'_>],
+    range_db: f32,
+) -> (Rect, ui::FrequencyPlotOutput) {
+    let mut output = None;
+    let used = run(ctx, events, |ui| {
+        output = Some(ui::frequency_plot(
+            ui,
+            &ui::FrequencyPlot {
+                curves: &[],
+                spectrum: None,
+                nodes,
+                range_db,
+                limit_db: 24.0,
+                size: vec2(610.0, 200.0),
+            },
+        ));
+    });
+    (used, output.unwrap())
+}
+
+fn node_position(plot: Rect, frequency: f32, gain_db: f32, range_db: f32) -> Pos2 {
+    let inner = plot.shrink(1.0);
+    pos2(
+        inner.left() + inner.width() * (frequency / 20.0).ln() / 1000f32.ln(),
+        inner.center().y - inner.height() * 0.5 * (gain_db / range_db).clamp(-1.0, 1.0),
+    )
+}
+
+#[test]
+fn frequency_node_follows_the_pointer_from_where_it_was_grabbed() {
+    let ctx = themed();
+    let nodes = [ui::FrequencyNode::new(1000.0, 0.0)];
+    let (plot, _) = plot_frame(&ctx, vec![], &nodes, 12.0);
+    // Six points off the node's center: a press there must not move it.
+    let grab = node_position(plot, 1000.0, 0.0, 12.0) + vec2(6.0, 6.0);
+    plot_frame(&ctx, vec![Event::PointerMoved(grab)], &nodes, 12.0);
+    let (_, pressed) = plot_frame(&ctx, button(grab, true), &nodes, 12.0);
+    assert!(pressed.drags.is_empty(), "no jump on press");
+    assert_eq!(pressed.clicked, None);
+    let moved = grab + vec2(40.0, -30.0);
+    let (_, dragged) = plot_frame(&ctx, vec![Event::PointerMoved(moved)], &nodes, 12.0);
+    assert_eq!(dragged.dragging, Some(0));
+    assert_eq!(dragged.clicked, Some(0), "starting a drag selects the node");
+    let drag = dragged.drags[0];
+    let expected = node_position(plot, 1000.0, 0.0, 12.0) + vec2(40.0, -30.0);
+    let reached = node_position(plot, drag.frequency, drag.gain_db, 12.0);
+    assert!(
+        (reached - expected).length() < 0.5,
+        "{reached:?} against {expected:?}"
+    );
+}
+
+#[test]
+fn frequency_node_gain_can_leave_the_axis_up_to_its_limit() {
+    let ctx = themed();
+    let nodes = [ui::FrequencyNode::new(1000.0, 11.0)];
+    let (plot, _) = plot_frame(&ctx, vec![], &nodes, 12.0);
+    let at = node_position(plot, 1000.0, 11.0, 12.0);
+    plot_frame(&ctx, vec![Event::PointerMoved(at)], &nodes, 12.0);
+    plot_frame(&ctx, button(at, true), &nodes, 12.0);
+    // A third of the plot's height is 8 dB on a ±12 dB axis.
+    let (_, output) = plot_frame(
+        &ctx,
+        vec![Event::PointerMoved(at - vec2(0.0, 66.0))],
+        &nodes,
+        12.0,
+    );
+    let gain = output.drags[0].gain_db;
+    assert!(gain > 18.0 && gain <= 24.0, "{gain}");
+    let nodes = [ui::FrequencyNode::new(1000.0, 23.0)];
+    let (_, output) = plot_frame(
+        &ctx,
+        vec![Event::PointerMoved(at - vec2(0.0, 166.0))],
+        &nodes,
+        12.0,
+    );
+    assert_eq!(output.drags[0].gain_db, 24.0, "the limit clamps the drag");
+}
+
+#[test]
+fn selected_frequency_node_wins_where_nodes_overlap() {
+    for selected in [0, 1] {
+        let ctx = themed();
+        let nodes: Vec<_> = (0..2)
+            .map(|index| ui::FrequencyNode {
+                selected: index == selected,
+                ..ui::FrequencyNode::new(1000.0, 0.0)
+            })
+            .collect();
+        let (plot, _) = plot_frame(&ctx, vec![], &nodes, 12.0);
+        let at = node_position(plot, 1000.0, 0.0, 12.0);
+        let mut clicked = None;
+        click(at, 1, &mut |events| {
+            let (_, output) = plot_frame(&ctx, events, &nodes, 12.0);
+            clicked = clicked.or(output.clicked);
+        });
+        assert_eq!(clicked, Some(selected));
+    }
+}
+
+#[test]
+fn frequency_node_reports_double_click_and_wheel() {
+    let ctx = themed();
+    let nodes = [
+        ui::FrequencyNode {
+            label: Some("HP"),
+            enabled: false,
+            gain_editable: false,
+            readout: Some("80 Hz  24 dB/oct"),
+            ..ui::FrequencyNode::new(80.0, 0.0)
+        },
+        ui::FrequencyNode::new(1000.0, 6.0),
+    ];
+    let (plot, output) = plot_frame(&ctx, vec![], &nodes, 12.0);
+    assert_eq!(
+        output.nodes.len(),
+        2,
+        "one response per node, in node order"
+    );
+    let at = node_position(plot, 80.0, 0.0, 12.0);
+    assert!(output.nodes[0].rect.contains(at));
+    let mut double_clicked = None;
+    click(at, 2, &mut |events| {
+        let (_, output) = plot_frame(&ctx, events, &nodes, 12.0);
+        double_clicked = double_clicked.or(output.double_clicked);
+    });
+    assert_eq!(double_clicked, Some(0));
+    let wheel = |delta: f32| Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Line,
+        delta: vec2(0.0, delta),
+        modifiers: Modifiers::NONE,
+    };
+    let (_, output) = plot_frame(&ctx, vec![wheel(2.0)], &nodes, 12.0);
+    assert_eq!(output.scrolled, Some((0, 2.0)));
+    assert!(output.drags.is_empty(), "the wheel is not a drag");
+    // Away from every node the wheel belongs to whatever scrolls the page.
+    let away = plot.center() + vec2(0.0, 60.0);
+    plot_frame(&ctx, vec![Event::PointerMoved(away)], &nodes, 12.0);
+    let (_, output) = plot_frame(&ctx, vec![wheel(2.0)], &nodes, 12.0);
+    assert_eq!(output.scrolled, None);
+}
+
+#[test]
+fn wheel_over_a_frequency_node_leaves_the_page_where_it_is() {
+    let ctx = themed();
+    let nodes = [ui::FrequencyNode::new(1000.0, 0.0)];
+    let frame = |events: Vec<Event>| {
+        let (mut offset, mut scrolled) = (0.0, None);
+        run(&ctx, events, |ui| {
+            let area = egui::ScrollArea::vertical().show(ui, |ui| {
+                let plot = ui::FrequencyPlot {
+                    curves: &[],
+                    spectrum: None,
+                    nodes: &nodes,
+                    range_db: 12.0,
+                    limit_db: 24.0,
+                    size: vec2(610.0, 200.0),
+                };
+                scrolled = ui::frequency_plot(ui, &plot).scrolled;
+                ui.add_space(2000.0);
+            });
+            offset = area.state.offset.y;
+        });
+        (offset, scrolled)
+    };
+    let wheel = Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Line,
+        delta: vec2(0.0, -1.0),
+        modifiers: Modifiers::NONE,
+    };
+    let (plot, _) = plot_frame(&themed(), vec![], &nodes, 12.0);
+    // The notch goes to the node, and nothing of it to the page in the
+    // frames egui spreads it over.
+    frame(vec![Event::PointerMoved(node_position(
+        plot, 1000.0, 0.0, 12.0,
+    ))]);
+    assert_eq!(frame(vec![wheel.clone()]), (0.0, Some((0, -1.0))));
+    for _ in 0..20 {
+        assert_eq!(frame(vec![]), (0.0, None));
+    }
+    // Beside the node the same notch scrolls the page.
+    frame(vec![Event::PointerMoved(plot.center() + vec2(0.0, 60.0))]);
+    frame(vec![wheel]);
+    let offsets: Vec<f32> = (0..20).map(|_| frame(vec![]).0).collect();
+    assert!(offsets.iter().any(|offset| *offset > 0.0), "{offsets:?}");
+}
+
+/// Bins of a spectrum that is `floor` dB everywhere but `peak` dB at `frequency`.
+fn bins_with_peak(frequency: f32, sample_rate: f32) -> Vec<f32> {
+    let mut bins = vec![-80.0; 4097];
+    let bin = (frequency / (sample_rate * 0.5) * 4096.0).round() as usize;
+    bins[bin] = -6.0;
+    bins
+}
+
+#[test]
+fn spectrum_peaks_at_its_sine_and_interpolates_between_low_bins() {
+    let rate = 48_000.0;
+    let bins = bins_with_peak(1000.0, rate);
+    let spectrum = ui::Spectrum {
+        smoothing_octaves: 1.0 / 6.0,
+        ..ui::Spectrum::new(&bins, rate)
+    };
+    let (peak, _) = (0..600)
+        .map(|index| ui::log_grid_frequency(index, 600))
+        .map(|frequency| (frequency, spectrum.level_db(frequency)))
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+        .unwrap();
+    assert!((peak / 1000.0).log2().abs() < 1.0 / 12.0, "{peak} Hz");
+    assert!(spectrum.level_db(4000.0) < -79.0);
+
+    // Bins are 5.9 Hz apart: between 20 and 100 Hz most drawn points fall
+    // between two. A ramp of 1 dB per bin must read as a ramp, not as steps.
+    let ramp: Vec<f32> = (0..4097).map(|bin| -60.0 + bin as f32).collect();
+    let spectrum = ui::Spectrum::new(&ramp, rate);
+    let spacing = rate * 0.5 / 4096.0;
+    let mut previous = spectrum.level_db(20.0);
+    for step in 1..=200 {
+        let frequency = 20.0 + 80.0 * step as f32 / 200.0;
+        let level = spectrum.level_db(frequency);
+        assert!(
+            (level - (-60.0 + frequency / spacing)).abs() < 1e-3,
+            "{frequency} Hz reads {level}"
+        );
+        assert!(level > previous);
+        previous = level;
+    }
+}
+
+#[test]
+fn spectrum_tilt_turns_about_one_kilohertz() {
+    let flat = vec![-40.0; 4097];
+    let spectrum = ui::Spectrum {
+        tilt_db_per_octave: 4.5,
+        smoothing_octaves: 1.0 / 6.0,
+        ..ui::Spectrum::new(&flat, 48_000.0)
+    };
+    assert!((spectrum.level_db(1000.0) + 40.0).abs() < 1e-3);
+    assert!((spectrum.level_db(2000.0) - spectrum.level_db(1000.0) - 4.5).abs() < 1e-3);
+    assert!((spectrum.level_db(500.0) - spectrum.level_db(1000.0) + 4.5).abs() < 1e-3);
+    // Damaged bins and an empty spectrum draw as silence.
+    let broken = [f32::NAN; 16];
+    assert!(ui::Spectrum::new(&broken, 48_000.0).level_db(1000.0) <= -90.0);
+    assert!(ui::Spectrum::new(&[], 48_000.0).level_db(1000.0) <= -90.0);
 }

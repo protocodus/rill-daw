@@ -419,6 +419,7 @@ pub struct AudioEngine {
     audition: Arc<Mutex<Option<(u64, u8, u8)>>>,
     audition_wheels: Arc<Mutex<Option<(u64, f32, f32)>>>,
     channel_meters: Arc<ChannelMeters>,
+    device_telemetry: Arc<crate::builtin::DeviceTelemetry>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -616,6 +617,12 @@ impl AudioEngine {
         ));
         let worker_signal_monitor = Arc::clone(&signal_monitor);
         let worker_meters = Arc::clone(&channel_meters);
+        // Room for every device of a large song, so listing them after a
+        // graph change does not allocate on the render worker.
+        let device_telemetry = Arc::new(crate::builtin::DeviceTelemetry::new(Vec::with_capacity(
+            256,
+        )));
+        let worker_telemetry = Arc::clone(&device_telemetry);
         let queue = Arc::new(AudioQueue::new(settings.render_queue_frames()));
         let input = InputController::new(
             Arc::clone(&controls),
@@ -693,11 +700,20 @@ impl AudioEngine {
                 let mut render_failure = RenderFailureLatch::default();
                 let mut preview = false;
                 let mut midi_monitor = MidiMonitor::new();
+                // Whether the graph changed since its devices were last listed.
+                let mut devices_changed = true;
                 while !worker_controls.shutdown.load(Ordering::Acquire) {
                     if worker_edits.apply_pending(&mut renderer) {
                         worker_controls
                             .finished_generation
                             .store(u64::MAX, Ordering::Release);
+                        devices_changed = true;
+                    }
+                    // A panel holds the list only for a lookup; if it does
+                    // right now, the next pass publishes instead of waiting.
+                    if devices_changed && let Ok(mut devices) = worker_telemetry.try_lock() {
+                        renderer.device_telemetry(&mut devices);
+                        devices_changed = false;
                     }
                     worker_controls.publish_streaming(&renderer);
                     // UI edits never touch the callback. Coalesce rapid drags before
@@ -877,6 +893,7 @@ impl AudioEngine {
             audition,
             audition_wheels,
             channel_meters,
+            device_telemetry,
         };
         if let Some((device, config, format)) = output {
             let controls = Arc::clone(&engine.controls);
@@ -1279,6 +1296,22 @@ impl AudioEngine {
         }
         self.signal_monitor.snapshot()
     }
+    /// The live telemetry of the built-in device on `track`: its instrument
+    /// (`effect` `None`) or the insert with that slot ID. `None` for a hosted
+    /// plug-in, an unknown device, or until the graph that holds it sounds.
+    pub fn device_telemetry(
+        &self,
+        track: u64,
+        effect: Option<u64>,
+    ) -> Option<Arc<daw_devices::Telemetry>> {
+        self.device_telemetry
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .iter()
+            .find(|(key, _)| *key == (track, effect))
+            .map(|(_, telemetry)| Arc::clone(telemetry))
+    }
+
     /// Post-insert, post-fader/pan stereo channel peaks (including buses), with
     /// instant attack and a 24 dB/second release. This nonconsuming atomic read
     /// never locks, allocates, or touches a plugin. Stopped/missing channels read
@@ -1620,6 +1653,7 @@ mod tests {
             audition: Arc::new(Mutex::new(None)),
             audition_wheels: Arc::new(Mutex::new(None)),
             channel_meters: meters,
+            device_telemetry: Default::default(),
         };
         assert_eq!(engine.channel_peaks(channel), [0.0; 2]);
         engine.set_playing(true);
@@ -1732,6 +1766,7 @@ mod tests {
             audition: Arc::new(Mutex::new(None)),
             audition_wheels: Arc::new(Mutex::new(None)),
             channel_meters: Arc::new(ChannelMeters::new(&project)),
+            device_telemetry: Default::default(),
         };
         let mut settings = MidiSettings {
             port_id: Some("rill-virtual-midi".into()),
@@ -1788,6 +1823,7 @@ mod tests {
             audition: Arc::new(Mutex::new(None)),
             audition_wheels: Arc::new(Mutex::new(None)),
             channel_meters: Arc::new(ChannelMeters::default()),
+            device_telemetry: Default::default(),
         };
         engine.set_instrument_parameter(1, 7, 0.1).unwrap();
         engine.set_plugin_parameter(1, Some(10), 7, 0.2).unwrap();

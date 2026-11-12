@@ -162,7 +162,12 @@ pub fn paint_automation_control(ui: &Ui, response: &Response, state: AutomationS
 /// target and never changes layout.
 pub fn paint_automation_indicator(ui: &Ui, rect: egui::Rect, state: Option<AutomationState>) {
     register_automation_indicator(ui.ctx(), state, rect);
-    if !ui.is_rect_visible(rect) {
+    let quiet = state.is_none()
+        && ui.data(|data| {
+            data.get_temp::<bool>(ui.id().with(QUIET_INDICATORS))
+                .is_some()
+        });
+    if quiet || !ui.is_rect_visible(rect) {
         return;
     }
     let radius = 2.5;
@@ -177,6 +182,16 @@ pub fn paint_automation_indicator(ui: &Ui, rect: egui::Rect, state: Option<Autom
             egui::Stroke::new(1.0_f32, theme::palette(ui.ctx()).muted.gamma_multiply(0.6)),
         ),
     };
+}
+
+const QUIET_INDICATORS: &str = "rill_quiet_automation_indicators";
+
+/// Controls drawn directly in `ui` leave out the faint ring that marks a
+/// control without a lane; a lane's own marker still shows. For the cells
+/// of a dense table, where a ring on every value reads as punctuation.
+/// **Automate** stays in each control's context menu.
+pub fn quiet_automation_indicators(ui: &Ui) {
+    ui.data_mut(|data| data.insert_temp(ui.id().with(QUIET_INDICATORS), true));
 }
 
 #[derive(Clone, Default)]

@@ -2440,6 +2440,22 @@ impl Renderer {
         }
     }
 
+    /// Lists the telemetry of every built-in device of this graph, for
+    /// [`crate::builtin::DeviceTelemetry`].
+    pub(crate) fn device_telemetry(&self, out: &mut crate::builtin::TelemetryList) {
+        out.clear();
+        for track in self.tracks.iter().flatten() {
+            if let Processor::Builtin(device) = &track.processor {
+                out.push(((track.id, None), device.telemetry()));
+            }
+            for insert in &track.inserts {
+                if let InsertProcessor::Builtin(device) = &insert.effect {
+                    out.push(((track.id, Some(insert.id)), device.telemetry()));
+                }
+            }
+        }
+    }
+
     pub(crate) fn attach_signal_monitor(
         &mut self,
         monitor: Arc<crate::signal_monitor::SignalMonitor>,

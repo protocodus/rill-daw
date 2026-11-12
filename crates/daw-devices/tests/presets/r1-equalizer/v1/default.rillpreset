@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "device": "r1-equalizer",
+  "name": "Default",
+  "author": "Rill",
+  "category": "Basic",
+  "description": "Flat, with four bands ready to shape.",
+  "parameters": {}
+}
