@@ -241,7 +241,12 @@ One format, one browser and one set of tools for every device.
 
 The shared `preset_group` on the bar of every device frame is one bordered group, set
 apart from the device's own controls: the current preset name with a modified
-marker in a menu of all presets, previous/next, Save as… and Reset. The
+marker in a menu of all presets, previous/next, Save as…, Reset, and Random
+1% · 10% · 100%. A random roll (`daw_devices::randomized`) moves every
+continuous value to anywhere within that share of its range of where it is,
+and changes each choice or switch to another option, picked at random, with
+that chance. The output level and volume never move, so a roll is never a
+jump in loudness. The roll is one Undo step and leaves the preset Custom. The
 `preset_browser` (search, category and tag filters, Factory/User, favorites)
 is the larger companion. Both are `daw-ui` components and identical for all
 devices.

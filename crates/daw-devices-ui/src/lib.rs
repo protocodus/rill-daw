@@ -1818,6 +1818,17 @@ fn preset_bar(
             host.set_values(&values);
             state.preset = None;
         }
+        Some(daw_ui::PresetAction::Randomize(amount)) => {
+            // The time of the click picks the roll.
+            let seed = ui.input(|input| input.time).to_bits();
+            let values: Vec<_> =
+                daw_devices::randomized(descriptor, |id| host.value(id) as f32, amount, seed)
+                    .into_iter()
+                    .map(|(id, value)| (id, f64::from(value)))
+                    .collect();
+            host.set_values(&values);
+            state.preset = None;
+        }
         Some(daw_ui::PresetAction::ToggleFavorite(_)) | None => {}
     }
 }

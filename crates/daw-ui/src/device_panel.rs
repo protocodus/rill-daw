@@ -52,6 +52,9 @@ pub enum PresetAction {
     ToggleFavorite(usize),
     SaveAs(String),
     Reset,
+    /// Move every parameter at random by up to this share (0–1) of its
+    /// range; a choice or switch changes with that chance.
+    Randomize(f32),
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -322,6 +325,30 @@ pub fn preset_group(
                         .clicked()
                     {
                         *action = Some(PresetAction::Reset);
+                    }
+                    ui.add_space(tokens::SPACE_XS);
+                    ui.separator();
+                    ui.add_space(tokens::SPACE_XS);
+                    let title = group_title(ui, "Random");
+                    let (rect, _) = ui.allocate_exact_size(
+                        title.size() + vec2(tokens::SPACE_XS, 0.0),
+                        egui::Sense::hover(),
+                    );
+                    ui.painter().galley(
+                        egui::pos2(rect.left(), rect.center().y - title.size().y * 0.5),
+                        title,
+                        egui::Color32::PLACEHOLDER,
+                    );
+                    for (label, amount) in [("1%", 0.01), ("10%", 0.1), ("100%", 1.0)] {
+                        if crate::small_button(ui, label)
+                            .on_hover_text(format!(
+                                "Move every control at random by up to {label} of its range; \
+                                 a choice or switch changes with a {label} chance"
+                            ))
+                            .clicked()
+                        {
+                            *action = Some(PresetAction::Randomize(amount));
+                        }
                     }
                 }
             };
