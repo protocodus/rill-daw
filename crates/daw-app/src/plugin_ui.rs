@@ -2122,6 +2122,16 @@ impl DawApp {
         }
         self.flush_pending_edit();
         let before = self.project.clone();
+        let latency = |app: &Self| {
+            let rate = app.engine.as_ref()?.sample_rate();
+            let (_, parameters) = app.editor_state(target)?;
+            Some(daw_engine::builtin_latency(
+                instrument.builtin_device(),
+                parameters,
+                rate,
+            ))
+        };
+        let latency_before = latency(self);
         let mut automation_changed = false;
         for &(id, value) in updates {
             if !value.is_finite() || !(0.0..=1.0).contains(&value) {
@@ -2186,7 +2196,11 @@ impl DawApp {
             self.song_session.bump();
             self.modified = true;
             self.revision = self.revision.wrapping_add(1);
-            if automation_changed {
+            if latency(self) != latency_before {
+                // The live queue already took the value, so the engine's own
+                // compatibility check would see nothing to rebuild for.
+                self.rebuild();
+            } else if automation_changed {
                 // Native editor gestures use grouped history rather than
                 // changed(); publish their lane takeover through the same live
                 // project path so automation cannot reclaim the value.

@@ -33,6 +33,7 @@ pub use device::{
     RecordingTimingSnapshot, VirtualIoSettings, list_input_devices, list_midi_inputs,
     list_output_devices,
 };
+pub use render::live_edit::builtin_latency;
 pub use render::{
     CompensationDelay, ExportFormat, ExportOptions, ExportRange, ExportReport, FreezeRenderOutput,
     FreezeRenderReport, FreezeRenderRequest, StemFile, StemPlan, StemRequest, WavEncoding,

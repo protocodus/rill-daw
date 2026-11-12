@@ -860,7 +860,7 @@ impl Renderer {
 /// compensation is fixed when the graph is built, so an edit that changes
 /// this (a compressor's lookahead) is not a live edit, although the value
 /// itself reaches the device through the live queue.
-fn builtin_latency(
+pub fn builtin_latency(
     device: Option<&str>,
     parameters: &[PluginParameterValue],
     sample_rate: u32,
