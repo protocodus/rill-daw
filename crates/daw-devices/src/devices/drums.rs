@@ -79,8 +79,12 @@ const CONTROL: usize = 16;
 const CHOKE_FADE_MS: f32 = 5.0;
 /// A hit reaching its end marker fades over this long, so it never cuts.
 const END_FADE_MS: f32 = 2.0;
-/// A pad's filter and drive run on this long after its last hit.
+/// A pad's filter and drive run on at least this long after its last hit,
+/// then until they are silent.
 const TAIL_MS: f32 = 100.0;
+/// How long a resonant filter may ring after its last hit, for the length
+/// of a render.
+const RING_MS: f32 = 1000.0;
 /// Below this an envelope that only decays is over (−80 dB).
 const SILENT: f32 = 1e-4;
 
@@ -764,6 +768,7 @@ impl Drums {
                 );
             }
             let chain = &mut self.chains[pad];
+            let mut peak = 0.0_f32;
             for ((out_left, out_right), (l, r)) in left
                 .iter_mut()
                 .zip(right.iter_mut())
@@ -786,10 +791,21 @@ impl Drums {
                     l = a.process(l, gains);
                     r = b.process(r, gains);
                 }
+                peak = peak.max(l.abs()).max(r.abs());
                 *out_left += l * chain.gains[0].next_value();
                 *out_right += r * chain.gains[1].next_value();
             }
             chain.tail = chain.tail.saturating_sub(frames);
+            if chain.tail == 0 {
+                if peak > SILENT * 0.1 {
+                    // A resonant filter still rings: drain it rather than
+                    // cut it off and resume it on the next hit.
+                    chain.tail = frames;
+                } else {
+                    chain.filters = Default::default();
+                    chain.drive = Default::default();
+                }
+            }
         }
     }
 }
@@ -1017,7 +1033,12 @@ impl Device for Drums {
                 Some(shaped.map_or(played, |shaped| shaped.min(played)))
             })
             .fold(0.0_f32, f32::max);
-        ((longest + TAIL_MS * 0.001 + 0.05) * self.sample_rate) as u32
+        let ring = if self.settings.pads.iter().any(|p| p.filter != 0.0) {
+            RING_MS
+        } else {
+            TAIL_MS
+        };
+        ((longest + ring * 0.001 + 0.05) * self.sample_rate) as u32
     }
 
     fn telemetry(&self) -> Arc<Telemetry> {

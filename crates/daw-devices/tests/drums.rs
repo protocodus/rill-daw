@@ -416,3 +416,22 @@ fn a_roll_moves_the_sound_of_every_pad_but_not_the_kit() {
         assert!(moved(offset) >= 12, "offset {offset}: {}", moved(offset));
     }
 }
+
+#[test]
+fn a_ringing_filter_drains_instead_of_cutting_off() {
+    let sample = sine(RATE, 0.02, 60.0, 0.8);
+    let mut device = kit(
+        &[(0, sample)],
+        &[(id(0, FILTER), -100.0), (id(0, RESONANCE), 100.0)],
+    );
+    let (left, _) = render(&mut *device, 2.0, &[(0.0, hit(0))]);
+    let rings = left[at(0.15)..].iter().any(|x| x.abs() > 1e-4);
+    assert!(
+        rings,
+        "the filter still rings after the tail's first 100 ms"
+    );
+    let cut = left
+        .windows(2)
+        .position(|pair| pair[0].abs() > 1e-4 && pair[1] == 0.0);
+    assert_eq!(cut, None, "the ring goes silent, never stops dead");
+}
