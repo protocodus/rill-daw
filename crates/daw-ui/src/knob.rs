@@ -695,10 +695,18 @@ impl<'a> Knob<'a> {
                 center + Vec2::angled(START_ANGLE + ARC_ANGLE * self.normalized(1.0)) * radius
             }),
         };
+        // An explicit state wins; an `automated` scope adds where the lane is.
+        let mark = crate::automation_mark(ui);
+        let automation = self.automation.or(mark.map(|mark| mark.state));
+        let ghost = mark
+            .filter(|_| automation == Some(AutomationState::Overridden))
+            .and_then(|mark| mark.ghost());
+        if automation.is_some() {
+            crate::automation::register_self_marked(ui.ctx(), response.id);
+            crate::automation::register_self_marked(ui.ctx(), dial_response.id);
+        }
         if ui.is_rect_visible(dial) {
-            let state_color = self
-                .automation
-                .map_or(colors.accent, |state| state.color(ui.ctx()));
+            let state_color = automation.map_or(colors.accent, |state| state.color(ui.ctx()));
             let active = if ui.is_enabled() {
                 state_color
             } else {
@@ -801,6 +809,19 @@ impl<'a> Knob<'a> {
                     Stroke::new(1.5_f32, colors.modulation),
                 ));
             }
+            if let Some(lane) = ghost {
+                // Where the overridden lane is: a tick across the arc in the
+                // lane's color, as long as the arc is wide.
+                let unit = Vec2::angled(START_ANGLE + ARC_ANGLE * self.normalized(lane));
+                let half = arc_width.max(2.0) * 0.5;
+                ui.painter().line_segment(
+                    [
+                        center + unit * (radius - half - 1.5),
+                        center + unit * (radius + half + 2.5),
+                    ],
+                    Stroke::new(2.0_f32, colors.automation),
+                );
+            }
             for fraction in tick_fractions.iter().filter(|_| !self.pointer) {
                 let unit = samples[(*fraction * ARC_STEPS as f32).round() as usize];
                 let major = *fraction == 0.0 || *fraction == 0.5 || *fraction == 1.0;
@@ -844,7 +865,17 @@ impl<'a> Knob<'a> {
                         } else {
                             2.4_f32
                         },
-                        colors.text,
+                        // The value itself, which carries the automation's
+                        // color even where the arc is empty (a centered
+                        // bipolar value).
+                        match automation {
+                            Some(state)
+                                if state != AutomationState::Bypassed && ui.is_enabled() =>
+                            {
+                                active
+                            }
+                            _ => colors.text,
+                        },
                     ),
                 );
                 if let Some(labels) = &self.endpoint_labels {
@@ -874,12 +905,9 @@ impl<'a> Knob<'a> {
                 ui.painter().circle_filled(center, 2.0, active);
             }
         }
-        if let Some(state) = self.automation {
-            crate::paint_automation_glow(ui, dial, state);
-        }
         if !self.compact
             && self.show_automation_label
-            && let Some(state) = self.automation
+            && let Some(state) = automation
         {
             crate::automation_badge(ui, state);
         }

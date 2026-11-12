@@ -280,10 +280,14 @@ native plug-in gestures, exact instance ownership, override recall and resume,
 including a delayed native setter acknowledgement arriving after Resume.
 `automation_tools_e2e` verifies that tool-driven mix changes enter override,
 preserve curves and Undo/Redo, and respect explicit Resume in an atomic batch.
+`device_frame_e2e` opens R1 Spacer with one lane following and one held by
+hand: the name and presets share the frame's bar above every section and the
+body repeats neither, both automation states show on their controls, and
+**Resume automation** from the held control's menu returns it to its lane.
 These tests require no audio device, display or installed plug-in.
 
 ```sh
-cargo test --locked -p daw-app --test automation_curves_e2e --test automation_indicators_e2e --test automation_tools_e2e --test automation_e2e --test parameter_search_e2e --test native_parameter_automation_e2e -- --test-threads=1
+cargo test --locked -p daw-app --test automation_curves_e2e --test automation_indicators_e2e --test automation_tools_e2e --test automation_e2e --test parameter_search_e2e --test native_parameter_automation_e2e --test device_frame_e2e -- --test-threads=1
 ```
 
 `mixer_readability_e2e` checks channel separation, destination color markers,

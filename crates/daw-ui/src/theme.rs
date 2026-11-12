@@ -57,6 +57,8 @@ pub struct Palette {
     pub automation_override: Color32,
     /// Reserved for modulation sources, depth arcs and mod-matrix rows.
     pub modulation: Color32,
+    /// The border and title bar of a device's frame.
+    pub device: Color32,
     /// Armed inputs and active recording. Never used for ordinary commands.
     pub recording: Color32,
     /// Mute's idle label and active fill; distinct from Solo at a glance.
@@ -105,6 +107,7 @@ pub const DARK: Palette = Palette {
     automation: rgb(233, 174, 114),
     automation_override: rgb(255, 118, 126),
     modulation: rgb(178, 156, 236),
+    device: rgb(62, 86, 118),
     recording: rgb(222, 120, 126),
     mute: rgb(236, 196, 94),
     solo: rgb(140, 203, 158),
@@ -141,9 +144,11 @@ pub const LIGHT: Palette = Palette {
     orange: rgb(130, 65, 10),
     cursor: rgb(49, 119, 80),
     cursor_outline: rgb(255, 255, 255),
-    automation: rgb(130, 65, 10),
+    // A clear orange, not brown, that still reads as text on the panel.
+    automation: rgb(178, 80, 0),
     automation_override: rgb(174, 40, 49),
     modulation: rgb(98, 66, 168),
+    device: rgb(176, 196, 222),
     recording: rgb(164, 56, 67),
     mute: rgb(146, 104, 8),
     solo: rgb(49, 119, 80),

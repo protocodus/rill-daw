@@ -6,8 +6,8 @@
 //! this crate needs no knowledge of the device crates. See `docs/UI.md` and
 //! `docs/R1_DEVICES.md` for the panel grammar.
 use crate::{
-    AutomationState, Icon, IconButton, KnobSize, labeled_knob, segmented, stepped_selector,
-    text::TextRole, theme, toggle_led, tokens, value_text,
+    AutomationMark, AutomationState, Icon, IconButton, KnobSize, labeled_knob, segmented,
+    stepped_selector, text::TextRole, theme, toggle_led, tokens, value_text,
 };
 use egui::{Align, Layout, Response, Ui, Vec2, vec2};
 use std::ops::RangeInclusive;
@@ -241,9 +241,13 @@ pub fn preset_group(
     draft: &mut Option<String>,
 ) -> Option<PresetAction> {
     let mut action = None;
-    // The device popup scrolls only vertically, so on a narrow panel the
-    // actions go on a second row instead of off its right edge.
-    let one_row = ui.available_width() >= tokens::POPUP_WIDTH_MD;
+    // The device popup scrolls only vertically, so where one row does not
+    // fit the actions go on a second row instead of off its right edge. The
+    // row's width is known once it has been drawn.
+    let row_id = egui::Id::new((&id_salt, "preset_row_width"));
+    let row_width = ui.data(|data| data.get_temp::<f32>(row_id));
+    let one_row = ui.available_width() + 0.5
+        >= row_width.unwrap_or(tokens::POPUP_WIDTH_SM + tokens::SPACE_XL * 4.0);
     crate::inset(ui.ctx())
         .inner_margin(egui::Margin::symmetric(
             tokens::SPACE_SM as i8,
@@ -322,13 +326,19 @@ pub fn preset_group(
                 }
             };
             if one_row {
-                ui.horizontal(|ui| {
+                let row = ui.horizontal(|ui| {
                     navigation(ui, &mut action);
                     ui.add_space(tokens::SPACE_XS);
                     ui.separator();
                     ui.add_space(tokens::SPACE_XS);
                     actions(ui, &mut action);
                 });
+                // Saving swaps the actions for a wider name field.
+                if draft.is_none() {
+                    // With the group's own margin and border.
+                    let width = row.response.rect.width() + 2.0 * (tokens::SPACE_SM + 1.0);
+                    ui.data_mut(|data| data.insert_temp(row_id, width));
+                }
             } else {
                 ui.vertical(|ui| {
                     ui.horizontal(|ui| navigation(ui, &mut action));
@@ -411,8 +421,6 @@ pub struct DevicePanelOutput {
     pub header_automate: Vec<bool>,
 }
 
-const NAME_WIDTH: f32 = 130.0;
-const BYPASS_WIDTH: f32 = 42.0;
 const METER_SIZE: Vec2 = vec2(13.0, tokens::CONTROL_HEIGHT);
 
 /// The frame every device shares. `body` draws the sections.
@@ -461,9 +469,6 @@ impl<'a> DevicePanel<'a> {
 
     pub fn show(self, ui: &mut Ui, body: impl FnOnce(&mut Ui)) -> DevicePanelOutput {
         let colors = theme::palette(ui.ctx());
-        let total = self.width.points();
-        let frame = crate::panel(ui.ctx());
-        let inner_width = total - 2.0 * tokens::SPACE_LG;
         let mut output = DevicePanelOutput {
             preset: None,
             header: Vec::new(),
@@ -471,107 +476,82 @@ impl<'a> DevicePanel<'a> {
         };
         let Self {
             name,
+            width,
             bypassed,
             presets,
             input,
             output: out_peaks,
             knobs,
-            ..
         } = self;
-        frame.show(ui, |ui| {
-            ui.set_width(inner_width);
+        ui.set_width(width.points().min(ui.available_width()));
+        let mut frame = device_frame(ui, name);
+        if let Some(presets) = presets {
+            let bar = &mut frame.bar;
+            let (button, action) = preset_bar(bar, presets.name, presets.modified);
+            output.preset = action;
+            let browser_id = button.id.with("browser");
+            let mut state = bar
+                .data(|data| data.get_temp::<PresetBrowserState>(browser_id))
+                .unwrap_or_default();
+            egui::Popup::menu(&button)
+                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                .id(browser_id.with("popup"))
+                .show(|ui| {
+                    if let Some(action) =
+                        preset_browser(ui, presets.entries, presets.current, &mut state)
+                    {
+                        output.preset = Some(action);
+                    }
+                });
+            bar.data_mut(|data| data.insert_temp(browser_id, state));
+        }
+        frame.body(ui, |ui| {
             ui.spacing_mut().item_spacing = vec2(tokens::SPACE_SM, tokens::SPACE_SM);
             let height = if knobs.is_empty() {
                 tokens::CONTROL_HEIGHT
             } else {
                 KnobSize::Dense.cell_height()
             };
-            let meters = usize::from(input.is_some()) + usize::from(out_peaks.is_some());
-            let right = BYPASS_WIDTH
-                + meters as f32 * (METER_SIZE.x * 2.0 + tokens::SPACE_XS + tokens::SPACE_SM)
-                + knobs.len() as f32 * (KnobSize::Dense.cell_width() + tokens::SPACE_SM);
-            ui.horizontal(|ui| {
-                ui.allocate_ui_with_layout(
-                    vec2((inner_width - right - tokens::SPACE_MD).max(0.0), height),
-                    Layout::left_to_right(Align::Center),
-                    |ui| {
-                        ui.allocate_ui_with_layout(
-                            vec2(NAME_WIDTH, height),
-                            Layout::left_to_right(Align::Center),
-                            |ui| {
-                                ui.add(
-                                    egui::Label::new(TextRole::Subtitle.rich(ui.ctx(), name))
-                                        .truncate(),
-                                );
-                            },
-                        );
-                        if let Some(presets) = presets {
-                            let (button, action) = preset_bar(ui, presets.name, presets.modified);
-                            output.preset = action;
-                            let browser_id = button.id.with("browser");
-                            let mut state = ui
-                                .data(|data| data.get_temp::<PresetBrowserState>(browser_id))
-                                .unwrap_or_default();
-                            egui::Popup::menu(&button)
-                                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-                                .id(browser_id.with("popup"))
-                                .show(|ui| {
-                                    if let Some(action) = preset_browser(
-                                        ui,
-                                        presets.entries,
-                                        presets.current,
-                                        &mut state,
-                                    ) {
-                                        output.preset = Some(action);
-                                    }
-                                });
-                            ui.data_mut(|data| data.insert_temp(browser_id, state));
+            // Bypass, meters and the Mix/Output or Volume knobs, flush right.
+            ui.allocate_ui_with_layout(
+                vec2(ui.available_width(), height),
+                Layout::right_to_left(Align::Center),
+                |ui| {
+                    for knob in knobs.into_iter().rev() {
+                        let mut labeled = labeled_knob(knob.caption, knob.value, knob.range)
+                            .size(KnobSize::Dense)
+                            .unit(knob.unit)
+                            .default_value(knob.default)
+                            .automation(knob.automation);
+                        if let Some(format) = knob.format {
+                            labeled = labeled.format(format);
                         }
-                    },
-                );
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.allocate_ui_with_layout(
-                        vec2(right, height),
-                        Layout::left_to_right(Align::Center),
-                        |ui| {
-                            let mut active = !*bypassed;
-                            if toggle_led(ui, &mut active, "On")
-                                .on_hover_text("Bypass the device when off")
-                                .changed()
-                            {
-                                *bypassed = !active;
-                            }
-                            for (title, peaks) in [("Input", input), ("Output", out_peaks)] {
-                                if let Some(peaks) = peaks {
-                                    crate::stereo_meter(
-                                        ui,
-                                        peaks,
-                                        vec2(METER_SIZE.x * 2.0 + tokens::SPACE_XS, METER_SIZE.y),
-                                    )
-                                    .on_hover_text(format!("{title} level"));
-                                }
-                            }
-                            for knob in knobs {
-                                let mut labeled =
-                                    labeled_knob(knob.caption, knob.value, knob.range)
-                                        .size(KnobSize::Dense)
-                                        .unit(knob.unit)
-                                        .default_value(knob.default)
-                                        .automation(knob.automation);
-                                if let Some(format) = knob.format {
-                                    labeled = labeled.format(format);
-                                }
-                                if let Some(parse) = knob.parse {
-                                    labeled = labeled.parse(parse);
-                                }
-                                let shown = labeled.show(ui);
-                                output.header.push(shown.response);
-                                output.header_automate.push(shown.automate);
-                            }
-                        },
-                    );
-                });
-            });
+                        if let Some(parse) = knob.parse {
+                            labeled = labeled.parse(parse);
+                        }
+                        let shown = labeled.show(ui);
+                        output.header.insert(0, shown.response);
+                        output.header_automate.insert(0, shown.automate);
+                    }
+                    for (title, peaks) in [("Output", out_peaks), ("Input", input)] {
+                        if let Some(peaks) = peaks {
+                            crate::stereo_meter(
+                                ui,
+                                peaks,
+                                vec2(METER_SIZE.x * 2.0 + tokens::SPACE_XS, METER_SIZE.y),
+                            )
+                            .on_hover_text(format!("{title} level"));
+                        }
+                    }
+                    let mut active = !*bypassed;
+                    if toggle_led(ui, &mut active, "On")
+                        .on_hover_text("Bypass the device when off")
+                        .changed()
+                    {
+                        *bypassed = !active;
+                    }
+                },
+            );
             ui.add_space(tokens::SPACE_XS);
             let line = ui.available_rect_before_wrap();
             ui.painter().hline(
@@ -583,6 +563,127 @@ impl<'a> DevicePanel<'a> {
             body(ui);
         });
         output
+    }
+}
+
+/// Thickness of a [`device_frame`]'s border.
+pub const DEVICE_FRAME_BORDER: f32 = 3.0;
+/// The width a [`device_frame`] takes from its contents, both sides together.
+pub const DEVICE_FRAME_INSET: f32 = 2.0 * (DEVICE_FRAME_BORDER + tokens::SPACE_SM);
+const DEVICE_FRAME_RADIUS: u8 = 10;
+
+/// The frame every device sits in, so each one reads as one unit: a thick
+/// rounded border, and a bar in the border's color across the top with the
+/// device's name at the left and its presets at the right. Draw the presets
+/// into [`DeviceFrame::bar`], then the device with [`DeviceFrame::body`],
+/// [`DEVICE_FRAME_INSET`] narrower than the frame. Nothing in the body
+/// repeats the name or the presets.
+pub struct DeviceFrame {
+    /// Draw the presets here, left to right; the frame keeps them flush right.
+    pub bar: Ui,
+    top: egui::Pos2,
+    width: f32,
+    bar_rect: egui::Rect,
+    background: egui::layers::ShapeIdx,
+    width_id: egui::Id,
+    previous: Option<f32>,
+}
+
+pub fn device_frame(ui: &mut Ui, name: &str) -> DeviceFrame {
+    let colors = theme::palette(ui.ctx());
+    let width = ui.available_width();
+    let top = ui.cursor().min;
+    // The frame goes under its contents, once their height is known.
+    let background = ui.painter().add(egui::Shape::Noop);
+    // The preset group and a little air above and below it.
+    let bar_height = tokens::CONTROL_HEIGHT + 2.0 * tokens::SPACE_XS + 2.0 * 3.0;
+    let bar_rect = egui::Rect::from_min_size(top, vec2(width, bar_height));
+    let inner = bar_rect.shrink2(vec2(tokens::SPACE_SM + DEVICE_FRAME_BORDER, 0.0));
+    let mut title = ui.new_child(
+        egui::UiBuilder::new()
+            .id_salt("device_frame_name")
+            .max_rect(inner)
+            .layout(Layout::left_to_right(Align::Center)),
+    );
+    let color = theme::contrast_text(colors.device);
+    let name_width = title
+        .add(egui::Label::new(TextRole::Subtitle.rich(title.ctx(), name).color(color)).truncate())
+        .rect
+        .width();
+    // The presets keep their own order, flush right: placed by the width
+    // they took on the previous pass.
+    // Per device: another device's presets may take another width.
+    let width_id = ui.id().with(("device_frame_bar", name));
+    let previous = ui.data(|data| data.get_temp::<f32>(width_id));
+    let room = (inner.width() - name_width - tokens::SPACE_MD).max(0.0);
+    let left = inner.right() - previous.unwrap_or(room).min(room);
+    let bar = ui.new_child(
+        egui::UiBuilder::new()
+            .id_salt("device_frame_bar")
+            .max_rect(egui::Rect::from_x_y_ranges(
+                left..=inner.right(),
+                inner.y_range(),
+            ))
+            .layout(Layout::left_to_right(Align::Center)),
+    );
+    DeviceFrame {
+        bar,
+        top,
+        width,
+        bar_rect,
+        background,
+        width_id,
+        previous,
+    }
+}
+
+impl DeviceFrame {
+    /// Draws the device under the bar and closes the frame around it.
+    pub fn body<R>(self, ui: &mut Ui, body: impl FnOnce(&mut Ui) -> R) -> R {
+        let colors = theme::palette(ui.ctx());
+        let used = self.bar.min_rect().width();
+        if self.previous != Some(used) {
+            ui.data_mut(|data| data.insert_temp(self.width_id, used));
+            ui.ctx().request_discard("device frame bar width");
+        }
+        let side = DEVICE_FRAME_BORDER + tokens::SPACE_SM;
+        let body_rect = egui::Rect::from_min_max(
+            egui::pos2(self.top.x + side, self.bar_rect.bottom() + tokens::SPACE_SM),
+            egui::pos2(self.top.x + self.width - side, f32::INFINITY),
+        );
+        let mut child = ui.new_child(
+            egui::UiBuilder::new()
+                .id_salt("device_frame_body")
+                .max_rect(body_rect)
+                .layout(*ui.layout()),
+        );
+        child.set_width(body_rect.width());
+        let inner = body(&mut child);
+        let bottom = child.min_rect().bottom() + side;
+        let frame = egui::Rect::from_min_max(self.top, egui::pos2(self.top.x + self.width, bottom));
+        ui.allocate_rect(frame, egui::Sense::hover());
+        let radius = egui::CornerRadius::same(DEVICE_FRAME_RADIUS);
+        ui.painter().set(
+            self.background,
+            egui::Shape::Vec(vec![
+                egui::Shape::rect_filled(
+                    self.bar_rect,
+                    egui::CornerRadius {
+                        sw: 0,
+                        se: 0,
+                        ..radius
+                    },
+                    colors.device,
+                ),
+                egui::Shape::rect_stroke(
+                    frame,
+                    radius,
+                    egui::Stroke::new(DEVICE_FRAME_BORDER, colors.device),
+                    egui::StrokeKind::Inside,
+                ),
+            ]),
+        );
+        inner
     }
 }
 
@@ -618,7 +719,7 @@ fn group_title(ui: &Ui, title: &str) -> std::sync::Arc<egui::Galley> {
 /// separates it from the controls. Distinct from the sentence-case
 /// [`control_caption`]s under it, so the panel's two levels never read alike.
 pub fn device_section_title(ui: &mut Ui, title: &str) -> Response {
-    device_section_header(ui, title, None)
+    device_section_header(ui, title, None, None)
 }
 
 const HEADER_LAMP: f32 = 11.0;
@@ -627,7 +728,13 @@ const HEADER_LAMP: f32 = 11.0;
 /// given: a lamp stands in front of the name, and a click on either flips
 /// it. As tall as the plain title, so cards with and without a lamp share
 /// a row. The response is `changed` when the click flipped the value.
-pub fn device_section_header(ui: &mut Ui, title: &str, enable: Option<&mut bool>) -> Response {
+/// `mark` shows the switch's automation on its lamp, as [`crate::automated`].
+pub fn device_section_header(
+    ui: &mut Ui,
+    title: &str,
+    enable: Option<&mut bool>,
+    mark: Option<AutomationMark>,
+) -> Response {
     let galley = group_title(ui, title);
     let (rect, response) = ui.allocate_exact_size(
         vec2(
@@ -636,7 +743,7 @@ pub fn device_section_header(ui: &mut Ui, title: &str, enable: Option<&mut bool>
         ),
         egui::Sense::hover(),
     );
-    header_title(ui, rect, rect.top(), galley, title, enable, response)
+    header_title(ui, rect, rect.top(), galley, title, enable, mark, response)
 }
 
 /// A [`device_section_header`] whose section comes in a few models: the
@@ -645,13 +752,15 @@ pub fn device_section_header(ui: &mut Ui, title: &str, enable: Option<&mut bool>
 /// the plain title: give it to every card of a row or to none. While the
 /// section is switched off the choice is disabled in its place. Returns the
 /// title's response, `changed` when its lamp was flipped, and the choice's,
-/// `changed` when another option was picked.
+/// `changed` when another option was picked. `marks` show the automation of
+/// the switch and of the choice, as [`crate::automated`].
 pub fn device_section_header_choice(
     ui: &mut Ui,
     title: &str,
     enable: Option<&mut bool>,
     selected: &mut usize,
     options: &[&str],
+    marks: [Option<AutomationMark>; 2],
 ) -> (Response, Response) {
     let galley = group_title(ui, title);
     let (rect, response) = ui.allocate_exact_size(
@@ -675,14 +784,17 @@ pub fn device_section_header_choice(
     // Less padding than a button's: the name left of it needs its room.
     child.spacing_mut().button_padding.x = tokens::SPACE_SM;
     let indexed: Vec<(usize, &str)> = options.iter().copied().enumerate().collect();
-    let choice = crate::toggle_grid(&mut child, selected, &indexed, options.len().max(1));
+    let choice = crate::automated(&mut child, marks[1], |child| {
+        crate::toggle_grid(child, selected, &indexed, options.len().max(1))
+    });
     let top = band.center().y - galley.size().y * 0.5;
-    let header = header_title(ui, rect, top, galley, title, enable, response);
+    let header = header_title(ui, rect, top, galley, title, enable, marks[0], response);
     (header, choice)
 }
 
 /// The name of a section in `rect`, its text starting at `top`, with the
 /// lamp of its switch in front where it has one, and the rule below.
+#[expect(clippy::too_many_arguments)]
 fn header_title(
     ui: &Ui,
     rect: egui::Rect,
@@ -690,6 +802,7 @@ fn header_title(
     galley: std::sync::Arc<egui::Galley>,
     title: &str,
     enable: Option<&mut bool>,
+    mark: Option<AutomationMark>,
     mut response: Response,
 ) -> Response {
     let colors = theme::palette(ui.ctx());
@@ -716,6 +829,7 @@ fn header_title(
             HEADER_LAMP,
             *value,
             hit.has_focus(),
+            mark.filter(|_| ui.is_enabled()),
         );
         response = hit.on_hover_cursor(egui::CursorIcon::PointingHand);
     }

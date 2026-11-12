@@ -171,7 +171,7 @@ fn filter_hides_controls_that_do_not_apply() {
 fn mini_uses_the_wide_panel_and_shows_pulse_width_only_for_pulse() {
     assert_eq!(
         panel_width(&mini::DESCRIPTOR),
-        daw_ui::tokens::POPUP_WIDTH_LG
+        daw_ui::tokens::POPUP_WIDTH_LG + daw_ui::DEVICE_FRAME_INSET
     );
     let layout = panels::layout(&mini::DESCRIPTOR);
     let wave = |index: f32| {
@@ -362,7 +362,7 @@ fn equalizer_fits_its_window_in_both_themes() {
         );
         assert_eq!(
             panel_width(&equalizer::DESCRIPTOR),
-            daw_ui::tokens::POPUP_WIDTH_LG
+            daw_ui::tokens::POPUP_WIDTH_LG + daw_ui::DEVICE_FRAME_INSET
         );
         // What the effect window shows of a panel without scrolling in the
         // app's default 1480 x 960 window is about 634 points.
@@ -656,7 +656,10 @@ fn wheel(notches: f32) -> Event {
 #[test]
 fn saturator_and_compressor_fit_their_window_in_both_themes() {
     for descriptor in [&saturator::DESCRIPTOR, &compressor::DESCRIPTOR] {
-        assert_eq!(panel_width(descriptor), daw_ui::tokens::POPUP_WIDTH_LG);
+        assert_eq!(
+            panel_width(descriptor),
+            daw_ui::tokens::POPUP_WIDTH_LG + daw_ui::DEVICE_FRAME_INSET
+        );
         for appearance in [
             daw_ui::theme::Appearance::Light,
             daw_ui::theme::Appearance::Dark,
@@ -1035,7 +1038,10 @@ fn key(key: egui::Key) -> Event {
 #[test]
 fn modulator_and_spacer_fit_their_window_in_both_themes() {
     for descriptor in [&modulator::DESCRIPTOR, &spacer::DESCRIPTOR] {
-        assert_eq!(panel_width(descriptor), daw_ui::tokens::POPUP_WIDTH_LG);
+        assert_eq!(
+            panel_width(descriptor),
+            daw_ui::tokens::POPUP_WIDTH_LG + daw_ui::DEVICE_FRAME_INSET
+        );
         for appearance in [
             daw_ui::theme::Appearance::Light,
             daw_ui::theme::Appearance::Dark,

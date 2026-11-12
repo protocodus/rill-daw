@@ -83,3 +83,55 @@ fn automation_ownership_glows_orange_and_manual_takeover_glows_red() {
         }
     }
 }
+
+fn shape_colors(shape: &Shape, out: &mut Vec<egui::Color32>) {
+    match shape {
+        Shape::Vec(shapes) => shapes.iter().for_each(|shape| shape_colors(shape, out)),
+        Shape::Rect(rect) => out.extend([rect.fill, rect.stroke.color]),
+        Shape::LineSegment { stroke, .. } => out.push(stroke.color),
+        Shape::Path(path) => out.push(path.fill),
+        Shape::Circle(circle) => out.extend([circle.fill, circle.stroke.color]),
+        _ => {}
+    }
+}
+
+#[test]
+fn an_overridden_choice_turns_red_and_ghosts_its_lane_in_orange() {
+    for dark in [false, true] {
+        let ctx = Context::default();
+        theme::apply(&ctx);
+        ctx.set_theme(if dark {
+            egui::Theme::Dark
+        } else {
+            egui::Theme::Light
+        });
+        let mut leaked = true;
+        let output = ctx.run(RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let mark = daw_ui::AutomationMark {
+                    state: AutomationState::Overridden,
+                    lane: Some(0.0),
+                };
+                let mut current = 1;
+                daw_ui::automated(ui, Some(mark), |ui| {
+                    daw_ui::toggle_group(ui, &mut current, &[(0, "Clean"), (1, "Tube")]);
+                });
+                leaked = daw_ui::automation_mark(ui).is_some();
+            });
+        });
+        assert!(!leaked, "the mark stays inside its scope");
+        let mut colors = Vec::new();
+        for shape in &output.shapes {
+            shape_colors(&shape.shape, &mut colors);
+        }
+        let palette = if dark { theme::DARK } else { theme::LIGHT };
+        assert!(
+            colors.contains(&palette.automation_override),
+            "the chosen option is red"
+        );
+        assert!(
+            colors.contains(&palette.automation),
+            "the lane's option is outlined in orange"
+        );
+    }
+}
