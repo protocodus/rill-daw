@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Tape Echo",
+  "author": "Rill",
+  "category": "Echo",
+  "tags": ["guitar", "keys"],
+  "description": "Warm, wavering repeats.",
+  "parameters": {
+    "reverb.on": false,
+    "echo.model": "Tape",
+    "echo.division": "1/4",
+    "echo.feedback": 50.0,
+    "echo.wobble": 35.0,
+    "echo.color": -30.0,
+    "echo.stereo": "Mono"
+  }
+}

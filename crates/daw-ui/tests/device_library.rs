@@ -500,11 +500,14 @@ fn every_visualization_renders_without_overflow() {
                 curves: &[ui::FrequencyCurve {
                     db: &curve,
                     emphasis: true,
+                    low: None,
                 }],
                 spectrum: Some(spec),
                 nodes: &[],
                 range_db: 12.0,
                 limit_db: 12.0,
+                spans: &[],
+                markers: &[],
                 size,
             },
         );
@@ -555,7 +558,34 @@ fn every_visualization_renders_without_overflow() {
             0.5,
             size,
         );
-        ui::lfo_view(ui, &[0.0, 1.0, 0.0, -1.0], Some(0.3), size);
+        ui::lfo_view(
+            ui,
+            &ui::LfoView {
+                traces: &[
+                    ui::LfoTrace {
+                        samples: &[0.0, 1.0, 0.0, -1.0],
+                        emphasis: true,
+                    },
+                    // Degenerate input must not panic.
+                    ui::LfoTrace {
+                        samples: &[f32::NAN],
+                        emphasis: false,
+                    },
+                ],
+                markers: &[
+                    ui::LfoMarker {
+                        phase: 0.3,
+                        label: "L",
+                    },
+                    ui::LfoMarker {
+                        phase: f32::NAN,
+                        label: "R",
+                    },
+                ],
+                draggable: true,
+                size,
+            },
+        );
         ui::sample_view(
             ui,
             &ui::SampleViewData {
@@ -569,13 +599,49 @@ fn every_visualization_renders_without_overflow() {
         );
         ui::delay_view(
             ui,
-            &ui::DelayViewData {
-                taps: &[(0.2, 0.8, 0.5)],
-                decay_seconds: 1.0,
-                pre_delay_seconds: 0.0,
+            &ui::DelayView {
+                taps: &[
+                    ui::DelayTap {
+                        seconds: 0.2,
+                        left: 0.8,
+                        right: 0.5,
+                        thin: false,
+                        faint: false,
+                        blur_seconds: 0.05,
+                    },
+                    // Degenerate input must not panic.
+                    ui::DelayTap {
+                        seconds: f32::NAN,
+                        left: f32::INFINITY,
+                        right: -1.0,
+                        thin: true,
+                        faint: true,
+                        blur_seconds: f32::NAN,
+                    },
+                ],
+                tails: &[
+                    ui::DelayTail {
+                        start_seconds: 0.0,
+                        start_db: -6.0,
+                        decay_seconds: 1.0,
+                        inner_decay_seconds: Some(0.4),
+                        faint: false,
+                    },
+                    ui::DelayTail {
+                        start_seconds: 0.0,
+                        start_db: -6.0,
+                        decay_seconds: 1.0,
+                        inner_decay_seconds: Some(f32::NAN),
+                        faint: true,
+                    },
+                ],
+                grid: &[(0.5, "2")],
                 span_seconds: 1.0,
+                floor_db: -60.0,
+                handles: &[],
+                reductions: &[(f32::NAN, 0.0, "E"), (30.0, 24.0, "R")],
+                size,
             },
-            size,
         );
         ui::harmonics_view(
             ui,
@@ -641,11 +707,14 @@ fn frequency_node_nudges_with_arrow_keys() {
                     curves: &[ui::FrequencyCurve {
                         db: &curve,
                         emphasis: true,
+                        low: None,
                     }],
                     spectrum: None,
                     nodes: &nodes,
                     range_db: 18.0,
                     limit_db: 18.0,
+                    spans: &[],
+                    markers: &[],
                     size,
                 },
             )
@@ -1167,6 +1236,7 @@ fn every_glyph_and_the_column_mark_paint_without_taking_space() {
         ui::Glyph::Saw,
         ui::Glyph::Square,
         ui::Glyph::SampleHold,
+        ui::Glyph::Wander,
     ]
     .map(|glyph| (glyph, ui::ToggleFace::Glyph(glyph), "Shape"));
     let used = run(&ctx, vec![], |ui| {
@@ -1176,7 +1246,7 @@ fn every_glyph_and_the_column_mark_paint_without_taking_space() {
     });
     assert_eq!(
         used.size(),
-        vec2(12.0 * 28.0, ui::tokens::CONTROL_HEIGHT),
+        vec2(13.0 * 28.0, ui::tokens::CONTROL_HEIGHT),
         "the column mark is paint only"
     );
 }
@@ -1198,6 +1268,8 @@ fn plot_frame(
                 nodes,
                 range_db,
                 limit_db: 24.0,
+                spans: &[],
+                markers: &[],
                 size: vec2(610.0, 200.0),
             },
         ));
@@ -1341,6 +1413,8 @@ fn wheel_over_a_frequency_node_leaves_the_page_where_it_is() {
                     nodes: &nodes,
                     range_db: 12.0,
                     limit_db: 24.0,
+                    spans: &[],
+                    markers: &[],
                     size: vec2(610.0, 200.0),
                 };
                 scrolled = ui::frequency_plot(ui, &plot).scrolled;
@@ -1429,4 +1503,513 @@ fn spectrum_tilt_turns_about_one_kilohertz() {
     let broken = [f32::NAN; 16];
     assert!(ui::Spectrum::new(&broken, 48_000.0).level_db(1000.0) <= -90.0);
     assert!(ui::Spectrum::new(&[], 48_000.0).level_db(1000.0) <= -90.0);
+}
+
+#[test]
+fn section_header_is_as_tall_as_the_title_and_its_lamp_flips() {
+    let ctx = themed();
+    let mut on = true;
+    let heights = std::cell::Cell::new((0.0, 0.0));
+    let flips = std::cell::Cell::new(0);
+    let mut frame = |events: Vec<Event>| {
+        run(&ctx, events, |ui| {
+            ui.set_width(300.0);
+            ui.spacing_mut().item_spacing.y = 0.0;
+            let plain = ui::device_section_title(ui, "Reverb");
+            let lamp = ui::device_section_header(ui, "Echo", Some(&mut on));
+            heights.set((plain.rect.height(), ui.min_rect().height()));
+            flips.set(flips.get() + usize::from(lamp.changed()));
+        })
+    };
+    let used = frame(vec![]);
+    let (plain, both) = heights.get();
+    assert_eq!(both, 2.0 * plain, "two equal lines");
+    // On the lamp, at the left of the second line.
+    let lamp = pos2(used.left() + 6.0, used.bottom() - plain + 6.0);
+    click(lamp, 1, &mut |events| {
+        frame(events);
+    });
+    assert_eq!(flips.get(), 1);
+    // The rest of the line is not a target.
+    click(pos2(used.left() + 250.0, lamp.y), 1, &mut |events| {
+        frame(events);
+    });
+    assert_eq!(flips.get(), 1);
+    assert!(!on);
+}
+
+#[test]
+fn section_header_choice_picks_a_model_and_keeps_the_lamp_apart() {
+    let ctx = themed();
+    let state = std::cell::Cell::new((true, 0_usize));
+    let rects = std::cell::Cell::new((Rect::NOTHING, Rect::NOTHING, 0.0));
+    let events = std::cell::Cell::new((0, 0));
+    let frame = |input: Vec<Event>| {
+        run(&ctx, input, |ui| {
+            ui.set_width(300.0);
+            ui.spacing_mut().item_spacing.y = 0.0;
+            let plain = ui::device_section_title(ui, "Output").rect.height();
+            let (mut on, mut model) = state.get();
+            let (lamp, choice) = ui::device_section_header_choice(
+                ui,
+                "Echo",
+                Some(&mut on),
+                &mut model,
+                &["Digital", "BBD", "Tape"],
+            );
+            state.set((on, model));
+            rects.set((lamp.rect, choice.rect, plain));
+            let (flips, picks) = events.get();
+            events.set((
+                flips + usize::from(lamp.changed()),
+                picks + usize::from(choice.changed()),
+            ));
+        })
+    };
+    let used = frame(vec![]);
+    let (lamp, choice, plain) = rects.get();
+    // Right-aligned on the title line, clear of the name, above the rule.
+    assert!((choice.right() - used.right()).abs() < 0.5, "{choice:?}");
+    assert!(lamp.right() + 8.0 < choice.left(), "{lamp:?} {choice:?}");
+    assert!(choice.bottom() < used.bottom());
+    assert!(used.height() - plain > plain, "taller than a plain title");
+    // The last third of the track is the third option.
+    click(choice.right_center() - vec2(8.0, 0.0), 1, &mut |events| {
+        frame(events);
+    });
+    assert_eq!(state.get(), (true, 2));
+    click(lamp.left_center() + vec2(5.0, 0.0), 1, &mut |events| {
+        frame(events);
+    });
+    assert_eq!(state.get(), (false, 2));
+    assert_eq!(events.get(), (1, 1));
+}
+
+#[test]
+fn variation_stepper_steps_wraps_and_rolls_another_value() {
+    let ctx = themed();
+    let value = std::cell::Cell::new(1);
+    let range = std::cell::Cell::new((1, 32));
+    let rect = std::cell::Cell::new(Rect::NOTHING);
+    let changes = std::cell::Cell::new(0);
+    let mut frame = |events: Vec<Event>| {
+        run(&ctx, events, |ui| {
+            let (low, high) = range.get();
+            let mut next = value.get();
+            let response = ui::variation_stepper(ui, &mut next, low..=high, "seed");
+            value.set(next);
+            rect.set(response.rect);
+            changes.set(changes.get() + usize::from(response.changed()));
+        });
+    };
+    frame(vec![]);
+    let track = rect.get();
+    assert_eq!(track.size(), ui::VARIATION_STEPPER_SIZE);
+    // Three equal buttons; a knob's 75-point cell holds them.
+    assert!(track.width() <= 67.0);
+    let at = |index: f32| {
+        pos2(
+            track.left() + track.width() * (index + 0.5) / 3.0,
+            track.center().y,
+        )
+    };
+    click(at(2.0), 2, &mut frame);
+    assert_eq!(value.get(), 3);
+    click(at(0.0), 3, &mut frame);
+    assert_eq!(value.get(), 32, "previous wraps below the first");
+    click(at(2.0), 1, &mut frame);
+    assert_eq!(value.get(), 1, "next wraps above the last");
+    assert_eq!(changes.get(), 6);
+    // The die never lands on the value it left, and stays in the range.
+    for _ in 0..20 {
+        let before = value.get();
+        click(at(1.0), 1, &mut frame);
+        assert_ne!(value.get(), before);
+        assert!((1..=32).contains(&value.get()));
+    }
+    // A range of one has nowhere to go, and a value is not moved unasked.
+    range.set((4, 4));
+    value.set(7);
+    click(at(1.0), 1, &mut frame);
+    click(at(2.0), 1, &mut frame);
+    assert_eq!(value.get(), 7);
+}
+
+#[test]
+fn delay_view_keeps_its_points_with_reduction_bars_and_blurred_taps() {
+    let ctx = themed();
+    let rects = std::cell::RefCell::new(Vec::new());
+    for reductions in [&[][..], &[(6.0, 24.0, "E"), (3.0, 12.0, "R")][..]] {
+        run(&ctx, vec![], |ui| {
+            let view = ui::DelayView {
+                taps: &[ui::DelayTap {
+                    seconds: 0.5,
+                    left: 0.5,
+                    right: 0.0,
+                    thin: false,
+                    faint: false,
+                    blur_seconds: 0.04,
+                }],
+                tails: &[ui::DelayTail {
+                    start_seconds: 0.1,
+                    start_db: -9.0,
+                    decay_seconds: 1.8,
+                    inner_decay_seconds: Some(0.6),
+                    faint: false,
+                }],
+                grid: &[],
+                span_seconds: 2.0,
+                floor_db: -60.0,
+                handles: &[],
+                reductions,
+                size: vec2(400.0, 175.0),
+            };
+            let rect = ui::delay_view(ui, &view).response.rect;
+            // The bars stand inside the frame: time and level map as without.
+            rects
+                .borrow_mut()
+                .push((rect, ui::delay_point(&view, rect, 1.0, -30.0, true)));
+        });
+    }
+    let rects = rects.borrow();
+    assert_eq!(rects[0], rects[1]);
+    assert_eq!(rects[0].0.size(), vec2(400.0, 175.0));
+}
+
+#[test]
+fn value_menu_lists_its_options_and_reports_the_pick() {
+    let ctx = themed();
+    let picked = std::cell::Cell::new(None);
+    let options = ["1/8", "1/4", "1/2"];
+    let frame = |events: Vec<Event>| {
+        run(&ctx, events, |ui| {
+            let (link, pick) = ui::value_menu(ui, options[1], &options, 1, 60.0);
+            if pick.is_some() {
+                picked.set(pick);
+            }
+            let _ = link;
+        })
+    };
+    let used = frame(vec![]);
+    let link = pos2(used.left() + 6.0, used.top() + 6.0);
+    click(link, 1, &mut |events| {
+        frame(events);
+    });
+    assert_eq!(picked.get(), None, "the click only opens the list");
+    // The third option of the list under the link.
+    let mut at = None;
+    for y in (used.top() as i32 + 20)..(used.top() as i32 + 160) {
+        let candidate = pos2(used.left() + 12.0, y as f32);
+        click(candidate, 1, &mut |events| {
+            frame(events);
+        });
+        if picked.get().is_some() {
+            at = Some(candidate);
+            break;
+        }
+        // A click outside an option closed the list: open it again.
+        if !egui::Popup::is_any_open(&ctx) {
+            click(link, 1, &mut |events| {
+                frame(events);
+            });
+        }
+    }
+    assert!(at.is_some(), "an option of the list was reachable");
+    assert!(picked.get().is_some_and(|index| index < options.len()));
+}
+
+fn delay(ui: &mut egui::Ui, handle: (f32, f32), below: bool) -> (Rect, ui::DelayViewOutput) {
+    let view = ui::DelayView {
+        taps: &[],
+        tails: &[],
+        grid: &[],
+        span_seconds: 2.0,
+        floor_db: -60.0,
+        handles: &[ui::DelayHandle {
+            seconds: handle.0,
+            db: handle.1,
+            below,
+            label: "T",
+            readout: "Time",
+            horizontal: true,
+            vertical: true,
+        }],
+        reductions: &[],
+        size: vec2(400.0, 175.0),
+    };
+    let output = ui::delay_view(ui, &view);
+    let rect = output.response.rect;
+    (rect, output)
+}
+
+#[test]
+fn delay_handle_follows_the_pointer_in_seconds_and_decibels() {
+    for below in [false, true] {
+        let ctx = themed();
+        let handle = std::cell::Cell::new((0.5, -12.0));
+        let last = std::cell::RefCell::new(None);
+        let frame = |events: Vec<Event>| {
+            run(&ctx, events, |ui| {
+                let (rect, output) = delay(ui, handle.get(), below);
+                if let Some(drag) = output.drags.first() {
+                    handle.set((drag.seconds, drag.db));
+                }
+                *last.borrow_mut() = Some((rect, output));
+            });
+        };
+        frame(vec![]);
+        let (rect, _) = last.borrow_mut().take().unwrap();
+        let view = ui::DelayView {
+            taps: &[],
+            tails: &[],
+            grid: &[],
+            span_seconds: 2.0,
+            floor_db: -60.0,
+            handles: &[],
+            reductions: &[],
+            size: vec2(400.0, 175.0),
+        };
+        let at = ui::delay_point(&view, rect, 0.5, -12.0, below);
+        // The outer edge is 0 dB: above the axis for the left channel.
+        let axis = ui::delay_point(&view, rect, 0.5, -60.0, below);
+        assert_eq!(at.y < axis.y, !below);
+        let to = ui::delay_point(&view, rect, 1.0, -30.0, below);
+        frame(vec![Event::PointerMoved(at + vec2(4.0, 3.0))]);
+        frame(button(at + vec2(4.0, 3.0), true));
+        for step in 1..=4 {
+            frame(vec![Event::PointerMoved(
+                at + vec2(4.0, 3.0) + (to - at) * (step as f32 / 4.0),
+            )]);
+        }
+        let (_, output) = last.borrow_mut().take().unwrap();
+        assert!(output.dragging);
+        frame(button(to + vec2(4.0, 3.0), false));
+        let (seconds, db) = handle.get();
+        assert!((seconds - 1.0).abs() < 0.01, "{seconds}");
+        assert!((db + 30.0).abs() < 0.5, "{db}");
+    }
+}
+
+#[test]
+fn delay_handle_keeps_moves_a_stepped_value_swallows_and_takes_arrow_keys() {
+    let ctx = themed();
+    // The caller snaps time to half seconds, as a note division does.
+    let handle = std::cell::Cell::new((0.5_f32, -12.0_f32));
+    let nudges = std::cell::RefCell::new(Vec::new());
+    let rect = std::cell::Cell::new(Rect::NOTHING);
+    let frame = |events: Vec<Event>| {
+        run(&ctx, events, |ui| {
+            let (area, output) = delay(ui, handle.get(), false);
+            rect.set(area);
+            if let Some(drag) = output.drags.first() {
+                handle.set(((drag.seconds * 2.0).round() / 2.0, drag.db));
+            }
+            nudges.borrow_mut().extend(output.nudges);
+        });
+    };
+    frame(vec![]);
+    let width = rect.get().width() - 2.0;
+    let view = ui::DelayView {
+        taps: &[],
+        tails: &[],
+        grid: &[],
+        span_seconds: 2.0,
+        floor_db: -60.0,
+        handles: &[],
+        reductions: &[],
+        size: vec2(400.0, 175.0),
+    };
+    let at = ui::delay_point(&view, rect.get(), 0.5, -12.0, false);
+    frame(vec![Event::PointerMoved(at)]);
+    frame(button(at, true));
+    // Forty steps of a hundredth of a second each: none reaches the next
+    // half second by itself, together they do.
+    for step in 1..=40 {
+        frame(vec![Event::PointerMoved(
+            at + vec2(width * 0.005 * step as f32, 0.0),
+        )]);
+    }
+    frame(button(at + vec2(width * 0.2, 0.0), false));
+    assert_eq!(handle.get().0, 1.0, "the small moves added up");
+    // The handle has focus after the drag.
+    frame(key(egui::Key::ArrowRight, Modifiers::NONE));
+    frame(key(egui::Key::ArrowDown, Modifiers::NONE));
+    assert_eq!(*nudges.borrow(), vec![(0, 1.0, 0.0), (0, 0.0, -1.0)]);
+}
+
+#[test]
+fn delay_handles_that_crowd_into_one_place_keep_a_target_each() {
+    let ctx = themed();
+    let handles = std::cell::RefCell::new(Vec::new());
+    run(&ctx, vec![], |ui| {
+        // A long span: all three would stand in the left corner.
+        let handle = |seconds: f32, db: f32, label: &'static str| ui::DelayHandle {
+            seconds,
+            db,
+            below: false,
+            label,
+            readout: "",
+            horizontal: true,
+            vertical: true,
+        };
+        let output = ui::delay_view(
+            ui,
+            &ui::DelayView {
+                taps: &[],
+                tails: &[],
+                grid: &[],
+                span_seconds: 32.0,
+                floor_db: -60.0,
+                handles: &[
+                    handle(0.375, -6.0, "T"),
+                    handle(0.75, -14.0, "F"),
+                    handle(0.02, -9.0, "P"),
+                ],
+                reductions: &[],
+                size: vec2(400.0, 175.0),
+            },
+        );
+        *handles.borrow_mut() = output.handles.iter().map(|hit| hit.rect).collect();
+    });
+    let handles = handles.borrow();
+    assert_eq!(handles.len(), 3);
+    for (index, rect) in handles.iter().enumerate() {
+        for other in &handles[index + 1..] {
+            // Edge to edge is apart.
+            assert!(
+                !rect.shrink(0.5).intersects(*other),
+                "{rect:?} on {other:?}"
+            );
+        }
+    }
+    // The first keeps its place; the others stand beside it in their order.
+    assert!(handles[0].center().x < handles[1].center().x);
+    assert!(handles[1].center().x < handles[2].center().x);
+}
+
+#[test]
+fn lfo_view_reports_horizontal_drags_in_notches_only_when_draggable() {
+    for draggable in [true, false] {
+        let ctx = themed();
+        let total = std::cell::Cell::new(0.0);
+        let doubles = std::cell::Cell::new(0);
+        let frame = |events: Vec<Event>| {
+            run(&ctx, events, |ui| {
+                let output = ui::lfo_view(
+                    ui,
+                    &ui::LfoView {
+                        traces: &[ui::LfoTrace {
+                            samples: &[0.0, 1.0, 0.0, -1.0, 0.0],
+                            emphasis: true,
+                        }],
+                        markers: &[],
+                        draggable,
+                        size: vec2(208.0, 208.0),
+                    },
+                );
+                total.set(total.get() + output.dragged.unwrap_or(0.0));
+                doubles.set(doubles.get() + usize::from(output.double_clicked));
+            })
+        };
+        let used = frame(vec![]);
+        let at = used.left_top() + vec2(60.0, 100.0);
+        frame(vec![Event::PointerMoved(at)]);
+        frame(button(at, true));
+        for step in 1..=4 {
+            frame(vec![Event::PointerMoved(
+                at + vec2(15.0 * step as f32, 40.0),
+            )]);
+        }
+        frame(button(at + vec2(60.0, 40.0), false));
+        click(at, 2, &mut |events| {
+            frame(events);
+        });
+        if draggable {
+            // Sixty points to the right, six to a notch; the way down is ignored.
+            assert!((total.get() - 10.0).abs() < 0.01, "{}", total.get());
+            assert_eq!(doubles.get(), 1);
+        } else {
+            assert_eq!((total.get(), doubles.get()), (0.0, 0));
+        }
+    }
+}
+
+#[test]
+fn grid_row_gives_a_bare_cell_the_whole_height_and_width_of_its_place() {
+    let ctx = themed();
+    let rects = std::cell::RefCell::new(Vec::new());
+    let used = run(&ctx, vec![], |ui| {
+        ui.set_width(600.0);
+        let cells = [
+            ui::GridCell {
+                span: 6,
+                framed: false,
+            },
+            ui::GridCell {
+                span: 6,
+                framed: true,
+            },
+        ];
+        let drawn = ui::grid_row_cells(ui, &cells, |ui, index| {
+            if index == 0 {
+                let size = ui.available_size();
+                ui.allocate_exact_size(size, egui::Sense::hover()).0
+            } else {
+                ui.allocate_exact_size(vec2(100.0, 120.0), egui::Sense::hover())
+                    .0
+            }
+        });
+        *rects.borrow_mut() = drawn;
+    });
+    let rects = rects.borrow();
+    let (bare, card) = (rects[0], rects[1]);
+    // Twelve columns with an 8-point gutter: a half is 296 points.
+    assert!((bare.width() - 296.0).abs() < 0.01, "{bare:?}");
+    assert_eq!(bare.left(), used.left());
+    assert!((bare.height() - used.height()).abs() < 0.01);
+    assert!(bare.height() > 120.0, "the card's margins count");
+    assert!(
+        card.left() > bare.right() + 8.0,
+        "the card keeps its margin"
+    );
+    assert!(card.top() > bare.top());
+}
+
+#[test]
+fn frequency_plot_draws_bands_spans_and_markers_without_changing_its_size() {
+    let ctx = themed();
+    let high = [0.0, 6.0, 6.0, 0.0];
+    let low = [0.0, -6.0, -6.0, 0.0];
+    let used = run(&ctx, vec![], |ui| {
+        let output = ui::frequency_plot(
+            ui,
+            &ui::FrequencyPlot {
+                curves: &[
+                    ui::FrequencyCurve {
+                        db: &high,
+                        emphasis: true,
+                        low: Some(&low),
+                    },
+                    // A band whose edges disagree in length is drawn as a line.
+                    ui::FrequencyCurve {
+                        db: &high,
+                        emphasis: false,
+                        low: Some(&low[..2]),
+                    },
+                ],
+                spectrum: None,
+                nodes: &[],
+                range_db: 24.0,
+                limit_db: 24.0,
+                spans: &[(200.0, 3200.0), (f32::NAN, 10.0)],
+                markers: &[ui::FrequencyMarker {
+                    frequency: 800.0,
+                    label: "L",
+                }],
+                size: vec2(610.0, 200.0),
+            },
+        );
+        assert!(output.nodes.is_empty() && output.drags.is_empty());
+    });
+    assert_eq!(used.size(), vec2(610.0, 200.0));
 }

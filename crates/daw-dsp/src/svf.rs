@@ -299,7 +299,7 @@ pub struct Shelf1 {
 impl Default for Shelf1 {
     /// Passes its input unchanged.
     fn default() -> Self {
-        Self::new(1.0, 1.0, 1.0)
+        Self::with_gains(1.0, 1.0, 1.0)
     }
 }
 
@@ -309,7 +309,9 @@ fn warp(hz: f32, sample_rate: f32) -> f32 {
 }
 
 impl Shelf1 {
-    fn new(k: f32, low_gain: f32, high_gain: f32) -> Self {
+    /// From the bilinear pole variable `k = tan(π·f/fs)` and the gains at DC
+    /// and at the top.
+    pub fn with_gains(k: f32, low_gain: f32, high_gain: f32) -> Self {
         Self {
             big_g: k / (1.0 + k),
             low_gain,
@@ -323,7 +325,7 @@ impl Shelf1 {
     /// warped frequencies).
     pub fn shelf(zero_hz: f32, pole_hz: f32, sample_rate: f32) -> Self {
         let (zero, pole) = (warp(zero_hz, sample_rate), warp(pole_hz, sample_rate));
-        Self::new(pole, 1.0, pole / zero)
+        Self::with_gains(pole, 1.0, pole / zero)
     }
 
     /// The exact digital inverse of [`Self::shelf`] with the same arguments:
@@ -331,23 +333,28 @@ impl Shelf1 {
     /// pair is the identity at any sample rate.
     pub fn inverse_shelf(zero_hz: f32, pole_hz: f32, sample_rate: f32) -> Self {
         let (zero, pole) = (warp(zero_hz, sample_rate), warp(pole_hz, sample_rate));
-        Self::new(zero, 1.0, zero / pole)
+        Self::with_gains(zero, 1.0, zero / pole)
     }
 
     /// Tilt around `pivot_hz`: `−gain_db` at DC, `+gain_db` at the top, 0 dB
     /// at the pivot.
     pub fn tilt(gain_db: f32, pivot_hz: f32, sample_rate: f32) -> Self {
         let a = crate::db_to_gain(gain_db);
-        Self::new(warp(a * pivot_hz, sample_rate), 1.0 / a, a)
+        Self::with_gains(warp(a * pivot_hz, sample_rate), 1.0 / a, a)
     }
 
     /// First-order high-pass; at a few hertz, a DC blocker.
     pub fn high_pass(hz: f32, sample_rate: f32) -> Self {
-        Self::new(warp(hz, sample_rate), 0.0, 1.0)
+        Self::with_gains(warp(hz, sample_rate), 0.0, 1.0)
+    }
+
+    /// First-order low-pass.
+    pub fn low_pass(hz: f32, sample_rate: f32) -> Self {
+        Self::with_gains(warp(hz, sample_rate), 1.0, 0.0)
     }
 
     pub fn low_shelf(gain_db: f32, hz: f32, sample_rate: f32) -> Self {
-        Self::new(warp(hz, sample_rate), crate::db_to_gain(gain_db), 1.0)
+        Self::with_gains(warp(hz, sample_rate), crate::db_to_gain(gain_db), 1.0)
     }
 
     /// Takes the other section's coefficients and keeps the state.
@@ -383,10 +390,85 @@ impl Shelf1 {
     }
 }
 
+/// A [`Shelf1`] that reaches new coefficients in a straight line over a
+/// number of samples: an absorption or a level that follows a control
+/// without a step. On the way between two shelves that never gain it never
+/// gains either, so it is safe inside a feedback loop.
+#[derive(Clone, Debug, Default)]
+pub struct ShelfGlide {
+    shelf: Shelf1,
+    target: [f32; 3],
+    step: [f32; 3],
+    left: u32,
+}
+
+impl ShelfGlide {
+    /// Moves to the other section's coefficients over `samples` (at once
+    /// with 0) and keeps the state.
+    pub fn set(&mut self, other: &Shelf1, samples: u32) {
+        let now = [self.shelf.big_g, self.shelf.low_gain, self.shelf.high_gain];
+        self.target = [other.big_g, other.low_gain, other.high_gain];
+        self.left = samples;
+        if samples == 0 {
+            self.shelf.set(other);
+        } else {
+            self.step =
+                std::array::from_fn(|index| (self.target[index] - now[index]) / samples as f32);
+        }
+    }
+
+    /// Clears the state; the coefficients stay as they are.
+    pub fn reset(&mut self) {
+        self.shelf.reset();
+    }
+
+    #[inline]
+    pub fn process(&mut self, input: f32) -> f32 {
+        if self.left > 0 {
+            self.left -= 1;
+            let [big_g, low, high] = if self.left == 0 {
+                // Exactly, not by the sum of the steps.
+                self.target
+            } else {
+                [
+                    self.shelf.big_g + self.step[0],
+                    self.shelf.low_gain + self.step[1],
+                    self.shelf.high_gain + self.step[2],
+                ]
+            };
+            (self.shelf.big_g, self.shelf.low_gain, self.shelf.high_gain) = (big_g, low, high);
+        }
+        self.shelf.process(input)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::prewarp;
+
+    #[test]
+    fn a_gliding_shelf_arrives_exactly_and_without_a_step() {
+        let mut shelf = ShelfGlide::default();
+        shelf.set(&Shelf1::with_gains(0.2, 0.1, 0.05), 0);
+        assert_eq!(shelf.process(0.0), 0.0);
+        let target = Shelf1::with_gains(0.5, 0.9, 0.7);
+        shelf.set(&target, 32);
+        let mut last = shelf.process(1.0);
+        for _ in 0..400 {
+            let out = shelf.process(1.0);
+            // A constant input: the low gain alone, moving by a 32nd of
+            // the way at most (and the pole settling).
+            assert!((out - last).abs() < 0.1, "{last} to {out}");
+            last = out;
+        }
+        assert!((last - 0.9).abs() < 1e-4, "{last}");
+        let (glided, direct) = (&shelf.shelf, &target);
+        assert_eq!(
+            (glided.big_g, glided.low_gain, glided.high_gain),
+            (direct.big_g, direct.low_gain, direct.high_gain)
+        );
+    }
 
     const RATE: f32 = 48_000.0;
 

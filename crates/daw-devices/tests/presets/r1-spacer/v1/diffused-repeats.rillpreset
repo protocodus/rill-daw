@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Diffused Repeats",
+  "author": "Rill",
+  "category": "Echo",
+  "tags": ["pad", "keys"],
+  "description": "Repeats that melt into a wash.",
+  "parameters": {
+    "reverb.on": false,
+    "echo.model": "Digital",
+    "echo.division": "1/4",
+    "echo.feedback": 55.0,
+    "echo.diffusion": 80.0,
+    "echo.color": -25.0
+  }
+}

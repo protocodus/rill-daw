@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Ping-Pong Eighths",
+  "author": "Rill",
+  "category": "Echo",
+  "tags": ["synth", "lead"],
+  "description": "Clean tempo delay bouncing left and right.",
+  "parameters": {
+    "reverb.on": false,
+    "echo.model": "Digital",
+    "echo.division": "1/8",
+    "echo.feedback": 45.0,
+    "echo.stereo": "Ping-pong"
+  }
+}

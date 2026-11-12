@@ -20,6 +20,10 @@ pub struct State {
     slope: u32,
     shape: ui::Glyph,
     selected_band: usize,
+    division: usize,
+    section_on: bool,
+    model: usize,
+    seed: i32,
 }
 
 impl Default for State {
@@ -47,6 +51,10 @@ impl Default for State {
             slope: 24,
             shape: ui::Glyph::Sine,
             selected_band: 1,
+            division: 3,
+            section_on: true,
+            model: 0,
+            seed: 1,
         }
     }
 }
@@ -105,6 +113,18 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
             ui.horizontal(|ui| {
                 ui::value_link(ui, "Kick +1", false, 89.0);
                 ui::value_link(ui, "No source", true, 89.0);
+                // The value under a detented knob: a click lists the options.
+                let options = ["1/16", "1/8 T", "1/8", "1/8 D", "1/4", "1/2"];
+                if let (_, Some(picked)) =
+                    ui::value_menu(ui, options[state.division], &options, state.division, 89.0)
+                {
+                    state.division = picked;
+                }
+            });
+            // One of a numbered set of variations, under its number.
+            ui.vertical(|ui| {
+                ui::variation_stepper(ui, &mut state.seed, 1..=32, "seed");
+                ui::text::note(ui, format!("#{}", state.seed));
             });
         });
         ui::wheel(ui, &mut state.pitch, true, "Pitch", egui::vec2(34.0, 120.0));
@@ -165,6 +185,16 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
     );
     ui.add_space(tokens::SPACE_SM);
     band_table(ui, state);
+    ui.add_space(tokens::SPACE_LG);
+    ui::text::note(
+        ui,
+        "grid_row_cells · device_section_header_choice: a bare picture cell beside a card with an enable lamp and its model",
+    );
+    ui.add_space(tokens::SPACE_SM);
+    ui.scope(|ui| {
+        ui.set_max_width(610.0);
+        picture_row(ui, state);
+    });
     ui.add_space(tokens::SPACE_MD);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = tokens::SPACE_LG;
@@ -189,6 +219,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
                 wave(ui::Glyph::Saw, "Saw"),
                 wave(ui::Glyph::Square, "Square"),
                 wave(ui::Glyph::SampleHold, "Sample and hold"),
+                wave(ui::Glyph::Wander, "Random, smooth"),
             ],
             28.0,
         );
@@ -212,6 +243,45 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
             ui::inline_knob("Send", &mut send, 0.0..=1.0, "60 %")
                 .automation(Some(ui::AutomationState::Read)),
         );
+    });
+}
+
+/// A picture as a bare cell beside a card whose title carries the section's
+/// enable lamp and its model: `grid_row_cells` and
+/// `device_section_header_choice`.
+pub fn picture_row(ui: &mut egui::Ui, state: &mut State) {
+    let cells = [
+        ui::GridCell {
+            span: 5,
+            framed: false,
+        },
+        ui::GridCell {
+            span: 7,
+            framed: true,
+        },
+    ];
+    ui::grid_row_cells(ui, &cells, |ui, index| {
+        if index == 0 {
+            // As tall as the row: the card decides the height.
+            let size = ui.available_size();
+            ui::scope(ui, &[0.0, 0.6, 0.0, -0.6, 0.0], false, size);
+            return;
+        }
+        // The section's model on its title line.
+        ui::device_section_header_choice(
+            ui,
+            "Echo",
+            Some(&mut state.section_on),
+            &mut state.model,
+            &["Digital", "BBD", "Tape"],
+        );
+        ui.add_space(tokens::SPACE_XS);
+        ui.add_enabled_ui(state.section_on, |ui| {
+            ui.horizontal(|ui| {
+                ui::labeled_knob("Feedback", &mut state.resonance, 0.0..=1.0).show(ui);
+                ui::labeled_knob("Level", &mut state.drive, 0.0..=1.0).show(ui);
+            });
+        });
     });
 }
 

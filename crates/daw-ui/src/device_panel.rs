@@ -618,6 +618,16 @@ fn group_title(ui: &Ui, title: &str) -> std::sync::Arc<egui::Galley> {
 /// separates it from the controls. Distinct from the sentence-case
 /// [`control_caption`]s under it, so the panel's two levels never read alike.
 pub fn device_section_title(ui: &mut Ui, title: &str) -> Response {
+    device_section_header(ui, title, None)
+}
+
+const HEADER_LAMP: f32 = 11.0;
+
+/// A [`device_section_title`] that switches its section when `enable` is
+/// given: a lamp stands in front of the name, and a click on either flips
+/// it. As tall as the plain title, so cards with and without a lamp share
+/// a row. The response is `changed` when the click flipped the value.
+pub fn device_section_header(ui: &mut Ui, title: &str, enable: Option<&mut bool>) -> Response {
     let galley = group_title(ui, title);
     let (rect, response) = ui.allocate_exact_size(
         vec2(
@@ -626,14 +636,100 @@ pub fn device_section_title(ui: &mut Ui, title: &str) -> Response {
         ),
         egui::Sense::hover(),
     );
+    header_title(ui, rect, rect.top(), galley, title, enable, response)
+}
+
+/// A [`device_section_header`] whose section comes in a few models: the
+/// choice among them stands at the right end of the title line, as toggle
+/// buttons, so the card's own lines stay free for its controls. Taller than
+/// the plain title: give it to every card of a row or to none. While the
+/// section is switched off the choice is disabled in its place. Returns the
+/// title's response, `changed` when its lamp was flipped, and the choice's,
+/// `changed` when another option was picked.
+pub fn device_section_header_choice(
+    ui: &mut Ui,
+    title: &str,
+    enable: Option<&mut bool>,
+    selected: &mut usize,
+    options: &[&str],
+) -> (Response, Response) {
+    let galley = group_title(ui, title);
+    let (rect, response) = ui.allocate_exact_size(
+        vec2(
+            ui.available_width(),
+            crate::TOGGLE_ROW_HEIGHT + tokens::SPACE_SM + tokens::BORDER_WIDTH,
+        ),
+        egui::Sense::hover(),
+    );
+    let band = egui::Rect::from_min_size(rect.min, vec2(rect.width(), crate::TOGGLE_ROW_HEIGHT));
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .id_salt((title, "model"))
+            .max_rect(band)
+            .layout(egui::Layout::right_to_left(egui::Align::Center)),
+    );
+    // A section that is off has no model to pick.
+    if enable.as_deref() == Some(&false) {
+        child.disable();
+    }
+    // Less padding than a button's: the name left of it needs its room.
+    child.spacing_mut().button_padding.x = tokens::SPACE_SM;
+    let indexed: Vec<(usize, &str)> = options.iter().copied().enumerate().collect();
+    let choice = crate::toggle_grid(&mut child, selected, &indexed, options.len().max(1));
+    let top = band.center().y - galley.size().y * 0.5;
+    let header = header_title(ui, rect, top, galley, title, enable, response);
+    (header, choice)
+}
+
+/// The name of a section in `rect`, its text starting at `top`, with the
+/// lamp of its switch in front where it has one, and the rule below.
+fn header_title(
+    ui: &Ui,
+    rect: egui::Rect,
+    top: f32,
+    galley: std::sync::Arc<egui::Galley>,
+    title: &str,
+    enable: Option<&mut bool>,
+    mut response: Response,
+) -> Response {
     let colors = theme::palette(ui.ctx());
-    ui.painter().galley(rect.left_top(), galley, colors.muted);
+    let mut text_left = rect.left();
+    let on = enable.as_deref().copied();
+    if let Some(value) = enable {
+        text_left += HEADER_LAMP + tokens::SPACE_SM;
+        // The lamp and the name; the rest of the line stays free.
+        let target = egui::Rect::from_min_max(
+            rect.left_top(),
+            egui::pos2(
+                text_left + galley.size().x,
+                rect.bottom() - tokens::BORDER_WIDTH,
+            ),
+        );
+        let mut hit = ui.interact(target, response.id.with("enable"), egui::Sense::click());
+        if hit.clicked() {
+            *value = !*value;
+            hit.mark_changed();
+        }
+        crate::device_controls::paint_lamp(
+            ui.painter(),
+            egui::pos2(rect.left() + HEADER_LAMP * 0.5, top + galley.size().y * 0.5),
+            HEADER_LAMP,
+            *value,
+            hit.has_focus(),
+        );
+        response = hit.on_hover_cursor(egui::CursorIcon::PointingHand);
+    }
+    ui.painter()
+        .galley(egui::pos2(text_left, top), galley, colors.muted);
     ui.painter().hline(
         rect.x_range(),
         rect.bottom() - tokens::BORDER_WIDTH * 0.5,
         egui::Stroke::new(tokens::BORDER_WIDTH, colors.line),
     );
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, title));
+    response.widget_info(|| match on {
+        Some(on) => egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, on, title),
+        None => egui::WidgetInfo::labeled(egui::WidgetType::Label, true, title),
+    });
     response
 }
 

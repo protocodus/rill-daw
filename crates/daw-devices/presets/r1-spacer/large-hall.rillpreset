@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Large Hall",
+  "author": "Rill",
+  "category": "Reverb",
+  "tags": ["strings", "piano"],
+  "description": "Concert hall.",
+  "parameters": {
+    "echo.on": false,
+    "reverb.model": "Hall",
+    "reverb.size": 70.0,
+    "reverb.decay": 2.8,
+    "reverb.pre_delay": 25.0
+  }
+}

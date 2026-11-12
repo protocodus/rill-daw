@@ -209,3 +209,76 @@ pub fn time_to(signal: &[f32], share: f32) -> usize {
         .position(|x| if to > from { *x >= goal } else { *x <= goal })
         .unwrap()
 }
+
+/// Level in dB of the largest component between the bins `low` and `high`
+/// that is not a harmonic of the tone at `bin`, against the tone, in a
+/// [`spectrum`].
+pub fn worst_inharmonic_db(spectrum: &[f64], bin: usize, low: usize, high: usize) -> f32 {
+    let near_harmonic = |candidate: usize| {
+        let nearest = ((candidate as f64 / bin as f64).round() as usize).max(1) * bin;
+        candidate.abs_diff(nearest) <= SKIRT
+    };
+    let worst = (low..=high.min(spectrum.len() - 1))
+        .filter(|candidate| !near_harmonic(*candidate))
+        .map(|candidate| spectrum[candidate])
+        .fold(0.0, f64::max);
+    db(worst / spectrum[bin])
+}
+
+/// Magnitude of the transfer function at `frequency` from an impulse
+/// response that has died away within `response`, for an impulse of
+/// `amplitude`.
+pub fn response_at(response: &[f32], amplitude: f64, frequency: f64, rate: f64) -> f64 {
+    let step = std::f64::consts::TAU * frequency / rate;
+    let (mut re, mut im) = (0.0, 0.0);
+    for (n, y) in response.iter().enumerate() {
+        let (sin, cos) = (step * n as f64).sin_cos();
+        re += f64::from(*y) * cos;
+        im -= f64::from(*y) * sin;
+    }
+    re.hypot(im) / amplitude
+}
+
+/// Running mean over `window` values; `window` shorter than the input.
+fn running_mean(values: &[f64], window: usize) -> Vec<f64> {
+    let mut sum: f64 = values[..window].iter().sum();
+    let mut means = vec![sum / window as f64];
+    for n in window..values.len() {
+        sum += values[n] - values[n - window];
+        means.push(sum / window as f64);
+    }
+    means
+}
+
+/// Frequency of a signal near `carrier` over time, in hertz, one value per
+/// sample: the tone is shifted to zero, its image at twice the carrier is
+/// averaged away (three running means over `window` samples, a whole number
+/// of carrier periods) and the phase differentiated.
+pub fn instantaneous_hz(signal: &[f32], carrier: f64, rate: f64, window: usize) -> Vec<f64> {
+    let step = std::f64::consts::TAU * carrier / rate;
+    let shift = |turn: fn(f64) -> f64| {
+        let mut part: Vec<f64> = signal
+            .iter()
+            .enumerate()
+            .map(|(n, y)| f64::from(*y) * turn(step * n as f64))
+            .collect();
+        for _ in 0..3 {
+            part = running_mean(&part, window);
+        }
+        part
+    };
+    let (re, im) = (shift(f64::cos), shift(|angle| -angle.sin()));
+    let phases: Vec<f64> = re.iter().zip(&im).map(|(re, im)| im.atan2(*re)).collect();
+    phases
+        .windows(2)
+        .map(|pair| {
+            let mut turn = pair[1] - pair[0];
+            if turn > std::f64::consts::PI {
+                turn -= std::f64::consts::TAU;
+            } else if turn < -std::f64::consts::PI {
+                turn += std::f64::consts::TAU;
+            }
+            carrier + turn * rate / std::f64::consts::TAU
+        })
+        .collect()
+}

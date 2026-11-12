@@ -1,0 +1,14 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Ducked Space",
+  "author": "Rill",
+  "category": "Space",
+  "tags": ["vocal", "lead"],
+  "description": "Echo and hall that clear for the source and rise when it stops.",
+  "parameters": {
+    "echo.duck": 60.0,
+    "reverb.duck": 60.0,
+    "mix": 40.0
+  }
+}

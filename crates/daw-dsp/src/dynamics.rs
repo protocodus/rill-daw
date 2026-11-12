@@ -199,6 +199,65 @@ impl ProgramRelease {
     }
 }
 
+/// The compressor and expander around a bucket-brigade delay line: 2:1 on
+/// the way in, 1:2 on the way out, so the line's noise and headroom matter
+/// less. What sits between the two halves (the line's saturation and
+/// filters) is heard through the expander's envelope: the bloom and
+/// breathing of these circuits.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Compander {
+    compress: Ballistics,
+    expand: Ballistics,
+}
+
+impl Compander {
+    /// Envelope level at which both halves have unit gain.
+    pub const REFERENCE: f32 = 0.1;
+    /// Largest gain of the compressor and attenuation of the expander: below
+    /// it the pair is linear, and silence stays silence.
+    pub const MAX_GAIN: f32 = 32.0;
+    /// A fast rise keeps the burst short that an onset out of silence
+    /// sends into the line at the compressor's largest gain.
+    const RISE_MS: f32 = 1.0;
+    const FALL_MS: f32 = 10.0;
+
+    pub fn prepare(&mut self, sample_rate: f32) {
+        self.compress
+            .set_times(Self::RISE_MS, Self::FALL_MS, sample_rate);
+        self.expand
+            .set_times(Self::RISE_MS, Self::FALL_MS, sample_rate);
+    }
+
+    pub fn reset(&mut self) {
+        self.compress.reset();
+        self.expand.reset();
+    }
+
+    /// The compressor's envelope: the level of what it has put out.
+    pub fn envelope(&self) -> f32 {
+        self.compress.value()
+    }
+
+    /// Divides by the envelope of its own output so far (a feedback
+    /// detector): the output level is the square root of the input's.
+    #[inline]
+    pub fn compress(&mut self, input: f32) -> f32 {
+        let gain = (Self::REFERENCE / self.compress.value()).min(Self::MAX_GAIN);
+        let output = input * gain;
+        self.compress.process(output.abs());
+        output
+    }
+
+    /// Multiplies by the envelope of its input so far: the inverse of
+    /// [`Self::compress`], sample for sample, when fed its output.
+    #[inline]
+    pub fn expand(&mut self, input: f32) -> f32 {
+        let gain = (self.expand.value() / Self::REFERENCE).max(1.0 / Self::MAX_GAIN);
+        self.expand.process(input.abs());
+        input * gain
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -463,5 +522,41 @@ mod tests {
         off.set(5.0);
         off.reset();
         assert_eq!(off.process(0.0), 0.0);
+    }
+
+    #[test]
+    fn compander_halves_the_level_range_and_its_pair_is_the_identity() {
+        let rate = 48_000.0;
+        let mut silent = Compander::default();
+        silent.prepare(rate);
+        let stored = silent.compress(0.0);
+        assert_eq!(silent.expand(stored), 0.0);
+        for level_db in [-60.0_f32, -40.0, -20.0, -6.0, 0.0] {
+            let amplitude = crate::db_to_gain(level_db);
+            let mut pair = Compander::default();
+            pair.prepare(rate);
+            let (mut stored, mut worst) = (0.0_f32, 0.0_f32);
+            for n in 0..48_000 {
+                let x = amplitude * (std::f32::consts::TAU * 1000.0 * n as f32 / rate).sin();
+                let w = pair.compress(x);
+                let y = pair.expand(w);
+                if n > 24_000 {
+                    stored = stored.max(w.abs());
+                    worst = worst.max((y - x).abs());
+                }
+            }
+            assert!(
+                20.0 * (1.0 + worst / amplitude).log10() < 0.1,
+                "{level_db} dB: error {worst}"
+            );
+            // 2:1 around the reference: the stored peak is √(A·R/e), with
+            // an envelope `e` between the mean (2/π) and the peak of what
+            // is stored.
+            let expected = (amplitude * Compander::REFERENCE * 1.25).sqrt();
+            assert!(
+                (20.0 * (stored / expected).log10()).abs() < 1.0,
+                "{level_db} dB: stored {stored}, expected {expected}"
+            );
+        }
     }
 }

@@ -45,6 +45,12 @@ pub trait DeviceHost {
     fn telemetry(&self) -> Option<Arc<Telemetry>> {
         None
     }
+    /// The song's tempo in beats per minute, for the picture of a
+    /// tempo-synced time. `None` when the host has no song (a gallery, a
+    /// test table).
+    fn tempo(&self) -> Option<f64> {
+        None
+    }
     /// Names of the channels routed to the device's sidechain input.
     /// `None` when the host cannot say (a gallery, a test table).
     fn sidechain_sources(&self) -> Option<Vec<String>> {
@@ -79,6 +85,12 @@ pub struct PanelState {
     pub reduction_hold: f32,
     /// The level history as last read, oldest first.
     history: Vec<[f32; 3]>,
+    /// The time span of a delay picture while one of its handles is
+    /// dragged, so the axis does not rescale under the pointer.
+    held_span: Option<f32>,
+    /// What a drag across an LFO picture has turned of the next step of a
+    /// synced rate.
+    rate_drag: f32,
     /// Where the response, the parts of another picture and each control
     /// were last drawn, and which controls were disabled.
     #[cfg(test)]
@@ -87,6 +99,9 @@ pub struct PanelState {
     picture_rects: Vec<egui::Rect>,
     #[cfg(test)]
     control_rects: Vec<(u32, egui::Rect)>,
+    /// The toggle grids themselves, inside their places.
+    #[cfg(test)]
+    grid_rects: Vec<(u32, egui::Rect)>,
     #[cfg(test)]
     disabled: Vec<u32>,
 }
@@ -196,23 +211,14 @@ pub fn show(
     #[cfg(test)]
     {
         state.control_rects.clear();
+        state.grid_rects.clear();
         state.picture_rects.clear();
         state.disabled.clear();
     }
     preset_bar(ui, descriptor, host, state);
     daw_ui::section_gap(ui);
-    if let Some(picture) = &layout.picture {
-        match picture {
-            panels::Picture::Response(view) => {
-                response(ui, descriptor, view, &layout, host, state);
-            }
-            panels::Picture::Saturation { height } => {
-                pictures::saturation(ui, *height, host, state);
-            }
-            panels::Picture::Dynamics { height } => {
-                pictures::dynamics(ui, *height, host, state);
-            }
-        }
+    if layout.picture_place == panels::PicturePlace::Above && layout.picture.is_some() {
+        picture(ui, descriptor, &layout, host, state);
         daw_ui::section_gap(ui);
     }
     let rows = layout.sections.iter().map(|section| section.row).max();
@@ -223,7 +229,12 @@ pub fn show(
             .filter(|section| section.row == row)
             .collect();
         let drawn = if layout.cells {
-            cell_row(ui, descriptor, &sections, host, state, &layout);
+            // The picture's columns, when it stands in this row.
+            let beside = match layout.picture_place {
+                panels::PicturePlace::Row { row: place, span } if place == row => Some(span),
+                _ => None,
+            };
+            cell_row(ui, descriptor, &sections, beside, host, state, &layout);
             true
         } else {
             natural_row(ui, descriptor, &sections, host, state, &layout)
@@ -236,6 +247,53 @@ pub fn show(
     if descriptor.kind == DeviceKind::Instrument {
         daw_ui::section_gap(ui);
         performance(ui, host, state);
+    }
+}
+
+/// The device's picture, in the space the caller gave it.
+fn picture(
+    ui: &mut Ui,
+    descriptor: &DeviceDescriptor,
+    layout: &panels::Layout,
+    host: &mut dyn DeviceHost,
+    state: &mut PanelState,
+) {
+    match &layout.picture {
+        Some(panels::Picture::Response(view)) => {
+            response(ui, descriptor, view, layout, host, state);
+        }
+        Some(panels::Picture::Saturation { height }) => {
+            pictures::saturation(ui, *height, host, state);
+        }
+        Some(panels::Picture::Dynamics { height }) => {
+            pictures::dynamics(ui, *height, host, state);
+        }
+        Some(panels::Picture::Modulation { height }) => {
+            pictures::modulation(ui, *height, host, state);
+        }
+        Some(panels::Picture::Space) => pictures::space(ui, host, state),
+        None => {}
+    }
+}
+
+/// The parameter a slot of several shows: the one the layout names, else
+/// the first that applies, or the first when none does.
+fn shown(ids: &[u32], host: &dyn DeviceHost, layout: &panels::Layout) -> usize {
+    let values = |id| host.value(id);
+    ids.iter()
+        .position(|id| (layout.swap)(*id, &values))
+        .or_else(|| ids.iter().position(|id| (layout.visible)(*id, &values)))
+        .unwrap_or(0)
+}
+
+/// A change of a choice from the panel, with whatever the layout sends
+/// along as one edit.
+fn edit(host: &mut dyn DeviceHost, layout: &panels::Layout, id: u32, value: f64) {
+    let mut values = vec![(id, value)];
+    values.extend((layout.companions)(id, value, &|id| host.value(id)));
+    match values[..] {
+        [(id, value)] => host.set_value(id, value),
+        _ => host.set_values(&values),
     }
 }
 
@@ -316,11 +374,13 @@ fn natural_row(
 
 /// One row of cards on the cell grid: a card `span` cells wide holds that
 /// many equal cells per line, so controls stand in columns within a card
-/// and on shared center lines across the row.
+/// and on shared center lines across the row. With `beside`, the picture
+/// is the row's first cell, that many columns wide, without a frame.
 fn cell_row(
     ui: &mut Ui,
     descriptor: &DeviceDescriptor,
     sections: &[&panels::Section],
+    beside: Option<u8>,
     host: &mut dyn DeviceHost,
     state: &mut PanelState,
     layout: &panels::Layout,
@@ -338,6 +398,13 @@ fn cell_row(
                 .flatten()
                 .filter_map(|slot| match slot {
                     panels::Slot::Control(id, _) => descriptor.parameter(*id),
+                    // Whichever shows: the line must not change height.
+                    panels::Slot::Swap(ids, _) => ids
+                        .iter()
+                        .filter_map(|id| descriptor.parameter(*id))
+                        .max_by(|a, b| {
+                            control_height(a, layout).total_cmp(&control_height(b, layout))
+                        }),
                     _ => None,
                 })
                 .map(|spec| control_height(spec, layout))
@@ -349,10 +416,24 @@ fn cell_row(
     let text = ui.fonts_mut(|fonts| fonts.row_height(&daw_ui::control_caption_font()));
     let between = 2.0 * text + 3.0 * ui.spacing().item_spacing.y + LINE_GAP;
     let tall = heights.iter().sum::<f32>() + between * lines.saturating_sub(1) as f32;
-    let spans: Vec<u8> = sections.iter().map(|section| section.span).collect();
-    daw_ui::grid_row(ui, &spans, |ui, index| {
+    let cells: Vec<daw_ui::GridCell> = beside
+        .map(|span| daw_ui::GridCell {
+            span,
+            framed: false,
+        })
+        .into_iter()
+        .chain(sections.iter().map(|section| daw_ui::GridCell {
+            span: section.span,
+            framed: true,
+        }))
+        .collect();
+    daw_ui::grid_row_cells(ui, &cells, |ui, index| {
+        let Some(index) = index.checked_sub(usize::from(beside.is_some())) else {
+            picture(ui, descriptor, layout, host, state);
+            return;
+        };
         let section = sections[index];
-        daw_ui::device_section_title(ui, section.title);
+        section_header(ui, descriptor, section, host, state, layout);
         ui.add_space(daw_ui::tokens::SPACE_XS);
         let width = ui.available_width() / f32::from(section.span);
         for (line, slots) in section.lines.iter().enumerate() {
@@ -371,6 +452,10 @@ fn cell_row(
                             (std::slice::from_ref(id), cells, false)
                         }
                         panels::Slot::Faders(ids, cells) => (*ids, cells, true),
+                        panels::Slot::Swap(ids, cells) => {
+                            let at = shown(ids, host, layout);
+                            (&ids[at..=at], cells, false)
+                        }
                         panels::Slot::Blank(cells) => {
                             ui.add_space(width * f32::from(*cells));
                             continue;
@@ -395,6 +480,83 @@ fn cell_row(
             });
         }
     });
+}
+
+/// A card's title; with the lamp of the toggle that switches the section
+/// and the choice of its model, where it has them.
+fn section_header(
+    ui: &mut Ui,
+    descriptor: &DeviceDescriptor,
+    section: &panels::Section,
+    host: &mut dyn DeviceHost,
+    // Only tests look at where controls were drawn.
+    #[cfg_attr(not(test), expect(unused_variables))] state: &mut PanelState,
+    layout: &panels::Layout,
+) {
+    let parameter = |id: Option<u32>| id.and_then(|id| descriptor.parameter(id));
+    let (enable, model) = (parameter(section.enable), parameter(section.choice));
+    let mut on = enable.is_some_and(|spec| host.value(spec.id) >= 0.5);
+    let lamp = match model {
+        Some(spec) => {
+            let ParamRange::Choice(labels) = spec.range else {
+                unreachable!("a section's model is a choice");
+            };
+            let mut selected = spec.to_plain(host.value(spec.id) as f32).round() as usize;
+            let (lamp, choice) = daw_ui::device_section_header_choice(
+                ui,
+                section.title,
+                enable.is_some().then_some(&mut on),
+                &mut selected,
+                labels,
+            );
+            if choice.changed() {
+                let value = f64::from(spec.to_normalized(selected as f32));
+                edit(host, layout, spec.id, value);
+            }
+            #[cfg(test)]
+            {
+                state.control_rects.push((spec.id, choice.rect));
+                if !active(spec, host, layout) {
+                    state.disabled.push(spec.id);
+                }
+            }
+            let navigation = daw_ui::automatable_parameter_context(
+                ui,
+                &choice,
+                AutomationControl::DeviceParameter { id: spec.id },
+                host.automation(spec.id),
+            );
+            if let Some(action) = navigation {
+                host.navigate(action);
+            }
+            lamp
+        }
+        None => {
+            daw_ui::device_section_header(ui, section.title, enable.is_some().then_some(&mut on))
+        }
+    };
+    let Some(spec) = enable else {
+        return;
+    };
+    if lamp.changed() {
+        host.set_value(spec.id, f64::from(u8::from(on)));
+    }
+    // The lane marker stands clear of the title.
+    let mut rect = lamp.rect;
+    rect.max.x += LED_MARKER;
+    let lamp = lamp.with_new_rect(rect);
+    let navigation = daw_ui::automatable_parameter_context(
+        ui,
+        &lamp,
+        AutomationControl::DeviceParameter { id: spec.id },
+        host.automation(spec.id),
+    );
+    #[cfg(test)]
+    state.control_rects.push((spec.id, lamp.rect));
+    lamp.on_hover_text(spec.name);
+    if let Some(action) = navigation {
+        host.navigate(action);
+    }
 }
 
 /// A section's visible controls, line by line, with their natural widths.
@@ -607,9 +769,16 @@ fn is_knob(spec: &ParamSpec) -> bool {
     )
 }
 
+/// Whether the layout draws a choice as a detented knob.
+fn dial(spec: &ParamSpec, layout: &panels::Layout) -> bool {
+    layout.dials.contains(&spec.id) && matches!(spec.range, ParamRange::Choice(_))
+}
+
 /// Height of the control itself, between its caption and its value.
 fn control_height(spec: &ParamSpec, layout: &panels::Layout) -> f32 {
-    if is_knob(spec) {
+    if layout.steppers.contains(&spec.id) {
+        daw_ui::VARIATION_STEPPER_SIZE.y
+    } else if is_knob(spec) || dial(spec, layout) {
         knob_diameter(spec, layout)
     } else if let (Some(columns), ParamRange::Choice(labels)) =
         (toggle_columns(spec, layout), spec.range)
@@ -788,11 +957,13 @@ fn response(
             curves.push(daw_ui::FrequencyCurve {
                 db: &own,
                 emphasis: false,
+                low: None,
             });
         }
         curves.push(daw_ui::FrequencyCurve {
             db: &db,
             emphasis: true,
+            low: None,
         });
         let plain = |id: u32| {
             descriptor
@@ -848,6 +1019,8 @@ fn response(
                 nodes: &nodes,
                 range_db: range,
                 limit_db: view.limit_db,
+                spans: &[],
+                markers: &[],
                 size,
             },
         );
@@ -1082,7 +1255,9 @@ fn table_control(
                 knob = knob.bipolar();
             }
             let response = ui.add(knob);
-            let navigation = knob_edits(ui, spec, host, &response, value, normalized, automation);
+            let navigation = knob_edits(
+                ui, spec, host, &response, value, normalized, automation, false,
+            );
             (response, navigation)
         }
         ParamRange::Choice(labels) => {
@@ -1138,6 +1313,8 @@ fn table_control(
 /// What every continuous control offers once drawn: the exact value and
 /// automation from its context menu, Reset by double-click, and the edit
 /// itself. `value` is what the control left after this frame's gesture.
+/// A `stepper` has no Reset: two quick clicks on a button are two steps.
+#[expect(clippy::too_many_arguments)]
 fn knob_edits(
     ui: &Ui,
     spec: &ParamSpec,
@@ -1146,6 +1323,7 @@ fn knob_edits(
     value: f64,
     normalized: f64,
     automation: Option<(u64, AutomationState)>,
+    stepper: bool,
 ) -> Option<AutomationNavigation> {
     let (action, exact) = daw_ui::automatable_parameter_value_context_named(
         ui,
@@ -1159,7 +1337,7 @@ fn knob_edits(
     );
     if let Some(plain) = exact {
         host.set_value(spec.id, f64::from(spec.to_normalized(plain as f32)));
-    } else if response.double_clicked() {
+    } else if response.double_clicked() && !stepper {
         host.set_value(spec.id, f64::from(spec.default_normalized()));
     } else if response.changed() {
         host.set_value(spec.id, value.clamp(0.0, 1.0));
@@ -1237,6 +1415,14 @@ fn control(
                     let response = if fader {
                         let size = egui::vec2(daw_ui::FADER_CAP_WIDTH, height);
                         daw_ui::fader(ui, &mut value, spec.name, size, state)
+                    } else if let (true, ParamRange::Integer { min, max }) =
+                        (layout.steppers.contains(&spec.id), spec.range)
+                    {
+                        let mut whole = spec.to_plain(normalized as f32).round() as i32;
+                        let response =
+                            daw_ui::variation_stepper(ui, &mut whole, min..=max, caption);
+                        value = f64::from(spec.to_normalized(whole as f32));
+                        response
                     } else {
                         let mut knob = daw_ui::Knob::new(&mut value, 0.0..=1.0)
                             .compact()
@@ -1261,17 +1447,31 @@ fn control(
                     // Values share one baseline across the line.
                     ui.add_space(offset);
                     match replaced {
-                        // The pointer and the number disagree: say where
-                        // the knob is.
                         Some(text) if text != own => {
-                            daw_ui::text::note(ui, &text)
-                                .on_hover_text(format!("The knob is at {own}"));
+                            let note = daw_ui::text::note(ui, &text);
+                            // The pointer and the number disagree: say where
+                            // the knob is. Another wording of the knob's own
+                            // value ("+50 %") needs no such note.
+                            let same = spec
+                                .parse(&text)
+                                .is_some_and(|value| (f64::from(value) - normalized).abs() < 1e-3);
+                            if !same {
+                                note.on_hover_text(format!("The knob is at {own}"));
+                            }
                         }
                         _ => {
                             daw_ui::text::note(ui, &own);
                         }
                     }
-                    knob_edits(ui, spec, host, &response, value, normalized, automation)
+                    let hint = (layout.hint)(spec.id, &|id| host.value(id));
+                    let response = match hint {
+                        Some(hint) => response.on_hover_text(hint),
+                        None => response,
+                    };
+                    let stepper = layout.steppers.contains(&spec.id);
+                    knob_edits(
+                        ui, spec, host, &response, value, normalized, automation, stepper,
+                    )
                 }
                 ParamRange::Choice(labels) => {
                     // Option indices with their labels.
@@ -1285,19 +1485,96 @@ fn control(
                         .collect();
                     let mut current = spec.to_plain(normalized as f32);
                     let label = spec.format(normalized as f32);
-                    let response = if toggles(spec) {
+                    let response = if dial(spec, layout) {
+                        // One detent per option; the value below names the
+                        // option and lists them all.
+                        let last = labels.len().saturating_sub(1).max(1);
+                        // The ends of a scale ("1/32 T" to "1/1 D") stand
+                        // under the arc; names that are no scale ("Single",
+                        // "Golden") would only collide there.
+                        let scale = labels
+                            .iter()
+                            .all(|label| label.starts_with(|first: char| first.is_ascii_digit()));
+                        let ends = if scale {
+                            (labels[0], labels[last])
+                        } else {
+                            ("", "")
+                        };
+                        let mut value = normalized;
+                        let response = ui.add(
+                            daw_ui::Knob::new(&mut value, 0.0..=1.0)
+                                .compact()
+                                .pointer()
+                                .diameter(layout.knob.diameter())
+                                .text(caption)
+                                .endpoint_labels(ends.0, ends.1)
+                                .step_by(1.0 / last as f64)
+                                .automation(automation.map(|(_, state)| state)),
+                        );
+                        if response.double_clicked() {
+                            edit(host, layout, spec.id, f64::from(spec.default_normalized()));
+                        } else if response.changed() {
+                            edit(host, layout, spec.id, value.clamp(0.0, 1.0));
+                        }
+                        ui.add_space(offset);
+                        let text = (layout.readout)(spec.id, &|id| host.value(id)).unwrap_or(label);
+                        let (_, picked) = daw_ui::value_menu(
+                            ui,
+                            &text,
+                            labels,
+                            current.round() as usize,
+                            width - CELL_GAP,
+                        );
+                        if let Some(index) = picked {
+                            let value = f64::from(spec.to_normalized(index as f32));
+                            edit(host, layout, spec.id, value);
+                        }
+                        response
+                    } else if let Some(faces) = faces(spec, layout) {
+                        let options: Vec<_> = faces
+                            .faces
+                            .iter()
+                            .enumerate()
+                            .map(|(index, (face, name))| (index as f32, *face, *name))
+                            .collect();
+                        let response =
+                            daw_ui::glyph_toggle(ui, &mut current, &options, faces.segment_width);
+                        if response.changed() {
+                            let value = f64::from(spec.to_normalized(current));
+                            edit(host, layout, spec.id, value);
+                        }
+                        response
+                    } else if toggles(spec) {
                         let options: Vec<(f32, &str)> = options
                             .iter()
                             .map(|(plain, option)| (*plain, option.as_str()))
                             .collect();
                         let response = match toggle_columns(spec, layout) {
                             Some(columns) => {
-                                daw_ui::toggle_grid(ui, &mut current, &options, columns)
+                                // Columns as wide as the longest name: less
+                                // padding where the place is narrower.
+                                let padding = ui.spacing().button_padding.x;
+                                let widest = options
+                                    .iter()
+                                    .map(|(_, option)| {
+                                        daw_ui::toggle_group_width(ui, std::iter::once(*option))
+                                    })
+                                    .fold(0.0, f32::max);
+                                let over = widest - (width - CELL_GAP) / columns as f32;
+                                ui.spacing_mut().button_padding.x =
+                                    (padding - 0.5 * over.max(0.0)).max(0.0);
+                                let response =
+                                    daw_ui::toggle_grid(ui, &mut current, &options, columns);
+                                ui.spacing_mut().button_padding.x = padding;
+                                #[cfg(test)]
+                                state.grid_rects.push((spec.id, response.rect));
+                                response
                             }
                             None => daw_ui::toggle_group(ui, &mut current, &options),
                         };
                         if response.changed() {
-                            host.set_value(spec.id, f64::from(spec.to_normalized(current)));
+                            let value = f64::from(spec.to_normalized(current));
+                            edit(host, layout, spec.id, value);
                         }
                         response
                     } else {
@@ -1317,10 +1594,8 @@ fn control(
                                             if daw_ui::selectable(ui, *plain == current, option)
                                                 .clicked()
                                             {
-                                                host.set_value(
-                                                    spec.id,
-                                                    f64::from(spec.to_normalized(*plain)),
-                                                );
+                                                let value = f64::from(spec.to_normalized(*plain));
+                                                edit(host, layout, spec.id, value);
                                             }
                                         }
                                     })
@@ -1350,7 +1625,7 @@ fn control(
                     daw_ui::automatable_parameter_context(ui, &response, control, automation)
                 }
             };
-            if !is_knob(spec) {
+            if !is_knob(spec) && !dial(spec, layout) {
                 // A value line, empty unless the layout has something to
                 // say there, so every cell of a line is as tall as a knob's
                 // and the next line starts level across cards.

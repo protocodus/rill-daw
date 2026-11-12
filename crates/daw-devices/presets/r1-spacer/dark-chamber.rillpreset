@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Dark Chamber",
+  "author": "Rill",
+  "category": "Reverb",
+  "tags": ["vocal", "strings"],
+  "description": "Dense, warm chamber.",
+  "parameters": {
+    "echo.on": false,
+    "reverb.model": "Room",
+    "reverb.size": 75.0,
+    "reverb.decay": 1.6,
+    "reverb.damping": 60.0,
+    "reverb.color": -30.0,
+    "reverb.seed": 5
+  }
+}

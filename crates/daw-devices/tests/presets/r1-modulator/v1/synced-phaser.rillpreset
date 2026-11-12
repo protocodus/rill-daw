@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-modulator",
+  "name": "Synced Phaser",
+  "author": "Rill",
+  "category": "Phaser",
+  "tags": ["synth", "drums"],
+  "description": "One sweep per bar.",
+  "parameters": {
+    "mode": "Phaser",
+    "shape": "Triangle",
+    "stages": "6",
+    "feedback": 50.0,
+    "sync": true,
+    "division": "1 bar",
+    "center.phaser": 900.0
+  }
+}

@@ -222,6 +222,9 @@ impl daw_devices_ui::DeviceHost for PanelHost<'_> {
             .as_ref()?
             .device_telemetry(self.target.track, self.target.effect)
     }
+    fn tempo(&self) -> Option<f64> {
+        Some(self.app.project.tempo)
+    }
     fn sidechain_sources(&self) -> Option<Vec<String>> {
         if !self.descriptor.sidechain_input {
             return None;

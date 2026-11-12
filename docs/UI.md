@@ -632,7 +632,7 @@ divider; active tools retain their glowing border and keyboard semantics.
 
 **Choices.** A choice among fewer than five fixed options is a row of toggle buttons, never a drop-down: every option stays visible and one click picks it. Call `choice(ui, id, &mut value, &[(value, "Label"), …])`, which applies the rule: toggle buttons (`toggle_group`) below five options, a `select` drop-down from five on or when the labels are too wide to sit side by side. `toggle_group_vertical` stacks two or three short options where width is scarcer than height, as beside a row of knobs; `toggle_grid(ui, &mut value, options, columns)` lays options out in equal columns, four as two by two. Use `select` directly only for lists that are long, dynamic (devices, ports, folders) or have long names.
 
-**Containers.** Group related controls in a labelled container: the title on top in small, dimmed capitals, separated from the contents by a rule or space, and the contents padded by at least `SPACE_MD`. Separate groups with space (`section_gap`, the `grid_row` gutter) rather than extra lines. Containers that share a view sit on `grid_row`: each spans a number of columns, and rows whose spans add up to the same number share the grid, so their edges line up from row to row.
+**Containers.** Group related controls in a labelled container: the title on top in small, dimmed capitals, separated from the contents by a rule or space, and the contents padded by at least `SPACE_MD`. Separate groups with space (`section_gap`, the `grid_row` gutter) rather than extra lines. Containers that share a view sit on `grid_row`: each spans a number of columns, and rows whose spans add up to the same number share the grid, so their edges line up from row to row. `grid_row_cells` takes a `GridCell { span, framed }` per place: a cell that is not framed gets no card, only the whole rectangle of its place at the row's height, for a picture that stands beside a card.
 
 Use distinct control roles consistently. Primary and confirmation actions use filled buttons; persistent secondary toolbar commands use the quiet variants below. `action_menu` keeps the filled treatment and adds a disclosure chevron for commands available on demand. `choice_menu` is a bordered, inset field labelled with its current choice; ordinary single choices use `select`. `view_menu` is a quiet outlined eye button for presentation options such as scale highlighting and row visibility. Keep view controls grouped separately from editing actions. Both settings menus remain open while their controls change; Escape or an outside click dismisses them, and `ui.close()` accepts a choice. Use nested `choice_menu` or `action_menu` for submenus rather than a ComboBox inside a menu, because those share egui's popup state. All three roles retain native focus, accessible labels, disabled behavior, and whole-control toolbar wrapping; they never own project history.
 
@@ -1399,8 +1399,10 @@ arrow keys), and canvas handles use the 21-point `HIT_TARGET`.
 | `fader` | A vertical fader over a normalized value: a rail highlighted up to its cap. For values read as a shape across neighbours (envelope stages); a knob everywhere else. Relative drag, Shift for fine, arrow keys when focused. The caller supplies caption, value and hover. |
 | `labeled_knob` | Caption, dial and value in a fixed cell (`KnobSize::Dense` 34, `Standard` 48, `Hero` 64). Clicking the value types a number. The context menu offers **Reset**, **Type value…**, **Automate** (or **Show automation lane**) and, with `.mod_sources`, **Modulate with …**. `show` returns `automate` and `modulate_with`; the host creates the lane or routing. |
 | `segmented`, `stepped_selector`, `toggle_led` | Two to four options as toggle buttons (falls back to a drop-down), longer lists, and section enables. |
+| `value_menu` | A value line in the action colour that opens a menu of a choice's options and returns the picked index. It stands under a dial with one detent per option (`Knob::step_by`), where a list is too long for toggle buttons and the place is one cell wide: the dial steps through the options, the menu reaches any of them with two clicks. As tall as a knob's value line. |
+| `variation_stepper` | Picks one of a numbered set of equally good variations (a reverb's seed, a round-robin layer): previous, a die that jumps to any other one, next, as three 21-point buttons in one track (`VARIATION_STEPPER_SIZE`, 63 by 25 points), which fits a knob's cell. Previous and next wrap around the range. The value is a whole number the caller owns, so presets and automation hold it; print it on the value line below ("#7"). The response is `changed` when a button moved the value. Use it instead of a knob where no value is more than another; do not give it a double-click Reset, since two quick clicks are two steps. |
 | `inline_knob` | A knob for a table of parameters: a mini arc with its value beside it on one 21-point line, the whole cell one hit target. The line's caption stands once, in the table's caption column, and the name is the accessible label. Same gestures as every knob (relative drag, Shift for fine, double-click to reset, arrow keys, right-click menu, click the value to type). `.width` fixes the cell so lines share columns; `inline_knob_width` measures a value text. |
-| `glyph_toggle` | A toggle group whose segments show a drawn shape (`ToggleFace::Glyph`: bell, shelves, notch, pass filters, LFO waves) or a short text (`ToggleFace::Text`, such as 12, 24, 48) in equal segments of a given width. Each option carries its full name for hover and screen readers. Use it where option names do not fit the column; plain `toggle_group` everywhere else. |
+| `glyph_toggle` | A toggle group whose segments show a drawn shape (`ToggleFace::Glyph`: bell, shelves, notch, pass filters, LFO waves; `Glyph::Wander` is a smooth irregular wave for a random LFO that does not step, where `Glyph::SampleHold` would misdescribe it) or a short text (`ToggleFace::Text`, such as 12, 24, 48) in equal segments of a given width. Each option carries its full name for hover and screen readers. Use it where option names do not fit the column; plain `toggle_group` everywhere else. |
 | `column_highlight` | Paints the selection mark behind one column of a table: call it with the column's rectangle before drawing the cells. |
 | `toggle_led_width` | The width a `toggle_led` with a given label takes, to center a lamp in a column. |
 | `value_link` | A value line that is also a way somewhere: note-sized text in the action colour (the warning colour with `attention`, for something missing), truncated to a width, as tall as a knob's value so the lines of a row stay level. The response reports the click; the caller opens the view. R1 Compressor names its sidechain source with it. |
@@ -1458,7 +1460,52 @@ with its level over it and its number under it, against a decibel scale down
 to `floor_db`; bars are centered and capped in width, and `harmonic_bars`
 returns their rectangles.
 
-The other plots: `spectrum`, `scope`, `wavetable_view`, `lfo_view`, `sample_view` (draggable start, end and loop markers) and `delay_view`. They take plain data and own no audio state.
+`frequency_plot` also draws what moves. A `FrequencyCurve` with `low` is a
+band filled between `low` and `db` with the upper edge as its line, for a
+response finer than a pixel (a comb's teeth); `spans` shade frequency
+ranges (what a sweep covers); `markers` (`FrequencyMarker`) put a small
+labelled mark on the 0 dB line (a live position). None of them changes the
+plot's size or takes input.
+
+`lfo_view` takes an `LfoView`: `traces` (`LfoTrace`: samples of one cycle
+and an `emphasis` flag, so one voice leads and the others stand back) and
+`markers` (`LfoMarker`: a phase in cycles and a letter). With `draggable`
+it reports a sideways drag in `LfoViewOutput::dragged` as notches (six
+points each, a tenth with Shift) and `double_clicked`; the caller decides
+what a notch turns (R1 Modulator: Rate, or one Division per four notches)
+and keeps the knob as the non-drag path.
+
+`delay_view` shows sound over time from a `DelayView`. Time runs left to
+right over `span_seconds`; level is in decibels from 0 dB at the outer
+edges to `floor_db` on the centre line, the left channel above it and the
+right below, so an exponential decay is a straight line. `taps`
+(`DelayTap`: time, left and right gain, `thin` for reflections, `faint`
+for a part that is switched off, `blur_seconds` for a glow that fades to
+either side of a diffused echo) are bars from the centre line; `tails`
+(`DelayTail`: start time and level, decay time for 60 dB, an optional
+`inner_decay_seconds` for a second wedge inside the first, such as the top
+of a damped reverb, `faint`) are filled wedges mirrored about it; `grid` is
+lines with labels (seconds or beats); `reductions` are thin gain-reduction
+bars at the right edge, each with its value now, the value that fills it
+and a letter above it ("E", "R"). The
+level scale is printed at the right, where the picture has decayed.
+`handles` (`DelayHandle`: time, level, `below` for the right channel's
+side, a letter, a hover `readout`, and which of `horizontal` and `vertical`
+it moves along) make it an editor: each is a 21-point target drawn whole
+inside the frame. `DelayViewOutput` reports `drags` (`DelayDrag`: the
+handle's index and its new position in seconds and decibels, relative to
+the press, a tenth as far with Shift), `nudges` (arrow keys while a handle
+has focus), `double_clicked`, `dragging` and the `handles`' responses for
+context menus. A dragged handle's position is kept apart from its value,
+so a value that moves in steps (a note division) does not swallow small
+moves. `delay_point` gives the screen position of a time and level. A
+handle that would lie on an earlier one of the list stands to the right of
+it, clear of its target and letter, so each keeps its letter and a target of its own
+when a long span crowds them into one corner. The
+view knows no parameters: R1 Spacer maps the handles to Time or Division,
+Feedback, Pre-delay, Decay and the two levels.
+
+The other plots: `spectrum`, `scope`, `wavetable_view` and `sample_view` (draggable start, end and loop markers). They take plain data and own no audio state.
 
 ### Panels ([`device_panel.rs`](../crates/daw-ui/src/device_panel.rs))
 
@@ -1468,6 +1515,15 @@ dense Mix/Output (effects) or Volume (instruments) knobs; width is
 `device_section` titles a group with a word and spacing instead of an outline.
 Its heading, `device_section_title`, sets the name on top in small, dimmed,
 tracked capitals over a rule that separates it from the controls;
+`device_section_header` is the same heading with a lamp in front for a
+section that can be switched off (lamp and title are one click target, and
+the heading is as tall as the plain one, so cards line up);
+`device_section_header_choice` adds the choice of the section's model
+(Digital, BBD, Tape) as toggle buttons at the right end of the same line,
+which keeps the card's own lines for its controls. It is taller than the
+plain heading, so give it to every card of a row or to none; while the
+section's lamp is off the choice stays in place, disabled. It returns the
+heading's response and the choice's;
 `control_caption` names one control in sentence-case text in the full text
 color, so the two levels never read alike. Built-in device cards use the same
 pair.

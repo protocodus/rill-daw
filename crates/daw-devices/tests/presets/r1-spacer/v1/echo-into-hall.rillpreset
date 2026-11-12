@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Echo Into Hall",
+  "author": "Rill",
+  "category": "Space",
+  "tags": ["lead", "vocal"],
+  "description": "Tape repeats washing into a hall.",
+  "parameters": {
+    "echo.model": "Tape",
+    "echo.division": "1/4",
+    "echo.feedback": 40.0,
+    "reverb.model": "Hall",
+    "reverb.decay": 2.5,
+    "routing": "Echo → Reverb"
+  }
+}

@@ -15,6 +15,20 @@ pub fn tanh_fast(x: f32) -> f32 {
     x * (27.0 + x2) / (27.0 + 9.0 * x2)
 }
 
+/// Safety stage for a loop that may reach unity gain: the exact identity up
+/// to ±1, then a curve that leaves the knee with slope 1 and never reaches
+/// `ceiling` (above 1).
+#[inline]
+pub fn soft_limit(x: f32, ceiling: f32) -> f32 {
+    let size = x.abs();
+    if size <= 1.0 {
+        return x;
+    }
+    let room = ceiling - 1.0;
+    let t = (size - 1.0) / room;
+    (1.0 + room * t / (1.0 + t)).copysign(x)
+}
+
 /// Four-pole transistor ladder. `k` 0–4+ (self-oscillates near 4); the
 /// passband drops as resonance rises, as in the original circuit.
 #[derive(Clone, Debug, Default)]
@@ -116,5 +130,22 @@ mod tests {
         }
         assert_eq!(tanh_fast(1e6), 1.0);
         assert_eq!(tanh_fast(-1e6), -1.0);
+    }
+
+    #[test]
+    fn soft_limit_is_the_identity_below_one_and_bounded_above() {
+        let mut previous = -4.0;
+        for step in -20_000..=20_000 {
+            let x = step as f32 * 0.001;
+            let y = soft_limit(x, 4.0);
+            if x.abs() <= 1.0 {
+                assert_eq!(y.to_bits(), x.to_bits());
+            }
+            assert!(y >= previous && y.abs() < 4.0, "{x}: {y}");
+            previous = y;
+        }
+        // Slope 1 on leaving the knee.
+        assert!((soft_limit(1.001, 4.0) - 1.001).abs() < 1e-6);
+        assert!(soft_limit(1e9, 4.0) <= 4.0 && soft_limit(-1e9, 4.0) >= -4.0);
     }
 }

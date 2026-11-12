@@ -1,7 +1,7 @@
 use daw_ui::{
-    self as ui, DelayViewData, FrequencyCurve, FrequencyNode, FrequencyPlot, HarmonicsView,
-    LevelHistory, ReductionMeter, SampleViewData, Spectrum, TransferAxis, TransferHandle,
-    TransferPlot, tokens,
+    self as ui, DelayHandle, DelayTail, DelayTap, DelayView, FrequencyCurve, FrequencyMarker,
+    FrequencyNode, FrequencyPlot, HarmonicsView, LevelHistory, LfoMarker, LfoTrace, LfoView,
+    ReductionMeter, SampleViewData, Spectrum, TransferAxis, TransferHandle, TransferPlot, tokens,
 };
 
 pub struct State {
@@ -17,6 +17,11 @@ pub struct State {
     frames: Vec<Vec<f32>>,
     peaks: Vec<(f32, f32)>,
     sample: (f32, f32),
+    /// A comb's upper and lower edge, where its teeth are finer than a point.
+    comb: (Vec<f32>, Vec<f32>),
+    /// Echo time, echo level, pre-delay and decay of the delay view.
+    echo: (f32, f32),
+    tail: (f32, f32),
 }
 
 impl Default for State {
@@ -94,7 +99,22 @@ impl Default for State {
                 (-a, a)
             })
             .collect();
+        let comb = (0..240)
+            .map(|i| {
+                let f = ui::log_grid_frequency(i, 240);
+                // Teeth 500 Hz apart: single notches low down, a band on top.
+                if f < 3000.0 {
+                    let depth = 6.0 * (std::f32::consts::PI * f / 500.0).cos();
+                    (depth, depth)
+                } else {
+                    (6.0, -6.0)
+                }
+            })
+            .unzip();
         Self {
+            comb,
+            echo: (0.375, -6.0),
+            tail: (0.02, 1.6),
             response,
             spectrum,
             nodes,
@@ -121,10 +141,18 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
     let output = ui::frequency_plot(
         ui,
         &FrequencyPlot {
-            curves: &[FrequencyCurve {
-                db: &state.response,
-                emphasis: true,
-            }],
+            curves: &[
+                FrequencyCurve {
+                    db: &state.comb.0,
+                    emphasis: false,
+                    low: Some(&state.comb.1),
+                },
+                FrequencyCurve {
+                    db: &state.response,
+                    emphasis: true,
+                    low: None,
+                },
+            ],
             spectrum: Some(Spectrum {
                 tilt_db_per_octave: 4.5,
                 smoothing_octaves: 1.0 / 6.0,
@@ -133,6 +161,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
             nodes: &state.nodes,
             range_db: 18.0,
             limit_db: 18.0,
+            spans: &[(300.0, 2400.0)],
+            markers: &[FrequencyMarker {
+                frequency: 600.0,
+                label: "L",
+            }],
             size: egui::vec2(610.0, 170.0),
         },
     );
@@ -233,7 +266,34 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
     ui.horizontal(|ui| {
         let frames: Vec<&[f32]> = state.frames.iter().map(Vec::as_slice).collect();
         ui::wavetable_view(ui, &frames, 0.4, small);
-        ui::lfo_view(ui, &state.wave[..128], Some(0.3), small);
+        let second: Vec<f32> = (0..128).map(|i| state.wave[(i + 32) % 128] * 0.6).collect();
+        ui::lfo_view(
+            ui,
+            &LfoView {
+                traces: &[
+                    LfoTrace {
+                        samples: &state.wave[..128],
+                        emphasis: true,
+                    },
+                    LfoTrace {
+                        samples: &second,
+                        emphasis: false,
+                    },
+                ],
+                markers: &[
+                    LfoMarker {
+                        phase: 0.3,
+                        label: "L",
+                    },
+                    LfoMarker {
+                        phase: 0.55,
+                        label: "R",
+                    },
+                ],
+                draggable: false,
+                size: small,
+            },
+        );
         ui::spectrum(ui, Spectrum::new(&state.spectrum, 48_000.0), small);
     });
     ui.add_space(tokens::SPACE_MD);
@@ -256,20 +316,84 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
                 _ => {}
             }
         }
-        ui::delay_view(
+        let (time, level) = state.echo;
+        let (pre_delay, decay) = state.tail;
+        let gain = |db: f32| 10f32.powf(db / 20.0);
+        let taps: Vec<DelayTap> = (1..=5)
+            .map(|repeat| {
+                let level = gain(level - 8.0 * (repeat - 1) as f32);
+                DelayTap {
+                    seconds: time * repeat as f32,
+                    left: if repeat % 2 == 1 { level } else { 0.0 },
+                    right: if repeat % 2 == 0 { level } else { 0.0 },
+                    thin: false,
+                    faint: false,
+                    // A diffused echo: each repeat smears further.
+                    blur_seconds: 0.012 * repeat as f32,
+                }
+            })
+            .chain([0.012, 0.021, 0.034].map(|seconds| DelayTap {
+                seconds: pre_delay + seconds,
+                left: 0.2,
+                right: 0.15,
+                thin: true,
+                faint: false,
+                blur_seconds: 0.0,
+            }))
+            .collect();
+        let output = ui::delay_view(
             ui,
-            &DelayViewData {
-                taps: &[
-                    (0.25, 0.9, 0.0),
-                    (0.5, 0.0, 0.6),
-                    (0.75, 0.4, 0.0),
-                    (1.0, 0.0, 0.25),
+            &DelayView {
+                taps: &taps,
+                tails: &[
+                    DelayTail {
+                        start_seconds: pre_delay,
+                        start_db: -9.0,
+                        decay_seconds: decay,
+                        // The top of a damped tail is gone sooner.
+                        inner_decay_seconds: Some(decay * 0.4),
+                        faint: false,
+                    },
+                    DelayTail {
+                        start_seconds: time + pre_delay,
+                        start_db: level - 9.0,
+                        decay_seconds: decay,
+                        inner_decay_seconds: None,
+                        faint: true,
+                    },
                 ],
-                decay_seconds: 1.6,
-                pre_delay_seconds: 0.02,
-                span_seconds: 1.5,
+                grid: &[(0.5, "2"), (1.0, "3"), (1.5, "4")],
+                span_seconds: 2.0,
+                floor_db: -60.0,
+                handles: &[
+                    DelayHandle {
+                        seconds: time,
+                        db: level,
+                        below: false,
+                        label: "T",
+                        readout: &format!("Time {:.0} ms · Level {level:+.1} dB", time * 1000.0),
+                        horizontal: true,
+                        vertical: true,
+                    },
+                    DelayHandle {
+                        seconds: pre_delay + decay * 51.0 / 60.0,
+                        db: -60.0,
+                        below: false,
+                        label: "D",
+                        readout: &format!("Decay {decay:.2} s"),
+                        horizontal: true,
+                        vertical: false,
+                    },
+                ],
+                reductions: &[(6.0, 24.0, "E"), (3.0, 12.0, "R")],
+                size: egui::vec2(377.0, 144.0),
             },
-            small,
         );
+        for drag in output.drags {
+            match drag.index {
+                0 => state.echo = (drag.seconds.max(0.01), drag.db),
+                _ => state.tail.1 = ((drag.seconds - pre_delay) * 60.0 / 51.0).max(0.1),
+            }
+        }
     });
 }

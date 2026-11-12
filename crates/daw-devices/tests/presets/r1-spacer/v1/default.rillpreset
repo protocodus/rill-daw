@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Default",
+  "author": "Rill",
+  "category": "Basic",
+  "description": "Dotted-eighth ping-pong echo into a hall.",
+  "parameters": {}
+}

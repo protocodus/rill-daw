@@ -1,11 +1,14 @@
 # R1 built-in devices: design draft
 
-Status: **design approved on 2026-11-10. Steps 2 and 4 of the
-[implementation order](#implementation-order) and the Equalizer, Saturator
-and Compressor of step 3 are in place:** the device foundation,
-model/engine/app/tools integration including the sidechain input of built-in
-inserts, R1 Filter, R1 Equalizer, R1 Saturator, R1 Compressor, and R1 Mini as
-the default instrument of new MIDI tracks. The other devices are not
+Status: **design approved on 2026-11-10. Steps 2, 3 and 4 of the
+[implementation order](#implementation-order) are in place:** the device
+foundation, model/engine/app/tools integration including the sidechain input
+of built-in inserts, the six effects (R1 Filter, R1 Equalizer, R1 Saturator,
+R1 Compressor, R1 Modulator, R1 Spacer), and R1 Mini as the default
+instrument of new MIDI tracks. R1 Spacer follows the owner's specification
+of 2026-11-12 (three reverb models, three echo models, each with Color,
+Diffusion, Duck and, for the reverb, Seed), which replaced the roadmap's
+first version before it shipped. R1 Maxi, R1 Sampler and R1 Drums are not
 implemented yet. This document proposes the
 architecture, the shared UI additions and the per-device specifications for
 Rill's first built-in instruments and effects. Implementation follows in
@@ -411,6 +414,8 @@ pub trait DeviceHost {
     fn audition(&mut self, note: Option<(u8, f32)>);
     fn wheels(&mut self, pitch: f32, modulation: f32);
     fn telemetry(&self) -> Option<Arc<Telemetry>> { None }
+    /// The song's tempo, for the picture of a tempo-synced time.
+    fn tempo(&self) -> Option<f64> { None }
     fn sidechain_sources(&self) -> Option<Vec<String>> { None }
     fn route_sidechain(&mut self) {}
 }
@@ -446,14 +451,32 @@ that is External: the first source's name, "+N" for more, or **No source**
 in the attention colour, as a `value_link`.
 
 A layout names its picture: `Picture::Response` (a `frequency_plot`; Filter
-and Equalizer), `Picture::Saturation` (curve and harmonics) or
-`Picture::Dynamics` (curve, history and meter). Further hooks every layout
-can use: `mode_captions` renames a control by the option of another
+and Equalizer), `Picture::Saturation` (curve and harmonics),
+`Picture::Dynamics` (curve, history and meter), `Picture::Modulation` (LFO
+and swept response) or `Picture::Space` (echoes and decay over time). It
+stands above the cards, or with `PicturePlace::Row` as the first cell of a
+card row, without a card of its own (the Spacer's shares a row with its
+Output card). Further hooks every layout can use: `mode_captions` renames a control by the option of another
 parameter (the Saturator's Character is Hardness, Bias or Compress; the
 Compressor's Makeup is Gain in front of the limiter) without moving
 anything, since the cell is as wide as its widest name; `readout` replaces
 the value line under a knob or toggle with what the device actually uses
-("∞:1", "Auto", the attack an Opto cell holds up, what Auto gain applies).
+("∞:1", "Auto", the attack an Opto cell holds up, what Auto gain applies);
+`Slot::Swap` gives one cell to several parameters of which one applies at a
+time (the Modulator's three Centers, Rate or Division) and shows the first
+that does, or the first, disabled, when none does; `Section.enable` names
+the toggle drawn as the lamp in the card's title, and disables the card's
+controls while it is off (the Spacer's Echo and Reverb); `Section.choice`
+names the choice of the section's model, drawn as toggle buttons on the
+same title line; `steppers` draws a whole number as a `variation_stepper`
+(the Spacer's Seed); `hint` gives the hover text of a control whose meaning
+follows a mode (the Spacer's Color and Wobble); `dials` draws a
+choice too long for toggle buttons in a one-cell place as a dial with one
+detent per option, whose value line lists the options when clicked;
+`companions` names values to send together with a panel change of one
+control, as one `set_values` and so one Undo step (the Modulator's mode
+defaults). `companions` is not consulted for presets, automation, tools or
+Undo.
 
 The app implements it over the session service. The gallery and the UI tests
 implement it over a plain value table, so every panel can be rendered and
@@ -481,6 +504,10 @@ handle uses the 21-point `HIT_TARGET`.
 | `segmented` | Exclusive choice of 2–4 short options (Digital/Tube/Opto/FET) as toggle buttons. | Radio semantics. Falls back to the existing `select` when options do not fit. |
 | `stepped_selector` | Previous/next arrows around a current-value menu (wavetable, preset, division). | Reuses `choice_menu`. |
 | `toggle_led` | Small on/off with a lit state for section enables (Echo on, Band on). | Uses the existing `switch` semantics; compact visual. |
+| `device_section_header` | A section title whose lamp switches the section. | The title and lamp are one click target, as tall as the plain `device_section_title`, so cards with and without a lamp line up. |
+| `device_section_header_choice` | The same title with the choice of the section's model at the right end of its line, as toggle buttons. | Keeps the card's lines free for its controls. Taller than the plain title: every card of a row has one or none. Disabled in place while the section is off. |
+| `variation_stepper` | Previous, a die for any other one, next: picks one of a numbered set of equally good variations (a reverb's seed; later round-robin layers, humanize patterns). | In a knob's place, 63 points wide; an ordinary whole-number parameter, so presets and automation hold it. Previous and next wrap around. The caller prints the number on the value line. |
+| `value_menu` | A value line that opens the list of a choice's options. | Under a detented dial: the non-drag path to any option. |
 | `xy_pad` | Two parameters on one surface (cutoff × resonance). | Returns per-axis changes; relative Shift-fine drag like `Knob`. |
 | `envelope_editor` | ADSR / AHDSR with draggable break points and optional per-segment curve. | Plain data in, `EnvelopeEdit` out. Optional playhead dots from telemetry. |
 | `pad_grid` | 4×4 pads with name, activity flash, selection and drop target. | Click height on the pad sets audition velocity. Returns pressed/released/selected/dropped. |
@@ -520,7 +547,9 @@ and a new device has little to decide:
    its row with ordinary cards. A cell that does not apply stays
    empty or disabled in place. Every line of a row has one center line for its knobs,
    choices and switches and one baseline for their values, so neighbouring
-   cards line up. A panel with many controls (R1 Mini) is a **cell grid**
+   cards line up. A cell of a row may be **bare** (`grid_row_cells`): no
+   card, the whole rectangle of its place, for a picture beside a card (R1
+   Spacer). A panel with many controls (R1 Mini) is a **cell grid**
    instead, as on hardware: a card as many columns wide holds that many
    equal cells per line, one control each unless planned wider, with cells
    left blank where a line has fewer controls, so controls stand in columns.
@@ -528,9 +557,11 @@ and a new device has little to decide:
    named options: toggle buttons (`segmented`, `toggle_group`, or stacked
    with `toggle_group_vertical` where a card is short of width), so every
    option is visible; `toggle_grid` lays four out two by two, as tall as a
-   knob. Whole numbers: a knob with one detent per value. The stages of an
+   knob. Whole numbers: a knob with one detent per value, or, where the
+   number only names a variation, a `variation_stepper`. The stages of an
    envelope: `fader`s side by side, read as its shape. Longer lists: a
-   drop-down or `stepped_selector`. On/off: `toggle_led`. One hero knob at most per panel (64 points); standard knobs
+   drop-down or `stepped_selector`; in a one-cell place of a cell grid, a
+   dial with one detent per option over a `value_menu` (a note division). On/off: `toggle_led`. One hero knob at most per panel (64 points); standard knobs
    are 48, dense rows 34.
 6. **Color.** Neutral surfaces from the theme; one value-arc color for all
    knobs; orange only for automation, violet only for modulation, pink only
@@ -550,16 +581,16 @@ to place the visualization and order the sections well, not to restyle.
 
 | Component | Shows | Data it takes |
 | --- | --- | --- |
-| `frequency_plot` | Log-frequency magnitude graph: one or more response curves, optional spectrum backdrop, optional draggable band nodes. | Curves as `&[f32]` dB values over a shared log grid; nodes with frequency, gain, name, selected, enabled and a hover readout. Returns node drags, double-clicks, wheel steps and each node's response. Used by Equalizer, Filter, Mini, Maxi, Sampler, Modulator. |
+| `frequency_plot` | Log-frequency magnitude graph: one or more response curves, optional spectrum backdrop, optional draggable band nodes, shaded frequency spans and markers on the 0 dB line. | Curves as `&[f32]` dB values over a shared log grid, optionally with a second slice that makes the curve a filled band (a response finer than a pixel, such as a comb's); spans as frequency pairs; markers with a frequency and a letter; nodes with frequency, gain, name, selected, enabled and a hover readout. Returns node drags, double-clicks, wheel steps and each node's response. Used by Equalizer, Filter, Mini, Maxi, Sampler, Modulator. |
 | `transfer_plot` | Input→output curve on linear axes (Saturator) or in decibels (Compressor), with the unity diagonal, an optional shaded span (the knee), the live operating point and the span the signal sweeps, and optionally one draggable handle on the curve. | Curve samples over the x range, the current input level, the handle's position, letter and hover readout. Returns the handle's drag in plot units (Shift: a tenth), arrow-key nudges, wheel notches and a double-click; the caller decides which parameters those are. |
 | `gain_reduction_history` | Scrolling levels: the input as a dim fill, the output as a line over it, the gain reduction as a trace hanging from the top, and the threshold as a horizontal line that can be dragged. | Columns of `[input peak, output peak, reduction dB]`, oldest first; the level floor (the same as the transfer plot beside it, so the line stands at the handle's height), the reduction range, the threshold. Returns the threshold a drag or the arrow keys ask for. |
 | `reduction_meter` | Vertical gain-reduction bar reading downward on the history's reduction axis, with a hold line and the held value as a number; a click is reported so the caller can clear the hold. | Reduction and hold in dB, the range. |
 | `scope` | Oscilloscope with optional zero-cross sync. | Sample slice. |
 | `spectrum` | Spectrum as a standalone or as a backdrop for `frequency_plot`. | Magnitude bins; reuses the `signal_analyzer` painting where possible. |
 | `wavetable_view` | Current wavetable frame, with neighboring frames stacked faintly behind it. | Frames as slices plus position. |
-| `lfo_view` | One LFO cycle with a moving phase marker. | Shape samples and phase. |
+| `lfo_view` | One LFO cycle, as one trace or several (voices), with labelled phase markers. Optionally draggable sideways. | Traces as samples with an emphasis flag, markers with a phase and a letter. Returns the drag in notches (Shift: a tenth) and a double-click; the caller decides what they turn. |
 | `sample_view` | Sample waveform with draggable start, end and loop markers, and voice playheads. | Peak columns (reuses `waveform.rs`), marker positions; returns marker drags. |
-| `delay_view` | Echo taps as decaying bars (left/right), with the reverb decay drawn behind them. | Tap times and gains, decay time, pre-delay. |
+| `delay_view` | Sound over time: taps as bars (left above the centre line, right below) and decays as filled wedges, on a decibel axis from 0 dB at the outer edges to a floor on the centre line, so a decay is a straight line; a time or beat grid; draggable handles; lettered gain-reduction bars. A tap can glow sideways (a diffused echo) and a tail can hold a second, faster wedge (the top of a damped reverb). | Taps (time, left and right gain, thin, faint, blur time), tails (start time and level, decay time, an optional inner decay time), grid lines with labels, the time span, reductions (now, full scale, letter), handles (time, level, side, letter, hover readout, which axes move). Returns each handle's drag in seconds and decibels, arrow-key nudges, double-clicks and the handles' responses for context menus. |
 | `harmonics_view` | Bars for the harmonics of a tone, each with its level over it, on a decibel scale relative to the first. | Any number of values in dB and the floor; `harmonic_bars` gives the bar rectangles. |
 
 The drawing data for static graphs (EQ curve, filter response, compressor
@@ -578,14 +609,21 @@ The `daw-dsp` crate, used by all devices and unit-tested on its own. `daw_dsp::f
 | Linear filters | Zero-delay-feedback (TPT) state-variable filter as the default; biquads with matched magnitude at Nyquist (Vicanek's matched design) so bells and shelves near 10–20 kHz are not cramped at 44.1/48 kHz. `daw_dsp::matched` designs them (impulse-invariant poles, numerator fitted to the analog magnitude up to 20 kHz) and `SvfMix::from_biquad` runs any of them as a state-variable filter, in `f64` where low, narrow bands need it. |
 | Nonlinear filters | ZDF transistor ladder (4-pole, saturating stages, resonance to self-oscillation, with pole-output taps for multimode mixing), Sallen-Key with clipped feedback, and state-variable filters with clipped band state (diode pair) or saturating integrators (OTA). Each loop is solved linearly and then saturated, with a rational `tanh` approximation (within 1e-4) instead of `tanh`, and runs at 2×. |
 | Waveshapers | Static curves with first-order antiderivative anti-aliasing, inside the oversampler. `shaper`: `AntialiasedShaper` (centred ADAA in `f64`) with a `DroopCorrector` for the half-sample averaging it implies; the curves `HyperbolicClip` (asymmetric clipper with a knee from soft to hard), `AlgebraicSigmoid` (`x/√(1+x²)` with separate ceilings and a bias), and the bounded `BoundedSquare` and `BoundedCubic` for parallel even and odd colour. All have closed antiderivatives and cost one square root. |
-| First-order sections | `svf::Shelf1` on a TPT one-pole: shelf with given corner frequencies and its exact inverse (emphasis pairs), low shelf, tilt, low-pass, and a 5 Hz DC blocker. |
-| Delay lines | Power-of-two ring buffers with third-order Lagrange (modulated delays) or allpass (fixed fractional) interpolation. |
-| Reverb core | 16-line feedback delay network, Hadamard mixing, per-line absorption filters for frequency-dependent decay, slow delay modulation against metallic ringing, allpass input diffusion, multitap early reflections. |
+| First-order sections | `svf::Shelf1` on a TPT one-pole: shelf with given corner frequencies and its exact inverse (emphasis pairs), low shelf, tilt, low-pass, and a 5 Hz DC blocker. `svf::ShelfGlide` moves one to new coefficients in a straight line over a number of samples and stays passive on the way (reverb absorption). |
+| Delay lines | Power-of-two ring buffers with third-order Lagrange interpolation; `read_at` takes the whole and fractional delay apart (an `f32` cannot hold seconds of delay to a fraction of a sample) and `lagrange_response` gives the read's response for drawing. `FadeTap` is a read position that changes by crossfading two whole taps, linearly, so it is safe inside a feedback loop (digital echo time, pre-delay, early reflections). `SincTable` with `read_sinc` is a 16-tap Kaiser-windowed sinc read in 64 phases, optionally scaled so that no phase exceeds unit gain, for a modulated read inside a loop (and the Sampler's interpolator later). `AllpassInterp` is a first-order allpass fractional read: unit magnitude at every frequency, for slow modulation that must not cost decay. |
+| Allpasses | `allpass`: `AllpassChain`, up to twelve first-order stages with the feedback loop solved exactly (phaser), optionally with saturating stages; `DelayAllpass`, a Schroeder allpass on its own line whose length changes by crossfading, or glides when the caller gives it per sample (diffusion); `AbsorbentAllpass`, the same with an absorption filter on its delayed signal and a length that glides, crossfades or is modulated, and with a gain of 0 an absorbent delay (the elements of a reverb ring). |
+| Gliding corners | `cutoff::CutoffGlide`: a filter corner that follows its target without zipper noise, recomputed every 32 samples and ramped between. A cut that is off at the end of its range keeps running and, once the glide has settled there, leaves the signal by a short crossfade (`reverb::cut_share`), since it still turns the phase of what is heard. |
+| Companding | `dynamics::Compander`: the 2:1 compressor and 1:2 expander around a bucket-brigade line, exact inverses sample for sample; the detector rises in 1 ms and falls in 10 ms. |
+| Seeded structure | `random`: `hash32` and `Random::stream(seed, a, b)`, unrelated streams for adjacent seeds; `reverb::layout`: `stratified` (one draw per stratum of a range), `line_seconds` and `prime_lengths` (delay sets with a fixed mean, on distinct primes). |
+| Bucket-brigade line | `echo::bucket`: `BucketLine`, a variable-rate sample-and-hold queue with taps, and `BucketFilter`, its fourth-order Butterworth input and output filters integrated analytically at the clock's ticks (Holters and Parker), so no interpolator or oversampler stands in the loop. |
+| Tape transport | `echo::tape::TapeTransport`: tape position over time from a lagging motor with wow, flutter and drift; solves each head's delay from the position history. |
+| Reverb core | `reverb`: `hadamard` and `butterflies` (orthogonal mixing for any power of two; the second a rotation between identity and Hadamard), `Fdn<N>` (feedback delay network on prime lengths that glide at a bounded rate, with optional scattering delays and rotating pairs in its matrix), `DiffuserStep<N>` (a feed-forward multichannel diffuser step), the absorbent-allpass ring, and `absorption_shelf`, the per-element loss that makes any of them decay in a given time at 1 kHz and at the top. `ReverbKernel` builds the Studio, Room and Hall models from them, with pre-delay, seeded early reflections from a shoebox image-source model, output tone and width. |
+| Effect kernels | Complete stereo effects with settings in plain units, as `filter::FilterKernel` is: `modulation::ModulationKernel` (chorus, flanger, phaser), `echo::EchoKernel` (digital, bucket-brigade, tape; up to four heads; diffusion) and `reverb::ReverbKernel`. The device modules map parameters, route, mix and publish telemetry; Maxi's effect slots will use the same kernels. Each has pure response and shape functions for drawing and tests (`modulation::swept` and `wet_response`, `echo::taps`, `smear_seconds` and `repeat_response`, `reverb::decay_seconds_at` and `early_taps`). |
 | Oscillators | `daw_dsp::oscillator`: circuit-modelled VCO (charging-capacitor ramp with slight curvature, finite reset time, analog drift) and DCO (exact divider pitch, ramp level following the per-range charge current) with saw, pulse (comparator), triangle (rectifier) and sine (differential-pair shaper), hard sync and a flip-flop sub-oscillator; band-limited with 4-point B-spline BLEP/BLAMP corrections at 2× (aliasing below −80 dB for a 4.7 kHz saw). Wavetable with one band-limited mip level per octave built by FFT at load, crossfaded between levels and frames (Maxi). |
-| Envelopes and LFOs | Exponential-segment ADSR/AHDSR with click-free retrigger; LFO shapes sine, triangle, saw, square, sample-and-hold, with tempo sync. |
+| Envelopes and LFOs | Exponential-segment ADSR/AHDSR with click-free retrigger; LFO shapes sine, triangle, saw, square, sample-and-hold and a smooth random curve (`LfoShape::Smooth`), with tempo sync. |
 | Level detection | Peak and RMS followers. `dynamics`: `GainComputer` (log-domain static curve with a quadratic soft knee, compressing or expanding, with its auto makeup), `Ballistics` (one-pole attack and release whose times are exact at any rate), `ProgramRelease` (a slow cell beside the fast release, for two-stage and automatic release), and `solve_feedback`, the closed-form solution of a feedback compressor's loop for one sample, so a feedback detector settles on the same static curve as a feed-forward one. `limiter`: `SlidingMax`, `BoxSmoother` and `TruePeak4x` (inter-sample peaks through the 4× interpolator), the parts of a lookahead limiter that cannot overshoot. |
 | Sample playback | 16-tap windowed-sinc polyphase interpolation whose cutoff lowers when pitching up, to keep aliasing out. |
-| Hygiene | Denormal guard, DC blocker after asymmetric shapers, equal-power dry/wet. |
+| Hygiene | Denormal guard, DC blocker after asymmetric shapers, equal-power dry/wet; `tan_fast` for the prewarp of swept corners and `soft_limit` (the identity below full scale, bounded above it) as a safety stage for loops that may reach unity gain. |
 
 Processing is stereo `f32`; blocks that need more (the equalizer's filters)
 take `f64` through the `Real` trait and convert at the device boundary. All
@@ -597,87 +635,489 @@ which use a seeded generator reset by `reset()`.
 
 All effects share the `device_panel` header (preset, bypass, input/output
 meters) and end with **Mix** (where parallel blending makes sense) and
-**Output** (−24 to +24 dB). Those two are not repeated in the tables. Panels
+**Output** (−24 to +24 dB); Output is not repeated in the tables. Panels
 are 610 points wide (`POPUP_WIDTH_MD`) unless noted.
 
 ### R1 Spacer
 
-Echo and reverb in one device: an echo section and a reverb section that can
-run in series or in parallel. One device covers a slapback, a tempo delay, a
-room, a hall, and a delay washing into a hall.
+Echo and reverb in one device, in series (the echo washes into the reverb)
+or in parallel. The reverb is one of three models that differ in size class
+and in algorithm: **Studio**, **Room**, **Hall**. The echo is one of three
+delay media, each with up to four heads: **Digital**, **BBD**, **Tape**.
+Every model has Decay (Feedback for the echo), Diffusion, Color and Duck;
+the reverb models also have Seed. 987 points wide (`POPUP_WIDTH_LG`). No
+latency. Mix (ID 30) and Output (ID 31) are the effect pair; the descriptor
+lists the parameters in signal order (Echo, Reverb, Output).
 
-| Section | Parameter | Range / choices | Default |
+This is the owner's specification of 2026-11-12, which replaced the
+roadmap's first Spacer before anything shipped (see
+[Decisions](#decisions)); the first version's Room/Chamber/Hall/Plate on one
+network and its Digital/Tape/Analog echo are gone.
+
+| ID | Parameter (`key`) | Range / choices | Default |
 | --- | --- | --- | --- |
-| Echo | On | toggle | on |
-| | Type | Digital, Tape, Analog | Digital |
-| | Sync | toggle | on |
-| | Time | 1 ms – 2 s (log) | 350 ms |
-| | Division | 1/32 – 1/1, straight, dotted, triplet | 1/8 dotted |
-| | Feedback | 0 – 100 % | 35 % |
-| | Stereo | Mono, Ping-pong, Wide | Ping-pong |
-| | Low cut / High cut (in the feedback path) | 20 Hz – 2 kHz / 500 Hz – 20 kHz | 120 Hz / 8 kHz |
-| | Wobble | 0 – 100 % | 0 % |
-| | Level | −∞ – 0 dB | −6 dB |
-| Reverb | On | toggle | on |
-| | Type | Room, Chamber, Hall, Plate | Hall |
-| | Size | 0 – 100 % | 50 % |
-| | Decay | 0.1 – 20 s (log) | 1.8 s |
-| | Pre-delay | 0 – 250 ms | 15 ms |
-| | Damping | 0 – 100 % | 40 % |
-| | Low cut / High cut | 20 Hz – 1 kHz / 1 – 20 kHz | 100 Hz / 12 kHz |
-| | Diffusion | 0 – 100 % | 80 % |
-| | Movement | 0 – 100 % | 25 % |
-| | Width | 0 – 150 % | 100 % |
-| | Level | −∞ – 0 dB | −9 dB |
-| Global | Routing | Echo → Reverb, Parallel | Echo → Reverb |
-| | Duck | 0 – 100 % | 0 % |
+| 1 | Echo on (`echo.on`) | toggle | on |
+| 2 | Echo model (`echo.model`) | Digital, BBD, Tape | Digital |
+| 3 | Echo sync (`echo.sync`) | toggle | on |
+| 4 | Echo time (`echo.time`) | 1 ms – 2 s (log) | 350 ms |
+| 5 | Echo division (`echo.division`) | 1/32 – 1/1, each straight, dotted (D) and triplet (T): 18 options, shortest first | 1/8 D |
+| 6 | Echo feedback (`echo.feedback`) | 0 – 100 % | 35 % |
+| 12 | Echo taps (`echo.taps`) | Single, Double, Triple, Quad, Dotted, Swing, Gallop, Golden | Single |
+| 7 | Echo stereo (`echo.stereo`) | Mono, Ping-pong, Wide | Ping-pong |
+| 13 | Echo diffusion (`echo.diffusion`) | 0 – 100 % | 0 % |
+| 9 | Echo color (`echo.color`) | −100 – 100 % | 0 % |
+| 10 | Echo wobble (`echo.wobble`) | 0 – 100 % | 0 % |
+| 8 | Echo low cut (`echo.low_cut`) | 20 Hz – 2 kHz (log), in the feedback path | 120 Hz |
+| 14 | Echo duck (`echo.duck`) | 0 – 100 % | 0 % |
+| 11 | Echo level (`echo.level`) | −60 – 0 dB; −60 is silence | −6 dB |
+| 40 | Reverb on (`reverb.on`) | toggle | on |
+| 41 | Reverb model (`reverb.model`) | Studio, Room, Hall | Hall |
+| 42 | Pre-delay (`reverb.pre_delay`) | 0 – 250 ms | 15 ms |
+| 43 | Size (`reverb.size`) | 0 – 100 % | 50 % |
+| 44 | Decay (`reverb.decay`) | 0.1 – 20 s (log) | 1.8 s |
+| 45 | Damping (`reverb.damping`) | 0 – 100 % | 40 % |
+| 48 | Diffusion (`reverb.diffusion`) | 0 – 100 % | 80 % |
+| 49 | Movement (`reverb.movement`) | 0 – 100 % | 25 % |
+| 52 | Seed (`reverb.seed`) | whole numbers 1 – 32 | 1 |
+| 47 | Reverb color (`reverb.color`) | −100 – 100 % | 0 % |
+| 46 | Reverb low cut (`reverb.low_cut`) | 20 Hz – 1 kHz (log) | 100 Hz |
+| 50 | Width (`reverb.width`) | 0 – 150 % | 100 % |
+| 53 | Reverb duck (`reverb.duck`) | 0 – 100 % | 0 % |
+| 51 | Reverb level (`reverb.level`) | −60 – 0 dB; −60 is silence | −9 dB |
+| 20 | Routing (`routing`) | Echo → Reverb, Parallel | Echo → Reverb |
+| 30 | Mix (`mix`) | 0 – 100 % | 30 % |
 
-**DSP.** Echo: one interpolated delay line per channel. Digital is clean.
-Tape adds wow and flutter (two slow LFOs plus noise on the delay time, scaled
-by Wobble), soft saturation and progressive high-frequency loss in the
-feedback loop. Analog models a bucket-brigade line: band-limited before and
-after the delay, companded soft clipping, darker repeats. Changing Time glides
-(pitch-bending like tape) in Tape and Analog and crossfades in Digital.
-Reverb: the shared FDN. Type selects delay-length sets, early-reflection
-patterns and diffusion; Size scales lengths from a small room to a large hall
-continuously, so "room to hall" is one knob with Type as a starting character.
-Duck lowers the wet signal while the dry input is loud, so echoes fill the
-gaps instead of masking the source.
+Against the roadmap's first table: the two high cuts and the one Duck are
+gone. Color replaces each high cut (in Digital, Echo color *is* that cut:
+8 kHz at the centre as before, 1 kHz at the left end, none at the right);
+each section has its own Duck from one shared detector; Echo taps, the two
+Diffusions (the reverb had one), the two Colors and Seed are new. IDs 9 and
+47 were the high cuts of the unshipped first version.
 
-**Panel.** `delay_view` across the top (taps and decay tail, updates as you
-turn anything). Left half Echo, right half Reverb, each a `device_section`
-with its enable. Bottom strip: Routing, Duck, Mix, Output.
+A level at −60 dB is silence and reads "−∞ dB" on the panel (lanes and
+tools read "−60.0 dB"). `spacer::applies` says which parameters act: Time
+unless Sync and Division with it, a section's parameters only while it is
+on, Routing only while both are. Every other control acts in every model,
+so nothing is hidden or disabled by a model change.
+
+**Signal flow.**
+
+```
+in ─┬──────────────────────────────── dry ─────────────────────────────────────┐
+    │ (finite, clamped ±64)                                                     │
+    ├─ max|L|,|R| ─ SlidingMax 5 ms ─ dB ─ GainComputer ─ min 24 dB ─ Ballistics ─► env (dB)
+    │                                                                           │
+    ├─ × echo gate ─► ECHO ─ × Echo level ─┬─ × duck(env·Echo duck) ──────►(+)  │
+    │                                      │ (Echo → Reverb, pre-duck)      ▲   │
+    └─ × reverb gate ─►(+)◄── × series ────┘                                │   ▼
+                        └─► REVERB ─ × Reverb level ─ × duck(env·Reverb duck)┘  equal-power Mix ─ Output ─ out
+
+ECHO, per line (two lines; Mono, Ping-pong or Wide routing):
+
+  in ─►(+)─ low cut ─ Color ─ 4 allpass diffusers ─ model write ─► medium ─┬─ heads ─► Σ ─► out
+        ▲                                                                  │ main head (delay T)
+        └────────────────────── × loop gain ◄──────────────────────────────┘
+
+REVERB:
+
+  in ─ pre-delay ─┬─ model network (Studio | Room | Hall) ─ × model gain ─┐
+                  └─ early output of the model ───────────────────────────(+)─ low cut ─ Color (tilt, high cut) ─ Width ─► out
+```
+
+In series the reverb hears the input plus the echo before the echo's duck,
+so the reverb's own Duck governs the wash; in parallel only the input. A
+section's On fades its input and output over 50 ms, then the section is
+reset and no longer processed. Mix is equal-power, since the wet signal is
+decorrelated from the dry.
+
+**Algorithms, and why.** The echo is `daw_dsp::echo::EchoKernel`, the reverb
+`daw_dsp::reverb::ReverbKernel`; Maxi's Echo and Reverb slots will use the
+same two.
+
+*Reverb, common to the three models.*
+
+- *One decay law* (Jot): every delay element of a lossless network gets an
+  absorption filter whose loss is proportional to its length,
+  `absorption_shelf`: exact at 1 kHz (Decay) and at the top
+  (`Decay · 0.1^Damping`), passive, bass at most twice Decay. So three
+  different networks obey the same Decay and Damping. Chosen over a global
+  loop gain (ties decay to loop length and diffusion) and over a graphic
+  equalizer per line (ten biquads each). `decay_seconds_at` sums the losses
+  over all elements and is what the picture draws.
+- *Seed* draws times and phases only, from `Random::stream(seed, model,
+  stream)`: line or element lengths (stratified, so every seed spreads them
+  evenly and the mean is the same), scattering and diffuser delays,
+  early-reflection jitter, output tap positions, modulation phases and
+  rates. Matrices and signs are fixed: a time can glide or crossfade without
+  a click, a matrix swap cannot. Changing the lengths changes the modes, so
+  each of the 32 seeds is another room of the same size and decay. All 32
+  are tested per model at 44.1 and 48 kHz with a Decay of 1.5 s: decay
+  within 5 %, level within 0.5 dB, and no third octave of the tail more
+  than 3 dB off the trend in Room and Hall at Size 25, 50 and 75 %, nor
+  more than 4 dB in the Studio at Size 50, 75 and 100 %. No draw is
+  replaced by hand. A small Studio with a long Decay is coloured whatever
+  the seed (see Known limits).
+- *Moving a control.* Decay is smoothed as its inverse, so the loss in
+  decibels per second moves evenly, and every absorption filter reaches
+  its new coefficients in a straight line over the 32 samples between two
+  updates (`ShelfGlide`). The Hall's output taps take their share of the
+  absorption along while they crossfade to another place. The low cut and
+  Color's high cut leave and enter at their Off positions by a 20 ms
+  crossfade; the echo's do the same.
+- *Color* tilts the output around a pivot (±4.5 dB; 1.5 kHz Studio, 1 kHz
+  Room, 700 Hz Hall), adds a 12 dB/oct high cut on the dark side (20 kHz
+  down to 2 kHz) and moves the damping crossover by ±0.75 octave. At 0 it is
+  bypassed exactly.
+- *Model change*: all three are allocated; the feed crossfades over 30 ms
+  and the old model's tail rings out under the new one, no knob moves.
+  Models are equally loud at the defaults and Size does not change the
+  level.
+- *Movement* costs no decay and bends no pitch in Studio and Room: it
+  rotates pairs of lines against each other after the mixing matrix, and
+  every line stays on a whole sample. The first version modulated line
+  lengths and lost 3 – 6 dB at 8 kHz over a 4 s tail.
+
+*Studio* (small, dense within milliseconds): four feed-forward diffuser
+steps of eight channels (`DiffuserStep<8>`: delays, a fixed shuffle, a
+rotation by Diffusion) into a short 16-line network (`Fdn<16>`, mean loop
+4 – 18 ms). A feed-forward diffuser multiplies the echo count by eight per
+step and cannot ring, where series allpasses turn metallic and image-source
+taps alone stay sparse. Sixteen lines, not eight, so the default Decay of
+1.8 s still has enough modes at larger sizes.
+
+*Room* (medium): two input allpasses per channel, eight seeded shoebox early
+reflections per channel, and a 16-line network (mean loop 7 – 40 ms) whose
+feedback matrix carries short delays and a second rotation (a scattering
+matrix after Schlecht and Habets), so the echo density fills in tens of
+milliseconds, where a plain feedback delay network needs 150 – 200 ms. At
+Diffusion 0 it is a plain network.
+
+*Hall* (large, density that builds, lush movement): a ring of two branches,
+each an allpass, a delay, an allpass and a delay (Dattorro's figure of
+eight; 0.36 – 1.45 s around), behind four input allpasses per channel, with
+eleven output taps per channel and early reflections of a 30 × 20 × 12 m
+hall. The allpasses are *absorbent* (Dahl and Jot): the absorption sits on
+the delayed signal inside each, so the common decay law holds, where the
+classic ring has one damping filter and a scalar decay. Every output tap
+has its own shelf for the length its signal has passed since the last
+absorber. Movement modulates one allpass per branch by up to 0.5 ms through
+an allpass interpolator (`AllpassInterp`), which costs no top.
+
+*Echo, common to the three models.*
+
+- *Time.* Time, or with Sync the division at the song's tempo (playing or
+  not), halved while it would exceed the four seconds the lines hold.
+- *Stereo.* Mono, Ping-pong and Wide (the right line 3 % longer, 3 – 15 ms)
+  as before; a change crossfades over 20 ms.
+- *Taps* are heads of one line at fractions of its length (Double ½;
+  Triple ⅓, ⅔; Quad ¼, ½, ¾; Dotted ¾; Swing ⅔; Gallop ½, ¾; Golden 0.382,
+  0.618), all at unit gain as on a multi-head machine; only the full-length
+  head feeds back, so the loop time and the tail do not change. Each model
+  reads them natively: whole taps, bucket stages, tape heads.
+- *Diffusion* is four Schroeder allpasses on the write side of the loop
+  (`g = 0.7 · Diffusion`, up to 40 ms or an eighth of the time in all). The
+  heads are shortened by their length, and an allpass's energy centroid is
+  delayed by exactly its length, so repeats stay on the beat while each pass
+  smears them further into a wash. At 0 they are exact delays. In BBD and
+  Tape their lengths glide with the time (read through the sinc on the
+  way, whole again at rest), so a time change bends them with the medium;
+  crossfading them would comb what is written.
+- *Duck*: one detector on the dry input (5 ms peak hold, threshold −36 dB,
+  hard ratio, 12 dB knee, at most 24 dB, 8 ms down and 300 ms back), scaled
+  by each section's amount. At 0 the path is bit-identical to no duck.
+- *No Seed for the echo*: what it could honestly vary (diffuser splits,
+  drift and noise sequences) is too small to earn a control.
+- BBD and Tape pass unity loop gain over the top tenth of Feedback (up to
+  1.06) and self-oscillate, bounded by their saturation; their low cut is
+  never bypassed. A model change ducks the echo for 10 ms.
+
+*Digital*: whole-sample reads through `FadeTap`s (a 40 ms crossfade on a
+time change), bit-exact repeats with Color at +100 % and Diffusion and
+Wobble at 0. Color is the 12 dB/oct cut in the loop. Wobble drifts the time
+slowly; the heads then read through a 16-tap windowed sinc (`SincTable`)
+whose gain never exceeds 1, where third-order Lagrange would lose 2.5 dB at
+15 kHz per repeat.
+
+*BBD*: Holters and Parker's bucket-brigade model, a true variable-rate
+sample-and-hold line (`BucketLine`) with fourth-order Butterworth input and
+output filters integrated analytically at the clock's tick times
+(`BucketFilter`), a 2:1 `Compander` around it, a mild bucket nonlinearity
+and noise that breathes with the signal (silence in gives silence out).
+Bandwidth, hold droop, aliasing and repitch come from the clock itself;
+the first version's interpolated delay with tracking filters only imitated
+them. The stage count follows the time, as designers chain chips, and
+**Color is the clock**: `10 kHz · √(0.3 s / T) · 2^Color`, between 2 kHz and
+96 kHz; left is fewer stages, darker and grittier. A time change glides the
+clock and repitches what is in the buckets; once settled, or when the clock
+would leave its range on the way, a second line with the right stage count
+takes over, the input crossfading to it in 5 ms.
+
+*Tape*: a transport model (`TapeTransport`): a motor that lags 0.12 s, with
+wow, flutter and drift that turn with the tape, and each head's delay solved
+from the tape's position history. One model gives repitch on a time change,
+wow that grows with the delay and heads that stay consistent. Head loss is
+two one-poles whose corner follows the tape speed; saturation is a
+pre-emphasis shelf, an `AlgebraicSigmoid` with antiderivative anti-aliasing
+at 2× and the inverse shelf. Color is tape and head condition: left worn
+and hot (darker, more compression), right fresh and clean. A hysteresis
+model (Jiles–Atherton) was not chosen: it needs 16× inside a feedback loop,
+and with bias the recording follows the static curve anyway. Tape aliasing
+is tested below −60 dBc for tones up to 5 kHz at −6 dBFS and below −50 dBc
+up to 10 kHz at 44.1 kHz.
+
+*Tail*: the echo's (the passes needed for 60 dB, plus half a second at full
+Diffusion; a synced echo is counted at its longest time, 4 s, because the
+tail is asked for before the tempo is known) plus, in series, the reverb's (pre-delay, the model's structure,
+twice Decay); the larger of the two in parallel; at most 30 s.
+
+**Cost.** `devices_bench`, 48 kHz, 256-frame blocks, one core of the build
+container, against a budget of 133 µs (2.5 %) per line:
+
+| Setting | µs per block | of a core |
+| --- | --- | --- |
+| Default (Digital into Hall) | 72 | 1.4 % |
+| Echo Digital / BBD / Tape, reverb off | 20 / 44 / 95 | 0.4 / 0.8 / 1.8 % |
+| Reverb Studio / Room / Hall, echo off | 69 / 61 / 51 | 1.3 / 1.2 / 1.0 % |
+
+**Known limits.** In the Hall, a band whose decay is shorter than about
+0.3 s (the top at full Damping with a dark Color) rings 12 – 17 % longer
+than drawn. The Studio's sixteen lines of a few milliseconds hold too few
+modes for an even long tail: at Size 25 % and below with a Decay of 1.5 s
+a third octave stands 4 – 7 dB off the trend, for every seed. BBD heads
+before the main one share one expander, so
+overlapping diffused heads can lift by up to 2 dB. Three long decay tests
+are `#[ignore]`; run them with `cargo test --release -p daw-devices --test
+spacer -- --include-ignored`.
+
+The panel's drawing data comes from the audio path's code: `echo_taps`
+(every head of the first repeats), `echo_seconds`, `echo::smear_seconds`,
+`early_taps` and `decay_seconds_at`. Telemetry: the duck detector's
+reduction in dB at full depth, the echo time, the tempo and the sample
+rate.
+
+**Panel.** A cell grid of twelve columns, two rows, about 575 points high
+with its header:
+
+| Row | Cell (columns of 12) | Line 1 | Line 2 |
+| --- | --- | --- | --- |
+| 1 | Picture (7), without a card | `delay_view` | |
+| 1 | Output (5) | Routing as toggle buttons (three cells); Mix; Output | |
+| 2 | Echo (6), lamp and model in the title | Sync lamp; Time, or Division while synced, in one cell; Feedback; Taps; Stereo as toggle buttons (Mono, Ping, Wide) | Diffusion; Color; Wobble; Low cut; Duck; Level |
+| 2 | Reverb (6), lamp and model in the title | Pre-delay; Size; Decay; Damping; Diffusion; Movement | Seed; Color; Low cut; Width; Duck; Level |
+
+Inside each card the order is the signal's: time and loop, structure, tone,
+then Duck and Level. Each section's On is the lamp in its card's title and
+its model stands at the right end of the same line as three toggle buttons
+(`device_section_header_choice`), which leaves both cards twelve cells for
+twelve controls: no holes, and nothing moves on a model change. While a
+section is off its controls and its model stay in place, disabled, as does
+Routing unless both sections are on. Division and Taps are dials with one
+detent per option whose value lists them. Seed is a `variation_stepper`:
+previous, a die for any other room, next, over its number. Color is a
+bipolar knob; Echo color reads the cut's corner in Digital ("8.0 kHz",
+"Off" at the right end) and a signed percentage otherwise, and hovering
+Color or Wobble says what it is in the model at hand. Duck reads "Off" at
+0, the low cuts where they are bypassed.
+
+The picture runs time left to right and level in decibels from 0 dB at the
+outer edges to −60 dB on the centre line, left channel above and right
+below, so a decay is a straight line. It shows every head of the echo's
+repeats as a bar (ping-pong alternates sides) with a glow that widens as
+Diffusion smears each pass; the reverb's early reflections as thin bars,
+which change with model, Size and Seed; its tail at 1 kHz as a wedge from
+the pre-delay with the faster decay at 8 kHz inside it, so Damping and
+Color show; in series, a faint tail behind each of the first six heads.
+The grid is quarter notes with the bars numbered while the echo is synced,
+seconds otherwise; a synced time stands at the song's tempo
+(`DeviceHost::tempo`), also while nothing plays. The span is the shortest of 0.5 to 32 s that holds six
+repeats and the tail, and stays put while a handle is dragged. Bars "E"
+and "R" at the right edge show what each section is ducked by while its
+Duck is above 0. Four handles edit it; each has its knob below, Shift for
+fine steps, the arrow keys when focused, and a double-click or its context
+menu to reset:
+
+- **T**, on the full-length head of the first repeat: sideways sets Time,
+  or the nearest Division while synced; up and down sets Echo level.
+- **F**, on the full-length head of the second repeat: up and down sets
+  Feedback.
+- **P**, at the start of the tail: sideways sets Pre-delay; up and down
+  sets Reverb level.
+- **D**, where the tail meets the floor: sideways sets Decay.
+
+A section that is off is drawn dimmed, without handles. The cell Time and
+Division share shows the one Sync selects, also while the echo is off
+(`Layout::swap`).
+
+Factory presets: Default, Slapback, Ping-Pong Eighths, Tape Echo,
+Multi-Head, BBD Dub, Wide Doubler, Diffused Repeats, Vocal Booth, Drum
+Room, Live Room, Dark Chamber, Large Hall, Cathedral, Echo Into Hall,
+Ducked Space, Parallel Wash, Send Hall, Send Echo.
 
 ### R1 Modulator
 
-Chorus, flanger and phaser in one device with shared controls.
+Chorus, flanger and phaser with one set of controls: an LFO sweeps a short
+delay (chorus, flanger) or a chain of allpass stages (phaser), and the swept
+signal is mixed with the dry one. 987 points wide (`POPUP_WIDTH_LG`).
+Latency 31 samples at every setting and rate. Mix (ID 30) and Output (ID 31)
+are the effect pair.
 
-| Parameter | Range / choices | Default |
+| ID | Parameter (`key`) | Range / choices | Default |
+| --- | --- | --- | --- |
+| 1 | Mode (`mode`) | Chorus, Flanger, Phaser | Chorus |
+| 2 | Character (`character`) | Clean, Analog | Clean |
+| 10 | Shape (`shape`) | Sine, Triangle, Random | Sine |
+| 11 | Sync (`sync`) | toggle | off |
+| 12 | Rate (`rate`) | 0.01 – 20 Hz (log) | 0.6 Hz |
+| 13 | Division (`division`) | 8 bars, 4 bars, 2 bars, 1 bar, 1/2, 1/4, 1/8, 1/16 | 1 bar |
+| 14 | Depth (`depth`) | 0 – 100 % | 50 % |
+| 15 | Stereo (`stereo`) | 0 – 180° | 90° |
+| 20 | Feedback (`feedback`) | −95 – +95 % | 0 % |
+| 21 | Chorus center (`center.chorus`) | 5 – 30 ms (log) | 12 ms |
+| 22 | Flanger center (`center.flanger`) | 0.1 – 10 ms (log) | 1.5 ms |
+| 23 | Phaser center (`center.phaser`) | 100 Hz – 8 kHz (log) | 800 Hz |
+| 24 | Voices (`voices`) | 1 – 4 (Chorus) | 2 |
+| 25 | Stages (`stages`) | 2, 4, 6, 8, 12 (Phaser) | 4 |
+| 26 | Wet low cut (`low_cut`) | 20 – 500 Hz (log); Off at 20 Hz | 20 Hz |
+| 30 | Mix (`mix`) | 0 – 100 % | 50 % |
+
+Center is three parameters and the count two, because one parameter has one
+range and one unit: lanes, presets and tools read "12.0 ms" and "800 Hz"
+correctly, and the panel shows one **Center** cell and one count cell.
+`modulator::applies` says which act in a mode. Choosing a Mode **on the
+panel** also sets that mode's Feedback (0 % for Chorus, 50 % for Flanger and
+Phaser), its Center default and its count (`mode_defaults`), in the same
+Undo step. Presets, automation, tools and Undo set only what they name.
+
+**Signal flow.**
+
+```
+in ─┬─ dry ── delay 31 ───────────────────────────────────────────────┐
+    └─ ↑2 ─► [ core ] ─► ↓2 ─ wet low cut ─────────────────────────────┤
+                                  (dry·(1 − Mix) + wet·Mix) · loudness · Output ─ out
+
+core, Chorus and Flanger, per channel:
+   x ─►(+)─► [Analog: low-pass, saturate, DC block] ─► delay line ─ voices read at d(t) ─► average ─► wet
+        ▲                                                                                  │
+        └──────────────── × Feedback ◄── [Analog: low-pass] ◄──────────────────────────────┘
+
+core, Phaser, per channel:
+   x ─► N allpass stages at fc(t), zero-delay feedback ─► wet
+
+control: LFO ─ shape ─ offset per voice and channel ─ 3 ms smoothing ─ sweep law ─ d or fc
+```
+
+**Algorithms, and why.** The core is `daw_dsp::modulation::ModulationKernel`,
+which Maxi's Modulator slot will use too.
+
+- *2× for Clean as well.* A third-order Lagrange read halfway between
+  samples is 8 dB down at 20 kHz at 48 kHz and flat on a sample, so at 1×
+  the top octave of the wet signal would pulse with the sweep, and feedback
+  would compound it. At 2× the worst case is 0.5 dB. Fifth-order Lagrange
+  and a 16-tap sinc are still not flat; an interpolating allpass rings when
+  its coefficient moves. The dry path is delayed by the oversampler's 31
+  samples, so dry and wet are aligned and the notches fall where the
+  picture draws them. One code path and one latency for both characters.
+- *LFO.* One per device. With Sync it follows the song position while
+  playing and runs at the division's rate when stopped. Random is a smooth
+  random curve (`LfoShape::Smooth`), not steps. Voice `k` of `V` on channel
+  `c` reads the LFO `(k + c·Stereo/360)/V` of a cycle on: the channel
+  offset is a share of the voice spacing, so 180° always puts the right
+  voices midway between the left ones (a plain offset would make the wet
+  signal mono at 180° with two voices). With one voice, and in Flanger and
+  Phaser, Stereo is the plain offset.
+- *Sweep laws.* Chorus: `Center + Depth · 4 ms · lfo`, linear in time.
+  Flanger: `Center · 2^(2·Depth·lfo)`, so the notches move evenly in pitch.
+  Phaser: the stages' corner `Center · 2^(2.5·Depth·lfo)`, between 20 Hz and
+  20 kHz. `modulation::swept` is the one law for the audio and the picture.
+  The swept delay never changes faster than 0.75 samples per sample: a
+  delay that grows faster than time passes reads the line backwards, and
+  with feedback the Analog flanger then held a tone up for ever. Only a
+  flanger with a long Center at full Depth above about 5 Hz reaches the
+  limit, and sweeps less far than the picture shows.
+- *Chorus and flanger* are the classic regeneration form (feedback from the
+  delay's output to its input, dry added at the output), so Mix is an honest
+  dry/wet control and Mix 100 % in Chorus is vibrato. The loop runs on the
+  voices' average, which never exceeds one voice, so the loop gain stays
+  below 0.95; the output is that average times `√V`, the level of voices
+  that have drifted apart.
+- *Analog, chorus and flanger* is a behavioural bucket-brigade line: a
+  second-order low-pass at 9.5 kHz before and after the line, a slightly
+  biased `AlgebraicSigmoid` (about 0.8 % third harmonic at −12 dBFS) and a
+  5 Hz DC blocker, as a circuit's coupling capacitors are. Below 1e-8 the
+  curve is skipped (it is a straight line there, and its `f64` rounding
+  would keep a loop from ever reaching silence). The band-limit
+  keeps the harmonics out of the audio band at 2×. No compander: chorus and
+  flanger circuits have none.
+- *Phaser.* `AllpassChain`: first-order allpass stages with the feedback
+  loop solved exactly, without a unit delay (which would detune the peaks at
+  high frequencies). Analog spreads the stages' corners by a few percent
+  (finite notches, as in JFET phasers) and saturates each stage gently. The
+  stage curve runs at the kernel's 2× without further antialiasing: clean
+  for tones up to 5 kHz at −6 dBFS (the tested range), but a full-scale
+  15 kHz tone with Feedback +70 % folds its fifth harmonic back at −38 dBc
+  at 44.1 kHz (−50 dBc at 48 kHz, −84 dBc for 9 kHz), falling steeply with
+  level.
+- *Loudness.* The sum is scaled by one over the root of its mean power gain
+  over the audio band, so broadband material keeps its level as Mix and
+  Feedback move (without it the default Mix would be 3 dB under bypass).
+  For the comb modes that is `(1 − Mix)² + Mix²/(1 − fb²/V)`; for the phaser
+  it is computed from the chain's phase on a pitch axis, in closed form per
+  cell, on every parameter change. A tone on a comb's tooth still comes out
+  up to 3 dB up, and a phaser at +95 % can lift nearly the whole band: that
+  is what Output and the meters are for.
+- *Clicks.* Depth, Center, Feedback and Stereo are smoothed over 20 ms. A
+  jump of the LFO (Shape, Sync, Division, a locate or loop) glides over
+  150 ms instead of chirping. Mode, Character, Stages and Voices duck the
+  wet signal for 5 ms, switch, and return.
+- *Wet low cut*: a second-order high-pass on the wet signal, bypassed
+  exactly at 20 Hz.
+- *Tail*: the longest delay of the sweep times the passes feedback needs to
+  fall 60 dB (the phaser: its largest group delay), at most 10 s.
+
+The panel's drawing data comes from the audio path's code:
+`response_band_db` (the response of dry plus wet with the loudness factor,
+as the lowest and highest gain in each cell of the frequency grid, sampled
+at sixteen points per tooth where a comb is finer than the grid),
+`lfo_cycle` and `modulation::swept`. Telemetry: the LFO phase, the sweep
+position of every voice of each channel (a Random sweep is known nowhere
+else) and the sample rate. `TELEMETRY_VALUES` is 16 for that.
+
+**Panel.** The picture is 208 points high and reads left to right as cause
+and effect:
+
+- A square `lfo_view`: one cycle of the shape scaled by Depth, in Chorus one
+  trace per voice with the first emphasized, and while the device plays the
+  phases of the left and right channel as markers **L** and **R**. A drag
+  sideways turns Rate (Shift for a tenth), or steps Division while synced;
+  a double-click resets it.
+- A `frequency_plot` over the remaining width: the left channel's response
+  as a band with its upper edge drawn, the right channel's as a muted line,
+  both at the live sweep positions (when stopped, one curve at the centre of
+  the sweep); the range the sweep covers shaded; markers **L** and **R** at
+  the live positions; and one handle **C** on the 0 dB line at the swept
+  frequency (the phaser's Center, or the comb's fundamental `1/Center`, so
+  dragging right shortens the delay). Dragging it sets the mode's Center
+  (Shift for fine steps, arrow keys when focused), the wheel over it turns
+  Depth, and a double-click or its context menu resets Center.
+
+Below it one row of four cards on ten columns, each of two lines of cells
+(thirteen controls fill ten columns by two lines without a blank cell):
+
+| Card (columns of 10) | Line 1 | Line 2 |
 | --- | --- | --- |
-| Mode | Chorus, Flanger, Phaser | Chorus |
-| Character | Clean, Analog | Clean |
-| Rate | 0.01 – 20 Hz (log) | 0.6 Hz |
-| Sync / Division | toggle; 8 bars – 1/16 | off |
-| Depth | 0 – 100 % | 50 % |
-| Feedback | −95 – +95 % | 0 % (Chorus), 50 % (Flanger, Phaser) |
-| Center | Chorus 5 – 30 ms; Flanger 0.1 – 10 ms; Phaser 100 Hz – 8 kHz | 12 ms / 1.5 ms / 800 Hz |
-| Voices / Stages | Chorus 1 – 4 voices; Phaser 2, 4, 6, 8, 12 stages | 2 / 4 |
-| Shape | Sine, Triangle, Random | Sine |
-| Stereo | 0 – 180° LFO offset between channels | 90° |
-| Wet low cut | 20 – 500 Hz | 20 Hz |
+| Mode (3) | Mode as toggle buttons | Character as toggle buttons |
+| LFO (3) | Shape as drawn waves (Sine, Triangle, Random); Sync lamp | Rate, or Division while synced, in one cell; Depth; Stereo |
+| Wet (2) | Center, of the mode, in one cell; Feedback | Voices (Chorus) or Stages (Phaser) in one cell, disabled in Flanger; Low cut, reading "Off" at 20 Hz |
+| Output (2) | Mix | Output |
 
-**DSP.** Chorus: up to four modulated Lagrange-interpolated delay voices per
-channel with evenly spread LFO phases. Flanger: one short modulated delay with
-signed feedback (through-zero is left out). Phaser: a chain of first-order
-allpass stages with signed feedback. Analog character band-limits and softly
-saturates the delay path (bucket-brigade style) for chorus and flanger and
-adds stage nonlinearity for the phaser; it runs at 2×. Mix at 100 % with
-Chorus gives vibrato. Mode-specific defaults apply when the mode is changed
-from the panel, as one Undo step.
+Division and Stages are dials with one detent per option; clicking the
+value lists the options. Voices reads "2 voices". Nothing moves when the
+mode changes: a cell shows the parameter that applies, under the same
+caption.
 
-**Panel.** `frequency_plot` showing the moving comb or notch response with
-two phase dots for left and right LFO positions. One row of knobs: Rate,
-Depth, Feedback, Center, Stereo; Mode and Character as `segmented` above.
+Factory presets: Default, Wide Chorus, Ensemble, Analog Chorus, Vibrato,
+Drift, Jet Flanger, Hollow Flanger, Tape Flange, Classic Phaser, Deep
+Phaser, Synced Phaser, Fast Wobble.
 
 ### R1 Saturator
 
@@ -1331,7 +1771,10 @@ empty Sampler shows **Load sample…**; a kit preset can bring its own samples
   release reach 63 % in the set time (Digital); limiter output never exceeds
   the Ceiling on an inter-sample-peak test signal measured at 4×.
 - Reverb: measured RT60 within 10 % of Decay at 1 kHz; no DC or runaway at
-  maximum feedback and size.
+  maximum feedback and size. Echo: repeats at the set time and level per
+  Type and Stereo mode; bounded at Feedback 100 %.
+- Modulator: the rendered response matches `response_db` at fixed sweep
+  positions; the level of broadband material holds over Mix and Feedback.
 - Robustness: silence in gives exact silence out after the tail; no denormal
   slowdown; no NaN/Inf for any parameter combination in a randomized sweep;
   click-free parameter jumps (bounded sample-to-sample delta under a full-range
@@ -1429,3 +1872,13 @@ Settled in review on 2026-11-10:
 | Names | Crates `daw-devices` and `daw-devices-ui`; device IDs `r1-spacer`, `r1-modulator`, `r1-saturator`, `r1-compressor`, `r1-equalizer`, `r1-filter`, `r1-mini`, `r1-maxi`, `r1-sampler`, `r1-drums`. |
 | Hosting | In process with failure containment at the device boundary, as described under [Engine](#engine-daw-engine). |
 | Extensibility and uniformity | One device contract and registry, one panel grammar, one preset format and browser for all devices. |
+
+Given by the owner on 2026-11-12, after the first R1 Spacer was built and
+before it shipped; where they differ from the roadmap's Spacer they
+replace it:
+
+| Question | Decision |
+| --- | --- |
+| Spacer models | "spacer: it should have studio, room, hall models (different overall sizing) and delay - digital, bbd, tape based taps". Reverb: Studio, Room, Hall, each its own algorithm for its size class. Echo: Digital, BBD, Tape, each with up to four heads (Echo taps). |
+| What every model offers | "each model should use state-of-art algorithms, highly versatile, with ducking and color parameters, decay, diffusion, maybe some seed for additional coloration and internal structure". Decay (Feedback for the echo), Diffusion, Color and Duck in both sections; Seed (1 – 32) for the reverb. |
+| Consequences, chosen in the design and open to the owner's veto | The two high cuts are replaced by Color (in Digital, Echo color is the same cut). The one Duck became one per section from a shared detector. The echo has no Seed: it has nothing audible enough to vary. Seed is 32 tested rooms, not a free number. The default reverb has no 12 kHz output cut any more (Damping still shortens the top). BBD noise cannot be switched off, only lowered with Color. There is no early/late balance control. Echo heads all play at unit gain, so a pattern with more heads is louder. Parameter IDs 9 and 47 were reused, since nothing had shipped. |

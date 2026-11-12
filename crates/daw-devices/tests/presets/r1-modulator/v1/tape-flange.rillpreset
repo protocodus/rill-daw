@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-modulator",
+  "name": "Tape Flange",
+  "author": "Rill",
+  "category": "Flanger",
+  "tags": ["drums", "mix"],
+  "description": "Gentle analog flange, one sweep per two bars.",
+  "parameters": {
+    "mode": "Flanger",
+    "character": "Analog",
+    "feedback": 35.0,
+    "sync": true,
+    "division": "2 bars",
+    "depth": 70.0,
+    "center.flanger": 3.0
+  }
+}

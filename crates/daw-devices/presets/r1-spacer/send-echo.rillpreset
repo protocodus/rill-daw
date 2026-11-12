@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Send Echo",
+  "author": "Rill",
+  "category": "Send",
+  "tags": ["send"],
+  "description": "Echo for a return track: wet only.",
+  "parameters": {
+    "reverb.on": false,
+    "echo.model": "Digital",
+    "echo.division": "1/8 D",
+    "mix": 100.0
+  }
+}

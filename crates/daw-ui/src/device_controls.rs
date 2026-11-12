@@ -588,6 +588,36 @@ pub fn toggle_led_width(ui: &Ui, label: &str) -> f32 {
             .x
 }
 
+/// The lamp of a [`toggle_led`], `diameter` across with its glow.
+pub(crate) fn paint_lamp(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    diameter: f32,
+    on: bool,
+    focused: bool,
+) {
+    let colors = theme::palette(painter.ctx());
+    let radius = diameter * 0.5;
+    if on {
+        painter.circle_filled(center, radius + 2.0, colors.accent.gamma_multiply(0.25));
+        painter.circle_filled(center, radius - 1.0, colors.accent);
+    } else {
+        painter.circle_filled(center, radius - 1.0, colors.control_fill);
+        painter.circle_stroke(
+            center,
+            radius - 1.0,
+            Stroke::new(tokens::BORDER_WIDTH, colors.muted),
+        );
+    }
+    if focused {
+        painter.circle_stroke(
+            center,
+            radius + 2.0,
+            Stroke::new(tokens::FOCUS_WIDTH, colors.text),
+        );
+    }
+}
+
 /// A section enable: a small lit lamp with a caption.
 pub fn toggle_led(ui: &mut Ui, value: &mut bool, label: &str) -> Response {
     let colors = theme::palette(ui.ctx());
@@ -606,30 +636,7 @@ pub fn toggle_led(ui: &mut Ui, value: &mut bool, label: &str) -> Response {
     }
     if ui.is_rect_visible(rect) {
         let center = egui::pos2(rect.left() + lamp * 0.5, rect.center().y);
-        if *value {
-            ui.painter().circle_filled(
-                center,
-                lamp * 0.5 + 2.0,
-                colors.accent.gamma_multiply(0.25),
-            );
-            ui.painter()
-                .circle_filled(center, lamp * 0.5 - 1.0, colors.accent);
-        } else {
-            ui.painter()
-                .circle_filled(center, lamp * 0.5 - 1.0, colors.control_fill);
-            ui.painter().circle_stroke(
-                center,
-                lamp * 0.5 - 1.0,
-                Stroke::new(tokens::BORDER_WIDTH, colors.muted),
-            );
-        }
-        if response.has_focus() {
-            ui.painter().circle_stroke(
-                center,
-                lamp * 0.5 + 2.0,
-                Stroke::new(tokens::FOCUS_WIDTH, colors.text),
-            );
-        }
+        paint_lamp(ui.painter(), center, lamp, *value, response.has_focus());
         ui.painter().galley(
             egui::pos2(
                 rect.left() + lamp + tokens::SPACE_SM,
@@ -671,6 +678,148 @@ pub fn value_link(ui: &mut Ui, text: &str, attention: bool, max_width: f32) -> R
         }
     }
     response.widget_info(|| WidgetInfo::labeled(WidgetType::Link, ui.is_enabled(), text));
+    response
+}
+
+/// A [`value_link`] reading `text`, the current one of `options`, that
+/// lists them all when clicked: the way to pick an option by name under a
+/// detented knob, where a row of toggles or a drop-down has no room.
+/// Returns the option picked this frame.
+pub fn value_menu(
+    ui: &mut Ui,
+    text: &str,
+    options: &[&str],
+    selected: usize,
+    max_width: f32,
+) -> (Response, Option<usize>) {
+    let response = value_link(ui, text, false, max_width);
+    let mut picked = None;
+    egui::Popup::menu(&response).show(|ui| {
+        for (index, option) in options.iter().enumerate() {
+            if crate::selectable(ui, index == selected, *option).clicked() {
+                picked = Some(index);
+                ui.close();
+            }
+        }
+    });
+    (response, picked)
+}
+
+/// Width of one button of a [`variation_stepper`].
+const VARIATION_BUTTON: f32 = tokens::HIT_TARGET;
+
+/// The size a [`variation_stepper`] takes.
+pub const VARIATION_STEPPER_SIZE: Vec2 =
+    Vec2::new(3.0 * VARIATION_BUTTON, crate::TOGGLE_ROW_HEIGHT);
+
+/// Picks one of a numbered set of equally good variations (a seed, a
+/// round-robin layer): previous, a die that jumps to another one, next, in
+/// one track as wide as a knob's cell allows. Previous and next wrap around
+/// the range. The value is an ordinary whole number, so presets and
+/// automation hold it; the caller prints it ("#7") on the value line below.
+/// The response is `changed` when a button moved the value.
+pub fn variation_stepper(
+    ui: &mut Ui,
+    value: &mut i32,
+    range: std::ops::RangeInclusive<i32>,
+    name: &str,
+) -> Response {
+    let colors = theme::palette(ui.ctx());
+    let (rect, mut response) = ui.allocate_exact_size(VARIATION_STEPPER_SIZE, Sense::hover());
+    let (low, high) = (*range.start(), (*range.end()).max(*range.start()));
+    let count = i64::from(high) - i64::from(low) + 1;
+    let before = (*value).clamp(low, high);
+    let wrapped = |offset: i64| {
+        (i64::from(low) + (i64::from(before) - i64::from(low) + offset).rem_euclid(count)) as i32
+    };
+    if ui.is_rect_visible(rect) {
+        ui.painter().add(crate::component_shape(
+            ui.painter(),
+            rect,
+            tokens::RADIUS,
+            colors.bg,
+            Stroke::new(tokens::BORDER_WIDTH, colors.line),
+            crate::ComponentMaterial::default(),
+        ));
+    }
+    let mut next = None;
+    for (index, hint) in ["Previous", "Another", "Next"].into_iter().enumerate() {
+        let segment = Rect::from_min_size(
+            rect.min + vec2(VARIATION_BUTTON * index as f32, 0.0),
+            vec2(VARIATION_BUTTON, rect.height()),
+        );
+        let label = format!("{hint} {name}");
+        let button = ui
+            .interact(segment, response.id.with(index), Sense::click())
+            .on_hover_text(&label);
+        button.widget_info(|| WidgetInfo::labeled(WidgetType::Button, ui.is_enabled(), &label));
+        if button.clicked() && count > 1 {
+            next = Some(match index {
+                0 => wrapped(-1),
+                2 => wrapped(1),
+                // Any other one: the time of the click decides which.
+                _ => {
+                    let bits = ui.input(|input| input.time).to_bits();
+                    let hash = (bits ^ (bits >> 29)).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 33;
+                    wrapped(1 + (hash % (count as u64 - 1)) as i64)
+                }
+            });
+        }
+        if ui.is_rect_visible(segment) {
+            let painter = ui.painter();
+            let thumb = segment.shrink(2.0);
+            if button.hovered() && ui.is_enabled() {
+                painter.rect_filled(thumb, tokens::RADIUS - 2, colors.control_hover);
+            }
+            if button.has_focus() {
+                painter.rect_stroke(
+                    thumb,
+                    tokens::RADIUS - 2,
+                    Stroke::new(tokens::FOCUS_WIDTH, colors.accent),
+                    egui::StrokeKind::Inside,
+                );
+            }
+            let color = if button.hovered() {
+                colors.text
+            } else {
+                colors.muted
+            };
+            let stroke = Stroke::new(1.5_f32, color);
+            let center = segment.center();
+            match index {
+                1 => {
+                    // A die showing five.
+                    let face = Rect::from_center_size(center, Vec2::splat(11.0));
+                    painter.rect_stroke(face, 2.0, stroke, egui::StrokeKind::Middle);
+                    for (x, y) in [
+                        (-1.0, -1.0),
+                        (1.0, -1.0),
+                        (0.0, 0.0),
+                        (-1.0, 1.0),
+                        (1.0, 1.0),
+                    ] {
+                        painter.circle_filled(center + vec2(x, y) * 2.75, 1.0, color);
+                    }
+                }
+                _ => {
+                    let toward = if index == 0 { -1.0 } else { 1.0 };
+                    painter.add(egui::Shape::line(
+                        vec![
+                            center + vec2(-2.0 * toward, -4.0),
+                            center + vec2(2.0 * toward, 0.0),
+                            center + vec2(-2.0 * toward, 4.0),
+                        ],
+                        stroke,
+                    ));
+                }
+            }
+        }
+        response |= button;
+    }
+    if let Some(next) = next {
+        *value = next;
+        response.mark_changed();
+    }
     response
 }
 

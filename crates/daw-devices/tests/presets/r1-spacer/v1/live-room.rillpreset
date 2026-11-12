@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Live Room",
+  "author": "Rill",
+  "category": "Reverb",
+  "tags": ["drums", "guitar"],
+  "description": "Natural medium room.",
+  "parameters": {
+    "echo.on": false,
+    "reverb.model": "Room",
+    "reverb.size": 50.0,
+    "reverb.decay": 0.9,
+    "reverb.damping": 45.0
+  }
+}

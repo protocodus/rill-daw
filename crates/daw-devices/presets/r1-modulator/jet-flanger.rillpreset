@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "device": "r1-modulator",
+  "name": "Jet Flanger",
+  "author": "Rill",
+  "category": "Flanger",
+  "tags": ["drums", "guitar"],
+  "description": "Deep resonant sweep.",
+  "parameters": {
+    "mode": "Flanger",
+    "feedback": 80.0,
+    "rate": 0.12,
+    "depth": 85.0,
+    "center.flanger": 1.2
+  }
+}

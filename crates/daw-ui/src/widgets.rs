@@ -1016,6 +1016,8 @@ pub enum Glyph {
     Saw,
     Square,
     SampleHold,
+    /// A smooth irregular wave: a random source that glides, not steps.
+    Wander,
 }
 
 impl Glyph {
@@ -1056,6 +1058,10 @@ impl Glyph {
                 (1.0, -0.7),
                 (1.0, 0.7),
             ],
+            Self::Wander => sampled(&|x| {
+                let turn = std::f32::consts::TAU * x;
+                0.45 * (turn + 0.4).sin() + 0.4 * (2.3 * turn + 1.9).sin()
+            }),
             Self::SampleHold => vec![
                 (0.0, 0.2),
                 (0.25, 0.2),

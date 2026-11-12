@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Drum Room",
+  "author": "Rill",
+  "category": "Reverb",
+  "tags": ["drums"],
+  "description": "Punchy small room.",
+  "parameters": {
+    "echo.on": false,
+    "reverb.model": "Studio",
+    "reverb.size": 70.0,
+    "reverb.decay": 0.6,
+    "reverb.color": 15.0,
+    "reverb.low_cut": 60.0
+  }
+}

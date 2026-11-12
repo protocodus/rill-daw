@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "device": "r1-modulator",
+  "name": "Default",
+  "author": "Rill",
+  "category": "Basic",
+  "description": "A two-voice chorus to start from.",
+  "parameters": {}
+}

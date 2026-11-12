@@ -167,6 +167,8 @@ fn format_value(plain: f32, unit: &str) -> String {
     match unit {
         "Hz" if plain.abs() >= 1000.0 => format!("{:.2} kHz", plain / 1000.0),
         "Hz" if plain.abs() < 1.0 => format!("{plain:.2} Hz"),
+        // LFO rates: whole hertz would hide most of a turn of the knob.
+        "Hz" if plain.abs() < 20.0 => format!("{plain:.1} Hz"),
         "Hz" => format!("{plain:.0} Hz"),
         "ms" if plain.abs() >= 1000.0 => format!("{:.2} s", plain / 1000.0),
         "ms" if plain.abs() < 0.1 => format!("{plain:.2} ms"),
@@ -316,5 +318,17 @@ mod tests {
         assert_eq!(attack.format(0.0), "0.02 ms");
         assert_eq!(attack.format(attack.to_normalized(0.5)), "0.5 ms");
         assert_eq!(attack.parse("0.05 ms"), Some(attack.to_normalized(0.05)));
+        let rate = ParamSpec {
+            range: ParamRange::Log {
+                min: 0.01,
+                max: 20.0,
+            },
+            default: 0.6,
+            ..CUTOFF
+        };
+        assert_eq!(rate.format(rate.to_normalized(0.6)), "0.60 Hz");
+        assert_eq!(rate.format(rate.to_normalized(5.5)), "5.5 Hz");
+        assert_eq!(rate.format(1.0), "20 Hz");
+        assert_eq!(CUTOFF.format(0.0), "20 Hz");
     }
 }

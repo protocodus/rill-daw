@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering::Relaxed};
 pub const TELEMETRY_FRAMES: usize = 16_384;
 /// Device-defined live values (effective cutoff, gain reduction, LFO phase…).
 /// Each device documents which index means what.
-pub const TELEMETRY_VALUES: usize = 8;
+pub const TELEMETRY_VALUES: usize = 16;
 
 /// Columns of level history: 8 s at [`HISTORY_RATE`].
 pub const HISTORY_COLUMNS: usize = 512;

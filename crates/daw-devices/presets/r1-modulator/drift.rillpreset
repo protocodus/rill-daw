@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device": "r1-modulator",
+  "name": "Drift",
+  "author": "Rill",
+  "category": "Chorus",
+  "tags": ["pad", "keys"],
+  "description": "Slow random detune.",
+  "parameters": {
+    "shape": "Random",
+    "voices": 2,
+    "rate": 0.25,
+    "depth": 35.0,
+    "feedback": 0.0,
+    "center.chorus": 15.0
+  }
+}

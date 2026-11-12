@@ -70,8 +70,8 @@ discovery remains authoritative as the catalog expands.
 | Composition theory | `composer_catalog`, `composer_scale`, `composer_chord`, `composer_progression`, `composer_euclidean`: native, bounded theory queries adapted from midi-composer-mcp; no song edits |
 | Multi-part composition | `compose_progression`: create chord, arpeggio, and bass clips together in one fenced, undoable commit; reuse existing MIDI tracks or create new ones |
 | Musical edits | `apply_edits`, `create_midi_part`, `generate_part`, `transform_phrase`, `set_mix`, `join_clips`: atomic typed batches, complete patterns, seeded generation, phrase transforms, multi-channel settings, and MIDI/audio consolidation |
-| Instruments | `list_plugins`, `organize_plugin`, `assign_plugin`, `create_instrument_part`, `plugin_describe_parameters`: discover catalog IDs with favorites, categories and plug-in format (`VST3`, `CLAP`, `LV2`, `AU`; optional `format` filter, optionally rescanning plug-in folders), organize the library, assign instruments/inserts (an optional `format` must match the catalog entry), create notes plus instrument in one commit, and inspect actual parameter metadata. Rill's built-in devices are listed with format `Built-in` and IDs such as `rill:r1-mini`, `rill:r1-filter`, `rill:r1-equalizer`, `rill:r1-saturator` and `rill:r1-compressor` |
-| Built-in devices | `set_device_parameters`, `list_device_presets`, `load_device_preset`, `store_device_preset`: set built-in device parameters by key in their own units (`"200 Hz"`, `-6`, `"Transistor Ladder"`, `true`), as described by `plugin_describe_parameters`; keys are grouped by part where a device has several (R1 Equalizer: `hp.frequency`, `band2.gain`, `band3.type`, `lp.slope`); browse, load (one Undo step) and save `.rillpreset` presets. Saving writes only into the user preset directory |
+| Instruments | `list_plugins`, `organize_plugin`, `assign_plugin`, `create_instrument_part`, `plugin_describe_parameters`: discover catalog IDs with favorites, categories and plug-in format (`VST3`, `CLAP`, `LV2`, `AU`; optional `format` filter, optionally rescanning plug-in folders), organize the library, assign instruments/inserts (an optional `format` must match the catalog entry), create notes plus instrument in one commit, and inspect actual parameter metadata. Rill's built-in devices are listed with format `Built-in` and IDs such as `rill:r1-mini`, `rill:r1-filter`, `rill:r1-equalizer`, `rill:r1-saturator`, `rill:r1-compressor`, `rill:r1-modulator` and `rill:r1-spacer` |
+| Built-in devices | `set_device_parameters`, `list_device_presets`, `load_device_preset`, `store_device_preset`: set built-in device parameters by key in their own units (`"200 Hz"`, `-6`, `"Transistor Ladder"`, `true`), as described by `plugin_describe_parameters`; keys are grouped by part where a device has several (R1 Equalizer: `hp.frequency`, `band2.gain`, `band3.type`, `lp.slope`; R1 Spacer: `echo.time`, `echo.division`, `reverb.decay`; R1 Modulator: `center.chorus`, `center.flanger`, `center.phaser`); browse, load (one Undo step) and save `.rillpreset` presets. Saving writes only into the user preset directory |
 | Audio | `audio_analyze`, `audio_analyze_clip`, `audio_process_clip`: measure a rendered excerpt; analyze source regions and propose edits; normalize, split at transients, strip silence, place warp markers at transients (`warp_transients`) or quantize audio toward a grid (`quantize`, with `grid_beats`, `strength` and `max_move_beats`; the result reports `warp.moved`, `largest_move_beats` and `largest_move_ms`) with one checked background operation |
 | Transport | `transport`: inspect, play, pause, stop, or seek the active song |
 | Recording | `get_recording`, `configure_recording`, `start_recording`, `stop_recording`, `retry_recording_input`: inspect phase, bulk-configure inputs/arming/monitoring/placement/timing, capture, finalize, and recover inputs through the existing recording lifecycle |
@@ -86,6 +86,31 @@ A new MIDI track from `create_midi_part` or `apply_edits` starts with the
 built-in R1 Mini synth (`rill:r1-mini`), so it is audible at once; use
 `create_instrument_part` with a catalog ID to create notes and assign another
 instrument together. Rill's built-in devices need no scan.
+
+R1 Modulator (`rill:r1-modulator`) has one Center parameter per mode, each
+in its own unit (`center.chorus` and `center.flanger` in ms, `center.phaser`
+in Hz), and `voices` for Chorus beside `stages` for Phaser; only those of
+the current `mode` act. Setting `mode` with `set_device_parameters` changes
+nothing else: the panel's Mode buttons also set that mode's usual Feedback
+and Center, a tool names them itself (a flanger or phaser usually wants
+`feedback` near 50 %). With `sync` on, `division` (`"1 bar"`, `"1/4"`)
+replaces `rate`.
+
+R1 Spacer (`rill:r1-spacer`) is an echo and a reverb: `echo.on` and
+`reverb.on` switch the sections, `routing` is `"Echo → Reverb"` or
+`"Parallel"`. `echo.model` is `"Digital"`, `"BBD"` or `"Tape"` and
+`reverb.model` is `"Studio"`, `"Room"` or `"Hall"` (small to large; a model
+change moves no other parameter). With `echo.sync` on (the default) the
+echo's time is `echo.division` (`"1/8 D"`, `"1/4"`, `"1/8 T"`) and
+`echo.time` is ignored; set `echo.sync` to `false` to use `echo.time`
+(`"250 ms"`). `echo.taps` adds heads for rhythms (`"Single"`, `"Double"`,
+`"Triple"`, `"Quad"`, `"Dotted"`, `"Swing"`, `"Gallop"`, `"Golden"`).
+`echo.color` and `reverb.color` run from −100 % (dark) to 100 % (bright),
+`echo.diffusion` smears the repeats, and `reverb.seed` (1 – 32) picks
+another space of the same size and decay. As an insert keep `mix` low (the
+default is 30 %); on a send bus set `mix` to 100 %, or load the **Send
+Echo** or **Send Hall** preset. `echo.duck` and `reverb.duck` lower each
+section while the track itself is loud.
 
 To duck one track under another (a pad under a kick), insert R1 Compressor
 (`rill:r1-compressor`) on the track to be ducked, set its `sidechain`

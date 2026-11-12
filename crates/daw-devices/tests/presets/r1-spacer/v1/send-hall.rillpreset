@@ -1,0 +1,14 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Send Hall",
+  "author": "Rill",
+  "category": "Send",
+  "tags": ["send"],
+  "description": "Hall for a return track: wet only.",
+  "parameters": {
+    "echo.on": false,
+    "reverb.model": "Hall",
+    "mix": 100.0
+  }
+}

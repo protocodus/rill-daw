@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Parallel Wash",
+  "author": "Rill",
+  "category": "Space",
+  "tags": ["pad", "keys"],
+  "description": "Echo and room side by side.",
+  "parameters": {
+    "routing": "Parallel",
+    "echo.model": "Digital",
+    "echo.division": "1/8 D",
+    "reverb.model": "Room",
+    "reverb.decay": 1.4
+  }
+}
