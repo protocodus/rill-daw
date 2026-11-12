@@ -762,13 +762,23 @@ pub fn variation_stepper(
     let wrapped = |offset: i64| {
         (i64::from(low) + (i64::from(before) - i64::from(low) + offset).rem_euclid(count)) as i32
     };
+    // The value itself is printed by the caller, so the track carries the
+    // automation state: outlined and tinted in the lane's color.
+    let (fill, line) = match crate::automation_mark(ui).map(|mark| mark.state) {
+        Some(state) if state != crate::AutomationState::Bypassed => {
+            let color = state.color(ui.ctx());
+            (crate::automation::blend(colors.bg, color, 0.18), color)
+        }
+        _ => (colors.bg, colors.line),
+    };
+    crate::automation::register_self_marked(ui.ctx(), response.id);
     if ui.is_rect_visible(rect) {
         ui.painter().add(crate::component_shape(
             ui.painter(),
             rect,
             tokens::RADIUS,
-            colors.bg,
-            Stroke::new(tokens::BORDER_WIDTH, colors.line),
+            fill,
+            Stroke::new(tokens::BORDER_WIDTH, line),
             crate::ComponentMaterial::default(),
         ));
     }

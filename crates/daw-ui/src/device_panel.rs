@@ -646,9 +646,15 @@ impl DeviceFrame {
             ui.data_mut(|data| data.insert_temp(self.width_id, used));
             ui.ctx().request_discard("device frame bar width");
         }
+        // Presets that wrap onto a second row grow the bar, not the body.
+        let mut bar_rect = self.bar_rect;
+        bar_rect.max.y = bar_rect
+            .max
+            .y
+            .max(self.bar.min_rect().bottom() + tokens::SPACE_XS);
         let side = DEVICE_FRAME_BORDER + tokens::SPACE_SM;
         let body_rect = egui::Rect::from_min_max(
-            egui::pos2(self.top.x + side, self.bar_rect.bottom() + tokens::SPACE_SM),
+            egui::pos2(self.top.x + side, bar_rect.bottom() + tokens::SPACE_SM),
             egui::pos2(self.top.x + self.width - side, f32::INFINITY),
         );
         let mut child = ui.new_child(
@@ -667,7 +673,7 @@ impl DeviceFrame {
             self.background,
             egui::Shape::Vec(vec![
                 egui::Shape::rect_filled(
-                    self.bar_rect,
+                    bar_rect,
                     egui::CornerRadius {
                         sw: 0,
                         se: 0,

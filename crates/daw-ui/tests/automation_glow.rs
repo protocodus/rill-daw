@@ -135,3 +135,30 @@ fn an_overridden_choice_turns_red_and_ghosts_its_lane_in_orange() {
         );
     }
 }
+
+#[test]
+fn an_automated_variation_stepper_shows_its_state_on_the_track() {
+    let ctx = Context::default();
+    theme::apply(&ctx);
+    ctx.set_theme(egui::Theme::Dark);
+    let output = ctx.run(RawInput::default(), |ctx| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            let mark = daw_ui::AutomationMark {
+                state: AutomationState::Read,
+                lane: Some(0.5),
+            };
+            let mut seed = 7;
+            daw_ui::automated(ui, Some(mark), |ui| {
+                daw_ui::variation_stepper(ui, &mut seed, 1..=32, "seed");
+            });
+        });
+    });
+    let mut colors = Vec::new();
+    for shape in &output.shapes {
+        shape_colors(&shape.shape, &mut colors);
+    }
+    assert!(
+        colors.contains(&theme::DARK.automation),
+        "the stepper's track is outlined in the lane's color"
+    );
+}
