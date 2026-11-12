@@ -576,7 +576,8 @@ fn sampler_layout(mut layout: Layout) -> Layout {
         (VELOCITY_CUTOFF, "Velocity"),
         (VELOCITY_LEVEL, "Velocity"),
         (FILTER_KEY_TRACKING, "Key track"),
-        (KEY_TRACKING, "Key track"),
+        // "Key track" does not fit beside "Transpose" in two cells.
+        (KEY_TRACKING, "Track"),
         (LOOP_MODE, "Mode"),
         (LOOP_START, "Start"),
         (LOOP_END, "End"),

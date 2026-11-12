@@ -1864,3 +1864,16 @@ fn sampler_disables_what_does_not_apply_in_place() {
     assert!(panel.state.disabled.contains(&sampler::AENV_RELEASE));
     assert_eq!(panel.cell(sampler::CUTOFF), cutoff, "nothing moves");
 }
+
+#[test]
+fn faders_on_a_row_of_one_line_keep_the_travel_of_two() {
+    let panel = Panel::new(&sampler::DESCRIPTOR);
+    // The cell holds the caption and the value besides the fader.
+    for id in [sampler::FENV_ATTACK, sampler::AENV_RELEASE, sampler::VOLUME] {
+        let fader = panel.cell(id);
+        assert!(
+            fader.height() >= 3.0 * daw_ui::tokens::CONTROL_HEIGHT,
+            "{id}: {fader:?}"
+        );
+    }
+}

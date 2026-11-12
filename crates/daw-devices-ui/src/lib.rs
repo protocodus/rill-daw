@@ -453,6 +453,20 @@ fn cell_row(
     let text = ui.fonts_mut(|fonts| fonts.row_height(&daw_ui::control_caption_font()));
     let between = 2.0 * text + 3.0 * ui.spacing().item_spacing.y + LINE_GAP;
     let tall = heights.iter().sum::<f32>() + between * lines.saturating_sub(1) as f32;
+    // Faders on a row of one line still get the travel of two, so an
+    // envelope reads and drags precisely.
+    let faders = sections.iter().any(|section| {
+        section
+            .lines
+            .iter()
+            .flatten()
+            .any(|slot| matches!(slot, panels::Slot::Faders(..)))
+    });
+    let tall = if faders {
+        tall.max(2.0 * daw_ui::tokens::CONTROL_HEIGHT + between)
+    } else {
+        tall
+    };
     let cells: Vec<daw_ui::GridCell> = beside
         .map(|span| daw_ui::GridCell {
             span,
