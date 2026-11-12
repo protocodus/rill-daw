@@ -1403,6 +1403,7 @@ arrow keys), and canvas handles use the 21-point `HIT_TARGET`.
 | `glyph_toggle` | A toggle group whose segments show a drawn shape (`ToggleFace::Glyph`: bell, shelves, notch, pass filters, LFO waves) or a short text (`ToggleFace::Text`, such as 12, 24, 48) in equal segments of a given width. Each option carries its full name for hover and screen readers. Use it where option names do not fit the column; plain `toggle_group` everywhere else. |
 | `column_highlight` | Paints the selection mark behind one column of a table: call it with the column's rectangle before drawing the cells. |
 | `toggle_led_width` | The width a `toggle_led` with a given label takes, to center a lamp in a column. |
+| `value_link` | A value line that is also a way somewhere: note-sized text in the action colour (the warning colour with `attention`, for something missing), truncated to a width, as tall as a knob's value so the lines of a row stay level. The response reports the click; the caller opens the view. R1 Compressor names its sidechain source with it. |
 | `quiet_automation_indicators` | Called on a `Ui` whose controls stand close together (table cells): their automation indicators appear only while a lane exists, is being read or is overridden, never as idle rings. The context menu still offers **Automate**. |
 | `xy_pad` | Two normalized parameters; a press jumps, further motion is relative, Shift is fine, arrow keys nudge. |
 | `envelope_editor` | ADSR with hold and per-segment curves from plain `EnvelopeShape`; returns `EnvelopeEdit`s. |
@@ -1424,7 +1425,40 @@ overlap. `FrequencyPlotOutput` reports `dragged`, `double_clicked`,
 `dragging` and each node's `Response` for context menus. A `Spectrum` holds
 linear bins of an FFT in dB with `tilt_db_per_octave` (4.5 makes pink noise
 read flat) and `smoothing_octaves`; `level_db` reads it at any frequency.
-The other plots: `spectrum`, `transfer_plot`, `gain_reduction_history`, `reduction_meter`, `scope`, `wavetable_view`, `lfo_view`, `sample_view` (draggable start, end and loop markers), `delay_view` and `harmonics_view`. They take plain data and own no audio state.
+`transfer_plot` draws an input→output curve from samples spread evenly over
+`x_range`, with the unity diagonal behind it. `TransferAxis::Linear` is a
+shaper's view (grid at quarters, the ends named with their sign);
+`TransferAxis::Decibels` a dynamics processor's (a line every 20 dB). `input`
+puts the live operating point on the curve, `lit` highlights the span the
+signal sweeps, `shade` marks a span of the input axis (a knee). With a
+`TransferHandle` the plot is an editor: the handle sits where the caller
+says (drawn whole inside the frame at its edges), carries a letter up and to
+the left of it, or down and to the right at the top of the frame, clear of a
+rising curve, and shows its `readout` in a bubble while hovered or dragged. `TransferPlotOutput` reports `dragged` (the handle's new position
+in plot units; relative to the press, a tenth as far with Shift), `nudged`
+(arrow keys while it has focus, in plot units), `scrolled` (wheel notches
+over the handle, consumed) and `double_clicked`, plus the handle's `Response`
+for a context menu. The plot knows no parameters: R1 Compressor maps x to
+Threshold and the wheel to Ratio. Without a handle it only shows.
+
+`gain_reduction_history` scrolls `[input peak, output peak, reduction dB]`
+columns, oldest at the left: the input as a dim fill, the output as a line
+over it, the reduction as a trace hanging from the top. Its level axis runs
+from `floor_db` to 0 dB over the whole height, exactly as a decibel
+`transfer_plot` of the same range and height beside it, so a level reads
+across both; `threshold_db` is drawn as a line with its label (beside the
+span label where the two would meet at the floor) and, when
+`draggable`, drags vertically (Shift for fine, arrow keys when focused) and
+is returned in `LevelHistoryOutput::threshold`. `reduction_meter` is the bar
+for the same reduction axis, with a hold line and the held value printed
+under it; it reports a click, on which the caller clears its hold.
+
+`harmonics_view` draws one bar per value in `levels_db` (any count), each
+with its level over it and its number under it, against a decibel scale down
+to `floor_db`; bars are centered and capped in width, and `harmonic_bars`
+returns their rectangles.
+
+The other plots: `spectrum`, `scope`, `wavetable_view`, `lfo_view`, `sample_view` (draggable start, end and loop markers) and `delay_view`. They take plain data and own no audio state.
 
 ### Panels ([`device_panel.rs`](../crates/daw-ui/src/device_panel.rs))
 

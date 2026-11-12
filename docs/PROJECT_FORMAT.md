@@ -213,7 +213,11 @@ device's stable parameter IDs, so `state` must be empty. A device ID this
 version does not know stays in the project unchanged: an unknown insert passes
 audio through and an unknown instrument is silent. Older Rill versions reject
 the variant. New MIDI tracks start with `"Builtin": {"device": "r1-mini"}`;
-projects saved before keep the instrument they had.
+projects saved before keep the instrument they had. A built-in insert whose
+device has a sidechain input (`r1-compressor`) may carry `inputs` routes like
+a plug-in insert: its sidechain is `bus` 1, `first_channel` 0. Routes to
+another address, or on a device without a sidechain, are kept in the file but
+the song does not play until they are removed; the error names the insert.
 
 Plug-in binaries and external sample libraries managed by a plug-in are not
 included. Plug-in paths are made absolute when saving a bundle and retained when

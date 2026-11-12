@@ -1,10 +1,12 @@
 # R1 built-in devices: design draft
 
 Status: **design approved on 2026-11-10. Steps 2 and 4 of the
-[implementation order](#implementation-order) and the Equalizer of step 3
-are in place:** the device foundation, model/engine/app/tools integration,
-R1 Filter, R1 Equalizer, and R1 Mini as the default instrument of new MIDI
-tracks. The other devices are not implemented yet. This document proposes the
+[implementation order](#implementation-order) and the Equalizer, Saturator
+and Compressor of step 3 are in place:** the device foundation,
+model/engine/app/tools integration including the sidechain input of built-in
+inserts, R1 Filter, R1 Equalizer, R1 Saturator, R1 Compressor, and R1 Mini as
+the default instrument of new MIDI tracks. The other devices are not
+implemented yet. This document proposes the
 architecture, the shared UI additions and the per-device specifications for
 Rill's first built-in instruments and effects. Implementation follows in
 separate changes. The review answers are recorded in
@@ -108,6 +110,9 @@ pub struct DeviceDescriptor {
     pub parameters: &'static [ParamSpec],
     pub sample_slots: u32,           // 0, 1 (Sampler) or 16 (Drums)
     pub sidechain_input: bool,       // Compressor only
+    // Latency in samples for parameter values, without an instance; must
+    // equal `latency_samples()` for the same values (conformance checks it).
+    pub latency: fn(values: &dyn Fn(u32) -> f32, sample_rate: f32) -> u32,
 }
 
 pub struct ParamSpec {
@@ -310,12 +315,34 @@ panels, presets or projects.
 - Automation and manual edits go through the same `PluginAutomation` and live
   parameter queue used for hosted plug-ins; the closure calls
   `device.set_parameter` instead of `queue_parameter_for_block`.
-- Parameter edits on a built-in are always live-compatible (no graph rebuild).
+- Parameter edits on a built-in are live-compatible (no graph rebuild)
+  unless they change the device's latency. `DeviceDescriptor.latency` is a
+  pure function of the parameter values and the sample rate (a constant for
+  the Filter, Mini, the Equalizer and the Saturator; the lookahead and the
+  limiter's detection delay for the Compressor). `LiveEditCompatibility`
+  compares it between the sounding and the edited project for every built-in
+  instrument and insert; an edit that moves it (Lookahead, or a Mode or
+  Character that switches lookahead on or off) takes the ordinary graph
+  preparation, which creates the device anew and recomputes delay
+  compensation. The live queue still delivers the value at once and the
+  device cross-fades its delay taps, so the sound follows without a click
+  and the alignment follows when the new graph arrives. An automation lane
+  on such a parameter moves the device's own delay but not the
+  compensation, which stays at the saved value.
   Changing a sample is a controlled preparation, like changing an audio clip
   source.
-- The Compressor's external sidechain uses the existing
-  `EffectSlot.inputs` routes and their latency alignment; its descriptor
-  declares one auxiliary stereo input.
+- **Sidechain.** A built-in insert whose descriptor declares
+  `sidechain_input` (the Compressor) offers routing two input buses: bus 0,
+  its main input, and bus 1 "Sidechain", one stereo pair
+  (`builtin::bus_layout`). Its `EffectSlot.inputs` routes go through the
+  same `aux_inputs` preparation as a hosted plug-in's, so several sources
+  are summed, each with its gain and pre/post-volume tap, and the existing
+  per-insert alignment delays the main signal to a later sidechain and the
+  sidechain to a later main signal: both reach `Device::process` on the
+  same sample, the sidechain as `StereoIo.sidechain`. A route to any other
+  bus, or to a device without a sidechain, fails graph preparation with an
+  error that names the insert and the track. With External selected and
+  nothing routed the device receives no sidechain and treats it as silence.
 - A device error cannot occur in `process` (no fallible operations). Nonfinite
   output is guarded once, at the device boundary, by replacing the block with
   silence and resetting the device; the existing final-output guard stays.
@@ -335,6 +362,17 @@ panels, presets or projects.
   device panel itself instead of the overview with **Open editor**. The
   shared `utility_header`, **Automate…**, **Automate** (plug-ins) and **AI for this
   context** stay as they are.
+- **Routing a sidechain.** In **Routing**, under **Plug-in inputs and
+  outputs**, a built-in insert with a sidechain lists its **Sidechain**
+  input at once (no **Inspect I/O**, no helper process) with the same
+  **Add source…**, level, **Pre volume** and **Remove** as a plug-in's
+  auxiliary input; a built-in without one says "This device has no extra
+  inputs." The Compressor's panel opens that view on itself from its
+  Sidechain cell. The `set_plugin_inputs` edit writes the same routes; for
+  a built-in insert the tool accepts only bus 1, channel pair 0, on a
+  device that has a sidechain ("R1 … has no sidechain input", "Built-in
+  sidechain is bus 1, channel pair 0"), and `plugin_describe_parameters`
+  reports `sidechain_input` for such a device.
 - **Parameter metadata** comes straight from the registry. No helper process,
   no asynchronous inspection, no "unknown until read" state.
 - **Tools.** `create_instrument_part`, the instrument and insert tools accept
@@ -373,6 +411,8 @@ pub trait DeviceHost {
     fn audition(&mut self, note: Option<(u8, f32)>);
     fn wheels(&mut self, pitch: f32, modulation: f32);
     fn telemetry(&self) -> Option<Arc<Telemetry>> { None }
+    fn sidechain_sources(&self) -> Option<Vec<String>> { None }
+    fn route_sidechain(&mut self) {}
 }
 
 pub fn show(ui: &mut egui::Ui, device: &DeviceDescriptor, host: &mut dyn DeviceHost, state: &mut PanelState);
@@ -385,13 +425,35 @@ the same IDs form one step, so a node dragged across a response moves its
 frequency and gain together and one Undo takes both back.
 
 `telemetry` is the sounding instance's block: values the device publishes
-(the Equalizer its sample rate, the Filter its modulated cutoff) and rings
-of its input and output signal. The render worker registers each built-in
+(the Equalizer its sample rate, the Filter its modulated cutoff, the
+Compressor its gain reduction and detector level, the Saturator the level
+at its shaper), rings of its input and output signal, and a level history:
+one column of input peak, output peak and gain reduction per 1/64 s, 512
+columns (8 s), written by the device through `HistoryMeter`. A panel treats
+telemetry whose rings have not moved for a quarter of a second as stopped,
+so a stopped song leaves no level standing. The render worker registers each built-in
 device's block under its track and slot when a graph is built or edited, and
 `AudioEngine::device_telemetry` hands it to the app; the panel computes
 spectra from the rings on the UI thread, so the audio thread only copies
 samples. Without a sounding instance a panel draws from the parameter values
 alone.
+
+`sidechain_sources` names the tracks routed to the device's sidechain input
+(`None` where the host cannot say: the gallery and the tests), and
+`route_sidechain` opens the host's routing view on this device. The panel
+shows them as the value line under the layout's `sidechain` parameter while
+that is External: the first source's name, "+N" for more, or **No source**
+in the attention colour, as a `value_link`.
+
+A layout names its picture: `Picture::Response` (a `frequency_plot`; Filter
+and Equalizer), `Picture::Saturation` (curve and harmonics) or
+`Picture::Dynamics` (curve, history and meter). Further hooks every layout
+can use: `mode_captions` renames a control by the option of another
+parameter (the Saturator's Character is Hardness, Bias or Compress; the
+Compressor's Makeup is Gain in front of the limiter) without moving
+anything, since the cell is as wide as its widest name; `readout` replaces
+the value line under a knob or toggle with what the device actually uses
+("∞:1", "Auto", the attack an Opto cell holds up, what Auto gain applies).
 
 The app implements it over the session service. The gallery and the UI tests
 implement it over a plain value table, so every panel can be rendered and
@@ -489,16 +551,16 @@ to place the visualization and order the sections well, not to restyle.
 | Component | Shows | Data it takes |
 | --- | --- | --- |
 | `frequency_plot` | Log-frequency magnitude graph: one or more response curves, optional spectrum backdrop, optional draggable band nodes. | Curves as `&[f32]` dB values over a shared log grid; nodes with frequency, gain, name, selected, enabled and a hover readout. Returns node drags, double-clicks, wheel steps and each node's response. Used by Equalizer, Filter, Mini, Maxi, Sampler, Modulator. |
-| `transfer_plot` | Input→output curve with a live operating point. | Curve samples and the current input level. Compressor (dB/dB) and Saturator (linear). |
-| `gain_reduction_history` | Scrolling input envelope with the gain-reduction trace over it. | Ring of `(input_peak, reduction_db)` columns. |
-| `reduction_meter` | Vertical gain-reduction bar reading downward. | One value plus hold; reuses `channel_meter` styling. |
+| `transfer_plot` | Input→output curve on linear axes (Saturator) or in decibels (Compressor), with the unity diagonal, an optional shaded span (the knee), the live operating point and the span the signal sweeps, and optionally one draggable handle on the curve. | Curve samples over the x range, the current input level, the handle's position, letter and hover readout. Returns the handle's drag in plot units (Shift: a tenth), arrow-key nudges, wheel notches and a double-click; the caller decides which parameters those are. |
+| `gain_reduction_history` | Scrolling levels: the input as a dim fill, the output as a line over it, the gain reduction as a trace hanging from the top, and the threshold as a horizontal line that can be dragged. | Columns of `[input peak, output peak, reduction dB]`, oldest first; the level floor (the same as the transfer plot beside it, so the line stands at the handle's height), the reduction range, the threshold. Returns the threshold a drag or the arrow keys ask for. |
+| `reduction_meter` | Vertical gain-reduction bar reading downward on the history's reduction axis, with a hold line and the held value as a number; a click is reported so the caller can clear the hold. | Reduction and hold in dB, the range. |
 | `scope` | Oscilloscope with optional zero-cross sync. | Sample slice. |
 | `spectrum` | Spectrum as a standalone or as a backdrop for `frequency_plot`. | Magnitude bins; reuses the `signal_analyzer` painting where possible. |
 | `wavetable_view` | Current wavetable frame, with neighboring frames stacked faintly behind it. | Frames as slices plus position. |
 | `lfo_view` | One LFO cycle with a moving phase marker. | Shape samples and phase. |
 | `sample_view` | Sample waveform with draggable start, end and loop markers, and voice playheads. | Peak columns (reuses `waveform.rs`), marker positions; returns marker drags. |
 | `delay_view` | Echo taps as decaying bars (left/right), with the reverb decay drawn behind them. | Tap times and gains, decay time, pre-delay. |
-| `harmonics_view` | Bars for harmonics 1–10. | Ten values in dB. |
+| `harmonics_view` | Bars for the harmonics of a tone, each with its level over it, on a decibel scale relative to the first. | Any number of values in dB and the floor; `harmonic_bars` gives the bar rectangles. |
 
 The drawing data for static graphs (EQ curve, filter response, compressor
 curve, saturation curve and harmonics, envelope shapes) comes from pure
@@ -512,15 +574,16 @@ The `daw-dsp` crate, used by all devices and unit-tested on its own. `daw_dsp::f
 | Block | Approach |
 | --- | --- |
 | Parameter smoothing | Linear ramp (gains, mixes) and one-pole (times); filter coefficients interpolated per sample. |
-| Oversampling | 2×/4×/8× polyphase half-band FIR, linear phase, latency reported to the engine. Used around every nonlinearity. |
+| Oversampling | 2×/4×/8× polyphase half-band FIR, linear phase, latency reported to the engine. Used around every nonlinearity. `oversample::Oversampler` switches between the three factors at run time (round trip 32, 39 and 41 base samples), so a device can pad to one constant latency. |
 | Linear filters | Zero-delay-feedback (TPT) state-variable filter as the default; biquads with matched magnitude at Nyquist (Vicanek's matched design) so bells and shelves near 10–20 kHz are not cramped at 44.1/48 kHz. `daw_dsp::matched` designs them (impulse-invariant poles, numerator fitted to the analog magnitude up to 20 kHz) and `SvfMix::from_biquad` runs any of them as a state-variable filter, in `f64` where low, narrow bands need it. |
 | Nonlinear filters | ZDF transistor ladder (4-pole, saturating stages, resonance to self-oscillation, with pole-output taps for multimode mixing), Sallen-Key with clipped feedback, and state-variable filters with clipped band state (diode pair) or saturating integrators (OTA). Each loop is solved linearly and then saturated, with a rational `tanh` approximation (within 1e-4) instead of `tanh`, and runs at 2×. |
-| Waveshapers | Static curves with first-order antiderivative anti-aliasing, inside the oversampler. |
+| Waveshapers | Static curves with first-order antiderivative anti-aliasing, inside the oversampler. `shaper`: `AntialiasedShaper` (centred ADAA in `f64`) with a `DroopCorrector` for the half-sample averaging it implies; the curves `HyperbolicClip` (asymmetric clipper with a knee from soft to hard), `AlgebraicSigmoid` (`x/√(1+x²)` with separate ceilings and a bias), and the bounded `BoundedSquare` and `BoundedCubic` for parallel even and odd colour. All have closed antiderivatives and cost one square root. |
+| First-order sections | `svf::Shelf1` on a TPT one-pole: shelf with given corner frequencies and its exact inverse (emphasis pairs), low shelf, tilt, low-pass, and a 5 Hz DC blocker. |
 | Delay lines | Power-of-two ring buffers with third-order Lagrange (modulated delays) or allpass (fixed fractional) interpolation. |
 | Reverb core | 16-line feedback delay network, Hadamard mixing, per-line absorption filters for frequency-dependent decay, slow delay modulation against metallic ringing, allpass input diffusion, multitap early reflections. |
 | Oscillators | `daw_dsp::oscillator`: circuit-modelled VCO (charging-capacitor ramp with slight curvature, finite reset time, analog drift) and DCO (exact divider pitch, ramp level following the per-range charge current) with saw, pulse (comparator), triangle (rectifier) and sine (differential-pair shaper), hard sync and a flip-flop sub-oscillator; band-limited with 4-point B-spline BLEP/BLAMP corrections at 2× (aliasing below −80 dB for a 4.7 kHz saw). Wavetable with one band-limited mip level per octave built by FFT at load, crossfaded between levels and frames (Maxi). |
 | Envelopes and LFOs | Exponential-segment ADSR/AHDSR with click-free retrigger; LFO shapes sine, triangle, saw, square, sample-and-hold, with tempo sync. |
-| Level detection | Peak and RMS followers, log-domain gain computer with soft knee. |
+| Level detection | Peak and RMS followers. `dynamics`: `GainComputer` (log-domain static curve with a quadratic soft knee, compressing or expanding, with its auto makeup), `Ballistics` (one-pole attack and release whose times are exact at any rate), `ProgramRelease` (a slow cell beside the fast release, for two-stage and automatic release), and `solve_feedback`, the closed-form solution of a feedback compressor's loop for one sample, so a feedback detector settles on the same static curve as a feed-forward one. `limiter`: `SlidingMax`, `BoxSmoother` and `TruePeak4x` (inter-sample peaks through the 4× interpolator), the parts of a lookahead limiter that cannot overshoot. |
 | Sample playback | 16-tap windowed-sinc polyphase interpolation whose cutoff lowers when pitching up, to keep aliasing out. |
 | Hygiene | Denormal guard, DC blocker after asymmetric shapers, equal-power dry/wet. |
 
@@ -618,79 +681,274 @@ Depth, Feedback, Center, Stereo; Mode and Character as `segmented` above.
 
 ### R1 Saturator
 
-| Parameter | Range / choices | Default |
-| --- | --- | --- |
-| Model | Transistor, Tube, Tape | Tube |
-| Drive | 0 – 36 dB | 6 dB |
-| Character | 0 – 100 % (Transistor: hardness; Tube: bias; Tape: compression) | 50 % |
-| Tone | −6 – +6 dB tilt around 1 kHz | 0 dB |
-| Focus | 20 Hz – 1 kHz; content below it passes clean | 20 Hz |
-| Auto gain | toggle | on |
-| Quality | 2×, 4×, 8× oversampling | 4× |
+Harmonic colour and drive in three circuit styles. 987 points wide
+(`POPUP_WIDTH_LG`). Keys are those of the parameter snapshot; Mix (ID 30) and
+Output (ID 31) are the effect pair.
 
-**DSP.** All models: pre-emphasis, oversampled anti-aliased waveshaper,
-de-emphasis, DC blocker. *Transistor*: asymmetric diode-style clipper whose
-knee hardens with Character; odd harmonics dominate, edgy. *Tube*: triode-style
-asymmetric soft curve; Character moves the bias point, trading even against
-odd harmonics, with a slight level-dependent low-end bloom. *Tape*: symmetric
-soft saturation where high frequencies saturate earlier than lows, a gentle
-head-bump low shelf, and program-dependent compression; this is a tape-style
-model, not a physical hysteresis simulation. Focus is a crossover that keeps
-bass out of the shaper so low end stays solid under heavy drive. Auto gain
-compensates the static loudness change from Drive. Latency from oversampling
-is reported.
+| ID | Parameter (`key`) | Range / choices | Default |
+| --- | --- | --- | --- |
+| 1 | Model (`model`) | Transistor, Tube, Tape | Tube |
+| 2 | Drive (`drive`) | 0 – 36 dB | 6 dB |
+| 3 | Character (`character`) | 0 – 100 % (Transistor: hardness; Tube: bias; Tape: compression) | 50 % |
+| 4 | Tone (`tone`) | −6 – +6 dB tilt around 1 kHz | 0 dB |
+| 5 | Focus (`focus`) | 20 Hz – 1 kHz; content below it passes clean; Off at 20 Hz | 20 Hz |
+| 10 | Quality (`quality`) | 2×, 4×, 8× oversampling | 4× |
+| 20 | Auto gain (`auto_gain`) | toggle | on |
 
-**Panel.** `transfer_plot` with the live operating point on the left,
-`harmonics_view` on the right. Model as `segmented`; hero Drive knob; Character,
-Tone, Focus, Mix, Output in a row.
+**Signal flow**, per channel; only the bracket runs at the oversampled rate:
+
+```
+in ─┬─ dry ── delay 41 ────────────────────────────────────────────────┐
+    ├─ Focus split: low = in − HP(in) ── delay 41 ── × ρ ──────┐       │
+    └─ high ── × Drive ── (Tape: program compression)          │       │
+            ── pre-emphasis ── [↑M  ADAA shaper  ↓M] ── pad    │       │
+            ── de-emphasis ── (Tape: head bump) ── (Tube: bloom)       │
+            ── DC blocker ───────────────────────────────── (+)◄┘      │
+            ── × 1/ρ with Auto gain ── Tone tilt ── Mix ◄──────────────┘
+            ── Output ── out
+```
+
+**Algorithms, and why.**
+
+- *Focus* is a subtractive split around a two-pole TPT high-pass: the two
+  bands sum back to the input exactly, so with no drive the device is a pure
+  delay. A Linkwitz-Riley pair would sum to an allpass and comb against the
+  dry signal under Mix. At 20 Hz the split is off, exactly.
+- *Emphasis.* A first-order shelf before the shaper and its exact inverse
+  after it, both at the base rate, so the small-signal response stays flat
+  while highs meet the curve harder: Transistor +4 dB above 720 Hz (less
+  bass into the clipper), Tube +3 dB above 1.5 kHz, Tape +8 dB from the
+  50 µs corner (highs saturate before lows).
+- *Shaper.* One static curve per model inside the 2×/4×/8× `Oversampler`,
+  evaluated with centred first-order antiderivative anti-aliasing in `f64`
+  and a corrector for the droop that averaging brings. Aliasing below
+  20 kHz for tones up to 5 kHz at Drive 18 dB, Transistor: −61 / −82 /
+  −107 dBc at 2× / 4× / 8× at 48 kHz. At 44.1 kHz the first half-band
+  stage stops only from 25.65 kHz, so harmonics between 22.05 and 25.65 kHz
+  fold to above 18.4 kHz at every Quality (about −56 / −60 / −61 dBc there)
+  and 20 kHz is 0.9 dB down; below 18 kHz the figures hold. *Transistor*: `HyperbolicClip`, lower half 25 %
+  further out than the upper, knee from soft to hard with Character; odd
+  harmonics dominate. *Tube*: `AlgebraicSigmoid` with unequal ceilings and a
+  bias that Character moves, which raises the second harmonic at every
+  level. *Tape*: the symmetric sigmoid, odd only. `tanh` was rejected (an
+  exponential per sample for no audible gain), and a physical diode solve
+  for Transistor (no closed antiderivative).
+- *Tape program compression* (Character is its amount): a linked power
+  detector (10 ms / 150 ms) on the driven band feeds a `GainComputer` with
+  ratio 1 – 3 and a 10 dB knee that sets in where the curve begins to
+  saturate. *Head bump*: +1.5 dB low shelf at 90 Hz.
+- *Tube bloom*: a parallel 120 Hz low-pass whose amount follows the level
+  (at most +2 dB). Only a scalar is modulated, so it cannot click.
+- *DC blocker* at 5 Hz after the chain: biased curves produce DC.
+- *Auto gain* is static, never a follower (a follower pumps). On a change
+  of Drive, Model or Character the device integrates the curve over a
+  Gaussian signal at −18 dBFS RMS (241-point Simpson sum, in `process`,
+  no allocation), corrects for what the de-emphasis takes from the added
+  harmonics (one constant per model), and divides the wet band by the
+  result ρ. The clean low band is multiplied by ρ before that, so the
+  balance of the bands is the same with Auto gain on or off. Measured on
+  pink noise the level stays within 0.7 dB over the whole Drive and
+  Character range.
+- *Smoothing.* Drive, ρ and the Tape gain ramp in decibels over 20 ms;
+  Character, Tone and Focus ramp over 20 ms with coefficients re-aimed
+  every 32 samples. A change of Model or Quality fades the wet path to the
+  delayed dry signal in 5 ms, exchanges the oversampler and curve at zero,
+  and fades back.
+- *Latency* is 41 samples at every Quality and sample rate: the 2× and 4×
+  round trips (32 and 39) are padded to the 8× one, and the dry and low
+  paths use the same delay. Changing Quality therefore never shifts
+  anything else in the song, and no Saturator edit rebuilds the graph.
+  Tail: 41 samples plus half a second for the DC blocker.
+
+The panel's drawing data comes from the audio path's own code: `transfer`
+(the static curve at the set Drive), `harmonics_db` (Fourier sums of the
+curve for a tone of a given shaper level) and `auto_gain_db`. Telemetry:
+the held peak at the shaper in units of the curve's knee, and the rate.
+
+**Panel.** The picture is 233 points high: at the left a square
+`transfer_plot` (linear, −1…+1) of the curve's shape at the set Drive, with
+the span the signal sweeps lit and its peak as the operating point while the
+device plays; beside it, filling the width, `harmonics_view` with harmonics
+1–10 at the signal's level (without a signal, for a sine at −18 dBFS). Both
+only show; the controls that reshape them stand directly below. One row of
+cards in signal order:
+
+| Card (columns of 12) | Controls |
+| --- | --- |
+| Saturation (6) | Model as toggle buttons; Drive, the hero knob; Character, named **Hardness**, **Bias** or **Compress** for the model; Tone; Focus, reading "Off" at 20 Hz |
+| Quality (2) | 2× / 4× / 8× as toggle buttons |
+| Output (4) | Auto gain lamp with what it applies in dB as its value line; Mix; Output |
+
+The curve is drawn normalized to its largest value: in true units it would
+leave the frame without Auto gain and lie flat with it. The level is what
+the Auto gain readout is for.
+
+Factory presets: Default, Warm Tube, Tube Crunch, Transistor Edge, Fuzz Box,
+Tape Glue, Tape Slam, Bass Grit, Parallel Dirt, Hi-fi Sheen.
 
 ### R1 Compressor
 
-| Parameter | Range / choices | Default |
+One dynamics device in three modes with four detector characters. 987 points
+wide.
+
+| ID | Parameter (`key`) | Range / choices | Default |
+| --- | --- | --- | --- |
+| 1 | Mode (`mode`) | Compressor, Limiter, Expander | Compressor |
+| 2 | Character (`character`) | Digital, Tube, Opto, FET | Digital |
+| 3 | Threshold (`threshold`) | −60 – 0 dB | −18 dB |
+| 4 | Ratio (`ratio`) | 1:1 – 20:1 (Compressor, Expander); fixed ∞:1 in Limiter | 4:1 |
+| 5 | Knee (`knee`) | 0 – 24 dB | 6 dB |
+| 6 | Attack (`attack`) | 0.02 – 250 ms (log) | 10 ms |
+| 7 | Release (`release`) | 5 ms – 2.5 s (log) | 120 ms |
+| 8 | Auto release (`auto_release`) | toggle | off |
+| 9 | Lookahead (`lookahead`) | 0 – 10 ms (Digital character, Expander and Limiter) | 0 ms; acts as 5 ms in Limiter |
+| 10 | Ceiling (`ceiling`) | −12 – 0 dB (Limiter) | −0.3 dB |
+| 20 | Sidechain (`sidechain`) | Internal, External | Internal |
+| 21 | Sidechain high-pass (`sidechain.high_pass`) | 20 – 500 Hz; Off at 20 Hz | 20 Hz |
+| 22 | Stereo link (`stereo_link`) | 0 – 100 % | 100 % |
+| 25 | Makeup (`makeup`) | −12 – +24 dB | 0 dB |
+| 26 | Auto makeup (`auto_makeup`) | toggle | off |
+
+Which parameters apply (`compressor::applies`); the others are disabled in
+place:
+
+| Parameter | Compressor | Limiter | Expander |
+| --- | --- | --- | --- |
+| Character, Auto makeup | yes | no | no |
+| Threshold, Ratio, Attack | yes | no (Ratio reads "∞:1") | yes |
+| Knee, Stereo link, Makeup, Mix, Output | yes | yes (Makeup is the gain into the limiter) | yes |
+| Release | unless Auto release | unless Auto release | yes |
+| Auto release | yes | yes | no |
+| Lookahead | Digital only | yes | yes |
+| Ceiling | no | yes | no |
+| Sidechain, Sidechain high-pass | yes | no | yes |
+
+**Signal flow.**
+
+```
+in ─┬─ dry ─────────────────────────── delay P ────────────────────────┐
+    ├─ audio ─ (Limiter: × Makeup) ─── delay P ──► × g ─ colour ─ makeup ─ Mix ◄┘─ Output ─ out
+    └─ detector: Internal (the audio) or External (the sidechain input)
+         ─ high-pass ─ |·| (Limiter: 4× true peak) ─ stereo link ─ dB
+         ─ gain computer and ballistics of the mode and character ─► g
+```
+
+**Algorithms, and why.** One log-domain `GainComputer` (threshold, ratio,
+quadratic soft knee) is the static curve of every mode and character, and
+`transfer_db` draws exactly that curve. What differs between the characters
+is the detector topology and its timing law, which is where these designs
+differ in reality:
+
+- *Digital*: feed-forward. The reduction in dB is smoothed by `Ballistics`
+  with the knob's attack and release; times are exact. Lookahead delays the
+  audio, not the detector. No latency without lookahead.
+- *Tube, Opto, FET*: feedback. The level is taken after the gain element,
+  and each sample's loop equation is solved in closed form
+  (`solve_feedback`), so the loop settles on the same static curve as
+  Digital instead of a softer one. A closed loop multiplies the detector's
+  speed by its loop gain (about the ratio), so the rise coefficient is
+  divided by that gain at the set ratio: above the knee the attack is the
+  knob's time, inside the knee it is slower, and the loop still grabs
+  harder the further the signal overshoots. The release is the knob's time
+  once the signal is below the threshold and faster while it is still above
+  it: the program dependence of these designs. With an external sidechain
+  there is no loop to close and the same character runs feed-forward.
+  - *Tube*: two cascaded stages (an S-shaped onset), attack at least
+    0.5 ms, knee at least 12 dB, and a second harmonic that grows with the
+    reduction.
+  - *Opto*: attack at least 10 ms and a slow release cell that charges
+    under sustained reduction (fast initial recovery, long tail).
+  - *FET*: attack down to 0.02 ms, a shorter slow cell, and a third
+    harmonic that grows with the reduction.
+
+  The colour is a small parallel residual (a bounded square or cube at 2×),
+  absent at rest and fully there from 6 dB of reduction. The stage is driven
+  by the level entering the gain element, so deeper reduction does not thin
+  it out again: about −36 dBc (Tube) and −50 dBc (FET) for a −6 dBFS tone. Lookahead does not apply: a feedback detector cannot look
+  ahead of its own output.
+- *Auto release*: the fast release becomes 60 ms and a slow cell (weight
+  0.5, 1.5 s) holds what sustained material needs; Opto and FET keep their
+  own cells. Chosen over crest-factor automation: it is the block the
+  characters already use and has no second detector to pump.
+- *Expander*: downward expansion below Threshold, always feed-forward. The
+  curve reads a held peak (instant rise, Release fall; the reduction would
+  otherwise swing to the floor at every zero crossing), so a steady signal
+  sits on the drawn curve whatever the times. Release is closing; Attack is
+  opening, smoothed in linear gain (63 % of the amplitude after the time);
+  high ratios act as a gate with an 80 dB floor; Lookahead opens it ahead
+  of the transient.
+- *Limiter*: Ceiling is the threshold, the ratio is infinite, and Makeup is
+  applied before the detector as the gain that drives it. The needed
+  reduction is detected on 4× interpolated peaks, released by `Ballistics`,
+  held by a sliding maximum over the lookahead and smoothed by two box
+  filters whose total span is the lookahead, so the gain reaches the needed
+  value exactly when the delayed peak arrives and cannot overshoot; a
+  per-sample guard and clamp make the sample-peak bound independent of
+  rounding. Lookahead 0 means 5 ms. The detector is always the device's own
+  input without the high-pass: an external or filtered detector cannot
+  guarantee a ceiling. The ceiling holds at the device output with Mix
+  100 % and Output at or below 0 dB. It is not a certified true-peak
+  limiter: sample peaks never pass the Ceiling and settled tones hold it
+  within 0.05 dB between samples, but the abrupt start of a tone near
+  Nyquist can pass it by up to 0.55 dB between samples for its first
+  samples.
+- *Detector input.* The sidechain high-pass is a two-pole TPT filter with
+  an exact bypass at 20 Hz. Stereo link blends each channel's magnitude
+  toward the larger one, never below its own, so the limiter's guarantee
+  survives a partial link.
+- *Auto makeup* is static: half the reduction a 0 dBFS signal would get.
+  Full compensation overshoots on real material; a follower pumps.
+- *Switching.* A change of Mode, Character, Sidechain source or lookahead
+  cross-fades gain and delay tap over 10 ms; Threshold, Ratio and Knee are
+  smoothed over 5 ms.
+- *Latency* is `compressor::latency`: the lookahead in samples (Digital
+  compressor and Expander), plus the true-peak detector's 20 samples in
+  Limiter mode, zero otherwise. The engine compensates it and rebuilds the
+  graph when an edit changes it (see [Engine](#engine-daw-engine)).
+- *External sidechain.* With Sidechain on External the detector hears the
+  device's sidechain input (bus 1), routed in **Routing** like a plug-in's
+  auxiliary input; with nothing routed it hears silence: no reduction in
+  Compressor mode, closed in Expander mode.
+
+Telemetry: the block's largest reduction, the held detector level, whether
+a sidechain arrived, the rate, and the level history.
+
+**Panel.** The picture is 208 points high, read left to right as the signal:
+
+- `transfer_plot`, square, −60…0 dB on both axes: the static curve, the knee
+  shaded, the detector level as the operating point while the device plays,
+  and one handle on the curve at the threshold, marked **T** (**C**, the
+  Ceiling, in Limiter mode). Dragging the handle sets Threshold (Shift: a
+  tenth), as the left and right arrow keys do; the wheel over it and the up
+  and down keys turn Ratio; a double-click or its context menu resets it.
+- `gain_reduction_history`, the rest of the width: input, output and the
+  reduction over the last 8 s. Its level axis is the curve's, so its
+  threshold line stands at the handle's height, and it drags the same
+  parameter.
+- `reduction_meter`, 48 points: the reduction now, its largest value as a
+  line and a number; a click clears the hold.
+
+Below, one row of four cards of two lines each, on a grid of cells so every
+control keeps its place in every mode:
+
+| Card (columns of 12) | Line 1 | Line 2 |
 | --- | --- | --- |
-| Mode | Compressor, Limiter, Expander | Compressor |
-| Character | Digital, Tube, Opto, FET | Digital |
-| Threshold | −60 – 0 dB | −18 dB |
-| Ratio | 1:1 – 20:1 (Compressor, Expander); fixed ∞:1 in Limiter | 4:1 |
-| Attack | 0.02 – 250 ms (log) | 10 ms |
-| Release | 5 ms – 2.5 s (log) | 120 ms |
-| Auto release | toggle | off |
-| Knee | 0 – 24 dB | 6 dB |
-| Makeup | −12 – +24 dB | 0 dB |
-| Auto makeup | toggle | off |
-| Lookahead | 0 – 10 ms (Digital character and Limiter) | 0 ms; 5 ms in Limiter |
-| Ceiling | −12 – 0 dB (Limiter) | −0.3 dB |
-| Sidechain | Internal, External | Internal |
-| Sidechain high-pass | 20 – 500 Hz | 20 Hz |
-| Stereo link | 0 – 100 % | 100 % |
+| Mode (4) | Mode as toggle buttons | Character as toggle buttons |
+| Dynamics (4) | Threshold, Ratio, Knee, Ceiling | Attack, Release, **Auto** release lamp, Lookahead |
+| Sidechain (2) | Internal / External, stacked, with the routed source under it | High-pass, Link |
+| Output (2) | Makeup (**Gain** in Limiter mode), **Auto** makeup lamp with what it adds while it is on | Mix, Output |
 
-**DSP.** A shared log-domain gain computer with soft knee; Character changes
-the detector topology and timing law, which is where these designs actually
-differ:
+Value lines say what the device uses where that is not the knob's value:
+Ratio "∞:1" in Limiter mode, the attack or knee a character holds up,
+Release "Auto", Lookahead "Off" or the limiter's "5.0 ms", High-pass "Off".
+With External selected the Sidechain cell names the routed track ("+1" for
+more) or shows **No source**; clicking it opens Routing on this device.
+Controls that do not apply are disabled in place, not hidden: hiding Ratio,
+Ceiling or Lookahead would reflow the cards on every change of Mode.
 
-- *Digital*: feed-forward peak detection, exact ratio and times, optional
-  lookahead. Transparent.
-- *Tube* (variable-mu style): feedback detection, ratio that rises with level,
-  a knee that is never narrower than 12 dB, slow smooth
-  timing, mild even-harmonic color that grows with reduction.
-- *Opto*: feedback detection with a two-stage, program-dependent release (fast
-  initial recovery, slow tail that lengthens after sustained compression),
-  attack limited to about 10 ms and slower.
-- *FET*: feedback detection with very fast attack (down to 20 µs), release
-  curve with program dependence, and odd-harmonic color at the gain element.
-
-The colored characters run at 2×. *Limiter*: lookahead brickwall with
-4× oversampled peak detection to control inter-sample peaks at the Ceiling;
-this is not a certified true-peak limiter. *Expander*: downward expansion
-below Threshold; high ratios act as a gate. Lookahead and oversampling latency
-is reported and compensated by the engine. External sidechain uses the
-insert's existing auxiliary input routing.
-
-**Panel.** `gain_reduction_history` across the top with `reduction_meter` at
-its right edge; `transfer_plot` at the left with draggable threshold. Mode and
-Character as two `segmented` rows; knob row: Threshold, Ratio, Attack, Release,
-Knee, Makeup; a second, quieter row for sidechain, link, lookahead/ceiling.
-Controls that do not apply in the current mode are hidden, not disabled.
+Factory presets: Default, Vocal Leveler, Drum Bus Glue, Bass Control, Snare
+Snap, FET Smash, Parallel Crush, Master Bus, Brickwall Limiter, Loud Limiter,
+Gentle Expander, Noise Gate, Sidechain Duck.
 
 ### R1 Equalizer
 
@@ -1085,7 +1343,10 @@ empty Sampler shows **Load sample…**; a kit preset can bring its own samples
 
 **Engine tests:** built-in instrument and insert render, automation of a
 built-in parameter equals the manual value path, latency compensation with
-Compressor lookahead, save/reopen round trip, unknown device ID.
+Compressor lookahead, a sidechain routed into a built-in insert (it ducks,
+sample-aligned with the main signal; a route needs a sidechain bus), an edit
+that changes a device's latency rebuilds the graph while others stay live,
+save/reopen round trip, unknown device ID.
 
 **UI tests:** each new `daw-ui` component gets the same kind of interaction
 and geometry tests the existing ones have, and a gallery page. Every device
@@ -1105,6 +1366,8 @@ separation holds:
 
 1. `daw-devices/src/devices/<name>.rs`: the parameter table (IDs, keys,
    ranges, defaults), the `Device` implementation built from toolkit blocks,
+   the descriptor's `latency` function (a constant for most devices; it must
+   equal `latency_samples()` for the same values, which conformance checks),
    and any response functions its picture needs.
 2. One line in the registry.
 3. `daw-devices/presets/<id>/`: at least a default preset, and a frozen copy

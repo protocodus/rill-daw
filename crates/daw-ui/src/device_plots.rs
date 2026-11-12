@@ -49,14 +49,14 @@ fn paint_frame(painter: &Painter, rect: Rect, focused: bool) {
     );
 }
 
-fn label(painter: &Painter, at: Pos2, align: Align2, text: &str) {
+fn label(painter: &Painter, at: Pos2, align: Align2, text: &str) -> Rect {
     painter.text(
         at,
         align,
         text,
         TextRole::Note.font(),
         theme::palette(painter.ctx()).muted,
-    );
+    )
 }
 
 fn describe(response: &Response, ui: &Ui, text: String) {
@@ -520,27 +520,13 @@ pub fn frequency_plot(ui: &mut Ui, plot: &FrequencyPlot<'_>) -> FrequencyPlotOut
             if !(hit.hovered() || hit.dragged() || hit.has_focus()) {
                 continue;
             }
-            let center = center_of(node);
-            let galley =
-                painter.layout_no_wrap(readout.to_owned(), TextRole::Note.font(), colors.text);
-            let size = galley.size() + vec2(2.0 * tokens::SPACE_XS, tokens::SPACE_XS);
-            let gap = NODE_RADIUS + tokens::SPACE_SM;
-            // Right of the node, or left of it where the frame is too close.
-            let left = if center.x + gap + size.x <= inner.right() {
-                center.x + gap
-            } else {
-                center.x - gap - size.x
-            };
-            let top = (center.y - size.y * 0.5).clamp(inner.top(), inner.bottom() - size.y);
-            let bubble = Rect::from_min_size(pos2(left.max(inner.left()), top), size);
-            painter.rect(
-                bubble,
-                tokens::RADIUS,
-                colors.raised,
-                Stroke::new(tokens::BORDER_WIDTH, colors.line),
-                StrokeKind::Inside,
+            paint_bubble(
+                painter,
+                inner,
+                center_of(node),
+                NODE_RADIUS + tokens::SPACE_SM,
+                readout,
             );
-            painter.galley(bubble.center() - galley.size() * 0.5, galley, colors.text);
         }
     }
     describe(
@@ -577,174 +563,717 @@ pub fn spectrum(ui: &mut Ui, data: Spectrum<'_>, size: Vec2) -> Response {
     response
 }
 
+/// How a [`TransferPlot`] rules and labels its axes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TransferAxis {
+    /// Quarters of the range, labelled at its ends and middle: "-1 0 +1".
+    #[default]
+    Linear,
+    /// A line every 20 dB, labelled in dB.
+    Decibels,
+}
+
+/// The one draggable point of a [`TransferPlot`]: a threshold, a ceiling.
+#[derive(Clone, Copy, Debug)]
+pub struct TransferHandle<'a> {
+    pub x: f32,
+    pub y: f32,
+    /// Printed at the handle: "T".
+    pub label: &'a str,
+    /// The handle's value in words, shown beside it while it is hovered,
+    /// dragged or focused.
+    pub readout: &'a str,
+}
+
 /// Input→output curve sampled evenly over `x_range`, with the live level.
+#[derive(Clone, Copy, Debug)]
 pub struct TransferPlot<'a> {
     pub curve: &'a [f32],
     pub x_range: (f32, f32),
     pub y_range: (f32, f32),
+    pub axis: TransferAxis,
+    /// The live input level, as a dot on the curve.
     pub input: Option<f32>,
+    /// The span of x the signal sweeps: that part of the curve is drawn at
+    /// full strength and the rest dimmed. The whole curve when `None`.
+    pub lit: Option<(f32, f32)>,
+    /// A span of x marked by a faint band: a knee.
+    pub shade: Option<(f32, f32)>,
+    /// Without one the plot only shows.
+    pub handle: Option<TransferHandle<'a>>,
     pub size: Vec2,
 }
 
-pub fn transfer_plot(ui: &mut Ui, plot: &TransferPlot<'_>) -> Response {
+impl Default for TransferPlot<'_> {
+    fn default() -> Self {
+        Self {
+            curve: &[],
+            x_range: (-1.0, 1.0),
+            y_range: (-1.0, 1.0),
+            axis: TransferAxis::Linear,
+            input: None,
+            lit: None,
+            shade: None,
+            handle: None,
+            size: Vec2::splat(144.0),
+        }
+    }
+}
+
+pub struct TransferPlotOutput {
+    pub response: Response,
+    /// Where a drag puts the handle, in plot units.
+    pub dragged: Option<(f32, f32)>,
+    /// Arrow keys while the handle has focus, as steps along x and y; a
+    /// tenth of a step with Shift.
+    pub nudged: Option<(f32, f32)>,
+    /// Wheel notches turned over a plot that has a handle. A surrounding
+    /// scroll area stays still meanwhile.
+    pub scrolled: Option<f32>,
+    /// On the handle.
+    pub double_clicked: bool,
+    /// The handle's own response, for a context menu.
+    pub handle: Option<Response>,
+}
+
+const HANDLE_RADIUS: f32 = 6.0;
+
+/// Where a [`TransferPlot`] draws its handle for the point `at`, and the
+/// top left of its label of `size`. The handle stays whole inside `inner`.
+/// The label goes up and to the left, where a rising curve leaves room, or
+/// down and to the right at the top of the frame: never down-left or
+/// up-right, where the curve runs.
+fn place_handle(inner: Rect, at: Pos2, size: Vec2) -> (Pos2, Pos2) {
+    let room = inner.shrink(HANDLE_RADIUS);
+    let center = if room.is_positive() {
+        at.clamp(room.min, room.max)
+    } else {
+        at
+    };
+    let gap = HANDLE_RADIUS + 2.0;
+    let label = if center.y - gap - size.y >= inner.top() {
+        pos2(
+            (center.x - gap - size.x).max(inner.left() + 1.0),
+            center.y - gap - size.y,
+        )
+    } else {
+        pos2(
+            (center.x + gap).min(inner.right() - size.x - 1.0),
+            center.y + gap,
+        )
+    };
+    (center, label)
+}
+
+/// A value's text in a small raised box at `anchor`, kept inside `bounds`:
+/// right of the anchor, or left of it where the frame is too close.
+fn paint_bubble(painter: &Painter, bounds: Rect, anchor: Pos2, gap: f32, text: &str) {
+    let colors = theme::palette(painter.ctx());
+    let galley = painter.layout_no_wrap(text.to_owned(), TextRole::Note.font(), colors.text);
+    let size = galley.size() + vec2(2.0 * tokens::SPACE_XS, tokens::SPACE_XS);
+    let left = if anchor.x + gap + size.x <= bounds.right() {
+        anchor.x + gap
+    } else {
+        anchor.x - gap - size.x
+    };
+    let top =
+        (anchor.y - size.y * 0.5).clamp(bounds.top(), (bounds.bottom() - size.y).max(bounds.top()));
+    let bubble = Rect::from_min_size(pos2(left.max(bounds.left()), top), size);
+    painter.rect(
+        bubble,
+        tokens::RADIUS,
+        colors.raised,
+        Stroke::new(tokens::BORDER_WIDTH, colors.line),
+        StrokeKind::Inside,
+    );
+    painter.galley(bubble.center() - galley.size() * 0.5, galley, colors.text);
+}
+
+/// A whole number of decibels or units as an axis prints it: "-20", "0", "+1".
+fn axis_number(value: f32, signed: bool) -> String {
+    if value == 0.0 {
+        "0".into()
+    } else if signed {
+        format!("{value:+.0}")
+    } else {
+        format!("{value:.0}")
+    }
+}
+
+/// The y of `curve` (sampled evenly from `x0` to `x1`) at `x`.
+fn curve_at(curve: &[f32], x0: f32, x1: f32, x: f32, fallback: f32) -> f32 {
+    let last = (curve.len() - 1) as f32;
+    let position = ((x - x0) / (x1 - x0)).clamp(0.0, 1.0) * last;
+    let low = position.floor() as usize;
+    let high = (low + 1).min(curve.len() - 1);
+    let (a, b) = (finite(curve[low], fallback), finite(curve[high], fallback));
+    a + (b - a) * position.fract()
+}
+
+/// Input→output curve of a shaper (linear) or a dynamics processor (dB),
+/// with the live operating point. With a [`TransferHandle`] the curve is
+/// edited where it is drawn: the handle follows the pointer from where it
+/// was grabbed (one tenth as far with Shift) and takes the arrow keys when
+/// focused, and the wheel is reported for a second value. The caller also
+/// shows the values as dials, so dragging is never the only way.
+pub fn transfer_plot(ui: &mut Ui, plot: &TransferPlot<'_>) -> TransferPlotOutput {
     let (rect, response) = frame(ui, plot.size, Sense::hover());
     let colors = theme::palette(ui.ctx());
     let inner = rect.shrink(1.0);
     let (x0, x1) = plot.x_range;
     let (y0, y1) = plot.y_range;
+    let fraction = |value: f32, low: f32, high: f32| ((value - low) / (high - low)).clamp(0.0, 1.0);
     let to_point = |x: f32, y: f32| {
         pos2(
-            inner.left() + inner.width() * ((x - x0) / (x1 - x0)).clamp(0.0, 1.0),
-            inner.bottom() - inner.height() * ((y - y0) / (y1 - y0)).clamp(0.0, 1.0),
+            inner.left() + inner.width() * fraction(x, x0, x1),
+            inner.bottom() - inner.height() * fraction(y, y0, y1),
         )
     };
+    let fine = ui.input(|input| if input.modifiers.shift { 0.1 } else { 1.0 });
+    let (mut dragged, mut nudged, mut scrolled) = (None, None, None);
+    let mut double_clicked = false;
+    let mut union = response.clone();
+    let hit = plot.handle.map(|handle| {
+        let hit = ui.interact(
+            Rect::from_center_size(
+                to_point(handle.x, handle.y),
+                Vec2::splat(tokens::HIT_TARGET),
+            ),
+            response.id.with("handle"),
+            Sense::click_and_drag(),
+        );
+        if hit.clicked() || hit.drag_started() {
+            hit.request_focus();
+        }
+        double_clicked = hit.double_clicked();
+        // A focused handle is a parameter control: Undo/Redo still reach the song.
+        crate::parameter_focus::register_parameter_history_focus(&hit);
+        if hit.dragged_by(egui::PointerButton::Primary) {
+            let delta = hit.drag_delta();
+            let next = (
+                (handle.x + delta.x / inner.width() * (x1 - x0) * fine).clamp(x0, x1),
+                (handle.y - delta.y / inner.height() * (y1 - y0) * fine).clamp(y0, y1),
+            );
+            if next != (handle.x, handle.y) {
+                dragged = Some(next);
+            }
+        }
+        if hit.has_focus() {
+            let mut steps = (0.0, 0.0);
+            ui.input_mut(|input| {
+                let mut pressed = |key| {
+                    input.consume_key(egui::Modifiers::NONE, key)
+                        || input.consume_key(egui::Modifiers::SHIFT, key)
+                };
+                for (key, x, y) in [
+                    (egui::Key::ArrowRight, 1.0, 0.0),
+                    (egui::Key::ArrowLeft, -1.0, 0.0),
+                    (egui::Key::ArrowUp, 0.0, 1.0),
+                    (egui::Key::ArrowDown, 0.0, -1.0),
+                ] {
+                    if pressed(key) {
+                        steps.0 += x * fine;
+                        steps.1 += y * fine;
+                    }
+                }
+            });
+            if steps != (0.0, 0.0) {
+                nudged = Some(steps);
+            }
+        }
+        if response.hovered() || hit.hovered() {
+            let notches = wheel_notches(ui);
+            if notches != 0.0 {
+                scrolled = Some(notches);
+            }
+            // On every frame over the plot: egui spreads a notch over the
+            // frames that follow it.
+            ui.input_mut(|input| input.smooth_scroll_delta = Vec2::ZERO);
+        }
+        union = union.union(hit.clone());
+        hit
+    });
+    if dragged.is_some() || nudged.is_some() || scrolled.is_some() {
+        union.mark_changed();
+    }
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
         paint_frame(painter, rect, false);
-        for step in 1..4 {
-            let at = step as f32 / 4.0;
-            painter.line_segment(
-                [
-                    pos2(inner.left() + inner.width() * at, inner.top()),
-                    pos2(inner.left() + inner.width() * at, inner.bottom()),
-                ],
-                Stroke::new(1.0_f32, colors.grid_minor),
-            );
-            painter.line_segment(
-                [
-                    pos2(inner.left(), inner.top() + inner.height() * at),
-                    pos2(inner.right(), inner.top() + inner.height() * at),
-                ],
-                Stroke::new(1.0_f32, colors.grid_minor),
+        if let Some((from, to)) = plot.shade {
+            painter.rect_filled(
+                Rect::from_x_y_ranges(to_point(from, y0).x..=to_point(to, y0).x, inner.y_range()),
+                0.0,
+                colors.muted.gamma_multiply(0.1),
             );
         }
+        // Grid values, the same on both axes where their ranges are.
+        let lines = |low: f32, high: f32| -> Vec<(f32, bool)> {
+            match plot.axis {
+                TransferAxis::Linear => (1..4)
+                    .map(|step| (low + (high - low) * step as f32 / 4.0, step == 2))
+                    .collect(),
+                TransferAxis::Decibels => {
+                    let first = (low / 20.0).floor() as i32 + 1;
+                    (first..)
+                        .map(|step| step as f32 * 20.0)
+                        .take_while(|value| *value < high)
+                        .map(|value| (value, true))
+                        .collect()
+                }
+            }
+        };
+        let signed = plot.axis == TransferAxis::Linear;
+        for (value, labelled) in lines(x0, x1) {
+            let x = to_point(value, y0).x;
+            painter.line_segment(
+                [pos2(x, inner.top()), pos2(x, inner.bottom())],
+                Stroke::new(1.0_f32, colors.grid_minor),
+            );
+            if labelled {
+                label(
+                    painter,
+                    pos2(x + 3.0, inner.bottom() - 2.0),
+                    Align2::LEFT_BOTTOM,
+                    &axis_number(value, signed),
+                );
+            }
+        }
+        for (value, labelled) in lines(y0, y1) {
+            let y = to_point(x0, value).y;
+            painter.line_segment(
+                [pos2(inner.left(), y), pos2(inner.right(), y)],
+                Stroke::new(1.0_f32, colors.grid_minor),
+            );
+            // The middle of a linear plot is named once, on the x axis.
+            if labelled && plot.axis == TransferAxis::Decibels {
+                label(
+                    painter,
+                    pos2(inner.left() + 3.0, y - 1.0),
+                    Align2::LEFT_BOTTOM,
+                    &axis_number(value, signed),
+                );
+            }
+        }
+        // The ends: the low one in the corner both axes share, clear of the
+        // diagonal that starts there.
+        label(
+            painter,
+            inner.left_bottom() + vec2(tokens::FONT_SMALL + 5.0, -2.0),
+            Align2::LEFT_BOTTOM,
+            &axis_number(x0, signed),
+        );
+        label(
+            painter,
+            inner.right_bottom() + vec2(-3.0, -2.0),
+            Align2::RIGHT_BOTTOM,
+            &axis_number(x1, signed),
+        );
+        label(
+            painter,
+            inner.left_top() + vec2(3.0, 1.0),
+            Align2::LEFT_TOP,
+            &match plot.axis {
+                TransferAxis::Linear => axis_number(y1, signed),
+                TransferAxis::Decibels => format!("{} dB", axis_number(y1, signed)),
+            },
+        );
         painter.line_segment(
             [to_point(x0, y0.max(x0)), to_point(x1, y1.min(x1))],
             Stroke::new(1.0_f32, colors.grid_bar),
         );
         if plot.curve.len() >= 2 {
             let last = (plot.curve.len() - 1) as f32;
-            painter.add(Shape::line(
-                plot.curve
-                    .iter()
-                    .enumerate()
-                    .map(|(index, y)| {
-                        to_point(x0 + (x1 - x0) * index as f32 / last, finite(*y, y0))
-                    })
-                    .collect(),
-                Stroke::new(2.0_f32, colors.accent),
-            ));
-        }
-        if let Some(input) = plot.input.filter(|input| input.is_finite())
-            && plot.curve.len() >= 2
-        {
-            let last = (plot.curve.len() - 1) as f32;
-            let position = ((input - x0) / (x1 - x0)).clamp(0.0, 1.0) * last;
-            let low = position.floor() as usize;
-            let high = (low + 1).min(plot.curve.len() - 1);
-            let output = plot.curve[low] + (plot.curve[high] - plot.curve[low]) * position.fract();
-            let dot = to_point(input.clamp(x0, x1), finite(output, y0));
-            for end in [pos2(dot.x, inner.bottom()), pos2(inner.left(), dot.y)] {
-                painter.line_segment([dot, end], Stroke::new(1.0_f32, colors.muted));
+            let point = |index: usize| {
+                to_point(
+                    x0 + (x1 - x0) * index as f32 / last,
+                    finite(plot.curve[index], y0),
+                )
+            };
+            let on_curve = |x: f32| to_point(x, curve_at(plot.curve, x0, x1, x, y0));
+            let whole: Vec<Pos2> = (0..plot.curve.len()).map(point).collect();
+            match plot.lit {
+                None => {
+                    painter.add(Shape::line(whole, Stroke::new(2.0_f32, colors.accent)));
+                }
+                Some((from, to)) => {
+                    painter.add(Shape::line(
+                        whole,
+                        Stroke::new(2.0_f32, colors.accent.gamma_multiply(0.45)),
+                    ));
+                    let (from, to) = (from.clamp(x0, x1), to.clamp(x0, x1));
+                    if to > from {
+                        let mut lit = vec![on_curve(from)];
+                        lit.extend((0..plot.curve.len()).map(point).filter(|point| {
+                            point.x > on_curve(from).x && point.x < on_curve(to).x
+                        }));
+                        lit.push(on_curve(to));
+                        painter.add(Shape::line(lit, Stroke::new(2.0_f32, colors.accent)));
+                    }
+                }
             }
-            painter.circle_filled(dot, 4.5, colors.text);
+            if let Some(input) = plot.input.filter(|input| input.is_finite()) {
+                let dot = on_curve(input.clamp(x0, x1));
+                for end in [pos2(dot.x, inner.bottom()), pos2(inner.left(), dot.y)] {
+                    painter.line_segment([dot, end], Stroke::new(1.0_f32, colors.muted));
+                }
+                painter.circle_filled(dot, 4.5, colors.text);
+            }
+        }
+        if let (Some(handle), Some(hit)) = (plot.handle, &hit) {
+            let active = hit.hovered() || hit.dragged() || hit.has_focus();
+            let color = if active { colors.text } else { colors.muted };
+            let galley =
+                painter.layout_no_wrap(handle.label.to_owned(), TextRole::Note.font(), color);
+            let (center, label_at) =
+                place_handle(inner, to_point(handle.x, handle.y), galley.size());
+            painter.circle_filled(center, HANDLE_RADIUS, colors.accent);
+            painter.circle_stroke(
+                center,
+                HANDLE_RADIUS,
+                Stroke::new(1.5_f32, if active { colors.text } else { colors.bg }),
+            );
+            painter.galley(label_at, galley, color);
+            if active && !handle.readout.is_empty() {
+                paint_bubble(
+                    painter,
+                    inner,
+                    center,
+                    HANDLE_RADIUS + tokens::SPACE_SM,
+                    handle.readout,
+                );
+            }
         }
     }
-    describe(&response, ui, "Transfer curve".into());
-    response
+    describe(&union, ui, "Transfer curve".into());
+    TransferPlotOutput {
+        response: union,
+        dragged,
+        nudged,
+        scrolled,
+        double_clicked,
+        handle: hit,
+    }
 }
 
-/// Scrolling input envelope (peaks, linear, oldest first) with the gain
-/// reduction trace (dB, positive) hanging from the top.
-pub fn gain_reduction_history(
-    ui: &mut Ui,
-    columns: &[(f32, f32)],
-    size: Vec2,
-    max_reduction_db: f32,
-) -> Response {
-    let (rect, response) = frame(ui, size, Sense::hover());
+/// What [`reduction_meter`] keeps below its bar for the held value. The
+/// reduction axis of [`gain_reduction_history`] ends as far above its own
+/// bottom, so at equal heights the trace and the bar read against the same
+/// ticks.
+const REDUCTION_READOUT: f32 = tokens::FONT_SMALL + tokens::SPACE_SM;
+
+/// The top of a reduction axis and its length, in a frame of this height.
+fn reduction_axis(rect: Rect) -> (f32, f32) {
+    let inner = rect.shrink(1.0);
+    (inner.top(), (inner.height() - REDUCTION_READOUT).max(1.0))
+}
+
+/// Levels over time with the gain reduction they caused.
+#[derive(Clone, Copy, Debug)]
+pub struct LevelHistory<'a> {
+    /// Oldest first: input peak and output peak (linear), reduction in dB.
+    pub columns: &'a [[f32; 3]],
+    /// The level axis runs from this to 0 dB over the whole height, as a
+    /// [`TransferPlot`] in decibels of the same range and height does.
+    pub floor_db: f32,
+    /// The reduction axis hangs from the top, as [`reduction_meter`]'s.
+    pub max_reduction_db: f32,
+    /// A level drawn as a horizontal line: the threshold.
+    pub threshold_db: Option<f32>,
+    pub threshold_label: &'a str,
+    /// Whether the line can be dragged.
+    pub draggable: bool,
+    /// What the columns span, printed at the right: "8 s".
+    pub span_seconds: f32,
+    pub size: Vec2,
+}
+
+pub struct LevelHistoryOutput {
+    pub response: Response,
+    /// Where a drag or the arrow keys put the threshold, in dB.
+    pub threshold: Option<f32>,
+    /// The line's own response, for a context menu.
+    pub line: Option<Response>,
+}
+
+/// Scrolling level history: the input as a dim fill, the output as a line
+/// over it, and the gain reduction as a trace hanging from the top. The
+/// threshold line drags vertically (one tenth as far with Shift) and moves
+/// by arrow keys when focused; the caller also shows it as a dial.
+pub fn gain_reduction_history(ui: &mut Ui, history: &LevelHistory<'_>) -> LevelHistoryOutput {
+    let (rect, response) = frame(ui, history.size, Sense::hover());
     let colors = theme::palette(ui.ctx());
+    let inner = rect.shrink(1.0);
+    let floor = history.floor_db.min(-1.0);
+    let level_y =
+        |db: f32| inner.bottom() - inner.height() * ((db - floor) / -floor).clamp(0.0, 1.0);
+    let (top, length) = reduction_axis(rect);
+    let mut threshold = None;
+    let mut union = response.clone();
+    let line = history
+        .threshold_db
+        .filter(|_| history.draggable)
+        .map(|at| {
+            let y = level_y(at);
+            let hit = ui
+                .interact(
+                    Rect::from_x_y_ranges(
+                        inner.x_range(),
+                        y - tokens::HIT_TARGET * 0.5..=y + tokens::HIT_TARGET * 0.5,
+                    ),
+                    response.id.with("threshold"),
+                    Sense::click_and_drag(),
+                )
+                .on_hover_cursor(egui::CursorIcon::ResizeVertical);
+            if hit.clicked() || hit.drag_started() {
+                hit.request_focus();
+            }
+            crate::parameter_focus::register_parameter_history_focus(&hit);
+            let fine = ui.input(|input| if input.modifiers.shift { 0.1 } else { 1.0 });
+            let mut next = at;
+            if hit.dragged_by(egui::PointerButton::Primary) {
+                next += hit.drag_delta().y / inner.height() * floor * fine;
+            }
+            if hit.has_focus() {
+                ui.input_mut(|input| {
+                    let mut pressed = |key| {
+                        input.consume_key(egui::Modifiers::NONE, key)
+                            || input.consume_key(egui::Modifiers::SHIFT, key)
+                    };
+                    if pressed(egui::Key::ArrowUp) {
+                        next += fine;
+                    }
+                    if pressed(egui::Key::ArrowDown) {
+                        next -= fine;
+                    }
+                });
+            }
+            let next = next.clamp(floor, 0.0);
+            if next != at {
+                threshold = Some(next);
+            }
+            union = union.union(hit.clone());
+            hit
+        });
+    if threshold.is_some() {
+        union.mark_changed();
+    }
     if ui.is_rect_visible(rect) {
-        let painter = ui.painter();
-        paint_frame(painter, rect, false);
-        let inner = rect.shrink(1.0);
-        let count = columns.len().max(1);
-        let width = inner.width() / count as f32;
-        let mut trace = Vec::with_capacity(columns.len());
-        for (index, (peak, reduction)) in columns.iter().enumerate() {
-            let x = inner.left() + width * (index as f32 + 0.5);
-            let level =
-                ((20.0 * finite(*peak, 0.0).max(1e-6).log10() + 60.0) / 60.0).clamp(0.0, 1.0);
-            painter.line_segment(
-                [
-                    pos2(x, inner.bottom()),
-                    pos2(x, inner.bottom() - inner.height() * level),
-                ],
-                Stroke::new(width.max(1.0), colors.muted.gamma_multiply(0.35)),
-            );
-            trace.push(pos2(
-                x,
-                inner.top()
-                    + inner.height() * (finite(*reduction, 0.0) / max_reduction_db).clamp(0.0, 1.0),
-            ));
+        let painter = ui.painter().with_clip_rect(inner);
+        paint_frame(ui.painter(), rect, false);
+        let mut db = (floor / 12.0).ceil() * 12.0;
+        while db < 0.0 {
+            if db > floor {
+                painter.line_segment(
+                    [
+                        pos2(inner.left(), level_y(db)),
+                        pos2(inner.right(), level_y(db)),
+                    ],
+                    Stroke::new(1.0_f32, colors.grid_minor),
+                );
+            }
+            db += 12.0;
         }
-        painter.line_segment(
-            [inner.left_top(), inner.right_top()],
-            Stroke::new(1.0_f32, colors.grid_bar),
+        let count = history.columns.len();
+        if count >= 2 {
+            let x = |index: usize| inner.left() + inner.width() * index as f32 / (count - 1) as f32;
+            let level = |value: f32| level_y(20.0 * finite(value, 0.0).abs().max(1e-6).log10());
+            let trace = |column: usize| -> Vec<Pos2> {
+                history
+                    .columns
+                    .iter()
+                    .enumerate()
+                    .map(|(index, values)| pos2(x(index), level(values[column])))
+                    .collect()
+            };
+            fill_to(
+                &painter,
+                &trace(0),
+                inner.bottom(),
+                colors.muted.gamma_multiply(0.3),
+            );
+            painter.add(Shape::line(
+                trace(1),
+                Stroke::new(1.0_f32, colors.text.gamma_multiply(0.7)),
+            ));
+            let reduction: Vec<Pos2> = history
+                .columns
+                .iter()
+                .enumerate()
+                .map(|(index, values)| {
+                    let share = finite(values[2], 0.0) / history.max_reduction_db.max(1.0);
+                    pos2(x(index), top + length * share.clamp(0.0, 1.0))
+                })
+                .collect();
+            painter.add(Shape::line(reduction, Stroke::new(2.0_f32, colors.accent)));
+        }
+        let span = label(
+            &painter,
+            inner.right_bottom() + vec2(-4.0, -2.0),
+            Align2::RIGHT_BOTTOM,
+            &format!("{:.0} s", history.span_seconds),
         );
-        if trace.len() >= 2 {
-            painter.add(Shape::line(trace, Stroke::new(2.0_f32, colors.accent)));
+        if let Some(at) = history.threshold_db {
+            let y = level_y(at);
+            let active = line
+                .as_ref()
+                .is_some_and(|hit| hit.hovered() || hit.dragged() || hit.has_focus());
+            painter.line_segment(
+                [pos2(inner.left(), y), pos2(inner.right(), y)],
+                Stroke::new(
+                    if active { 1.5_f32 } else { 1.0_f32 },
+                    if active { colors.text } else { colors.muted },
+                ),
+            );
+            // Above the line, or below it where the frame is too close.
+            let above = y - tokens::FONT_SMALL - 4.0 > inner.top();
+            let color = if active { colors.text } else { colors.muted };
+            let galley = painter.layout_no_wrap(
+                history.threshold_label.to_owned(),
+                TextRole::Note.font(),
+                color,
+            );
+            let top = if above {
+                y - 2.0 - galley.size().y
+            } else {
+                y + 2.0
+            };
+            let mut at = pos2(inner.right() - 4.0 - galley.size().x, top);
+            // Near the floor the span stands in that corner: beside it.
+            if Rect::from_min_size(at, galley.size()).intersects(span) {
+                at.x = span.left() - tokens::SPACE_SM - galley.size().x;
+            }
+            painter.galley(at, galley, color);
+        }
+        // The scale over the traces, so it reads through them.
+        let mut db = (floor / 12.0).ceil() * 12.0;
+        while db < 0.0 {
+            if db > floor {
+                label(
+                    &painter,
+                    pos2(inner.left() + 3.0, level_y(db) - 1.0),
+                    Align2::LEFT_BOTTOM,
+                    &format!("{db:.0}"),
+                );
+            }
+            db += 12.0;
         }
         label(
-            painter,
+            &painter,
             inner.left_top() + vec2(3.0, 1.0),
             Align2::LEFT_TOP,
             "0 dB",
         );
-        label(
-            painter,
-            inner.left_bottom() + vec2(3.0, -1.0),
-            Align2::LEFT_BOTTOM,
-            &format!("−{max_reduction_db:.0} dB"),
-        );
     }
-    describe(&response, ui, "Gain reduction history".into());
-    response
+    describe(&union, ui, "Level and gain reduction history".into());
+    LevelHistoryOutput {
+        response: union,
+        threshold,
+        line,
+    }
 }
 
-/// Vertical gain-reduction bar that reads downward from 0 dB. `hold_db` marks
-/// the largest recent reduction.
-pub fn reduction_meter(
-    ui: &mut Ui,
-    reduction_db: f32,
-    hold_db: f32,
-    max_reduction_db: f32,
-    size: Vec2,
-) -> Response {
-    let (rect, response) = frame(ui, size, Sense::hover());
+/// Vertical gain-reduction bar that reads downward from 0 dB.
+#[derive(Clone, Copy, Debug)]
+pub struct ReductionMeter {
+    pub reduction_db: f32,
+    /// The largest reduction since the caller last reset it, marked on the
+    /// bar and printed under it.
+    pub hold_db: f32,
+    pub max_reduction_db: f32,
+    pub size: Vec2,
+}
+
+const REDUCTION_BAR_WIDTH: f32 = tokens::SPACE_MD;
+
+/// Gain-reduction bar with a scale beside it and the held maximum under it.
+/// A click is reported through the response; the caller then resets its hold.
+pub fn reduction_meter(ui: &mut Ui, meter: &ReductionMeter) -> Response {
+    let (rect, response) = frame(ui, meter.size, Sense::click());
     let colors = theme::palette(ui.ctx());
+    let max = meter.max_reduction_db.max(1.0);
+    let (top, length) = reduction_axis(rect);
+    let y = |db: f32| top + length * (finite(db, 0.0) / max).clamp(0.0, 1.0);
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
-        painter.rect_filled(rect, 1.0, colors.bg);
-        let fraction = |db: f32| (finite(db, 0.0) / max_reduction_db).clamp(0.0, 1.0);
-        let fill = Rect::from_min_max(
-            rect.min,
+        paint_frame(painter, rect, false);
+        let bar = Rect::from_min_max(
+            pos2(rect.left() + tokens::SPACE_XS, top),
             pos2(
-                rect.right(),
-                rect.top() + rect.height() * fraction(reduction_db),
+                rect.left() + tokens::SPACE_XS + REDUCTION_BAR_WIDTH.min(rect.width() * 0.4),
+                top + length,
             ),
         );
-        painter.rect_filled(fill, 1.0, colors.accent);
-        let hold = rect.top() + rect.height() * fraction(hold_db);
-        painter.line_segment(
-            [pos2(rect.left(), hold), pos2(rect.right(), hold)],
-            Stroke::new(1.5_f32, colors.text),
+        painter.rect_filled(bar, 1.0, colors.control_fill);
+        painter.rect_filled(
+            Rect::from_min_max(bar.min, pos2(bar.right(), y(meter.reduction_db))),
+            1.0,
+            colors.accent,
+        );
+        // A short meter names only the ticks that have room.
+        let mut named = f32::NEG_INFINITY;
+        for tick in [0.0, 3.0, 6.0, 12.0, 24.0, 48.0] {
+            if tick > max {
+                break;
+            }
+            painter.line_segment(
+                [
+                    pos2(bar.right() + 2.0, y(tick)),
+                    pos2(bar.right() + 5.0, y(tick)),
+                ],
+                Stroke::new(1.0_f32, colors.muted),
+            );
+            // The ends keep their numbers inside the axis.
+            let align = if tick == 0.0 {
+                Align2::LEFT_TOP
+            } else if tick == max {
+                Align2::LEFT_BOTTOM
+            } else {
+                Align2::LEFT_CENTER
+            };
+            let above = match align {
+                Align2::LEFT_TOP => 0.0,
+                Align2::LEFT_BOTTOM => tokens::FONT_SMALL,
+                _ => tokens::FONT_SMALL * 0.5,
+            };
+            if y(tick) - above >= named {
+                label(
+                    painter,
+                    pos2(bar.right() + 8.0, y(tick)),
+                    align,
+                    &format!("{tick:.0}"),
+                );
+                named = y(tick) - above + tokens::FONT_SMALL;
+            }
+        }
+        if meter.hold_db > 0.0 {
+            painter.line_segment(
+                [
+                    pos2(bar.left(), y(meter.hold_db)),
+                    pos2(bar.right(), y(meter.hold_db)),
+                ],
+                Stroke::new(1.5_f32, colors.text),
+            );
+        }
+        painter.text(
+            pos2(rect.center().x, rect.bottom() - 2.0),
+            Align2::CENTER_BOTTOM,
+            if meter.hold_db >= 0.05 {
+                format!("-{:.1}", finite(meter.hold_db, 0.0))
+            } else {
+                "0.0".into()
+            },
+            TextRole::Note.font(),
+            colors.text,
         );
     }
     describe(
         &response,
         ui,
-        format!("Gain reduction {:.1} dB", finite(reduction_db, 0.0)),
+        format!(
+            "Gain reduction {:.1} dB, held {:.1} dB",
+            finite(meter.reduction_db, 0.0),
+            finite(meter.hold_db, 0.0)
+        ),
     );
     response
 }
@@ -1144,41 +1673,164 @@ pub fn delay_view(ui: &mut Ui, data: &DelayViewData<'_>, size: Vec2) -> Response
     response
 }
 
-/// Bars for harmonics 1 to 10, in dB (−80 to 0).
-pub fn harmonics_view(ui: &mut Ui, harmonics_db: &[f32; 10], size: Vec2) -> Response {
-    let (rect, response) = frame(ui, size, Sense::hover());
+/// Harmonic levels as bars.
+#[derive(Clone, Copy, Debug)]
+pub struct HarmonicsView<'a> {
+    /// One level per harmonic, in dB; drawn relative to the first, so the
+    /// fundamental stands at 0 dB.
+    pub levels_db: &'a [f32],
+    /// The bottom of the axis, below zero.
+    pub floor_db: f32,
+    pub size: Vec2,
+}
+
+const HARMONIC_BAR_MAX: f32 = 34.0;
+
+/// Where the bars of a [`HarmonicsView`] of this frame stand: the plot area
+/// and each bar's rectangle. Bars are centered in equal slots and no wider
+/// than 34 points, so a wide view does not turn into blocks.
+pub fn harmonic_bars(view: &HarmonicsView<'_>, rect: Rect) -> (Rect, Vec<Rect>) {
+    let text = tokens::FONT_SMALL + tokens::SPACE_XS;
+    // The scale's numbers at the left, a bar's level above and its number below.
+    let area = Rect::from_min_max(
+        rect.min + vec2(tokens::SPACE_XL, text + tokens::SPACE_XS),
+        rect.max - vec2(tokens::SPACE_SM, text),
+    );
+    let floor = view.floor_db.min(-1.0);
+    let reference = view
+        .levels_db
+        .first()
+        .copied()
+        .map_or(0.0, |db| finite(db, 0.0));
+    let slot = area.width() / view.levels_db.len().max(1) as f32;
+    let width = (slot * 0.6).min(HARMONIC_BAR_MAX);
+    let bars = view
+        .levels_db
+        .iter()
+        .enumerate()
+        .map(|(index, db)| {
+            let level = (finite(*db, f32::NEG_INFINITY) - reference).clamp(floor, 0.0);
+            let x = area.left() + slot * (index as f32 + 0.5);
+            Rect::from_min_max(
+                pos2(
+                    x - width * 0.5,
+                    area.bottom() - area.height() * (level - floor) / -floor,
+                ),
+                pos2(x + width * 0.5, area.bottom()),
+            )
+        })
+        .collect();
+    (area, bars)
+}
+
+/// Bars for the harmonics of a shaper, with a dB scale, each bar's number
+/// under it and its level over it where it rises above the floor.
+pub fn harmonics_view(ui: &mut Ui, view: &HarmonicsView<'_>) -> Response {
+    let (rect, response) = frame(ui, view.size, Sense::hover());
     let colors = theme::palette(ui.ctx());
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
         paint_frame(painter, rect, false);
-        let inner = rect.shrink2(vec2(
-            tokens::SPACE_SM,
-            tokens::SPACE_SM + tokens::FONT_SMALL,
-        ));
-        let slot = inner.width() / 10.0;
-        for (index, db) in harmonics_db.iter().enumerate() {
-            let level = (finite(*db, -80.0).clamp(-80.0, 0.0) + 80.0) / 80.0;
-            let x = inner.left() + slot * (index as f32 + 0.5);
-            painter.rect_filled(
-                Rect::from_min_max(
-                    pos2(x - slot * 0.3, inner.bottom() - inner.height() * level),
-                    pos2(x + slot * 0.3, inner.bottom()),
+        let (area, bars) = harmonic_bars(view, rect);
+        let floor = view.floor_db.min(-1.0);
+        let reference = view
+            .levels_db
+            .first()
+            .copied()
+            .map_or(0.0, |db| finite(db, 0.0));
+        let mut db = 0.0;
+        while db > floor {
+            let y = area.bottom() - area.height() * (db - floor) / -floor;
+            painter.line_segment(
+                [pos2(area.left(), y), pos2(area.right(), y)],
+                Stroke::new(
+                    1.0_f32,
+                    if db == 0.0 {
+                        colors.grid_bar
+                    } else {
+                        colors.grid_minor
+                    },
                 ),
-                1.0,
-                if index == 0 {
-                    colors.accent
-                } else {
-                    colors.accent.gamma_multiply(0.7)
-                },
             );
             label(
                 painter,
-                pos2(x, rect.bottom() - 2.0),
+                pos2(area.left() - tokens::SPACE_XS, y),
+                Align2::RIGHT_CENTER,
+                &format!("{db:.0}"),
+            );
+            db -= 20.0;
+        }
+        painter.line_segment(
+            [area.left_bottom(), area.right_bottom()],
+            Stroke::new(1.0_f32, colors.grid_bar),
+        );
+        for (index, (bar, db)) in bars.iter().zip(view.levels_db).enumerate() {
+            let level = finite(*db, f32::NEG_INFINITY) - reference;
+            if level > floor {
+                painter.rect_filled(
+                    *bar,
+                    1.0,
+                    if index == 0 {
+                        colors.accent
+                    } else {
+                        colors.accent.gamma_multiply(0.7)
+                    },
+                );
+                label(
+                    painter,
+                    pos2(bar.center().x, bar.top() - 2.0),
+                    Align2::CENTER_BOTTOM,
+                    &format!("{level:.0}"),
+                );
+            }
+            label(
+                painter,
+                pos2(bar.center().x, rect.bottom() - 2.0),
                 Align2::CENTER_BOTTOM,
                 &format!("{}", index + 1),
             );
         }
     }
-    describe(&response, ui, "Harmonics".into());
+    describe(
+        &response,
+        ui,
+        format!("Harmonics: {}", view.levels_db.len()),
+    );
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transfer_handle_and_its_label_stay_inside_the_frame_and_apart() {
+        let inner = Rect::from_min_size(pos2(10.0, 20.0), vec2(208.0, 208.0));
+        let size = vec2(8.0, 14.0);
+        let points = [
+            inner.left_top(),
+            inner.right_top(),
+            inner.left_bottom(),
+            inner.right_bottom(),
+            inner.center(),
+            inner.right_top() + vec2(-30.0, 12.0),
+        ];
+        for at in points {
+            let (center, label) = place_handle(inner, at, size);
+            let handle = Rect::from_center_size(center, Vec2::splat(2.0 * HANDLE_RADIUS));
+            let label = Rect::from_min_size(label, size);
+            assert!(inner.contains_rect(handle), "{at:?}: handle {handle:?}");
+            assert!(inner.contains_rect(label), "{at:?}: label {label:?}");
+            assert!(!label.intersects(handle), "{at:?}: {label:?} on {handle:?}");
+            // A rising curve through the handle runs down-left and
+            // up-right of it: the label is in neither quarter.
+            let up_left = label.right() <= center.x && label.bottom() <= center.y;
+            let down_right = label.left() >= center.x && label.top() >= center.y;
+            let beside = label.top() >= handle.bottom() || label.bottom() <= handle.top();
+            assert!(up_left || down_right || beside, "{at:?}: {label:?}");
+        }
+        // At the top right, a ceiling: below the flat curve.
+        let (center, label) = place_handle(inner, inner.right_top(), size);
+        assert!(label.y > center.y + HANDLE_RADIUS);
+    }
 }

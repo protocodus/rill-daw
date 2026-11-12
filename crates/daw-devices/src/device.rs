@@ -25,6 +25,11 @@ pub struct DeviceDescriptor {
     /// `(parameter key, old label, current label)`. Presets store labels, so
     /// renaming an option without an entry here breaks every older preset.
     pub legacy_labels: &'static [(&'static str, &'static str, &'static str)],
+    /// Latency in samples at the given normalized parameter values (by ID)
+    /// and sample rate: what [`Device::latency_samples`] reports for them.
+    /// The engine compares it across an edit to see whether delay
+    /// compensation has to be rebuilt.
+    pub latency: fn(values: &dyn Fn(u32) -> f32, sample_rate: f32) -> u32,
     pub create: fn() -> Box<dyn Device>,
 }
 

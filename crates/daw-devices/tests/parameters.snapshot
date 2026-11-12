@@ -89,3 +89,29 @@ r1-equalizer 60 mode "Mode" choice Digital|Analog
 r1-equalizer 61 auto_gain "Auto gain" toggle
 r1-equalizer 62 analyzer "Analyzer" choice Off|Input|Output
 r1-equalizer 63 output "Output" linear -24 24
+r1-saturator 1 model "Model" choice Transistor|Tube|Tape
+r1-saturator 2 drive "Drive" linear 0 36
+r1-saturator 3 character "Character" linear 0 100
+r1-saturator 4 tone "Tone" linear -6 6
+r1-saturator 5 focus "Focus" log 20 1000
+r1-saturator 10 quality "Quality" choice 2×|4×|8×
+r1-saturator 20 auto_gain "Auto gain" toggle
+r1-saturator 30 mix "Mix" linear 0 100
+r1-saturator 31 output "Output" linear -24 24
+r1-compressor 1 mode "Mode" choice Compressor|Limiter|Expander
+r1-compressor 2 character "Character" choice Digital|Tube|Opto|FET
+r1-compressor 3 threshold "Threshold" linear -60 0
+r1-compressor 4 ratio "Ratio" log 1 20
+r1-compressor 5 knee "Knee" linear 0 24
+r1-compressor 6 attack "Attack" log 0.02 250
+r1-compressor 7 release "Release" log 5 2500
+r1-compressor 8 auto_release "Auto release" toggle
+r1-compressor 9 lookahead "Lookahead" linear 0 10
+r1-compressor 10 ceiling "Ceiling" linear -12 0
+r1-compressor 20 sidechain "Sidechain" choice Internal|External
+r1-compressor 21 sidechain.high_pass "Sidechain high-pass" log 20 500
+r1-compressor 22 stereo_link "Stereo link" linear 0 100
+r1-compressor 25 makeup "Makeup" linear -12 24
+r1-compressor 26 auto_makeup "Auto makeup" toggle
+r1-compressor 30 mix "Mix" linear 0 100
+r1-compressor 31 output "Output" linear -24 24

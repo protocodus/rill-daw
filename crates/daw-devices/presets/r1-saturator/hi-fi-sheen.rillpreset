@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "device": "r1-saturator",
+  "name": "Hi-fi Sheen",
+  "author": "Rill",
+  "category": "Tape",
+  "tags": ["master", "subtle"],
+  "description": "Barely-there polish at the best quality.",
+  "parameters": {
+    "model": "Tape",
+    "drive": 4.0,
+    "character": 20.0,
+    "tone": 1.5,
+    "quality": "8×"
+  }
+}

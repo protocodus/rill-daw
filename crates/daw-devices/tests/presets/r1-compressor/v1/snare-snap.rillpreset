@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device": "r1-compressor",
+  "name": "Snare Snap",
+  "author": "Rill",
+  "category": "Drums",
+  "tags": ["snare"],
+  "description": "Lets the transient through and holds the body.",
+  "parameters": {
+    "character": "FET",
+    "threshold": -20.0,
+    "ratio": 8.0,
+    "attack": 5.0,
+    "release": 60.0,
+    "makeup": 4.0
+  }
+}

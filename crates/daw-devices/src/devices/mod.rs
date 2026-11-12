@@ -2,9 +2,11 @@
 //! pure response functions its panel draws.
 use crate::{ParamRange, ParamSpec};
 
+pub mod compressor;
 pub mod equalizer;
 pub mod filter;
 pub mod mini;
+pub mod saturator;
 
 /// A parameter; continuous ones are modulatable.
 pub(crate) const fn param(

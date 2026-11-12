@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device": "r1-saturator",
+  "name": "Every parameter",
+  "description": "Every parameter key of this version, so a removed or renamed key is caught.",
+  "parameters": {
+    "model": "Tape",
+    "drive": 21.3,
+    "character": 72.0,
+    "tone": -3.4,
+    "focus": 310.0,
+    "quality": "8×",
+    "auto_gain": false,
+    "mix": 64.0,
+    "output": -9.6
+  }
+}

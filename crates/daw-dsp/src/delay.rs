@@ -33,6 +33,16 @@ impl DelayLine {
         self.buffer[self.cursor] = sample;
     }
 
+    /// The sample written `samples` writes ago, exactly; 0 is the last one.
+    /// For lookahead and aligned dry paths.
+    #[inline]
+    pub fn tap(&self, samples: usize) -> f32 {
+        if self.buffer.is_empty() {
+            return 0.0;
+        }
+        self.buffer[self.cursor.wrapping_sub(samples.min(self.mask)) & self.mask]
+    }
+
     /// Reads `delay` samples behind the last write (at least 1).
     #[inline]
     pub fn read(&self, delay: f32) -> f32 {
@@ -56,9 +66,81 @@ impl DelayLine {
     }
 }
 
+/// Fixed delay of up to `N` samples without a heap: a dry path beside a
+/// process with a known latency.
+#[derive(Clone, Debug)]
+pub struct StaticDelay<const N: usize> {
+    buffer: [f32; N],
+    cursor: usize,
+}
+
+impl<const N: usize> Default for StaticDelay<N> {
+    fn default() -> Self {
+        Self {
+            buffer: [0.0; N],
+            cursor: 0,
+        }
+    }
+}
+
+impl<const N: usize> StaticDelay<N> {
+    /// The input of `N` calls ago.
+    #[inline]
+    pub fn process(&mut self, input: f32) -> f32 {
+        self.process_at(input, N)
+    }
+
+    /// The input of `delay` calls ago, at most `N`; 0 is `input` itself.
+    #[inline]
+    pub fn process_at(&mut self, input: f32, delay: usize) -> f32 {
+        if N == 0 {
+            return input;
+        }
+        let output = if delay == 0 {
+            input
+        } else {
+            self.buffer[(self.cursor + N - delay.min(N)) % N]
+        };
+        self.buffer[self.cursor] = input;
+        self.cursor += 1;
+        if self.cursor == N {
+            self.cursor = 0;
+        }
+        output
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn taps_are_exact_from_zero() {
+        let mut line = DelayLine::default();
+        assert_eq!(line.tap(3), 0.0);
+        line.allocate(100);
+        for n in 0..300 {
+            line.write(n as f32);
+        }
+        assert_eq!(line.tap(0), 299.0);
+        assert_eq!(line.tap(1), 298.0);
+        assert_eq!(line.tap(100), 199.0);
+    }
+
+    #[test]
+    fn static_delay_reads_any_tap_up_to_its_length() {
+        let mut full = StaticDelay::<9>::default();
+        let mut short = StaticDelay::<9>::default();
+        let mut none = StaticDelay::<9>::default();
+        let mut empty = StaticDelay::<0>::default();
+        for n in 0..40 {
+            let x = n as f32;
+            assert_eq!(full.process(x), (x - 9.0).max(0.0));
+            assert_eq!(short.process_at(x, 2), (x - 2.0).max(0.0));
+            assert_eq!(none.process_at(x, 0), x);
+            assert_eq!(empty.process(x), x);
+        }
+    }
 
     #[test]
     fn integer_delays_are_exact_and_fractions_interpolate() {

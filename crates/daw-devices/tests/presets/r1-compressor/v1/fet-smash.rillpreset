@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-compressor",
+  "name": "FET Smash",
+  "author": "Rill",
+  "category": "Drums",
+  "tags": ["room", "crush"],
+  "description": "All-in room crush.",
+  "parameters": {
+    "character": "FET",
+    "threshold": -30.0,
+    "ratio": 20.0,
+    "attack": 0.05,
+    "release": 50.0,
+    "knee": 0.0,
+    "makeup": 12.0
+  }
+}

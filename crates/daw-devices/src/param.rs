@@ -142,7 +142,8 @@ impl ParamSpec {
 
     /// Parses user or tool text into a normalized value. Accepts an optional
     /// unit, `k` for thousands ("1.2k", "1.2 kHz"), seconds for millisecond
-    /// parameters ("1.5 s"), choice labels in any case, and on/off.
+    /// parameters ("1.5 s"), ratios with or without ":1", choice labels in
+    /// any case, and on/off.
     pub fn parse(&self, text: &str) -> Option<f32> {
         let text = text.trim();
         match self.range {
@@ -168,10 +169,12 @@ fn format_value(plain: f32, unit: &str) -> String {
         "Hz" if plain.abs() < 1.0 => format!("{plain:.2} Hz"),
         "Hz" => format!("{plain:.0} Hz"),
         "ms" if plain.abs() >= 1000.0 => format!("{:.2} s", plain / 1000.0),
+        "ms" if plain.abs() < 0.1 => format!("{plain:.2} ms"),
         "ms" if plain.abs() < 10.0 => format!("{plain:.1} ms"),
         "ms" => format!("{plain:.0} ms"),
         "dB" | "oct" | "st" => format!("{plain:+.1} {unit}"),
         "%" | "°" => format!("{plain:.0} {unit}"),
+        ":1" => format!("{plain:.1}:1"),
         "" => format!("{plain:.2}"),
         _ => format!("{plain:.2} {unit}"),
     }
@@ -285,5 +288,33 @@ mod tests {
         assert_eq!(release.parse("1.5 s"), Some(release.to_normalized(1500.0)));
         assert_eq!(release.parse("150 ms"), Some(release.to_normalized(150.0)));
         assert_eq!(release.format(release.to_normalized(1500.0)), "1.50 s");
+    }
+
+    #[test]
+    fn ratios_and_short_times_keep_their_digits() {
+        let ratio = ParamSpec {
+            unit: ":1",
+            range: ParamRange::Log {
+                min: 1.0,
+                max: 20.0,
+            },
+            default: 4.0,
+            ..CUTOFF
+        };
+        assert_eq!(ratio.format(ratio.to_normalized(4.0)), "4.0:1");
+        assert_eq!(ratio.parse("4:1"), Some(ratio.to_normalized(4.0)));
+        assert_eq!(ratio.parse("2.5"), Some(ratio.to_normalized(2.5)));
+        let attack = ParamSpec {
+            unit: "ms",
+            range: ParamRange::Log {
+                min: 0.02,
+                max: 250.0,
+            },
+            default: 10.0,
+            ..CUTOFF
+        };
+        assert_eq!(attack.format(0.0), "0.02 ms");
+        assert_eq!(attack.format(attack.to_normalized(0.5)), "0.5 ms");
+        assert_eq!(attack.parse("0.05 ms"), Some(attack.to_normalized(0.05)));
     }
 }

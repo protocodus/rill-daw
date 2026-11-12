@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "device": "r1-saturator",
+  "name": "Default",
+  "author": "Rill",
+  "category": "Basic",
+  "description": "A tube stage that is just starting to colour.",
+  "parameters": {}
+}

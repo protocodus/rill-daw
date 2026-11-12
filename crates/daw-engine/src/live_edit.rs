@@ -201,7 +201,8 @@ impl LiveEditCompatibility {
             .parameters
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        let samples_per_beat = self.context.sample_rate as f64 * 60.0 / project.tempo;
+        let rate = self.context.sample_rate;
+        let samples_per_beat = rate as f64 * 60.0 / project.tempo;
         let to_sample = |beat: f64| (beat.max(0.0) * samples_per_beat).round() as u64;
         let loop_valid = !project.loop_enabled
             || (project.loop_start.is_finite()
@@ -221,6 +222,15 @@ impl LiveEditCompatibility {
                         && a.solo == b.solo
                         && a.instrument == b.instrument
                         && a.instrument_state == b.instrument_state
+                        && builtin_latency(
+                            a.instrument.builtin_device(),
+                            &a.instrument_parameters,
+                            rate,
+                        ) == builtin_latency(
+                            b.instrument.builtin_device(),
+                            &b.instrument_parameters,
+                            rate,
+                        )
                         && a.instrument_inputs == b.instrument_inputs
                         && a.instrument_output == b.instrument_output
                         && (!compare_parameters
@@ -244,6 +254,15 @@ impl LiveEditCompatibility {
                                 && a_slot.effect == b_slot.effect
                                 && a_slot.state == b_slot.state
                                 && a_slot.inputs == b_slot.inputs
+                                && builtin_latency(
+                                    a_slot.effect.builtin_device(),
+                                    &a_slot.parameters,
+                                    rate,
+                                ) == builtin_latency(
+                                    b_slot.effect.builtin_device(),
+                                    &b_slot.parameters,
+                                    rate,
+                                )
                                 && (!compare_parameters
                                     || parameters.get(&(a.id, Some(a_slot.id)))
                                         == Some(&b_slot.parameters))
@@ -835,6 +854,33 @@ impl Renderer {
         self.end_sample = self.timeline_end_sample.max(self.release_end_sample);
         Ok(())
     }
+}
+
+/// A built-in device's latency at saved parameter values. Delay
+/// compensation is fixed when the graph is built, so an edit that changes
+/// this (a compressor's lookahead) is not a live edit, although the value
+/// itself reaches the device through the live queue.
+fn builtin_latency(
+    device: Option<&str>,
+    parameters: &[PluginParameterValue],
+    sample_rate: u32,
+) -> u32 {
+    let Some(descriptor) = device.and_then(daw_devices::descriptor) else {
+        return 0;
+    };
+    let value = |id: u32| {
+        parameters
+            .iter()
+            .find(|parameter| parameter.id == id)
+            .map(|parameter| parameter.value as f32)
+            .or_else(|| {
+                descriptor
+                    .parameter(id)
+                    .map(|spec| spec.default_normalized())
+            })
+            .unwrap_or(0.0)
+    };
+    (descriptor.latency)(&value, sample_rate as f32)
 }
 
 fn automation_edit_compatible(before: &Project, after: &Project, a: &Track, b: &Track) -> bool {

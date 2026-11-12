@@ -102,6 +102,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
                 ],
             );
             ui::toggle_led(ui, &mut state.on, "Echo");
+            ui.horizontal(|ui| {
+                ui::value_link(ui, "Kick +1", false, 89.0);
+                ui::value_link(ui, "No source", true, 89.0);
+            });
         });
         ui::wheel(ui, &mut state.pitch, true, "Pitch", egui::vec2(34.0, 120.0));
         ui::wheel(

@@ -602,6 +602,7 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-mini/noise-sweep.rillpreset"),
     ],
     legacy_labels: &[],
+    latency: |_, _| LATENCY,
     create: || Box::new(Mini::new()),
 };
 

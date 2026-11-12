@@ -515,12 +515,39 @@ fn every_visualization_renders_without_overflow() {
                 curve: &curve,
                 x_range: (-60.0, 0.0),
                 y_range: (-60.0, 0.0),
+                axis: ui::TransferAxis::Decibels,
                 input: Some(-12.0),
+                lit: Some((-30.0, -12.0)),
+                shade: Some((-21.0, -15.0)),
+                handle: Some(ui::TransferHandle {
+                    x: -18.0,
+                    y: -18.0,
+                    label: "T",
+                    readout: "-18.0 dB",
+                }),
                 size,
             },
         );
-        ui::gain_reduction_history(ui, &[(0.5, 3.0); 32], size, 24.0);
-        ui::reduction_meter(ui, 3.0, 6.0, 24.0, vec2(13.0, 120.0));
+        let history = ui::LevelHistory {
+            columns: &[[0.5, 0.4, 3.0]; 32],
+            floor_db: -60.0,
+            max_reduction_db: 24.0,
+            threshold_db: Some(-18.0),
+            threshold_label: "Threshold",
+            draggable: true,
+            span_seconds: 8.0,
+            size,
+        };
+        ui::gain_reduction_history(ui, &history);
+        ui::reduction_meter(
+            ui,
+            &ui::ReductionMeter {
+                reduction_db: 3.0,
+                hold_db: 6.0,
+                max_reduction_db: 24.0,
+                size: vec2(48.0, 120.0),
+            },
+        );
         ui::scope(ui, &[0.0, 0.5, -0.5, 0.2], true, size);
         ui::wavetable_view(
             ui,
@@ -550,16 +577,42 @@ fn every_visualization_renders_without_overflow() {
             },
             size,
         );
-        ui::harmonics_view(ui, &[-6.0; 10], size);
+        ui::harmonics_view(
+            ui,
+            &ui::HarmonicsView {
+                levels_db: &[-6.0; 10],
+                floor_db: -80.0,
+                size,
+            },
+        );
         // Degenerate input must not panic.
         ui::scope(ui, &[], true, size);
         ui::transfer_plot(
             ui,
             &ui::TransferPlot {
                 curve: &[],
-                x_range: (-1.0, 1.0),
-                y_range: (-1.0, 1.0),
                 input: Some(f32::NAN),
+                lit: Some((f32::NAN, 2.0)),
+                size,
+                ..Default::default()
+            },
+        );
+        for columns in [&[][..], &[[f32::NAN, f32::INFINITY, f32::NAN]; 3][..]] {
+            ui::gain_reduction_history(
+                ui,
+                &ui::LevelHistory {
+                    columns,
+                    threshold_db: None,
+                    draggable: false,
+                    ..history
+                },
+            );
+        }
+        ui::harmonics_view(
+            ui,
+            &ui::HarmonicsView {
+                levels_db: &[],
+                floor_db: 0.0,
                 size,
             },
         );
@@ -620,6 +673,336 @@ fn frequency_node_nudges_with_arrow_keys() {
     );
     assert_eq!(drags.len(), 1);
     assert!(drags[0].gain_db > 0.0);
+}
+
+#[test]
+fn value_link_is_one_value_line_and_reports_a_click() {
+    let ctx = themed();
+    let clicked = std::cell::Cell::new(false);
+    let line = std::cell::Cell::new(0.0);
+    let frame = |events: Vec<Event>| {
+        run(&ctx, events, |ui| {
+            line.set(ui::text::note(ui, "100 %").rect.height());
+            let link = ui::value_link(ui, "A very long name of a source track", true, 60.0);
+            clicked.set(clicked.get() || link.clicked());
+            assert!(link.rect.width() <= 60.0, "cut at its width");
+            assert_eq!(link.rect.height(), line.get(), "as tall as a value");
+        })
+    };
+    let used = frame(vec![]);
+    click(
+        pos2(used.left() + 10.0, used.bottom() - 4.0),
+        1,
+        &mut |events| {
+            frame(events);
+        },
+    );
+    assert!(clicked.get());
+}
+
+fn key(key: egui::Key, modifiers: Modifiers) -> Vec<Event> {
+    vec![Event::Key {
+        key,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers,
+    }]
+}
+
+const SHIFT: Modifiers = Modifiers {
+    shift: true,
+    ..Modifiers::NONE
+};
+
+/// One frame with Shift held, which pointer moves read from the input state.
+fn run_shifted(ctx: &Context, events: Vec<Event>, mut add: impl FnMut(&mut egui::Ui)) {
+    let _ = ctx.run(
+        RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 900.0))),
+            time: Some(ctx.cumulative_frame_nr() as f64 * 0.1),
+            modifiers: SHIFT,
+            events,
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.vertical(|ui| add(ui));
+            });
+        },
+    );
+}
+
+/// A 4:1 curve above −20 dB on a 200-point plot whose handle stands on it.
+fn transfer(ui: &mut egui::Ui, handle: Option<(f32, f32)>) -> ui::TransferPlotOutput {
+    let curve: Vec<f32> = (0..=60)
+        .map(|index| {
+            let x = index as f32 - 60.0;
+            if x < -20.0 {
+                x
+            } else {
+                -20.0 + (x + 20.0) / 4.0
+            }
+        })
+        .collect();
+    ui::transfer_plot(
+        ui,
+        &ui::TransferPlot {
+            curve: &curve,
+            x_range: (-60.0, 0.0),
+            y_range: (-60.0, 0.0),
+            axis: ui::TransferAxis::Decibels,
+            handle: handle.map(|(x, y)| ui::TransferHandle {
+                x,
+                y,
+                label: "T",
+                readout: "Threshold",
+            }),
+            // 198 points inside the frame: 3.3 points per decibel.
+            size: vec2(200.0, 200.0),
+            ..Default::default()
+        },
+    )
+}
+
+#[test]
+fn transfer_handle_drags_in_plot_units_and_honours_shift() {
+    let ctx = themed();
+    let handle = std::cell::Cell::new((-20.0, -20.0));
+    let add = |ui: &mut egui::Ui| {
+        if let Some(next) = transfer(ui, Some(handle.get())).dragged {
+            handle.set(next);
+        }
+    };
+    let used = run(&ctx, vec![], add);
+    let inner = used.shrink(1.0);
+    let at = pos2(
+        inner.left() + inner.width() * 40.0 / 60.0,
+        inner.bottom() - inner.height() * 40.0 / 60.0,
+    );
+    run(&ctx, vec![Event::PointerMoved(at)], add);
+    run(&ctx, button(at, true), add);
+    // 33 points right and up are ten decibels on both axes.
+    run(&ctx, vec![Event::PointerMoved(at + vec2(33.0, -33.0))], add);
+    let (x, y) = handle.get();
+    assert!(
+        (x + 10.0).abs() < 0.05 && (y + 10.0).abs() < 0.05,
+        "{x} {y}"
+    );
+    run_shifted(&ctx, vec![Event::PointerMoved(at + vec2(66.0, -33.0))], add);
+    let (x, y) = handle.get();
+    assert!((x + 9.0).abs() < 0.05, "Shift moves a tenth as far: {x}");
+    assert!((y + 10.0).abs() < 0.05, "{y}");
+    // The handle never leaves the axes.
+    run(
+        &ctx,
+        vec![Event::PointerMoved(at + vec2(5000.0, -5000.0))],
+        add,
+    );
+    assert_eq!(handle.get(), (0.0, 0.0));
+}
+
+#[test]
+fn transfer_handle_takes_arrow_keys_wheel_and_double_click() {
+    let ctx = themed();
+    let output = std::cell::RefCell::new(None);
+    let frame = |events: Vec<Event>| {
+        run(&ctx, events, |ui| {
+            *output.borrow_mut() = Some(transfer(ui, Some((-20.0, -20.0))));
+        })
+    };
+    let used = frame(vec![]);
+    let inner = used.shrink(1.0);
+    let at = pos2(
+        inner.left() + inner.width() * 40.0 / 60.0,
+        inner.bottom() - inner.height() * 40.0 / 60.0,
+    );
+    click(at, 1, &mut |events| {
+        frame(events);
+    });
+    let take = || output.borrow_mut().take().unwrap();
+    frame(key(egui::Key::ArrowRight, Modifiers::NONE));
+    assert_eq!(take().nudged, Some((1.0, 0.0)));
+    run_shifted(&ctx, key(egui::Key::ArrowDown, SHIFT), |ui| {
+        *output.borrow_mut() = Some(transfer(ui, Some((-20.0, -20.0))));
+    });
+    assert_eq!(take().nudged, Some((0.0, -0.1)));
+    frame(vec![Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Line,
+        delta: vec2(0.0, 2.0),
+        modifiers: Modifiers::NONE,
+    }]);
+    let scrolled = take();
+    assert_eq!(scrolled.scrolled, Some(2.0));
+    assert!(scrolled.response.changed());
+    let mut double_clicked = false;
+    click(at, 2, &mut |events| {
+        frame(events);
+        double_clicked |= take().double_clicked;
+    });
+    assert!(double_clicked);
+    // Away from the handle the wheel still turns, a click does nothing.
+    let corner = inner.left_top() + vec2(20.0, 20.0);
+    frame(vec![Event::PointerMoved(corner)]);
+    frame(vec![Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Line,
+        delta: vec2(0.0, -1.0),
+        modifiers: Modifiers::NONE,
+    }]);
+    assert_eq!(take().scrolled, Some(-1.0));
+}
+
+#[test]
+fn transfer_plot_without_a_handle_only_shows() {
+    let ctx = themed();
+    let output = std::cell::RefCell::new(None);
+    let frame = |events: Vec<Event>| {
+        run(&ctx, events, |ui| {
+            *output.borrow_mut() = Some(transfer(ui, None));
+        })
+    };
+    let used = frame(vec![]);
+    let at = used.center();
+    frame(vec![Event::PointerMoved(at)]);
+    frame(button(at, true));
+    frame(vec![Event::PointerMoved(at + vec2(30.0, 0.0))]);
+    frame(vec![Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Line,
+        delta: vec2(0.0, 2.0),
+        modifiers: Modifiers::NONE,
+    }]);
+    let output = output.borrow_mut().take().unwrap();
+    assert!(output.dragged.is_none() && output.scrolled.is_none() && output.handle.is_none());
+    assert!(!output.response.changed());
+}
+
+fn history(ui: &mut egui::Ui, threshold: f32, draggable: bool) -> ui::LevelHistoryOutput {
+    ui::gain_reduction_history(
+        ui,
+        &ui::LevelHistory {
+            columns: &[[0.5, 0.25, 6.0]; 16],
+            floor_db: -60.0,
+            max_reduction_db: 24.0,
+            threshold_db: Some(threshold),
+            threshold_label: "Threshold",
+            draggable,
+            span_seconds: 8.0,
+            size: vec2(300.0, 200.0),
+        },
+    )
+}
+
+#[test]
+fn history_threshold_line_stands_where_the_transfer_plot_puts_the_level_and_drags() {
+    let ctx = themed();
+    let mut threshold = -20.0;
+    let frame = |events: Vec<Event>, threshold: &mut f32, draggable: bool| {
+        run(&ctx, events, |ui| {
+            if let Some(next) = history(ui, *threshold, draggable).threshold {
+                *threshold = next;
+            }
+        })
+    };
+    let used = frame(vec![], &mut threshold, true);
+    let inner = used.shrink(1.0);
+    // The same height and range as the 200-point transfer plot above.
+    let at = pos2(
+        inner.center().x,
+        inner.bottom() - inner.height() * 40.0 / 60.0,
+    );
+    frame(vec![Event::PointerMoved(at)], &mut threshold, true);
+    frame(button(at, true), &mut threshold, true);
+    frame(
+        vec![Event::PointerMoved(at - vec2(40.0, 33.0))],
+        &mut threshold,
+        true,
+    );
+    assert!((threshold + 10.0).abs() < 0.05, "{threshold}");
+    frame(button(at - vec2(40.0, 33.0), false), &mut threshold, true);
+    frame(
+        key(egui::Key::ArrowDown, Modifiers::NONE),
+        &mut threshold,
+        true,
+    );
+    assert!((threshold + 11.0).abs() < 0.05, "{threshold}");
+    run_shifted(&ctx, key(egui::Key::ArrowUp, SHIFT), |ui| {
+        if let Some(next) = history(ui, threshold, true).threshold {
+            threshold = next;
+        }
+    });
+    assert!((threshold + 10.9).abs() < 0.05, "{threshold}");
+    // A line that only shows a level does not move.
+    let mut fixed = -20.0;
+    frame(vec![Event::PointerMoved(at)], &mut fixed, false);
+    frame(button(at, true), &mut fixed, false);
+    frame(
+        vec![Event::PointerMoved(at - vec2(0.0, 33.0))],
+        &mut fixed,
+        false,
+    );
+    assert_eq!(fixed, -20.0);
+}
+
+#[test]
+fn reduction_meter_reports_a_click() {
+    let ctx = themed();
+    let clicked = std::cell::Cell::new(false);
+    let frame = |events: Vec<Event>| {
+        run(&ctx, events, |ui| {
+            let response = ui::reduction_meter(
+                ui,
+                &ui::ReductionMeter {
+                    reduction_db: 30.0,
+                    hold_db: f32::NAN,
+                    max_reduction_db: 24.0,
+                    size: vec2(48.0, 200.0),
+                },
+            );
+            clicked.set(clicked.get() || response.clicked());
+        })
+    };
+    let used = frame(vec![]);
+    assert_eq!(used.size(), vec2(48.0, 200.0));
+    click(used.center(), 1, &mut |events| {
+        frame(events);
+    });
+    assert!(clicked.get());
+}
+
+#[test]
+fn harmonic_bars_are_relative_to_the_first_centered_and_capped() {
+    let rect = Rect::from_min_size(Pos2::ZERO, vec2(741.0, 233.0));
+    let view = ui::HarmonicsView {
+        levels_db: &[-6.0, -26.0, -46.0, -200.0, f32::NAN],
+        floor_db: -80.0,
+        size: rect.size(),
+    };
+    let (area, bars) = ui::harmonic_bars(&view, rect);
+    assert_eq!(bars.len(), 5);
+    assert!(rect.contains_rect(area));
+    // The fundamental fills the axis; 20 dB down is a quarter of it lower.
+    assert_eq!(bars[0].top(), area.top());
+    assert!((bars[1].height() - area.height() * 0.75).abs() < 0.01);
+    assert!((bars[2].height() - area.height() * 0.5).abs() < 0.01);
+    assert_eq!(bars[3].height(), 0.0);
+    assert_eq!(bars[4].height(), 0.0);
+    let slot = area.width() / 5.0;
+    for (index, bar) in bars.iter().enumerate() {
+        assert_eq!(bar.width(), 34.0, "a wide view does not grow blocks");
+        assert!((bar.center().x - (area.left() + slot * (index as f32 + 0.5))).abs() < 0.01);
+    }
+    // Any number of bars, narrower where they are many.
+    let many = [0.0; 24];
+    let (area, bars) = ui::harmonic_bars(
+        &ui::HarmonicsView {
+            levels_db: &many,
+            floor_db: -60.0,
+            size: vec2(233.0, 120.0),
+        },
+        Rect::from_min_size(Pos2::ZERO, vec2(233.0, 120.0)),
+    );
+    assert_eq!(bars.len(), 24);
+    assert!(bars[0].width() < area.width() / 24.0);
 }
 
 fn inline(ui: &mut egui::Ui, value: &mut f64) -> egui::Response {

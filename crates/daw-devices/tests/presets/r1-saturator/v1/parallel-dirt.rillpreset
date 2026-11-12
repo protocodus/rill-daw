@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "device": "r1-saturator",
+  "name": "Parallel Dirt",
+  "author": "Rill",
+  "category": "Transistor",
+  "tags": ["parallel", "drums"],
+  "description": "Heavy distortion blended under the dry signal.",
+  "parameters": {
+    "model": "Transistor",
+    "drive": 24.0,
+    "character": 70.0,
+    "mix": 35.0
+  }
+}

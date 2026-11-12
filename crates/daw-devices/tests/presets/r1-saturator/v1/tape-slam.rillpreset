@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "device": "r1-saturator",
+  "name": "Tape Slam",
+  "author": "Rill",
+  "category": "Tape",
+  "tags": ["drums", "bus"],
+  "description": "A drum bus driven hard into tape.",
+  "parameters": {
+    "model": "Tape",
+    "drive": 18.0,
+    "character": 85.0,
+    "focus": 80.0
+  }
+}

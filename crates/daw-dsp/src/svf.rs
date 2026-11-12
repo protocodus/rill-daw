@@ -284,6 +284,105 @@ impl OnePole {
     }
 }
 
+/// First-order section on a [`OnePole`]:
+/// `out = low_gain·lp + high_gain·(x − lp)`. One block for shelves, exact
+/// emphasis pairs, tilt, DC blocking and plain one-pole low-passes.
+#[derive(Clone, Debug)]
+pub struct Shelf1 {
+    /// Integrator gain of the pole, `k/(1 + k)` with `k = tan(π·f/fs)`.
+    pub big_g: f32,
+    pub low_gain: f32,
+    pub high_gain: f32,
+    pole: OnePole,
+}
+
+impl Default for Shelf1 {
+    /// Passes its input unchanged.
+    fn default() -> Self {
+        Self::new(1.0, 1.0, 1.0)
+    }
+}
+
+/// Bilinear frequency variable, held below 0.45 of the sample rate.
+fn warp(hz: f32, sample_rate: f32) -> f32 {
+    (std::f32::consts::PI * (hz / sample_rate).clamp(1e-6, 0.45)).tan()
+}
+
+impl Shelf1 {
+    fn new(k: f32, low_gain: f32, high_gain: f32) -> Self {
+        Self {
+            big_g: k / (1.0 + k),
+            low_gain,
+            high_gain,
+            pole: OnePole::default(),
+        }
+    }
+
+    /// High shelf with unit gain at DC: zero at `zero_hz`, pole at `pole_hz`,
+    /// so the top is raised by about their ratio (exactly that of the
+    /// warped frequencies).
+    pub fn shelf(zero_hz: f32, pole_hz: f32, sample_rate: f32) -> Self {
+        let (zero, pole) = (warp(zero_hz, sample_rate), warp(pole_hz, sample_rate));
+        Self::new(pole, 1.0, pole / zero)
+    }
+
+    /// The exact digital inverse of [`Self::shelf`] with the same arguments:
+    /// pole and zero exchanged. Both are the same bilinear function, so the
+    /// pair is the identity at any sample rate.
+    pub fn inverse_shelf(zero_hz: f32, pole_hz: f32, sample_rate: f32) -> Self {
+        let (zero, pole) = (warp(zero_hz, sample_rate), warp(pole_hz, sample_rate));
+        Self::new(zero, 1.0, zero / pole)
+    }
+
+    /// Tilt around `pivot_hz`: `−gain_db` at DC, `+gain_db` at the top, 0 dB
+    /// at the pivot.
+    pub fn tilt(gain_db: f32, pivot_hz: f32, sample_rate: f32) -> Self {
+        let a = crate::db_to_gain(gain_db);
+        Self::new(warp(a * pivot_hz, sample_rate), 1.0 / a, a)
+    }
+
+    /// First-order high-pass; at a few hertz, a DC blocker.
+    pub fn high_pass(hz: f32, sample_rate: f32) -> Self {
+        Self::new(warp(hz, sample_rate), 0.0, 1.0)
+    }
+
+    pub fn low_shelf(gain_db: f32, hz: f32, sample_rate: f32) -> Self {
+        Self::new(warp(hz, sample_rate), crate::db_to_gain(gain_db), 1.0)
+    }
+
+    /// Takes the other section's coefficients and keeps the state.
+    pub fn set(&mut self, other: &Shelf1) {
+        self.big_g = other.big_g;
+        self.low_gain = other.low_gain;
+        self.high_gain = other.high_gain;
+    }
+
+    pub fn reset(&mut self) {
+        self.pole.state = 0.0;
+    }
+
+    #[inline]
+    pub fn process(&mut self, input: f32) -> f32 {
+        let low = self.pole.low(input, self.big_g);
+        self.low_gain * low + self.high_gain * (input - low)
+    }
+
+    /// The pole's low-pass alone, whatever the gains.
+    #[inline]
+    pub fn low(&mut self, input: f32) -> f32 {
+        self.pole.low(input, self.big_g)
+    }
+
+    /// Exact response at `omega` radians per sample.
+    pub fn response(&self, omega: f64) -> Complex {
+        let omega = omega.clamp(0.0, 0.9999 * std::f64::consts::PI);
+        let big_g = f64::from(self.big_g);
+        let x = Complex::new(0.0, (0.5 * omega).tan() * (1.0 - big_g) / big_g);
+        (Complex::real(f64::from(self.low_gain)) + x.scale(f64::from(self.high_gain)))
+            / (Complex::ONE + x)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -602,5 +701,125 @@ mod tests {
             (peak - std::f32::consts::FRAC_1_SQRT_2).abs() < 0.01,
             "{peak}"
         );
+    }
+
+    /// Gain of a settled sine through `section`, by correlation.
+    fn shelf_gain(section: &mut Shelf1, frequency: f64, rate: f64) -> f64 {
+        let frames = (rate * (0.2 + 20.0 / frequency)) as usize;
+        let skip = frames / 2;
+        let (mut s, mut c, mut reference) = (0.0, 0.0, 0.0);
+        for n in 0..frames {
+            let phase = std::f64::consts::TAU * frequency * n as f64 / rate;
+            let y = f64::from(section.process(phase.sin() as f32));
+            if n >= skip {
+                s += y * phase.sin();
+                c += y * phase.cos();
+                reference += phase.sin() * phase.sin();
+            }
+        }
+        s.hypot(c) / reference
+    }
+
+    #[test]
+    fn shelf_and_its_inverse_are_the_identity() {
+        for rate in [44_100.0_f32, 48_000.0, 96_000.0] {
+            for (zero, ratio) in [(720.0_f32, 1.585), (1500.0, 1.413), (3183.0, 2.512)] {
+                let shelf = Shelf1::shelf(zero, zero * ratio, rate);
+                let inverse = Shelf1::inverse_shelf(zero, zero * ratio, rate);
+                for step in 0..=200 {
+                    let omega = std::f64::consts::PI * f64::from(step) / 200.0;
+                    let product = shelf.response(omega) * inverse.response(omega);
+                    assert!(
+                        (product - Complex::ONE).norm() < 1e-6,
+                        "{rate} {zero} {omega}"
+                    );
+                }
+                // DC stays; the top rises by the ratio of the warped
+                // frequencies.
+                assert!((shelf.response(0.0).norm() - 1.0).abs() < 1e-6);
+                let warped = |hz: f32| (std::f64::consts::PI * f64::from(hz / rate)).tan();
+                let rise = warped(zero * ratio) / warped(zero);
+                let top = shelf.response(std::f64::consts::PI).norm();
+                assert!((top / rise - 1.0).abs() < 1e-3, "{top} against {rise}");
+                // And in the time domain, on noise.
+                let (mut shelf, mut inverse) = (shelf, inverse);
+                let mut state = 1u32;
+                for _ in 0..4000 {
+                    state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                    let x = (state >> 8) as f32 / (1 << 23) as f32 - 1.0;
+                    let y = inverse.process(shelf.process(x));
+                    assert!((y - x).abs() < 1e-4, "{y} against {x}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn tilt_pivots_at_its_frequency() {
+        let rate = 48_000.0;
+        for gain_db in [-6.0_f32, -2.0, 3.0, 6.0] {
+            let tilt = Shelf1::tilt(gain_db, 1000.0, rate);
+            let db = |frequency: f64| {
+                let omega = std::f64::consts::TAU * frequency / f64::from(rate);
+                20.0 * tilt.response(omega).norm().log10()
+            };
+            assert!(db(1000.0).abs() < 0.05, "{gain_db}: {}", db(1000.0));
+            assert!((db(1.0) + f64::from(gain_db)).abs() < 0.05);
+            // Bilinear warping pulls the top up to full gain early; at the
+            // analog response 20 kHz would still be a little short of it.
+            let analog = {
+                let a = 10.0_f64.powf(f64::from(gain_db) / 20.0);
+                let x = 20.0;
+                20.0 * ((1.0 / a).hypot(x) / (1.0_f64).hypot(x / a)).log10()
+            };
+            assert!((db(20_000.0) - analog).abs() < 0.05, "{gain_db}");
+            assert!(
+                (db(20_000.0) - f64::from(gain_db)).abs() < 0.05,
+                "{gain_db}"
+            );
+            // The measured gain is the drawn one.
+            let mut section = tilt.clone();
+            let measured = 20.0 * shelf_gain(&mut section, 5000.0, f64::from(rate)).log10();
+            assert!((measured - db(5000.0)).abs() < 0.01);
+        }
+    }
+
+    #[test]
+    fn high_pass_blocks_dc_and_settles_to_exact_zero() {
+        let rate = 48_000.0;
+        let mut blocker = Shelf1::high_pass(5.0, rate);
+        let gain = 20.0 * shelf_gain(&mut blocker, 20.0, f64::from(rate)).log10();
+        assert!((-0.3..0.0).contains(&gain), "{gain}");
+        blocker.reset();
+        let mut last = 1.0;
+        for _ in 0..48_000 {
+            last = blocker.process(1.0);
+        }
+        // An f32 pole this low stops moving 80 dB below the step.
+        assert!(last.abs() < 2e-4, "{last}");
+        for _ in 0..(2.0 * rate) as usize {
+            last = blocker.process(0.0);
+        }
+        assert_eq!(last, 0.0);
+    }
+
+    #[test]
+    fn low_shelf_and_low_pass_share_the_pole() {
+        let rate = 48_000.0;
+        let shelf = Shelf1::low_shelf(1.5, 90.0, rate);
+        let db = |omega: f64| 20.0 * shelf.response(omega).norm().log10();
+        assert!((db(0.0) - 1.5).abs() < 1e-4);
+        assert!(db(3.0).abs() < 1e-3);
+        let mut section = Shelf1::low_shelf(0.0, 120.0, rate);
+        let mut low = 0.0;
+        for _ in 0..48_000 {
+            low = section.low(1.0);
+        }
+        assert!((low - 1.0).abs() < 1e-5);
+        // `set` changes the coefficients and keeps the state.
+        section.set(&Shelf1::high_pass(120.0, rate));
+        assert!(section.process(1.0).abs() < 1e-4);
+        let identity = Shelf1::default();
+        assert!((identity.response(1.0) - Complex::ONE).norm() < 1e-12);
     }
 }

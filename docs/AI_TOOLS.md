@@ -70,7 +70,7 @@ discovery remains authoritative as the catalog expands.
 | Composition theory | `composer_catalog`, `composer_scale`, `composer_chord`, `composer_progression`, `composer_euclidean`: native, bounded theory queries adapted from midi-composer-mcp; no song edits |
 | Multi-part composition | `compose_progression`: create chord, arpeggio, and bass clips together in one fenced, undoable commit; reuse existing MIDI tracks or create new ones |
 | Musical edits | `apply_edits`, `create_midi_part`, `generate_part`, `transform_phrase`, `set_mix`, `join_clips`: atomic typed batches, complete patterns, seeded generation, phrase transforms, multi-channel settings, and MIDI/audio consolidation |
-| Instruments | `list_plugins`, `organize_plugin`, `assign_plugin`, `create_instrument_part`, `plugin_describe_parameters`: discover catalog IDs with favorites, categories and plug-in format (`VST3`, `CLAP`, `LV2`, `AU`; optional `format` filter, optionally rescanning plug-in folders), organize the library, assign instruments/inserts (an optional `format` must match the catalog entry), create notes plus instrument in one commit, and inspect actual parameter metadata. Rill's built-in devices are listed with format `Built-in` and IDs such as `rill:r1-mini`, `rill:r1-filter` and `rill:r1-equalizer` |
+| Instruments | `list_plugins`, `organize_plugin`, `assign_plugin`, `create_instrument_part`, `plugin_describe_parameters`: discover catalog IDs with favorites, categories and plug-in format (`VST3`, `CLAP`, `LV2`, `AU`; optional `format` filter, optionally rescanning plug-in folders), organize the library, assign instruments/inserts (an optional `format` must match the catalog entry), create notes plus instrument in one commit, and inspect actual parameter metadata. Rill's built-in devices are listed with format `Built-in` and IDs such as `rill:r1-mini`, `rill:r1-filter`, `rill:r1-equalizer`, `rill:r1-saturator` and `rill:r1-compressor` |
 | Built-in devices | `set_device_parameters`, `list_device_presets`, `load_device_preset`, `store_device_preset`: set built-in device parameters by key in their own units (`"200 Hz"`, `-6`, `"Transistor Ladder"`, `true`), as described by `plugin_describe_parameters`; keys are grouped by part where a device has several (R1 Equalizer: `hp.frequency`, `band2.gain`, `band3.type`, `lp.slope`); browse, load (one Undo step) and save `.rillpreset` presets. Saving writes only into the user preset directory |
 | Audio | `audio_analyze`, `audio_analyze_clip`, `audio_process_clip`: measure a rendered excerpt; analyze source regions and propose edits; normalize, split at transients, strip silence, place warp markers at transients (`warp_transients`) or quantize audio toward a grid (`quantize`, with `grid_beats`, `strength` and `max_move_beats`; the result reports `warp.moved`, `largest_move_beats` and `largest_move_ms`) with one checked background operation |
 | Transport | `transport`: inspect, play, pause, stop, or seek the active song |
@@ -86,6 +86,20 @@ A new MIDI track from `create_midi_part` or `apply_edits` starts with the
 built-in R1 Mini synth (`rill:r1-mini`), so it is audible at once; use
 `create_instrument_part` with a catalog ID to create notes and assign another
 instrument together. Rill's built-in devices need no scan.
+
+To duck one track under another (a pad under a kick), insert R1 Compressor
+(`rill:r1-compressor`) on the track to be ducked, set its `sidechain`
+parameter to `"External"` with `set_device_parameters` (the **Sidechain
+Duck** preset does that and sets a fast, deep curve), and route the source
+with the `set_plugin_inputs` edit of `apply_edits` on that insert:
+`{"op":"set_plugin_inputs","track":<ducked track>,"effect":<insert id>,
+"inputs":[{"source_track":<source>,"bus":1,"first_channel":0,"gain":1.0,
+"pre_fader":false}]}`. A built-in device's sidechain is always bus 1,
+channel pair 0; any other address, or a route to a built-in device without
+a sidechain, is rejected with `invalid_arguments`.
+`plugin_describe_parameters` returns `sidechain_input` for a device that
+has one. With `sidechain` on External and nothing routed the compressor
+hears silence and does nothing. An empty `inputs` list removes the routes.
 
 Configure the provider, model, and user API key in **Window → Setup → AI**, then
 choose **Apply**. Open the menu bar’s **AI** button or **Window → Assistant** to

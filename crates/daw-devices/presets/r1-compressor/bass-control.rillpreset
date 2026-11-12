@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device": "r1-compressor",
+  "name": "Bass Control",
+  "author": "Rill",
+  "category": "Bass",
+  "tags": ["bass"],
+  "description": "Even notes; the detector ignores the fundamental.",
+  "parameters": {
+    "character": "Opto",
+    "threshold": -20.0,
+    "ratio": 4.0,
+    "attack": 20.0,
+    "release": 150.0,
+    "sidechain.high_pass": 90.0
+  }
+}
