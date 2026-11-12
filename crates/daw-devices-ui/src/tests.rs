@@ -1344,6 +1344,34 @@ fn spacer_models_stand_on_the_title_lines_and_pick_with_one_click() {
 }
 
 #[test]
+fn spacer_routings_stack_in_their_cells_and_pick_with_one_click() {
+    use spacer::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let routing = panel
+        .state
+        .grid_rects
+        .iter()
+        .find(|(id, _)| *id == ROUTING)
+        .unwrap()
+        .1;
+    // Stacked in their own cells, clear of Mix.
+    assert!(routing.height() > routing.width() / 3.0, "{routing:?}");
+    assert!(
+        routing.right() <= panel.cell(MIX).left() + 0.5,
+        "{routing:?}"
+    );
+    let half = routing.height() / 2.0;
+    panel.click(pos2(routing.center().x, routing.top() + half * 1.5), 1);
+    assert_eq!(panel.plain(ROUTING), 1.0, "Parallel is the lower option");
+    panel.click(pos2(routing.center().x, routing.top() + half * 0.5), 1);
+    assert_eq!(
+        panel.plain(ROUTING),
+        0.0,
+        "Echo → Reverb is the upper option"
+    );
+}
+
+#[test]
 fn spacer_seed_is_a_stepper_that_fits_its_cell() {
     use spacer::*;
     let mut panel = Panel::new(&DESCRIPTOR);

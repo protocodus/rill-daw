@@ -866,15 +866,11 @@ fn spacer_layout(mut layout: Layout) -> Layout {
     layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
     layout.cells = true;
     layout.picture = Some(Picture::Space);
-    layout.picture_place = PicturePlace::Row { row: 0, span: 7 };
+    layout.picture_place = PicturePlace::Row { row: 0, span: 8 };
+    // The two routings stacked: side by side they would take three cells.
+    layout.toggle_columns = &[(ROUTING, 1)];
     layout.sections = vec![
-        cells(
-            "Output",
-            0,
-            5,
-            // Two cells do not hold "Echo → Reverb" beside "Parallel".
-            &[&[C(ROUTING, 3), C(MIX, 1), C(OUTPUT, 1)]],
-        ),
+        cells("Output", 0, 4, &[&[C(ROUTING, 2), C(MIX, 1), C(OUTPUT, 1)]]),
         Section {
             enable: Some(ECHO_ON),
             choice: Some(ECHO_MODEL),

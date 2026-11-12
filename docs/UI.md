@@ -227,11 +227,11 @@ Use the spacing scale consistently:
 | --- | --- |
 | Tight caption/detail separation | 5 |
 | Related controls, form rows, compact toolbar groups, and horizontal menu-frame insets | 8 |
-| Ordinary sibling rows, card/inset padding, menu-item horizontal padding | 13 |
+| Ordinary sibling rows, horizontal container padding, menu-item horizontal padding | 13 |
 | Separate sections, pane gutters, horizontal window padding | 21 |
 | Major workspace separation | 34 |
 
-Windows use 21-point horizontal and 13-point vertical padding. Standard actions
+Every container (card, device frame) pads its contents by the same `PADDING_X` 13 horizontally and `PADDING_Y` 8 vertically: more across than down, as screens are landscape. Windows use 21-point horizontal and 13-point vertical padding. Standard actions
 retain 34-point targets and 13 × 8 padding; compact actions reduce horizontal
 padding to 8 without shrinking the target. Toolbars retain 8-point control gaps
 and vertical padding so small windows leave room for the musical canvas. Menus

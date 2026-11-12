@@ -15,6 +15,10 @@ pub const SPACE_MD: f32 = 13.0;
 pub const SPACE_LG: f32 = 21.0;
 /// Major workspace separation.
 pub const SPACE_XL: f32 = 34.0;
+/// Inner padding of every container (card, device frame): wider than it is
+/// tall, as screens are landscape, and the same in every container.
+pub const PADDING_X: f32 = SPACE_MD;
+pub const PADDING_Y: f32 = SPACE_SM;
 pub const CONTROL_HEIGHT: f32 = 34.0;
 /// A centered control line with room for readable slider scale captions.
 pub const PARAMETER_ROW_HEIGHT: f32 = 55.0;

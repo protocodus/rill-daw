@@ -1837,7 +1837,10 @@ pub fn card(ctx: &egui::Context) -> Frame {
             tokens::BORDER_WIDTH,
             colors.line.gamma_multiply(tokens::GOLDEN_RATIO_INVERSE),
         ))
-        .inner_margin(tokens::SPACE_MD)
+        .inner_margin(egui::Margin::symmetric(
+            tokens::PADDING_X as i8,
+            tokens::PADDING_Y as i8,
+        ))
         .corner_radius(tokens::SURFACE_RADIUS)
 }
 
