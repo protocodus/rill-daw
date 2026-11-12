@@ -163,3 +163,46 @@ r1-spacer 51 reverb.level "Reverb level" linear -60 0
 r1-spacer 20 routing "Routing" choice Echo → Reverb|Parallel
 r1-spacer 30 mix "Mix" linear 0 100
 r1-spacer 31 output "Output" linear -24 24
+r1-sampler 1 sample.root "Root" integer 0 127
+r1-sampler 2 sample.fine "Fine" linear -100 100
+r1-sampler 3 sample.start "Start" linear 0 100
+r1-sampler 4 sample.end "End" linear 0 100
+r1-sampler 5 sample.reverse "Reverse" toggle
+r1-sampler 6 sample.gain "Gain" linear -24 24
+r1-sampler 10 loop.mode "Loop" choice Off|Forward|Ping-pong|One-shot
+r1-sampler 11 loop.start "Loop start" linear 0 100
+r1-sampler 12 loop.end "Loop end" linear 0 100
+r1-sampler 13 loop.crossfade "Crossfade" linear 0 500
+r1-sampler 20 pitch.keytrack "Key track" toggle
+r1-sampler 21 pitch.transpose "Transpose" integer -24 24
+r1-sampler 30 filter.on "Filter" toggle
+r1-sampler 31 filter.type "Type" choice Low-pass|High-pass|Band-pass
+r1-sampler 32 filter.slope "Slope" choice 12 dB|24 dB
+r1-sampler 33 filter.cutoff "Cutoff" log 20 20000
+r1-sampler 34 filter.resonance "Resonance" linear 0 100
+r1-sampler 35 filter.env "Envelope" linear -5 5
+r1-sampler 36 filter.keytrack "Key track" linear 0 100
+r1-sampler 37 filter.velocity "Velocity" linear 0 5
+r1-sampler 40 fenv.attack "Attack" log 0.5 10000
+r1-sampler 41 fenv.decay "Decay" log 1 10000
+r1-sampler 42 fenv.sustain "Sustain" linear 0 100
+r1-sampler 43 fenv.release "Release" log 1 10000
+r1-sampler 50 aenv.attack "Attack" log 0.5 10000
+r1-sampler 51 aenv.hold "Hold" log 1 10000
+r1-sampler 52 aenv.decay "Decay" log 1 10000
+r1-sampler 53 aenv.sustain "Sustain" linear 0 100
+r1-sampler 54 aenv.release "Release" log 1 10000
+r1-sampler 60 lfo.rate "Rate" log 0.01 20
+r1-sampler 61 lfo.sync "Sync" choice Off|4 bars|2 bars|1 bar|1/2|1/4|1/8|1/16
+r1-sampler 62 lfo.shape "Shape" choice Sine|Triangle|Saw|Square|S&H
+r1-sampler 63 lfo.pitch "Pitch" linear 0 12
+r1-sampler 64 lfo.cutoff "Cutoff" linear 0 5
+r1-sampler 65 lfo.level "Level" linear 0 100
+r1-sampler 66 lfo.pan "Pan" linear 0 100
+r1-sampler 70 voice.mode "Mode" choice Poly|Mono|Legato
+r1-sampler 71 voice.count "Voices" integer 1 32
+r1-sampler 72 voice.glide "Glide" log 1 2000
+r1-sampler 73 voice.bend "Bend" integer 0 24
+r1-sampler 74 voice.velocity "Velocity" linear 0 100
+r1-sampler 75 voice.pan "Pan" linear -100 100
+r1-sampler 76 voice.volume "Volume" linear -36 6

@@ -1,6 +1,6 @@
 use super::*;
 use daw_devices::{
-    devices::{compressor, equalizer, filter, mini, modulator, saturator, spacer},
+    devices::{compressor, equalizer, filter, mini, modulator, sampler, saturator, spacer},
     registry,
 };
 use egui::{Event, Modifiers, PointerButton, Pos2, pos2, vec2};
@@ -24,6 +24,8 @@ struct TableHost {
     sources: Option<Vec<String>>,
     routed: usize,
     tempo: Option<f64>,
+    sample: Option<SampleSummary>,
+    sample_requests: Vec<(u32, SampleRequest)>,
 }
 
 impl TableHost {
@@ -88,6 +90,12 @@ impl DeviceHost for TableHost {
     }
     fn route_sidechain(&mut self) {
         self.routed += 1;
+    }
+    fn sample(&self, slot: u32) -> Option<&SampleSummary> {
+        self.sample.as_ref().filter(|_| slot == 0)
+    }
+    fn request_sample(&mut self, slot: u32, request: SampleRequest) {
+        self.sample_requests.push((slot, request));
     }
 }
 
@@ -1719,4 +1727,153 @@ fn spacer_picture_places_a_synced_echo_at_the_song_tempo_while_nothing_plays() {
     let from = echo_point(&panel, 4.0, 0.5, -6.0, false);
     panel.drag(from, from - vec2(0.0, -20.0));
     assert!(panel.plain(ECHO_LEVEL) < -8.0);
+}
+
+#[test]
+fn a_random_roll_sets_the_whole_device_as_one_step() {
+    let host = TableHost::new(&spacer::DESCRIPTOR);
+    let values = random_roll(&spacer::DESCRIPTOR, &host, 0.1, 3);
+    assert_eq!(values.len(), spacer::DESCRIPTOR.parameters.len());
+    assert!(values.iter().any(|(id, value)| *value != host.value(*id)));
+    let output = values.iter().find(|(id, _)| *id == spacer::OUTPUT).unwrap();
+    assert_eq!(output.1, host.value(spacer::OUTPUT));
+}
+
+#[test]
+fn sampler_places_every_parameter_once_on_the_wide_panel() {
+    assert_eq!(
+        panel_width(&sampler::DESCRIPTOR),
+        daw_ui::tokens::POPUP_WIDTH_LG + daw_ui::DEVICE_FRAME_INSET
+    );
+    let mut ids = placed(&sampler::DESCRIPTOR);
+    let count = ids.len();
+    ids.dedup();
+    assert_eq!(count, ids.len(), "placed twice");
+    assert_eq!(ids.len(), sampler::DESCRIPTOR.parameters.len());
+    // Short choices are toggle rows, never drop-downs, and the envelopes
+    // are faders.
+    let layout = panels::layout(&sampler::DESCRIPTOR);
+    assert!(layout.cells && layout.keep_inactive);
+    let faders: Vec<u32> = layout
+        .sections
+        .iter()
+        .flat_map(|section| section.lines.iter().flatten())
+        .filter(|slot| matches!(slot, panels::Slot::Faders(..)))
+        .flat_map(|slot| slot.ids().iter().copied())
+        .collect();
+    for id in [
+        sampler::AENV_ATTACK,
+        sampler::AENV_HOLD,
+        sampler::FENV_RELEASE,
+    ] {
+        assert!(faders.contains(&id));
+    }
+}
+
+#[test]
+fn sampler_controls_stay_inside_their_cards() {
+    let panel = Panel::new(&sampler::DESCRIPTOR);
+    // The recording spans the twelve columns the cards share.
+    let view = panel.state.picture_rects[0];
+    let column = view.width() / 12.0;
+    let layout = panels::layout(&sampler::DESCRIPTOR);
+    let mut offsets = [0u8; 3];
+    for section in &layout.sections {
+        let first = offsets[section.row];
+        offsets[section.row] += section.span;
+        let left = view.left() + column * f32::from(first);
+        let right = left + column * f32::from(section.span);
+        for id in section.ids().chain(section.enable) {
+            for (_, rect) in panel.state.control_rects.iter().filter(|(c, _)| *c == id) {
+                assert!(
+                    rect.left() >= left - 0.5 && rect.right() <= right + 0.5,
+                    "{} parameter {id}: {rect:?} outside {left}..{right}",
+                    section.title
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn sampler_offers_to_load_a_sample_while_empty() {
+    let mut panel = Panel::new(&sampler::DESCRIPTOR);
+    let view = panel.state.picture_rects[0];
+    assert!(view.width() > 800.0, "the recording spans the panel");
+    // The button in the middle of the empty view.
+    panel.click(view.center() - vec2(0.0, daw_ui::tokens::SPACE_SM), 1);
+    assert_eq!(panel.host.sample_requests, vec![(0, SampleRequest::Pick)]);
+    // A file dropped on the view loads.
+    let ctx = panel.ctx.clone();
+    let _ = ctx.run(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 1000.0))),
+            events: vec![Event::PointerMoved(view.left_center() + vec2(20.0, 0.0))],
+            dropped_files: vec![egui::DroppedFile {
+                path: Some("/tmp/a.wav".into()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                show(ui, &sampler::DESCRIPTOR, &mut panel.host, &mut panel.state);
+            });
+        },
+    );
+    assert_eq!(
+        panel.host.sample_requests[1],
+        (0, SampleRequest::File("/tmp/a.wav".into()))
+    );
+}
+
+#[test]
+fn sampler_markers_drag_like_their_knobs() {
+    let mut panel = Panel::new(&sampler::DESCRIPTOR);
+    panel.host.sample = Some(SampleSummary {
+        name: "Piano C4".into(),
+        seconds: 2.0,
+        peaks: vec![(-0.5, 0.5); 256],
+    });
+    panel.set(sampler::LOOP_MODE, 1.0);
+    let view = panel.state.picture_rects.last().copied().unwrap();
+    let inner = view.shrink(1.0);
+    let at = |share: f32| pos2(inner.left() + inner.width() * share, inner.center().y);
+    // Loop start sits at 40 %; drag it to 25 %.
+    panel.drag(at(0.4), at(0.25));
+    assert!((panel.plain(sampler::LOOP_START) - 25.0).abs() < 0.5);
+    panel.drag(at(0.0), at(0.1));
+    assert!(
+        (panel.plain(sampler::START) - 10.0).abs() < 0.5,
+        "{}",
+        panel.plain(sampler::START)
+    );
+    assert!(panel.host.sample_requests.is_empty());
+}
+
+#[test]
+fn sampler_disables_what_does_not_apply_in_place() {
+    let mut panel = Panel::new(&sampler::DESCRIPTOR);
+    // The filter is off by default; One-shot ignores the release.
+    assert!(panel.state.disabled.contains(&sampler::CUTOFF));
+    assert!(panel.state.disabled.contains(&sampler::LOOP_START));
+    let cutoff = panel.cell(sampler::CUTOFF);
+    panel.set(sampler::FILTER_ON, 1.0);
+    panel.set(sampler::LOOP_MODE, 3.0);
+    assert!(!panel.state.disabled.contains(&sampler::CUTOFF));
+    assert!(panel.state.disabled.contains(&sampler::AENV_RELEASE));
+    assert_eq!(panel.cell(sampler::CUTOFF), cutoff, "nothing moves");
+}
+
+#[test]
+fn faders_on_a_row_of_one_line_keep_the_travel_of_two() {
+    let panel = Panel::new(&sampler::DESCRIPTOR);
+    // The cell holds the caption and the value besides the fader.
+    for id in [sampler::FENV_ATTACK, sampler::AENV_RELEASE, sampler::VOLUME] {
+        let fader = panel.cell(id);
+        assert!(
+            fader.height() >= 3.0 * daw_ui::tokens::CONTROL_HEIGHT,
+            "{id}: {fader:?}"
+        );
+    }
 }

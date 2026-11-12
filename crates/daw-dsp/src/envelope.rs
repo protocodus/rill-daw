@@ -1,7 +1,8 @@
 //! Exponential-segment ADSR, shaped like an analog RC envelope: the attack
 //! charges toward a level above full scale and stops at it, decay and
 //! release discharge exponentially. A retrigger starts the attack from the
-//! current level, so it never clicks.
+//! current level, so it never clicks. An optional hold keeps full level
+//! between attack and decay (AHDSR).
 use super::flush;
 
 /// The attack aims this far above full scale, as an analog envelope charging
@@ -17,6 +18,8 @@ pub enum Stage {
     #[default]
     Idle,
     Attack,
+    /// Full level for the hold time; see [`Adsr::set_hold`].
+    Hold,
     Decay,
     Release,
 }
@@ -29,6 +32,9 @@ pub struct Adsr {
     decay: f32,
     sustain: f32,
     release: f32,
+    /// Hold length in calls of [`Adsr::next_value`], and what is left of it.
+    hold: u32,
+    holding: u32,
 }
 
 fn coefficient(seconds: f32, rate: f32) -> f32 {
@@ -44,6 +50,11 @@ impl Adsr {
         self.decay = coefficient(decay * 0.001 / TIME_CONSTANTS, rate);
         self.sustain = sustain.clamp(0.0, 1.0);
         self.release = coefficient(release * 0.001 / TIME_CONSTANTS, rate);
+    }
+
+    /// Time at full level after the attack, in milliseconds (0: none).
+    pub fn set_hold(&mut self, hold: f32, rate: f32) {
+        self.hold = (hold.max(0.0) * 0.001 * rate).round() as u32;
     }
 
     pub fn reset(&mut self) {
@@ -82,6 +93,17 @@ impl Adsr {
                 self.level += (ATTACK_TARGET - self.level) * self.attack;
                 if self.level >= 1.0 {
                     self.level = 1.0;
+                    self.holding = self.hold;
+                    self.stage = if self.hold > 0 {
+                        Stage::Hold
+                    } else {
+                        Stage::Decay
+                    };
+                }
+            }
+            Stage::Hold => {
+                self.holding -= 1;
+                if self.holding == 0 {
                     self.stage = Stage::Decay;
                 }
             }
@@ -136,6 +158,29 @@ mod tests {
         }
         assert_eq!(envelope.stage(), Stage::Idle);
         assert_eq!(envelope.next_value(), 0.0);
+    }
+
+    #[test]
+    fn hold_keeps_full_level_before_the_decay() {
+        let mut envelope = Adsr::default();
+        envelope.set(1.0, 50.0, 0.0, 50.0, RATE);
+        envelope.set_hold(20.0, RATE);
+        envelope.gate_on();
+        let levels: Vec<f32> = (0..samples(80.0)).map(|_| envelope.next_value()).collect();
+        let first = levels.iter().position(|level| *level >= 1.0).unwrap();
+        let last = levels.iter().rposition(|level| *level >= 1.0).unwrap();
+        assert!(first.abs_diff(samples(1.0)) <= 2, "{first}");
+        assert_eq!(last - first, samples(20.0));
+        assert!(levels[last + samples(50.0) - 1] < 0.011);
+        // A release during the hold starts from full level.
+        envelope.reset();
+        envelope.gate_on();
+        for _ in 0..samples(10.0) {
+            envelope.next_value();
+        }
+        assert_eq!(envelope.stage(), Stage::Hold);
+        envelope.gate_off();
+        assert!(envelope.next_value() > 0.99);
     }
 
     #[test]

@@ -252,7 +252,13 @@ pub(crate) fn snapshot_bytes(project: &Project) -> usize {
             Instrument::Vst3 { path, class_id } => {
                 bytes += path.len() + class_id.as_ref().map_or(0, String::len);
             }
-            Instrument::Builtin { device } => bytes += device.len(),
+            Instrument::Builtin { device, samples } => {
+                bytes += device.len()
+                    + samples
+                        .iter()
+                        .map(|s| size_of_val(s) + s.path.len())
+                        .sum::<usize>();
+            }
             Instrument::None => {}
         }
         for effect in &track.inserts {

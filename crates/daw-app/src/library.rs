@@ -1417,7 +1417,7 @@ pub(crate) fn instrument_model(
     match instrument {
         Instrument::None => None,
         Instrument::Vst3 { path, class_id } => Some(plugin_model(catalog, path, class_id)),
-        Instrument::Builtin { device } => Some(crate::builtin_devices::model(device)),
+        Instrument::Builtin { device, .. } => Some(crate::builtin_devices::model(device)),
     }
 }
 

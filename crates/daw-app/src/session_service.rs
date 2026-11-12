@@ -10,6 +10,25 @@ fn failure(error: impl std::fmt::Display) -> ToolError {
     ToolError::new("edit_failed", error.to_string())
 }
 
+/// Built-in instruments decode their samples whole; refuse what would not
+/// fit before it reaches the song.
+fn check_sample_size(path: &str) -> Result<(), ToolError> {
+    let bytes = AudioData::wav_decoded_bytes(path)
+        .map_err(|error| ToolError::new("import_failed", format!("{error:#}")))?;
+    let limit = daw_devices::SampleData::MAX_BYTES as u64;
+    if bytes > limit {
+        return Err(ToolError::new(
+            "too_large",
+            format!(
+                "This recording is {} MiB decoded; samples are limited to {} MiB",
+                bytes.div_ceil(1024 * 1024),
+                limit / (1024 * 1024)
+            ),
+        ));
+    }
+    Ok(())
+}
+
 impl DawApp {
     pub(crate) fn invalidate_assistant_session(&mut self) {
         self.assistant.reset_song();
@@ -140,6 +159,75 @@ impl DawApp {
             self.update_playback();
         }
         Ok(true)
+    }
+
+    /// Loads a recording into sample slot `slot` of the built-in instrument
+    /// on `track_id`, or clears the slot, as one Undo step. The tool, the
+    /// panel and the clip context menu all come through here; the path is
+    /// the source of a clip in the song or a managed import, never one a
+    /// tool named.
+    pub(crate) fn set_device_sample(
+        &mut self,
+        track_id: u64,
+        slot: u32,
+        sample: Option<DeviceSample>,
+    ) -> Result<bool, ToolError> {
+        let descriptor = self.tool_device(track_id, None)?;
+        if slot >= descriptor.sample_slots {
+            return Err(ToolError::new(
+                "invalid_arguments",
+                match descriptor.sample_slots {
+                    0 => format!("{} plays no samples", descriptor.name),
+                    1 => format!("{} has one sample slot, 0", descriptor.name),
+                    n => format!("{} has sample slots 0 to {}", descriptor.name, n - 1),
+                },
+            ));
+        }
+        if let Some(sample) = &sample {
+            check_sample_size(&sample.path)?;
+        }
+        let label = if sample.is_some() {
+            "Load sample"
+        } else {
+            "Clear sample"
+        };
+        let mut candidate = self.project.clone();
+        match sample {
+            Some(sample) => candidate.load_device_sample(track_id, DeviceSample { slot, ..sample }),
+            None => candidate.clear_device_sample(track_id, slot),
+        }
+        .map_err(failure)?;
+        let changed = self.commit_song_candidate(candidate, label)?;
+        self.cache_audio();
+        Ok(changed)
+    }
+
+    /// A new MIDI track below the clip's, named after the clip, whose R1
+    /// Sampler plays the clip's source recording from C4: one Undo step.
+    /// The clip stays as it is.
+    pub(crate) fn use_clip_as_sampler(
+        &mut self,
+        clip_track: u64,
+        clip: u64,
+    ) -> Result<u64, ToolError> {
+        let sample = self
+            .project
+            .clip_sample(clip, 0)
+            .ok_or_else(|| ToolError::new("not_found", "Choose an audio clip"))?;
+        check_sample_size(&sample.path)?;
+        let mut candidate = self.project.clone();
+        let track = candidate.add_instrument_track(sample.name.clone());
+        candidate
+            .set_instrument(
+                track,
+                Instrument::builtin(daw_devices::devices::sampler::DESCRIPTOR.id),
+            )
+            .and_then(|()| candidate.load_device_sample(track, sample))
+            .and_then(|()| candidate.reorder_track(track, clip_track, TrackPlacement::After))
+            .map_err(failure)?;
+        self.commit_song_candidate(candidate, "Use as sampler instrument")?;
+        self.cache_audio();
+        Ok(track)
     }
 
     pub(crate) fn check_tool_revision(
@@ -616,6 +704,46 @@ impl ToolHost for DawApp {
                 Ok(
                     json!({"session_id":self.song_session.id,"revision":self.song_session.revision,
                     "track_id":args.track_id,"insert_id":args.insert_id,"parameters":parameters}),
+                )
+            }
+            "set_device_sample" => {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Args {
+                    session_id: u64,
+                    expected_revision: u64,
+                    track_id: u64,
+                    #[serde(default)]
+                    slot: u32,
+                    clip_id: Option<u64>,
+                    #[serde(default)]
+                    clear: bool,
+                }
+                let args: Args = parse_arguments(arguments)?;
+                self.check_tool_revision(args.session_id, args.expected_revision)?;
+                let sample = match (args.clip_id, args.clear) {
+                    (Some(clip), false) => {
+                        Some(self.project.clip_sample(clip, args.slot).ok_or_else(|| {
+                            ToolError::new("not_found", "Choose an audio clip of this song")
+                        })?)
+                    }
+                    (None, true) => None,
+                    _ => {
+                        return Err(ToolError::new(
+                            "invalid_arguments",
+                            "Give clip_id to load a recording, or clear: true to empty the slot",
+                        ));
+                    }
+                };
+                self.set_device_sample(args.track_id, args.slot, sample)?;
+                let sample = self
+                    .project
+                    .track(args.track_id)
+                    .and_then(|track| track.instrument.sample(args.slot))
+                    .map(|sample| sample.name.clone());
+                Ok(
+                    json!({"session_id":self.song_session.id,"revision":self.song_session.revision,
+                    "track_id":args.track_id,"slot":args.slot,"sample":sample}),
                 )
             }
             "list_device_presets" | "load_device_preset" | "store_device_preset" => {

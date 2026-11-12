@@ -430,3 +430,102 @@ mod sidechain {
         assert_eq!((DESCRIPTOR.latency)(&|_| 1.0, 96_000.0), LATENCY);
     }
 }
+
+/// A MIDI track playing `pitch` for two beats through R1 Sampler, holding the
+/// recording at `sample` (if any) in slot 0.
+fn sampler_project(sample: Option<&std::path::Path>, pitch: u8) -> Project {
+    let mut project = Project::new();
+    project.tempo = 120.0;
+    let track = project.add_instrument_track("Sampler");
+    project
+        .set_instrument(track, Instrument::builtin("r1-sampler"))
+        .unwrap();
+    if let Some(path) = sample {
+        project
+            .load_device_sample(
+                track,
+                daw_core::DeviceSample {
+                    slot: 0,
+                    path: path.to_string_lossy().into_owned(),
+                    name: "A".into(),
+                },
+            )
+            .unwrap();
+    }
+    let channel = project.track_mut(track).unwrap();
+    channel.gain = 1.0;
+    channel.clips.push(Clip::midi(
+        "Note",
+        0.0,
+        2.0,
+        vec![daw_core::Note::new(pitch, 0.0, 2.0, 127)],
+    ));
+    project
+}
+
+fn write_sine(path: &std::path::Path, hz: f32, seconds: f32) {
+    AudioData {
+        sample_rate: 44_100,
+        channels: 1,
+        samples: (0..(44_100.0 * seconds) as usize)
+            .map(|n| 0.5 * (std::f32::consts::TAU * hz * n as f32 / 44_100.0).sin())
+            .collect(),
+    }
+    .write_wav(path)
+    .unwrap();
+}
+
+/// Upward zero crossings per second of the left channel between `from` and
+/// `to` seconds.
+fn frequency(samples: &[f32], from: f32, to: f32) -> f32 {
+    let left: Vec<f32> = samples.iter().step_by(2).copied().collect();
+    let window = &left[(from * RATE as f32) as usize..(to * RATE as f32) as usize];
+    let crossings = window
+        .windows(2)
+        .filter(|pair| pair[0] < 0.0 && pair[1] >= 0.0)
+        .count();
+    crossings as f32 / (to - from)
+}
+
+#[test]
+fn the_sampler_plays_its_sample_relative_to_the_root() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("a.wav");
+    write_sine(&path, 440.0, 2.0);
+    // The root key defaults to C4 (60); an octave up doubles the pitch.
+    let rendered = render(&sampler_project(Some(&path), 72), RATE, 2.0).unwrap();
+    let hz = frequency(&rendered, 0.1, 0.9);
+    assert!((hz - 880.0).abs() < 4.0, "{hz} Hz");
+    let rendered = render(&sampler_project(Some(&path), 60), RATE, 2.0).unwrap();
+    let hz = frequency(&rendered, 0.1, 0.9);
+    assert!((hz - 440.0).abs() < 4.0, "{hz} Hz");
+    // Without a sample the instrument is silent.
+    let rendered = render(&sampler_project(None, 60), RATE, 2.0).unwrap();
+    assert!(rendered.iter().all(|x| *x == 0.0));
+}
+
+#[test]
+fn a_missing_or_oversized_sample_fails_preparation_clearly() {
+    let directory = tempfile::tempdir().unwrap();
+    let missing = directory.path().join("gone.wav");
+    let project = sampler_project(Some(&missing), 60);
+    let error = format!("{:#}", render(&project, RATE, 2.0).unwrap_err());
+    assert!(error.contains("Loading the sample of Sampler"), "{error}");
+    assert!(error.contains("missing"), "{error}");
+    // 16-bit PCM, so the file is half its decoded size of just over 32 MiB.
+    let large = directory.path().join("large.wav");
+    let spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: 44_100,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut writer = hound::WavWriter::create(&large, spec).unwrap();
+    for _ in 0..(daw_devices::SampleData::MAX_BYTES / 4 + 1) {
+        writer.write_sample(0_i16).unwrap();
+    }
+    writer.finalize().unwrap();
+    let project = sampler_project(Some(&large), 60);
+    let error = format!("{:#}", render(&project, RATE, 2.0).unwrap_err());
+    assert!(error.contains("limited to 32 MiB"), "{error}");
+}

@@ -280,6 +280,18 @@ native plug-in gestures, exact instance ownership, override recall and resume,
 including a delayed native setter acknowledgement arriving after Resume.
 `automation_tools_e2e` verifies that tool-driven mix changes enter override,
 preserve curves and Undo/Redo, and respect explicit Resume in an atomic batch.
+`sampler_e2e` loads a recording into R1 Sampler four ways: the
+`set_device_sample` tool from an audio clip, the panel's **Load sample…**
+through the file dialog, a file dropped on the panel's waveform (which adds
+no clip), and the application profile's `document_action` import with the
+sampler's track. Exported audio checks that a key an octave above the root
+plays at twice the recording's frequency, that a key three semitones above a
+changed root follows it, that the recording ends without a loop and sustains
+with one, and that Undo restores the song. **Use as sampler instrument** on a
+clip's context menu adds a MIDI track below it that plays the clip at its
+pitch from C4, undone in one step. Run with
+`cargo test --locked -p daw-app --test sampler_e2e`.
+
 `device_frame_e2e` opens R1 Spacer with one lane following and one held by
 hand: the name and presets share the frame's bar above every section and the
 body repeats neither, both automation states show on their controls, and

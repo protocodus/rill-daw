@@ -87,6 +87,7 @@ pub fn tool_activity(name: &str) -> &'static str {
         "organize_plugin" => "Organizing the plug-in library…",
         "assign_plugin" => "Assigning an instrument or effect…",
         "set_device_parameters" => "Setting device parameters…",
+        "set_device_sample" => "Loading a sample…",
         "list_device_presets" => "Browsing device presets…",
         "load_device_preset" => "Loading a device preset…",
         "store_device_preset" => "Storing a device preset…",

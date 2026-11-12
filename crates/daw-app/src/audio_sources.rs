@@ -71,11 +71,7 @@ impl DawApp {
             .project
             .tracks
             .iter()
-            .flat_map(|track| &track.clips)
-            .filter_map(|clip| match &clip.content {
-                ClipContent::Audio { path, .. } => Some(path.as_str()),
-                _ => None,
-            })
+            .flat_map(daw_core::Track::audio_paths)
             .collect();
         self.audio_files
             .retain(|path, _| wanted.contains(path.as_str()));
@@ -98,16 +94,12 @@ impl DawApp {
             .project
             .tracks
             .iter()
-            .flat_map(|track| &track.clips)
-            .filter_map(|clip| match &clip.content {
-                ClipContent::Audio { path, .. }
-                    if !self.audio_files.contains_key(path)
-                        && !self.audio_admission_failed.contains(path) =>
-                {
-                    Some(path.clone())
-                }
-                _ => None,
+            .flat_map(daw_core::Track::audio_paths)
+            .filter(|path| {
+                !self.audio_files.contains_key(*path)
+                    && !self.audio_admission_failed.contains(*path)
             })
+            .map(str::to_owned)
             .collect();
         if paths.is_empty() {
             return;
@@ -159,11 +151,7 @@ impl DawApp {
                         .project
                         .tracks
                         .iter()
-                        .flat_map(|track| &track.clips)
-                        .filter_map(|clip| match &clip.content {
-                            ClipContent::Audio { path, .. } => Some(path.as_str()),
-                            _ => None,
-                        })
+                        .flat_map(daw_core::Track::audio_paths)
                         .collect();
                     let mut remaining = crate::project_io::WAVEFORM_CACHE_BYTES.saturating_sub(
                         self.waveforms

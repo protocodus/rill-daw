@@ -2036,3 +2036,53 @@ fn a_device_frame_bar_grows_to_hold_presets_on_two_rows() {
         "the body starts below the bar's contents ({body_top} <= {bar_bottom})"
     );
 }
+
+#[test]
+fn sample_view_takes_files_dropped_on_it_and_leaves_others() {
+    let ctx = themed();
+    let peaks = vec![(-0.5, 0.5); 64];
+    let data = ui::SampleViewData {
+        peaks: &peaks,
+        start: 0.0,
+        end: 1.0,
+        loop_range: None,
+        playheads: &[],
+    };
+    // The view's rect, the files it took and those left to the app.
+    let frame = |at: Pos2, dropped: bool| {
+        let mut rect = Rect::NOTHING;
+        let mut files = Vec::new();
+        let mut left = Vec::new();
+        let _ = ctx.run(
+            RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 900.0))),
+                events: vec![Event::PointerMoved(at)],
+                dropped_files: if dropped {
+                    vec![egui::DroppedFile {
+                        path: Some("/tmp/hit.wav".into()),
+                        ..Default::default()
+                    }]
+                } else {
+                    Vec::new()
+                },
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let output = ui::sample_view(ui, &data, vec2(300.0, 100.0));
+                    rect = output.response.rect;
+                    files = output.files;
+                });
+                left = ctx.input(|input| input.raw.dropped_files.clone());
+            },
+        );
+        (rect, files, left)
+    };
+    let (rect, _, _) = frame(pos2(600.0, 600.0), false);
+    let (_, files, left) = frame(rect.center(), true);
+    assert_eq!(files, vec![std::path::PathBuf::from("/tmp/hit.wav")]);
+    assert!(left.is_empty(), "the view took the file");
+    let (_, files, left) = frame(pos2(600.0, 600.0), true);
+    assert!(files.is_empty());
+    assert_eq!(left.len(), 1, "a drop elsewhere is not the view's");
+}

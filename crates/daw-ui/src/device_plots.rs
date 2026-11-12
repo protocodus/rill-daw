@@ -1609,12 +1609,15 @@ pub struct SampleViewOutput {
     pub response: Response,
     pub drags: Vec<(SampleMarker, f32)>,
     pub dropped: Option<String>,
+    /// Files dropped on the view from the system. The view takes them, so
+    /// nothing behind it imports them as well.
+    pub files: Vec<std::path::PathBuf>,
 }
 
 /// Sample waveform with start, end and loop markers and voice playheads.
 /// A focused marker moves with the arrow keys (Shift for fine steps); the
 /// panel also offers each position as a knob. A sample dragged from the
-/// library can be dropped on the view.
+/// library, or a file from the system, can be dropped on the view.
 pub fn sample_view(ui: &mut Ui, data: &SampleViewData<'_>, size: Vec2) -> SampleViewOutput {
     let (rect, response) = frame(ui, size, Sense::hover());
     let colors = theme::palette(ui.ctx());
@@ -1678,6 +1681,18 @@ pub fn sample_view(ui: &mut Ui, data: &SampleViewData<'_>, size: Vec2) -> Sample
     let dropped = union
         .dnd_release_payload::<SampleDrop>()
         .map(|payload| payload.0.clone());
+    let over = ui
+        .input(|input| input.pointer.hover_pos())
+        .is_some_and(|pointer| rect.contains(pointer));
+    let files_hovered = over && ui.input(|input| !input.raw.hovered_files.is_empty());
+    let files: Vec<_> = if over {
+        ui.input_mut(|input| std::mem::take(&mut input.raw.dropped_files))
+            .into_iter()
+            .filter_map(|file| file.path)
+            .collect()
+    } else {
+        Vec::new()
+    };
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
         paint_frame(painter, rect, false);
@@ -1750,7 +1765,7 @@ pub fn sample_view(ui: &mut Ui, data: &SampleViewData<'_>, size: Vec2) -> Sample
                 Stroke::new(1.0_f32, colors.cursor),
             );
         }
-        if union.dnd_hover_payload::<SampleDrop>().is_some() {
+        if union.dnd_hover_payload::<SampleDrop>().is_some() || files_hovered {
             painter.rect_stroke(
                 rect,
                 tokens::RADIUS,
@@ -1764,6 +1779,7 @@ pub fn sample_view(ui: &mut Ui, data: &SampleViewData<'_>, size: Vec2) -> Sample
         response: union,
         drags,
         dropped,
+        files,
     }
 }
 

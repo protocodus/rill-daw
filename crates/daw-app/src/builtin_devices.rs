@@ -108,9 +108,7 @@ pub(crate) fn effect(plugin: &PluginInfo) -> Effect {
 /// The instrument a Library entry creates.
 pub(crate) fn instrument(plugin: &PluginInfo) -> Instrument {
     match descriptor_for(plugin) {
-        Some(descriptor) => Instrument::Builtin {
-            device: descriptor.id.into(),
-        },
+        Some(descriptor) => Instrument::builtin(descriptor.id),
         None => Instrument::Vst3 {
             path: plugin.path.to_string_lossy().into_owned(),
             class_id: plugin.class_id.clone(),

@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "device": "r1-sampler",
+  "name": "Vibrato Lead",
+  "author": "Rill",
+  "category": "Lead",
+  "tags": [
+    "legato",
+    "vibrato",
+    "loop"
+  ],
+  "description": "Legato with glide between overlapping notes, a looped sustain and a gentle vibrato.",
+  "parameters": {
+    "loop.mode": "Forward",
+    "loop.start": 40.0,
+    "loop.end": 75.0,
+    "loop.crossfade": 60.0,
+    "lfo.rate": 5.5,
+    "lfo.shape": "Sine",
+    "lfo.pitch": 0.25,
+    "voice.mode": "Legato",
+    "voice.glide": 90.0,
+    "aenv.attack": 8.0,
+    "aenv.release": 250.0
+  }
+}

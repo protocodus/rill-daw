@@ -190,12 +190,7 @@ fn builtin_instrument_auditions_and_follows_the_panel_wheels() {
     let mut project = Project::new();
     let track = project.add_midi_track("Mini");
     project
-        .set_instrument(
-            track,
-            Instrument::Builtin {
-                device: "r1-mini".into(),
-            },
-        )
+        .set_instrument(track, Instrument::builtin("r1-mini"))
         .unwrap();
     // One sine, filter open: the pitch is easy to read.
     let parameters = [
@@ -255,12 +250,7 @@ fn panel_wheels_survive_a_loop_wrap() {
     project.loop_end = 0.5;
     let track = project.add_midi_track("Mini");
     project
-        .set_instrument(
-            track,
-            Instrument::Builtin {
-                device: "r1-mini".into(),
-            },
-        )
+        .set_instrument(track, Instrument::builtin("r1-mini"))
         .unwrap();
     let parameters = [
         (mini::OSC1_MODEL, 1.0),

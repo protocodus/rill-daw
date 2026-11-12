@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "device": "r1-sampler",
+  "name": "Lo-Fi Chop",
+  "author": "Rill",
+  "category": "Effects",
+  "tags": [
+    "mono",
+    "band-pass",
+    "chop"
+  ],
+  "description": "One voice at a time through a narrow band-pass, held briefly and cut short: chopped, telephone-like slices.",
+  "parameters": {
+    "filter.on": true,
+    "filter.type": "Band-pass",
+    "filter.cutoff": 1400.0,
+    "filter.resonance": 35.0,
+    "aenv.attack": 1.0,
+    "aenv.hold": 140.0,
+    "aenv.decay": 180.0,
+    "aenv.sustain": 0.0,
+    "aenv.release": 60.0,
+    "voice.mode": "Mono",
+    "voice.glide": 25.0,
+    "voice.volume": 0.0
+  }
+}

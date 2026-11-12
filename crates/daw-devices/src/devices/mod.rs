@@ -7,6 +7,7 @@ pub mod equalizer;
 pub mod filter;
 pub mod mini;
 pub mod modulator;
+pub mod sampler;
 pub mod saturator;
 pub mod spacer;
 

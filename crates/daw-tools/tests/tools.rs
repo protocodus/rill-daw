@@ -654,7 +654,7 @@ fn schema_example(schema: &Value) -> Value {
 fn every_published_edit_shape_deserializes_to_the_real_command_contract() {
     let schema = song_edit_schema();
     let variants = schema["oneOf"].as_array().unwrap();
-    assert_eq!(variants.len(), 90);
+    assert_eq!(variants.len(), 91);
     for variant in variants {
         let example = schema_example(variant);
         serde_json::from_value::<SongEdit>(example.clone()).unwrap_or_else(|error| {

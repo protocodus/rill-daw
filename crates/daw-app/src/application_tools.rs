@@ -41,6 +41,9 @@ struct DocumentArgs {
     discard_unsaved: bool,
     beat: Option<f64>,
     track_id: Option<u64>,
+    /// Import into a built-in instrument: its sample slot.
+    #[serde(default)]
+    slot: u32,
     #[serde(default = "include_tails")]
     include_tails: bool,
     /// Export: "wav" (default), "flac", "ogg" or "mp3".
@@ -248,6 +251,7 @@ impl DawApp {
             "import" => self.application_import(
                 &required_path(args.path.as_deref())?,
                 args.track_id,
+                args.slot,
                 args.beat.unwrap_or(self.cursor),
             )?,
             _ => return Err(invalid("Unknown document action")),
@@ -369,6 +373,7 @@ impl DawApp {
         &mut self,
         source: &Path,
         track_id: Option<u64>,
+        slot: u32,
         beat: f64,
     ) -> Result<(), ToolError> {
         self.tool_ready()?;
@@ -382,20 +387,45 @@ impl DawApp {
             .and_then(|s| s.to_str())
             .unwrap_or_default();
         if !extension.eq_ignore_ascii_case("mid") && !extension.eq_ignore_ascii_case("midi") {
-            if track_id.is_some_and(|id| {
-                self.project
-                    .track(id)
-                    .is_none_or(|track| track.kind != TrackKind::Audio)
+            let track = track_id.map(|id| self.project.track(id));
+            if track.is_some_and(|track| {
+                track.is_none_or(|track| !matches!(track.kind, TrackKind::Audio | TrackKind::Midi))
             }) {
-                return Err(invalid("Choose an existing audio track"));
+                return Err(invalid(
+                    "Choose an existing audio track, or a MIDI track whose instrument plays samples",
+                ));
             }
+            // A MIDI track's built-in instrument takes the file as a sample.
+            let sample = match track.flatten() {
+                Some(track) if track.kind == TrackKind::Midi => {
+                    let slots = track
+                        .instrument
+                        .builtin_device()
+                        .and_then(daw_devices::descriptor)
+                        .map_or(0, |descriptor| descriptor.sample_slots);
+                    if slot >= slots {
+                        return Err(invalid(if slots == 0 {
+                            "This track's instrument plays no samples".to_owned()
+                        } else {
+                            format!("Choose a sample slot below {slots}")
+                        }));
+                    }
+                    Some((track.id, slot))
+                }
+                _ => None,
+            };
             if !self.import_picker_ready() {
                 return Err(ToolError::new("busy", self.status.clone()));
             }
             // Reuse the same isolated, bounded, managed-media pipeline as file
             // drops and File → Import. The application capability returns an
             // accepted job; document_status reports it pending until committed.
-            self.queue_audio_import(vec![source.to_path_buf()], track_id, beat);
+            match sample {
+                Some((track, slot)) => {
+                    self.queue_sample_import(source.to_path_buf(), track, slot);
+                }
+                None => self.queue_audio_import(vec![source.to_path_buf()], track_id, beat),
+            }
             return if self.error {
                 Err(ToolError::new("import_failed", self.status.clone()))
             } else {

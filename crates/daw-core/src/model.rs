@@ -293,9 +293,29 @@ pub enum Instrument {
         #[serde(default)]
         class_id: Option<String>,
     },
-    /// A built-in R1 instrument; see [`Effect::Builtin`].
-    Builtin { device: String },
+    /// A built-in R1 instrument; see [`Effect::Builtin`]. `samples` are the
+    /// recordings it plays, by slot; older projects have none.
+    Builtin {
+        device: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        samples: Vec<DeviceSample>,
+    },
 }
+
+/// A recording loaded into one sample slot of a built-in instrument. The
+/// path is an audio source like an audio clip's, bundled with the project;
+/// `name` is what the panel shows, since bundling renames the file.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeviceSample {
+    pub slot: u32,
+    pub path: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
+}
+
+/// R1 Drums has the most sample slots of any built-in instrument.
+pub const MAX_DEVICE_SAMPLES: usize = 16;
+const MAX_SAMPLE_PATH_BYTES: usize = 4096;
 
 /// The built-in instrument a new MIDI track starts with, so a part is
 /// audible without installing a plug-in. Loaded projects keep what they have.
@@ -304,16 +324,42 @@ pub const DEFAULT_INSTRUMENT_DEVICE: &str = "r1-mini";
 impl Instrument {
     /// What a new MIDI track starts with: R1 Mini at its default preset.
     pub fn new_track_default() -> Self {
+        Self::builtin(DEFAULT_INSTRUMENT_DEVICE)
+    }
+
+    /// A built-in instrument with no samples loaded.
+    pub fn builtin(device: impl Into<String>) -> Self {
         Self::Builtin {
-            device: DEFAULT_INSTRUMENT_DEVICE.into(),
+            device: device.into(),
+            samples: Vec::new(),
         }
     }
 
     pub fn builtin_device(&self) -> Option<&str> {
         match self {
-            Self::Builtin { device } => Some(device),
+            Self::Builtin { device, .. } => Some(device),
             _ => None,
         }
+    }
+
+    /// The recordings a built-in instrument plays; none for anything else.
+    pub fn samples(&self) -> &[DeviceSample] {
+        match self {
+            Self::Builtin { samples, .. } => samples,
+            _ => &[],
+        }
+    }
+
+    pub fn samples_mut(&mut self) -> &mut [DeviceSample] {
+        match self {
+            Self::Builtin { samples, .. } => samples,
+            _ => &mut [],
+        }
+    }
+
+    /// The recording in `slot`, if one is loaded.
+    pub fn sample(&self, slot: u32) -> Option<&DeviceSample> {
+        self.samples().iter().find(|sample| sample.slot == slot)
     }
 
     /// A hosted plug-in or a built-in device: something with parameters.
@@ -572,6 +618,18 @@ impl Clip {
 }
 
 impl Track {
+    /// Every audio source the track plays: its audio clips' and the samples
+    /// of its instrument.
+    pub fn audio_paths(&self) -> impl Iterator<Item = &str> {
+        self.clips
+            .iter()
+            .filter_map(|clip| match &clip.content {
+                ClipContent::Audio { path, .. } => Some(path.as_str()),
+                ClipContent::Midi { .. } => None,
+            })
+            .chain(self.instrument.samples().iter().map(|s| s.path.as_str()))
+    }
+
     /// Output channels stay visually grouped beneath their instrument owner.
     pub fn group_parent(&self) -> Option<u64> {
         self.instrument_output
@@ -691,6 +749,24 @@ impl Project {
         self.tracks
             .iter_mut()
             .chain(std::iter::once(&mut self.master))
+    }
+
+    /// The source recording of the audio clip `clip_id`, on any track, as a
+    /// sample for `slot` named after the clip.
+    pub fn clip_sample(&self, clip_id: u64, slot: u32) -> Option<DeviceSample> {
+        let clip = self
+            .tracks
+            .iter()
+            .flat_map(|track| &track.clips)
+            .find(|clip| clip.id == clip_id)?;
+        match &clip.content {
+            ClipContent::Audio { path, .. } => Some(DeviceSample {
+                slot,
+                path: path.clone(),
+                name: clip.name.clone(),
+            }),
+            ClipContent::Midi { .. } => None,
+        }
     }
 
     pub fn clip(&self, track_id: u64, clip_id: u64) -> Option<&Clip> {
@@ -1309,12 +1385,38 @@ impl Project {
                     ensure!(!path.is_empty(), "Missing plug-in path");
                     validate_plugin_class_id(path, class_id.as_deref())?;
                 }
-                Instrument::Builtin { device } => {
+                Instrument::Builtin { device, samples } => {
                     validate_device_id(device)?;
                     ensure!(
                         track.instrument_state.is_empty(),
                         "Built-in instruments keep their state in parameters"
                     );
+                    ensure!(
+                        samples.len() <= MAX_DEVICE_SAMPLES,
+                        "A built-in instrument holds at most {MAX_DEVICE_SAMPLES} samples"
+                    );
+                    for (index, sample) in samples.iter().enumerate() {
+                        ensure!(
+                            (sample.slot as usize) < MAX_DEVICE_SAMPLES,
+                            "Sample slot {} is out of range",
+                            sample.slot
+                        );
+                        ensure!(
+                            !sample.path.is_empty() && sample.path.len() <= MAX_SAMPLE_PATH_BYTES,
+                            "Invalid sample path"
+                        );
+                        ensure!(
+                            sample.name.chars().count() <= 256 && !sample.name.contains('\0'),
+                            "Sample names have at most 256 characters"
+                        );
+                        ensure!(
+                            samples[..index]
+                                .iter()
+                                .all(|other| other.slot != sample.slot),
+                            "Sample slot {} is used twice",
+                            sample.slot
+                        );
+                    }
                 }
                 Instrument::None => {}
             }
@@ -1701,6 +1803,9 @@ impl Project {
             }
             if resolve_plugin_paths && let Instrument::Vst3 { path, .. } = &mut track.instrument {
                 absolutize(path, base);
+            }
+            for sample in track.instrument.samples_mut() {
+                absolutize(&mut sample.path, base);
             }
             for slot in &mut track.inserts {
                 max_id = max_id.max(slot.id);

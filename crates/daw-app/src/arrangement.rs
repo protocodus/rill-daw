@@ -41,6 +41,7 @@ enum Edit {
     Unfreeze(u64),
     MidiTransform(u64, u64, daw_ui::MidiClipAction),
     ClipMuted(u64, u64, bool),
+    UseAsSampler(u64, u64),
     New(u64, f64),
     Mute(u64),
     Solo(u64),
@@ -1026,7 +1027,7 @@ impl DawApp {
                                     let instrument = match &track.instrument {
                                         Instrument::None => "Choose…".to_owned(),
                                         _ if !track.instrument_name.is_empty() => track.instrument_name.clone(),
-                                        Instrument::Builtin { device } => daw_devices::descriptor(device)
+                                        Instrument::Builtin { device, .. } => daw_devices::descriptor(device)
                                             .map_or_else(|| device.clone(), |descriptor| descriptor.name.to_owned()),
                                         Instrument::Vst3 { path, class_id } => self.vst_catalog.iter()
                                             .find(|entry| entry.plugin.path == std::path::Path::new(path)
@@ -1773,6 +1774,14 @@ impl DawApp {
                                 edits.push(Edit::ClipMuted(track.id, clip.id, !clip.muted));
                                 ui.close();
                             }
+                            if matches!(clip.content, ClipContent::Audio { .. })
+                                && daw_ui::button(ui, "Use as sampler instrument")
+                                    .on_hover_text("Add a MIDI track whose R1 Sampler plays this clip's recording from C4")
+                                    .clicked()
+                            {
+                                edits.push(Edit::UseAsSampler(track.id, clip.id));
+                                ui.close();
+                            }
                             if matches!(clip.content, ClipContent::Midi { .. }) {
                                 daw_ui::choice_menu(ui, "MIDI timing and pitch", |ui| {
                                     if let Some(action) = daw_ui::midi_clip_action_menu_contents(ui,
@@ -2504,6 +2513,17 @@ impl DawApp {
                 }
                 Edit::MidiTransform(track, clip, action) => {
                     self.apply_midi_clip_action(track, clip, action);
+                    continue;
+                }
+                Edit::UseAsSampler(track, clip) => {
+                    match self.use_clip_as_sampler(track, clip) {
+                        Ok(instrument) => {
+                            self.selected_track = Some(instrument);
+                            self.selected_clip = None;
+                            self.status = "Sampler instrument added".into();
+                        }
+                        Err(error) => self.message(Err(anyhow::anyhow!(error.message)), ""),
+                    }
                     continue;
                 }
                 Edit::ClipMuted(track, clip, muted) => {

@@ -125,6 +125,7 @@ impl ParamSpec {
             ParamRange::Choice(_) => self.choice_label(normalized).unwrap_or("").to_string(),
             ParamRange::Toggle => if plain >= 0.5 { "On" } else { "Off" }.to_string(),
             ParamRange::Linear { .. } | ParamRange::Log { .. } => format_value(plain, self.unit),
+            ParamRange::Integer { .. } if self.unit == NOTE => note_name(plain),
             ParamRange::Integer { min, .. } => {
                 let number = if min < 0 && plain > 0.0 {
                     format!("+{plain:.0}")
@@ -156,11 +157,54 @@ impl ParamSpec {
                 "off" | "false" | "0" | "no" => Some(0.0),
                 _ => None,
             },
+            ParamRange::Integer { .. } if self.unit == NOTE => parse_note(text)
+                .or_else(|| parse_value(text, ""))
+                .map(|plain| self.to_normalized(plain)),
             ParamRange::Linear { .. } | ParamRange::Log { .. } | ParamRange::Integer { .. } => {
                 parse_value(text, self.unit).map(|plain| self.to_normalized(plain))
             }
         }
     }
+}
+
+/// The unit of a MIDI note number, shown and typed as a note name with
+/// middle C (60) as C4.
+pub const NOTE: &str = "note";
+
+const NOTE_NAMES: [&str; 12] = [
+    "C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B",
+];
+
+fn note_name(note: f32) -> String {
+    let note = note.round() as i32;
+    format!(
+        "{}{}",
+        NOTE_NAMES[note.rem_euclid(12) as usize],
+        note.div_euclid(12) - 1
+    )
+}
+
+/// "C4", "F#3", "Bb2", "C♯-1".
+fn parse_note(text: &str) -> Option<f32> {
+    let mut chars = text.trim().chars();
+    let base = match chars.next()?.to_ascii_uppercase() {
+        'C' => 0,
+        'D' => 2,
+        'E' => 4,
+        'F' => 5,
+        'G' => 7,
+        'A' => 9,
+        'B' => 11,
+        _ => return None,
+    };
+    let rest = chars.as_str();
+    let (shift, octave) = match rest.chars().next() {
+        Some(accidental @ ('#' | '♯')) => (1, &rest[accidental.len_utf8()..]),
+        Some(accidental @ ('b' | '♭')) => (-1, &rest[accidental.len_utf8()..]),
+        _ => (0, rest),
+    };
+    let octave: i32 = octave.trim().replace('−', "-").parse().ok()?;
+    Some(((octave + 1) * 12 + base + shift) as f32)
 }
 
 fn format_value(plain: f32, unit: &str) -> String {
@@ -274,6 +318,29 @@ mod tests {
             Some(semitones.to_normalized(-5.0))
         );
         assert_eq!(semitones.default_normalized(), 0.5);
+    }
+
+    #[test]
+    fn notes_show_and_parse_by_name() {
+        let root = ParamSpec {
+            unit: NOTE,
+            range: ParamRange::Integer { min: 0, max: 127 },
+            default: 60.0,
+            ..CUTOFF
+        };
+        assert_eq!(root.format(root.default_normalized()), "C4");
+        assert_eq!(root.format(root.to_normalized(61.0)), "C♯4");
+        assert_eq!(root.format(0.0), "C-1");
+        for (text, note) in [
+            ("A4", 69.0),
+            ("f#3", 54.0),
+            ("Bb2", 46.0),
+            ("C♯4", 61.0),
+            ("64", 64.0),
+        ] {
+            assert_eq!(root.parse(text), Some(root.to_normalized(note)), "{text}");
+        }
+        assert_eq!(root.parse("H2"), None);
     }
 
     #[test]

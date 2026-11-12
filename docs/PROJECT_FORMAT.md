@@ -212,7 +212,16 @@ and `-`; their state is only the normalized `parameters` overrides keyed by the
 device's stable parameter IDs, so `state` must be empty. A device ID this
 version does not know stays in the project unchanged: an unknown insert passes
 audio through and an unknown instrument is silent. Older Rill versions reject
-the variant. New MIDI tracks start with `"Builtin": {"device": "r1-mini"}`;
+the variant. A built-in instrument that plays recordings (`r1-sampler`) adds
+`samples`: `"Builtin": {"device": "r1-sampler", "samples": [{"slot": 0,
+"path": "assets/00000003.wav", "name": "Felt piano"}]}`. At most 16 samples,
+one per slot from 0 to 15; `name` is optional (at most 256 characters) and is
+what the panel shows. Without samples the field is omitted, so older projects
+load unchanged and Rill writes them as before. Sample files are audio sources
+like audio clips': a `.rill` bundle stores them in `assets/` (one copy for a
+file that a clip also plays), validates them on load like clip media, and a
+missing file stops playback with an error naming the track. A sample must
+decode to at most 32 MiB. New MIDI tracks start with `"Builtin": {"device": "r1-mini"}`;
 projects saved before keep the instrument they had. A built-in insert whose
 device has a sidechain input (`r1-compressor`) may carry `inputs` routes like
 a plug-in insert: its sidechain is `bus` 1, `first_channel` 0. Routes to

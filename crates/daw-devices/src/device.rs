@@ -1,4 +1,5 @@
 use crate::{ParamSpec, Telemetry};
+use daw_dsp::MipMap;
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -100,12 +101,53 @@ pub enum EventKind {
     Sustain(bool),
 }
 
-/// Decoded stereo audio at its source rate. The engine supplies it; devices
-/// never read files.
+/// Decoded audio at its source rate, one or two channels, kept as the
+/// mip-maps a band-limited read at any pitch needs. The engine supplies it;
+/// devices never read files.
 pub struct SampleData {
-    pub sample_rate: f32,
-    pub left: Vec<f32>,
-    pub right: Vec<f32>,
+    sample_rate: f32,
+    channels: Vec<MipMap>,
+}
+
+impl SampleData {
+    /// The largest recording a device takes, decoded to 32-bit samples:
+    /// resident in memory, never streamed.
+    pub const MAX_BYTES: usize = 32 * 1024 * 1024;
+
+    /// One or two channels of equal length; more are dropped. Allocates and
+    /// filters about twice the recording, so call it off the audio thread.
+    pub fn new(sample_rate: f32, channels: &[&[f32]]) -> Self {
+        let mut maps: Vec<MipMap> = channels
+            .iter()
+            .take(2)
+            .map(|samples| MipMap::new(samples))
+            .collect();
+        if maps.is_empty() {
+            maps.push(MipMap::new(&[]));
+        }
+        Self {
+            sample_rate,
+            channels: maps,
+        }
+    }
+
+    pub fn sample_rate(&self) -> f32 {
+        self.sample_rate
+    }
+
+    pub fn frames(&self) -> usize {
+        self.channels.first().map_or(0, MipMap::frames)
+    }
+
+    pub fn channel_count(&self) -> usize {
+        self.channels.len()
+    }
+
+    /// A channel; the last one for an index past it, so a mono recording
+    /// plays on both sides.
+    pub fn channel(&self, index: usize) -> &MipMap {
+        &self.channels[index.min(self.channels.len().saturating_sub(1))]
+    }
 }
 
 /// One block of stereo audio. Effects transform it in place; instruments

@@ -538,6 +538,15 @@ pub enum SongEdit {
     RemoveInstrument {
         track: EntityRef,
     },
+    /// Load an audio clip's source recording into a sample slot of the
+    /// track's built-in instrument, or clear the slot when `clip` is absent.
+    SetDeviceSample {
+        track: EntityRef,
+        #[serde(default)]
+        slot: u32,
+        #[serde(default)]
+        clip: Option<EntityRef>,
+    },
     SetInsertEnabled {
         track: EntityRef,
         effect: u64,
@@ -1480,6 +1489,15 @@ fn apply_one(
             p.remove_insert(r(track)?, *effect)?;
         }
         SongEdit::RemoveInstrument { track } => p.set_instrument(r(track)?, Instrument::None)?,
+        SongEdit::SetDeviceSample { track, slot, clip } => match clip {
+            Some(clip) => {
+                let sample = p
+                    .clip_sample(r(clip)?, *slot)
+                    .context("Choose an audio clip as the sample")?;
+                p.load_device_sample(r(track)?, sample)?;
+            }
+            None => p.clear_device_sample(r(track)?, *slot)?,
+        },
         SongEdit::SetInsertEnabled {
             track,
             effect,

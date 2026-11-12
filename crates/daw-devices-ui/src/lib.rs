@@ -14,6 +14,26 @@ use std::sync::Arc;
 mod panels;
 mod pictures;
 
+/// What a sample slot of a device holds, as its panel shows it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SampleSummary {
+    pub name: String,
+    pub seconds: f32,
+    /// Min and max of each column of the waveform, −1 to 1; empty while the
+    /// host has not read the recording.
+    pub peaks: Vec<(f32, f32)>,
+}
+
+/// What a panel asks of its host for a sample slot.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SampleRequest {
+    /// Choose a file with the host's file dialog.
+    Pick,
+    /// A file dropped on the panel.
+    File(std::path::PathBuf),
+    Clear,
+}
+
 /// The panel's view of the parameter owner.
 pub trait DeviceHost {
     /// Normalized 0–1.
@@ -63,6 +83,12 @@ pub trait DeviceHost {
     }
     /// Opens the host's routing view for this device.
     fn route_sidechain(&mut self) {}
+    /// What sample slot `slot` holds; `None` while it is empty.
+    fn sample(&self, _slot: u32) -> Option<&SampleSummary> {
+        None
+    }
+    /// Loads or clears a sample slot, as one Undo step.
+    fn request_sample(&mut self, _slot: u32, _request: SampleRequest) {}
 }
 
 /// Per-panel UI state the host keeps between frames.
@@ -280,6 +306,9 @@ fn picture(
             pictures::modulation(ui, *height, host, state);
         }
         Some(panels::Picture::Space) => pictures::space(ui, host, state),
+        Some(panels::Picture::Sample { height }) => {
+            pictures::sample(ui, descriptor, *height, host, state);
+        }
         None => {}
     }
 }
@@ -424,6 +453,20 @@ fn cell_row(
     let text = ui.fonts_mut(|fonts| fonts.row_height(&daw_ui::control_caption_font()));
     let between = 2.0 * text + 3.0 * ui.spacing().item_spacing.y + LINE_GAP;
     let tall = heights.iter().sum::<f32>() + between * lines.saturating_sub(1) as f32;
+    // Faders on a row of one line still get the travel of two, so an
+    // envelope reads and drags precisely.
+    let faders = sections.iter().any(|section| {
+        section
+            .lines
+            .iter()
+            .flatten()
+            .any(|slot| matches!(slot, panels::Slot::Faders(..)))
+    });
+    let tall = if faders {
+        tall.max(2.0 * daw_ui::tokens::CONTROL_HEIGHT + between)
+    } else {
+        tall
+    };
     let cells: Vec<daw_ui::GridCell> = beside
         .map(|span| daw_ui::GridCell {
             span,
@@ -1821,16 +1864,35 @@ fn preset_bar(
         Some(daw_ui::PresetAction::Randomize(amount)) => {
             // The time of the click picks the roll.
             let seed = ui.input(|input| input.time).to_bits();
-            let values: Vec<_> =
-                daw_devices::randomized(descriptor, |id| host.value(id) as f32, amount, seed)
-                    .into_iter()
-                    .map(|(id, value)| (id, f64::from(value)))
-                    .collect();
+            let values = random_roll(descriptor, host, amount, seed);
             host.set_values(&values);
             state.preset = None;
         }
         Some(daw_ui::PresetAction::ToggleFavorite(_)) | None => {}
     }
+}
+
+/// A roll of the dice over the whole device, every parameter included as a
+/// preset sets them: a host takes a whole device as one Undo step, never
+/// merged with the roll before it.
+fn random_roll(
+    descriptor: &DeviceDescriptor,
+    host: &dyn DeviceHost,
+    amount: f32,
+    seed: u64,
+) -> Vec<(u32, f64)> {
+    let rolled = daw_devices::randomized(descriptor, |id| host.value(id) as f32, amount, seed);
+    descriptor
+        .parameters
+        .iter()
+        .map(|spec| {
+            let value = rolled
+                .iter()
+                .find(|(id, _)| *id == spec.id)
+                .map_or(host.value(spec.id), |(_, value)| f64::from(*value));
+            (spec.id, value)
+        })
+        .collect()
 }
 
 #[cfg(test)]
