@@ -21,8 +21,10 @@ pub mod modulation;
 mod nonlinear;
 pub mod oscillator;
 mod oversample;
+pub mod playback;
 mod random;
 mod real;
+pub mod resample;
 pub mod reverb;
 mod shaper;
 mod smooth;
@@ -39,7 +41,7 @@ pub use echo::{
     TapeTransport,
 };
 pub use envelope::{Adsr, Stage};
-pub use filter::{FilterKernel, FilterModel, FilterShape, FilterType, LatencyDelay};
+pub use filter::{CleanShape, FilterKernel, FilterModel, FilterShape, FilterType, LatencyDelay};
 pub use follower::EnvelopeFollower;
 pub use lfo::{Lfo, LfoShape};
 pub use limiter::{BoxSmoother, SlidingMax, TruePeak4x};
@@ -48,8 +50,10 @@ pub use modulation::{ModulationKernel, ModulationMode, ModulationSettings};
 pub use nonlinear::{Ladder, SallenKey, soft_limit, tanh_fast};
 pub use oscillator::{Drift, Oscillator, OscillatorModel, SubOscillator, Waveform};
 pub use oversample::{HalfBand, OversampleFactor, Oversampler, Oversampler2x};
+pub use playback::{LoopMode, Markers, Playhead, Region};
 pub use random::{Random, hash32};
 pub use real::Real;
+pub use resample::{MipMap, SincBank, Step};
 pub use reverb::{
     DiffuserStep, Fdn, ReverbKernel, ReverbModel, ReverbSettings, absorption_shelf, butterflies,
     hadamard, nearest_prime,

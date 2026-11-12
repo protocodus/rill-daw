@@ -214,6 +214,45 @@ fn pick(out: SvfOutputs, filter_type: FilterType, band_gain: f32) -> f32 {
     }
 }
 
+/// The Clean model's response, its stage dampings worked out once: for a
+/// caller that runs many of them with the corner moving every sample (the
+/// Sampler's voices), without [`FilterKernel`]'s drive and latency.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CleanShape {
+    filter_type: FilterType,
+    steep: bool,
+    /// Damping (1/Q) of each stage; also the band-pass gain, for a constant peak.
+    k: [f32; 2],
+}
+
+impl CleanShape {
+    /// `resonance` 0–1.
+    pub fn new(filter_type: FilterType, steep: bool, resonance: f32) -> Self {
+        let k = if steep && matches!(filter_type, FilterType::LowPass | FilterType::HighPass) {
+            steep_qs(resonance).map(|q| 1.0 / q)
+        } else {
+            [1.0 / clean_q(resonance); 2]
+        };
+        Self {
+            filter_type,
+            steep,
+            k,
+        }
+    }
+
+    /// One sample through one or two stages; `g` from [`prewarp`].
+    #[inline]
+    pub fn process(&self, first: &mut Svf, second: &mut Svf, x: f32, g: f32) -> f32 {
+        let [k1, k2] = self.k;
+        let y = pick(first.process(x, g, k1), self.filter_type, k1);
+        if self.steep {
+            pick(second.process(y, g, k2), self.filter_type, k2)
+        } else {
+            y
+        }
+    }
+}
+
 /// Delays a signal by [`FilterKernel::LATENCY`]; for a dry path beside a
 /// kernel.
 pub type LatencyDelay = StaticDelay<{ Oversampler2x::LATENCY as usize }>;
@@ -296,23 +335,10 @@ impl FilterKernel {
                 }
                 sum
             }
-            _ if s.steep && matches!(s.filter_type, FilterType::LowPass | FilterType::HighPass) => {
-                let [q1, q2] = steep_qs(resonance);
-                let first = pick(self.svf[0].process(x, g, 1.0 / q1), s.filter_type, 1.0 / q1);
-                pick(
-                    self.svf[1].process(first, g, 1.0 / q2),
-                    s.filter_type,
-                    1.0 / q2,
-                )
-            }
             _ => {
-                let k = 1.0 / clean_q(resonance);
-                let first = pick(self.svf[0].process(x, g, k), s.filter_type, k);
-                if s.steep {
-                    pick(self.svf[1].process(first, g, k), s.filter_type, k)
-                } else {
-                    first
-                }
+                let clean = CleanShape::new(s.filter_type, s.steep, resonance);
+                let (first, rest) = self.svf.split_at_mut(1);
+                clean.process(&mut first[0], &mut rest[0], x, g)
             }
         };
         self.latency.process(wet)
