@@ -522,6 +522,78 @@ pub fn response(
     wet.scale(f64::from(drive_gain(s.model, s.drive_db)))
 }
 
+/// The lowest corner a [`sweep_mix`] low-pass reaches, at the left end.
+pub const SWEEP_LOW_HZ: f32 = 40.0;
+/// The highest corner a [`sweep_mix`] high-pass reaches, at the right end.
+pub const SWEEP_HIGH_HZ: f32 = 10_000.0;
+/// How far from the centre a sweep fades in from no filtering at all, as a
+/// share of either half: the corner starts at the edge of the audio band
+/// and the filter blends in over this travel, so the centre is exactly
+/// bypassed and a sweep through it never steps.
+const SWEEP_BLEND: f32 = 0.08;
+
+/// The corner of a one-knob filter sweep at `position` (−1 to 1): a
+/// low-pass from 20 kHz down to [`SWEEP_LOW_HZ`] left of the centre, a
+/// high-pass from 20 Hz up to [`SWEEP_HIGH_HZ`] right of it, nothing at the
+/// centre. `Some((high_pass, hertz))`.
+pub fn sweep_corner(position: f32) -> Option<(bool, f32)> {
+    if position == 0.0 || !position.is_finite() {
+        return None;
+    }
+    let position = position.clamp(-1.0, 1.0);
+    let travel = position.abs();
+    Some(if position < 0.0 {
+        (false, 20_000.0 * (SWEEP_LOW_HZ / 20_000.0).powf(travel))
+    } else {
+        (true, 20.0 * (SWEEP_HIGH_HZ / 20.0).powf(travel))
+    })
+}
+
+/// Damping of a sweep at `resonance` 0–1: Butterworth (Q 0.71) up to Q 8,
+/// a peak of about 18 dB.
+fn sweep_damping(resonance: f32) -> f32 {
+    1.0 / (std::f32::consts::FRAC_1_SQRT_2 * 11.3_f32.powf(resonance.clamp(0.0, 1.0)))
+}
+
+/// One-knob filter, as on a DJ mixer or a drum machine's pad: the
+/// coefficients of a 12 dB/oct [`Svf`] at [`sweep_corner`]`(position)`,
+/// blended in from the identity near the centre. Run it with [`Svf::tick`]
+/// and ramp between control periods with [`crate::SvfMixRamp`].
+pub fn sweep_mix(position: f32, resonance: f32, sample_rate: f32) -> crate::SvfMix<f32> {
+    let k = sweep_damping(resonance);
+    let Some((high, hertz)) = sweep_corner(position) else {
+        // The poles where the sweep leaves them for either side, so a ramp
+        // from here moves the mix only.
+        return crate::SvfMix::new(prewarp(20_000.0, sample_rate), k, 1.0, 0.0, 0.0);
+    };
+    let g = prewarp(hertz, sample_rate);
+    let t = (position.abs() / SWEEP_BLEND).min(1.0);
+    // Smoothstep: no corner in the blend either.
+    let t = t * t * (3.0 - 2.0 * t);
+    if high {
+        // high = input − k·band − low
+        crate::SvfMix::new(g, k, 1.0, -t * k, -t)
+    } else {
+        crate::SvfMix::new(g, k, 1.0 - t, 0.0, t)
+    }
+}
+
+/// Magnitude of [`sweep_mix`] at `frequency`, from the same coefficients,
+/// for drawing and tests.
+pub fn sweep_response(position: f32, resonance: f32, sample_rate: f32, frequency: f32) -> f32 {
+    let mix = sweep_mix(position, resonance, sample_rate);
+    let frequency = frequency.clamp(1.0, sample_rate * 0.499);
+    let s = Complex::new(
+        0.0,
+        f64::from(prewarp(frequency, sample_rate)) / f64::from(mix.g),
+    );
+    let denominator = s * s + s.scale(f64::from(mix.k)) + Complex::ONE;
+    // m0·input + m1·band + m2·low, with band = s/D and low = 1/D.
+    let response = Complex::real(f64::from(mix.m0))
+        + (s.scale(f64::from(mix.m1)) + Complex::real(f64::from(mix.m2))) / denominator;
+    response.norm() as f32
+}
+
 /// Analog prototype of [`Svf`] at normalized `s`, damping `k`; the band-pass
 /// is scaled by `band_gain` as in [`pick`].
 fn svf_response(s: Complex, filter_type: FilterType, k: f32, band_gain: f32) -> Complex {
@@ -540,6 +612,60 @@ mod tests {
     use super::*;
 
     const RATE: f32 = 48_000.0;
+
+    /// Peak gain of [`sweep_mix`] for a sine at `hz`, through an [`Svf`].
+    fn sweep_gain(position: f32, hz: f32) -> f32 {
+        let mix = sweep_mix(position, 0.0, RATE);
+        let mut svf = Svf::default();
+        let mut peak = 0.0_f32;
+        for n in 0..24_000 {
+            let x = (std::f32::consts::TAU * hz * n as f32 / RATE).sin();
+            let y = svf.tick(x, &mix);
+            if n > 12_000 {
+                peak = peak.max(y.abs());
+            }
+        }
+        peak
+    }
+
+    #[test]
+    fn a_sweep_bypasses_at_its_centre_and_cuts_on_either_side() {
+        assert!(sweep_mix(0.0, 0.3, RATE).is_identity());
+        assert_eq!(sweep_corner(0.0), None);
+        assert_eq!(sweep_corner(-1.0), Some((false, SWEEP_LOW_HZ)));
+        assert_eq!(sweep_corner(1.0), Some((true, SWEEP_HIGH_HZ)));
+        for hz in [50.0, 1000.0, 10_000.0] {
+            assert!((sweep_gain(0.0, hz) - 1.0).abs() < 1e-3, "{hz}");
+        }
+        // Half way left a low-pass near 900 Hz, half way right a high-pass
+        // near 450 Hz.
+        assert!(sweep_gain(-0.5, 100.0) > 0.95 && sweep_gain(-0.5, 8000.0) < 0.05);
+        assert!(sweep_gain(0.5, 5000.0) > 0.95 && sweep_gain(0.5, 50.0) < 0.05);
+        // The drawn response is what plays.
+        for (position, hz) in [(-0.5, 2000.0), (0.6, 300.0), (0.03, 30.0)] {
+            let drawn = sweep_response(position, 0.0, RATE, hz);
+            let played = sweep_gain(position, hz);
+            assert!(
+                (drawn - played).abs() < 0.02,
+                "{position} {hz}: {drawn} {played}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_sweep_moves_without_steps_through_its_centre() {
+        let mut previous = sweep_response(-0.2, 0.5, RATE, 3000.0);
+        for step in -199..=200 {
+            let position = step as f32 * 0.001;
+            let gain = sweep_response(position, 0.5, RATE, 3000.0);
+            assert!(
+                (gain - previous).abs() < 0.05,
+                "{position}: {previous} → {gain}"
+            );
+            previous = gain;
+        }
+    }
+
     const MODELS: [FilterModel; 9] = [
         FilterModel::Clean,
         FilterModel::TransistorLadder,

@@ -26,6 +26,11 @@ pub struct DeviceDescriptor {
     /// `(parameter key, old label, current label)`. Presets store labels, so
     /// renaming an option without an entry here breaks every older preset.
     pub legacy_labels: &'static [(&'static str, &'static str, &'static str)],
+    /// The last parts of parameter keys a random roll never moves, besides
+    /// the output level and volume every device keeps: where a roll would
+    /// change what the device is rather than how it sounds (which part of a
+    /// drum's recording plays, which pads cut each other).
+    pub fixed_on_roll: &'static [&'static str],
     /// Latency in samples at the given normalized parameter values (by ID)
     /// and sample rate: what [`Device::latency_samples`] reports for them.
     /// The engine compares it across an edit to see whether delay

@@ -422,6 +422,7 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-spacer/send-echo.rillpreset"),
     ],
     legacy_labels: &[],
+    fixed_on_roll: &[],
     latency: |_, _| 0,
     create: || Box::new(Spacer::new()),
 };

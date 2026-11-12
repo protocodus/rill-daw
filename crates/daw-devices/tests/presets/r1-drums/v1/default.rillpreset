@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "device": "r1-drums",
+  "name": "Default",
+  "author": "Rill",
+  "category": "Basic",
+  "description": "Sixteen pads on notes 36 to 51, each playing its recording whole, as it is.",
+  "parameters": {}
+}

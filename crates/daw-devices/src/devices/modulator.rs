@@ -216,6 +216,7 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-modulator/fast-wobble.rillpreset"),
     ],
     legacy_labels: &[],
+    fixed_on_roll: &[],
     latency: |_, _| LATENCY,
     create: || Box::new(Modulator::new()),
 };

@@ -1,0 +1,28 @@
+{
+  "format": 1,
+  "device": "r1-drums",
+  "name": "GM Kit",
+  "author": "Rill",
+  "category": "Kits",
+  "tags": [
+    "general midi",
+    "acoustic"
+  ],
+  "description": "Pads laid out as General MIDI drums: the three hi-hats cut each other, toms spread from left to right as seen from the drummer's seat.",
+  "parameters": {
+    "pad7.choke": "1",
+    "pad9.choke": "1",
+    "pad11.choke": "1",
+    "pad6.pan": -45.0,
+    "pad8.pan": -30.0,
+    "pad10.pan": -15.0,
+    "pad12.pan": 0.0,
+    "pad13.pan": 15.0,
+    "pad15.pan": 30.0,
+    "pad7.pan": 20.0,
+    "pad9.pan": 20.0,
+    "pad11.pan": 20.0,
+    "pad14.pan": -25.0,
+    "pad16.pan": 30.0
+  }
+}
