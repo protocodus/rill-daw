@@ -179,3 +179,53 @@ pub fn factory_presets(descriptor: &DeviceDescriptor) -> Vec<Preset> {
         .filter_map(|text| Preset::parse(text).ok())
         .collect()
 }
+
+/// The values a roll of the dice gives a device's parameters, as normalized
+/// `(id, value)` pairs of the ones that change. `amount` (0–1) is how far a
+/// value may move across its range: a continuous one lands anywhere within
+/// that distance of where it is, and a choice or switch moves to another
+/// option, picked at random, with that chance. The output level and volume
+/// stay as they are, so no roll is a jump in loudness. `seed` picks the roll.
+pub fn randomized(
+    descriptor: &DeviceDescriptor,
+    value: impl Fn(u32) -> f32,
+    amount: f32,
+    seed: u64,
+) -> Vec<(u32, f32)> {
+    let amount = amount.clamp(0.0, 1.0);
+    // SplitMix64: a whole roll from one seed, uniform in 0..1.
+    let mut state = seed;
+    let mut next = || {
+        state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        ((z ^ (z >> 31)) >> 40) as f32 / (1u64 << 24) as f32
+    };
+    descriptor
+        .parameters
+        .iter()
+        .filter(|spec| !matches!(spec.key.rsplit('.').next(), Some("output" | "volume")))
+        .filter_map(|spec| {
+            let current = value(spec.id);
+            let rolled = match spec.range {
+                ParamRange::Choice(_) | ParamRange::Toggle => {
+                    let count = spec.steps().unwrap_or(1);
+                    if count < 2 || next() >= amount {
+                        return None;
+                    }
+                    let index = spec.to_plain(current) as usize;
+                    let other = 1 + ((next() * (count - 1) as f32) as usize).min(count - 2);
+                    spec.to_normalized(((index + other) % count) as f32)
+                }
+                _ => {
+                    let low = (current - amount).max(0.0);
+                    let high = (current + amount).min(1.0);
+                    // Whole numbers snap to the nearest one.
+                    spec.to_normalized(spec.to_plain(low + next() * (high - low)))
+                }
+            };
+            (rolled != current).then_some((spec.id, rolled))
+        })
+        .collect()
+}

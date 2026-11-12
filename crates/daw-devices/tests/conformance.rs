@@ -597,3 +597,47 @@ fn descriptor_latency_is_what_the_device_reports() {
         }
     }
 }
+
+#[test]
+fn a_roll_stays_within_its_amount_and_keeps_the_output_level() {
+    for descriptor in registry() {
+        let defaults = |id: u32| {
+            descriptor
+                .parameter(id)
+                .map_or(0.0, |spec| spec.default_normalized())
+        };
+        for seed in 0..32 {
+            for amount in [0.01_f32, 0.1] {
+                for (id, value) in daw_devices::randomized(descriptor, defaults, amount, seed) {
+                    let spec = descriptor.parameter(id).unwrap();
+                    assert_ne!(spec.key, "output", "{}", descriptor.id);
+                    assert!((0.0..=1.0).contains(&value));
+                    if spec.steps().is_none() {
+                        assert!(
+                            (value - defaults(id)).abs() <= amount + 1e-6,
+                            "{} {} moved {} at {amount}",
+                            descriptor.id,
+                            spec.key,
+                            value - defaults(id)
+                        );
+                    }
+                }
+            }
+        }
+        // A full roll moves most of the device, choices included.
+        let rolled = daw_devices::randomized(descriptor, defaults, 1.0, 7);
+        assert!(
+            rolled.len() * 2 > descriptor.parameters.len(),
+            "{}",
+            descriptor.id
+        );
+        for (id, value) in &rolled {
+            let spec = descriptor.parameter(*id).unwrap();
+            if spec.steps().is_some()
+                && !matches!(spec.range, daw_devices::ParamRange::Integer { .. })
+            {
+                assert_ne!(spec.to_plain(*value), spec.to_plain(defaults(*id)));
+            }
+        }
+    }
+}

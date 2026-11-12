@@ -102,7 +102,7 @@ fn spacer_sits_in_its_frame_and_resumes_an_overridden_lane_from_its_control() {
     assert_eq!(preset.len(), 1);
     let (preset_x, preset_y) = center(preset[0]);
     assert!((name_y - preset_y).abs() < 4.0, "{name_y} {preset_y}");
-    assert!(preset_x > name_x + 200.0, "presets stand at the right");
+    assert!(preset_x > name_x + 100.0, "presets stand at the right");
     let (_, echo_y) = center(labels(&state, "ECHO")[0]);
     assert!(echo_y > name_y + 40.0);
 
@@ -135,5 +135,23 @@ fn spacer_sits_in_its_frame_and_resumes_an_overridden_lane_from_its_control() {
         2,
         "{after:?}"
     );
+
+    // Random 10% moves the device's own values in one Undo step and keeps
+    // its output level.
+    let before = app.inspect();
+    let inserts = |state: &Value| state["project"]["tracks"][0]["inserts"][0]["parameters"].clone();
+    let rolled = app.click("10%");
+    assert_ne!(inserts(&rolled), inserts(&before), "{}", rolled["project"]);
+    let output = |state: &Value| {
+        inserts(state)
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|parameter| parameter["id"] == daw_devices::devices::spacer::OUTPUT)
+            .cloned()
+    };
+    assert_eq!(output(&rolled), output(&before));
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(inserts(&undone), inserts(&before));
     app.quit();
 }

@@ -1542,8 +1542,9 @@ color, so the two levels never read alike. Built-in device cards use the same
 pair.
 `preset_group` holds every preset control in one bordered group with its own
 dimmed **Preset** title: previous and next, the preset menu, **Save as…**
-(the name is typed in the group) and **Reset**. It returns a `PresetAction`
-and is the same wherever presets appear.
+(the name is typed in the group), **Reset**, and **Random** 1% · 10% · 100%
+(`PresetAction::Randomize`). It returns a `PresetAction` and is the same
+wherever presets appear.
 `preset_browser` provides search, category and tag filters, Factory/User,
 favorites, **Save as…** and **Reset to default**. `generic_device_panel`
 builds a whole panel from `ParamRow`s (normalized values, `format`/`parse`
