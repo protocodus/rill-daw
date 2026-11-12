@@ -734,8 +734,9 @@ impl EchoLine {
             let line = &self.line;
             let sinc = |position: f64| {
                 let position = position.max(SincTable::REACH as f64);
-                let whole = position.floor();
-                line.read_sinc(whole as usize, (position - whole) as f32, shared.sinc)
+                // Positive, so the cast is the floor without a call.
+                let whole = position as usize;
+                line.read_sinc(whole, (position - whole as f64) as f32, shared.sinc)
             };
             let value = if shared.model == EchoModel::Tape {
                 self.head_delay[head] += self.head_step[head];

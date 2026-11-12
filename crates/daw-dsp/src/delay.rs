@@ -49,8 +49,9 @@ impl DelayLine {
     #[inline]
     pub fn read(&self, delay: f32) -> f32 {
         let delay = delay.clamp(1.0, self.max_delay().max(1.0));
-        let whole = delay.floor();
-        self.read_at(whole as usize, delay - whole)
+        // The delay is positive, so the cast is its floor without a call.
+        let whole = delay as usize;
+        self.read_at(whole, delay - whole as f32)
     }
 
     /// [`Self::read`] with the whole (at least 1) and fractional (0 up to 1)

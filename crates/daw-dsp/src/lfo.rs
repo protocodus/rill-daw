@@ -74,7 +74,14 @@ impl Lfo {
     /// Advances by `increment` cycles (rate / sample rate).
     #[inline]
     pub fn advance(&mut self, increment: f64) {
-        self.set_phase(self.phase + increment);
+        let next = self.phase + increment;
+        // Within the cycle nothing wraps and nothing is drawn, which spares
+        // the remainder on all but one sample of a cycle.
+        if next >= self.phase && next < 1.0 {
+            self.phase = next;
+        } else {
+            self.set_phase(next);
+        }
     }
 
     /// Jumps to an absolute phase in cycles; a new S&H value is drawn on
