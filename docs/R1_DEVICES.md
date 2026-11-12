@@ -1557,9 +1557,12 @@ layout. Everything is visible at once; about 45 parameters.
 | Voice | Mode, Voices (1 – 8), Glide, Bend range, Drift (0 – 100 %), Volume |
 
 **DSP.** The `daw_dsp` VCO or DCO per oscillator, with hard sync, mixed into
-the shared nonlinear filter kernel, whole voice at 2× oversampling. Modulation
+the shared nonlinear filter kernel, whole voice at 2× oversampling. The
+voices are summed at that rate and one half-band filter brings the sum down:
+the filter is linear, so the sum sounds as eight filters did, and a voice's
+amplifier gain ramps at the doubled rate. Modulation
 runs at a control rate of 8 samples with linear ramps between updates. Eight
-voices take about 5 % of one core in real time (`devices_bench` example). Drift adds a slow, seeded
+voices take about 4 % of one core in real time (`devices_bench` example). Drift adds a slow, seeded
 per-voice random walk to pitch and cutoff so stacked notes do not sound
 static. The mixer can overdrive the filter input, as on the hardware this
 layout comes from.
@@ -1938,6 +1941,10 @@ the 48-tap read.
 - No allocation in `process`, using the engine's existing allocation counter.
 - A `devices_bench` example reporting per-device CPU time per block, published
   as measurements, not as guarantees.
+- A `devices_null` example for changes that must not change the sound:
+  `write` renders every factory preset of every device from a fixed
+  performance, `compare` prints each render's residual against the earlier
+  one, its change in level and the largest change of a third-octave band.
 
 **Engine tests:** built-in instrument and insert render, automation of a
 built-in parameter equals the manual value path, latency compensation with
