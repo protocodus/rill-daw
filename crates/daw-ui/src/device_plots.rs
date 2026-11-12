@@ -1603,6 +1603,9 @@ pub struct SampleViewData<'a> {
     pub loop_range: Option<(f32, f32)>,
     /// Voice positions, 0 to 1.
     pub playheads: &'a [f32],
+    /// The amplifier's level, 0 to 1, at even steps from the start marker
+    /// to the end marker, drawn over the waveform; empty for none.
+    pub envelope: &'a [f32],
 }
 
 pub struct SampleViewOutput {
@@ -1755,6 +1758,22 @@ pub fn sample_view(ui: &mut Ui, data: &SampleViewData<'_>, size: Vec2) -> Sample
                 color,
                 Stroke::NONE,
             ));
+        }
+        if data.envelope.len() > 1 {
+            let last = (data.envelope.len() - 1) as f32;
+            let points: Vec<_> = data
+                .envelope
+                .iter()
+                .enumerate()
+                .map(|(index, level)| {
+                    let at = data.start + (data.end - data.start) * index as f32 / last;
+                    pos2(
+                        x_of(at),
+                        inner.bottom() - inner.height() * finite(*level, 0.0).clamp(0.0, 1.0),
+                    )
+                })
+                .collect();
+            painter.add(Shape::line(points, Stroke::new(1.5_f32, colors.accent)));
         }
         for playhead in data.playheads {
             painter.line_segment(

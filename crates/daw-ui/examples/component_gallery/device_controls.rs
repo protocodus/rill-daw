@@ -157,6 +157,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
             name: ["Kick", "Snare", "Hat", "Clap"][index % 4],
             loaded: index < 9,
             activity: if index == 1 { 0.6 } else { 0.0 },
+            muted: index == 3,
         });
         if let Some(selected) =
             ui::pad_grid(ui, &pads, state.selected_pad, egui::vec2(233.0, 144.0)).selected

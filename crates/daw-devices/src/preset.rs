@@ -185,7 +185,9 @@ pub fn factory_presets(descriptor: &DeviceDescriptor) -> Vec<Preset> {
 /// value may move across its range: a continuous one lands anywhere within
 /// that distance of where it is, and a choice or switch moves to another
 /// option, picked at random, with that chance. The output level and volume
-/// stay as they are, so no roll is a jump in loudness. `seed` picks the roll.
+/// stay as they are, so no roll is a jump in loudness, and so do the
+/// parameters the descriptor fixes ([`DeviceDescriptor::fixed_on_roll`]).
+/// `seed` picks the roll.
 pub fn randomized(
     descriptor: &DeviceDescriptor,
     value: impl Fn(u32) -> f32,
@@ -205,7 +207,10 @@ pub fn randomized(
     descriptor
         .parameters
         .iter()
-        .filter(|spec| !matches!(spec.key.rsplit('.').next(), Some("output" | "volume")))
+        .filter(|spec| {
+            let last = spec.key.rsplit('.').next().unwrap_or(spec.key);
+            !matches!(last, "output" | "volume") && !descriptor.fixed_on_roll.contains(&last)
+        })
         .filter_map(|spec| {
             let current = value(spec.id);
             let rolled = match spec.range {

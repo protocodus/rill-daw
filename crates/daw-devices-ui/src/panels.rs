@@ -2,7 +2,7 @@
 //! layout: one section per parameter group, every control visible.
 use daw_devices::DeviceDescriptor;
 use daw_devices::devices::{
-    compressor, equalizer, filter, mini, modulator, sampler, saturator, spacer,
+    compressor, drums, equalizer, filter, mini, modulator, sampler, saturator, spacer,
 };
 use daw_ui::{Glyph, ToggleFace};
 
@@ -167,6 +167,10 @@ pub enum Picture {
     /// The recording of sample slot 0 with its markers and the voices
     /// playing it.
     Sample { height: f32 },
+    /// R1 Drums: the pads with the kit's volume beside the selected pad's
+    /// recording, its markers, envelope and playhead; the cards below are
+    /// that pad's.
+    Drums { height: f32 },
 }
 
 impl Layout {
@@ -275,6 +279,12 @@ fn cells(title: &'static str, row: usize, span: u8, lines: &[&[Slot]]) -> Sectio
 }
 
 pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
+    layout_for(descriptor, 0)
+}
+
+/// The layout with `pad` (0–15) selected, for a device whose cards show
+/// one pad at a time; the same as [`layout`] for any other.
+pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
     let mut layout = generic(descriptor);
     if descriptor.id == filter::DESCRIPTOR.id {
         use filter::*;
@@ -470,7 +480,141 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
     if descriptor.id == sampler::DESCRIPTOR.id {
         layout = sampler_layout(layout);
     }
+    if descriptor.id == drums::DESCRIPTOR.id {
+        layout = drums_layout(layout, pad.min(drums::PADS - 1));
+    }
     layout
+}
+
+/// Each pad's IDs of the parameters at `offsets`, for slots that hold
+/// several.
+const fn per_pad<const N: usize>(offsets: [u32; N]) -> [[u32; N]; drums::PADS] {
+    let mut ids = [[0; N]; drums::PADS];
+    let mut pad = 0;
+    while pad < drums::PADS {
+        let mut index = 0;
+        while index < N {
+            ids[pad][index] = drums::id(pad, offsets[index]);
+            index += 1;
+        }
+        pad += 1;
+    }
+    ids
+}
+
+static DRUM_ENVELOPES: [[u32; 3]; drums::PADS] =
+    per_pad([drums::ATTACK, drums::HOLD, drums::DECAY]);
+static DRUM_VELOCITIES: [[u32; 1]; drums::PADS] = per_pad([drums::VELOCITY]);
+static DRUM_CHOKES: [u32; drums::PADS] = {
+    let ids = per_pad([drums::CHOKE]);
+    let mut out = [0; drums::PADS];
+    let mut pad = 0;
+    while pad < drums::PADS {
+        out[pad] = ids[pad][0];
+        pad += 1;
+    }
+    out
+};
+
+/// Captions of every pad's controls where the card names the rest.
+static DRUM_CAPTIONS: [(u32, &str); 2 * drums::PADS] = {
+    let mut out = [(0, ""); 2 * drums::PADS];
+    let mut pad = 0;
+    while pad < drums::PADS {
+        // The Pitch card names the envelope they shape.
+        out[2 * pad] = (drums::id(pad, drums::PITCH_ENV), "Env");
+        out[2 * pad + 1] = (drums::id(pad, drums::ENV_DECAY), "Decay");
+        pad += 1;
+    }
+    out
+};
+
+/// R1 Drums: the pads and the selected pad's recording over the whole
+/// width; below, that pad's controls on R1 Mini's grid of equal cells in
+/// the order of its signal: what of the recording plays and how a hit cuts
+/// others, its pitch and pitch envelope, the amplifier, then the pad's
+/// filter, drive, level and pan. Twelve cells by two lines hold the
+/// nineteen controls with no hole.
+fn drums_layout(mut layout: Layout, pad: usize) -> Layout {
+    use Slot::{Control as C, Faders};
+    use drums::*;
+    let at = |offset: u32| id(pad, offset);
+    layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
+    layout.cells = true;
+    layout.picture = Some(Picture::Drums { height: 200.0 });
+    layout.picture_place = PicturePlace::Above;
+    layout.sections = vec![
+        cells(
+            "Playback",
+            0,
+            3,
+            &[
+                &[C(at(START), 1), C(at(END), 1), C(at(REVERSE), 1)],
+                &[C(at(TRIGGER), 2), C(at(CHOKE), 1)],
+            ],
+        ),
+        cells(
+            "Pitch",
+            0,
+            2,
+            &[
+                &[C(at(PITCH), 1), C(at(FINE), 1)],
+                &[C(at(PITCH_ENV), 1), C(at(ENV_DECAY), 1)],
+            ],
+        ),
+        cells(
+            "Amp envelope",
+            0,
+            4,
+            &[&[
+                Faders(&DRUM_ENVELOPES[pad], 3),
+                Faders(&DRUM_VELOCITIES[pad], 1),
+            ]],
+        ),
+        // The pad's own path after its hits, in order; a card of one cell
+        // would be too narrow for the filter's corner.
+        cells(
+            "Filter & output",
+            0,
+            3,
+            &[
+                &[C(at(FILTER), 1), C(at(RESONANCE), 1), C(at(DRIVE), 1)],
+                &[C(at(LEVEL), 1), C(at(PAN), 1), C(at(MUTE), 1)],
+            ],
+        ),
+    ];
+    layout.captions = &DRUM_CAPTIONS;
+    // Five groups are too many for toggles in one cell.
+    layout.dials = &DRUM_CHOKES;
+    layout.visible = |id, values| applies(id, &drums_settings(values));
+    layout.keep_inactive = true;
+    layout.readout = |id, values| {
+        let (pad, offset) = pad_of(id)?;
+        let settings = drums_settings(values);
+        let pad = &settings.pads[pad];
+        match offset {
+            HOLD if pad.hold_ms.is_none() => Some("Full".into()),
+            FILTER => Some(match daw_devices::dsp::sweep_corner(pad.filter) {
+                None => "Off".into(),
+                Some((high, hertz)) => {
+                    let kind = if high { "HP" } else { "LP" };
+                    if hertz >= 1000.0 {
+                        format!("{kind} {:.1} kHz", hertz / 1000.0)
+                    } else {
+                        format!("{kind} {hertz:.0} Hz")
+                    }
+                }
+            }),
+            LEVEL if pad.gain == 0.0 => Some("−∞ dB".into()),
+            CHOKE if pad.choke > 0 => Some(format!("Group {}", pad.choke)),
+            _ => None,
+        }
+    };
+    layout
+}
+
+pub(crate) fn drums_settings(values: Values<'_>) -> drums::Settings {
+    drums::Settings::from_normalized(|id| values(id) as f32)
 }
 
 /// R1 Sampler on R1 Mini's grid of equal cells, in signal order: the

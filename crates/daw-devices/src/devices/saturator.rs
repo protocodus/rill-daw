@@ -148,6 +148,7 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-saturator/parallel-dirt.rillpreset"),
     ],
     legacy_labels: &[],
+    fixed_on_roll: &[],
     latency: |_, _| LATENCY,
     create: || Box::new(Saturator::new()),
 };

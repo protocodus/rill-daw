@@ -594,6 +594,7 @@ fn every_visualization_renders_without_overflow() {
                 end: 1.0,
                 loop_range: None,
                 playheads: &[0.5],
+                envelope: &[0.0, 1.0, 0.5, 0.0],
             },
             size,
         );
@@ -2047,6 +2048,7 @@ fn sample_view_takes_files_dropped_on_it_and_leaves_others() {
         end: 1.0,
         loop_range: None,
         playheads: &[],
+        envelope: &[],
     };
     // The view's rect, the files it took and those left to the app.
     let frame = |at: Pos2, dropped: bool| {
@@ -2085,4 +2087,56 @@ fn sample_view_takes_files_dropped_on_it_and_leaves_others() {
     let (_, files, left) = frame(pos2(600.0, 600.0), true);
     assert!(files.is_empty());
     assert_eq!(left.len(), 1, "a drop elsewhere is not the view's");
+}
+
+#[test]
+fn pad_grid_loads_a_file_dropped_on_a_pad_into_that_pad() {
+    let ctx = themed();
+    let pads = [ui::PadView::default(); 16];
+    let size = vec2(233.0, 144.0);
+    // The grid's rect, the pad and file it took and the files left over.
+    let frame = |at: Pos2, dropped: bool| {
+        let mut rect = Rect::NOTHING;
+        let mut files = None;
+        let mut left = Vec::new();
+        let _ = ctx.run(
+            RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 900.0))),
+                events: vec![Event::PointerMoved(at)],
+                dropped_files: if dropped {
+                    vec![egui::DroppedFile {
+                        path: Some("/tmp/snare.wav".into()),
+                        ..Default::default()
+                    }]
+                } else {
+                    Vec::new()
+                },
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let top = ui.cursor().min;
+                    let output = ui::pad_grid(ui, &pads, 0, size);
+                    rect = Rect::from_min_size(top, size);
+                    files = output.files;
+                });
+                left = ctx.input(|input| input.raw.dropped_files.clone());
+            },
+        );
+        (rect, files, left)
+    };
+    let (rect, _, _) = frame(pos2(600.0, 600.0), false);
+    // Bottom row first: the top-right pad is the sixteenth.
+    let (_, files, left) = frame(rect.right_top() + vec2(-10.0, 10.0), true);
+    assert_eq!(
+        files,
+        Some((15, std::path::PathBuf::from("/tmp/snare.wav")))
+    );
+    assert!(left.is_empty(), "the grid took the file");
+    let (_, files, left) = frame(rect.left_bottom() + vec2(10.0, -10.0), true);
+    assert_eq!(files.map(|(pad, _)| pad), Some(0));
+    assert!(left.is_empty());
+    let (_, files, left) = frame(pos2(600.0, 600.0), true);
+    assert!(files.is_none());
+    assert_eq!(left.len(), 1, "a drop elsewhere is not the grid's");
 }

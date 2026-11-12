@@ -4,6 +4,7 @@ use crate::{Device, DeviceDescriptor, devices};
 static REGISTRY: &[&DeviceDescriptor] = &[
     &devices::mini::DESCRIPTOR,
     &devices::sampler::DESCRIPTOR,
+    &devices::drums::DESCRIPTOR,
     &devices::filter::DESCRIPTOR,
     &devices::equalizer::DESCRIPTOR,
     &devices::saturator::DESCRIPTOR,

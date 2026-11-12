@@ -269,6 +269,7 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         ("model", "Digital Multimode", "OTA Multimode"),
         ("model", "SP Diode", "Diode Pair"),
     ],
+    fixed_on_roll: &[],
     latency: |_, _| FilterKernel::LATENCY,
     create: || Box::new(Filter::new()),
 };

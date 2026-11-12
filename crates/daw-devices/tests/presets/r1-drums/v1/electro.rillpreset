@@ -1,0 +1,43 @@
+{
+  "format": 1,
+  "device": "r1-drums",
+  "name": "Electro",
+  "author": "Rill",
+  "category": "Kits",
+  "tags": [
+    "electronic",
+    "punchy",
+    "zap"
+  ],
+  "description": "A fast pitch drop on the kick and toms for an electronic zap, snare and clap thinned out, bright resonant hats.",
+  "parameters": {
+    "pad7.choke": "1",
+    "pad9.choke": "1",
+    "pad11.choke": "1",
+    "pad1.pitch_env": 24.0,
+    "pad1.env_decay": 35.0,
+    "pad1.drive": 9.0,
+    "pad3.filter": 18.0,
+    "pad3.pitch_env": 7.0,
+    "pad3.env_decay": 25.0,
+    "pad4.filter": 25.0,
+    "pad6.pitch_env": 12.0,
+    "pad6.env_decay": 80.0,
+    "pad8.pitch_env": 12.0,
+    "pad8.env_decay": 80.0,
+    "pad10.pitch_env": 12.0,
+    "pad10.env_decay": 80.0,
+    "pad12.pitch_env": 12.0,
+    "pad12.env_decay": 80.0,
+    "pad13.pitch_env": 12.0,
+    "pad13.env_decay": 80.0,
+    "pad15.pitch_env": 12.0,
+    "pad15.env_decay": 80.0,
+    "pad7.filter": 35.0,
+    "pad7.resonance": 30.0,
+    "pad9.filter": 35.0,
+    "pad9.resonance": 30.0,
+    "pad11.filter": 35.0,
+    "pad11.resonance": 30.0
+  }
+}

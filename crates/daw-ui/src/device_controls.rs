@@ -1394,6 +1394,8 @@ pub struct PadView<'a> {
     pub loaded: bool,
     /// Flash level from telemetry, 0 to 1.
     pub activity: f32,
+    /// Drawn dimmed and marked: the pad does not sound.
+    pub muted: bool,
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -1403,6 +1405,9 @@ pub struct PadGridOutput {
     pub released: Option<usize>,
     pub selected: Option<usize>,
     pub dropped: Option<(usize, String)>,
+    /// A file dropped on a pad from the system. The grid takes it, so
+    /// nothing behind it imports it as well.
+    pub files: Option<(usize, std::path::PathBuf)>,
 }
 
 /// Audition velocity for a press at `y` within a pad: the top is loudest.
@@ -1427,6 +1432,8 @@ pub fn pad_grid(
         .flatten();
     let mut output = PadGridOutput::default();
     let mut now_held = held;
+    let pointer = ui.input(|input| input.pointer.hover_pos());
+    let files_hovered = ui.input(|input| !input.raw.hovered_files.is_empty());
     for (index, pad) in pads.iter().enumerate() {
         let (column, row) = (index % 4, 3 - index / 4);
         let rect = Rect::from_min_size(
@@ -1454,7 +1461,18 @@ pub fn pad_grid(
             output.dropped = Some((index, payload.0.clone()));
             output.selected = Some(index);
         }
-        let dropping = response.dnd_hover_payload::<SampleDrop>().is_some();
+        let over = pointer.is_some_and(|pointer| rect.contains(pointer));
+        if over
+            && let Some(path) = ui
+                .input_mut(|input| std::mem::take(&mut input.raw.dropped_files))
+                .into_iter()
+                .find_map(|file| file.path)
+        {
+            output.files = Some((index, path));
+            output.selected = Some(index);
+        }
+        let dropping =
+            response.dnd_hover_payload::<SampleDrop>().is_some() || (over && files_hovered);
         if ui.is_rect_visible(rect) {
             let is_selected = selected == index;
             let base = if response.hovered() {
@@ -1462,6 +1480,7 @@ pub fn pad_grid(
             } else {
                 colors.control_fill
             };
+            let line = ui.fonts_mut(|fonts| fonts.row_height(&TextRole::Label.font()));
             let painter = ui.painter();
             painter.rect_filled(rect, tokens::RADIUS, base);
             if pad.activity > 0.0 {
@@ -1492,22 +1511,41 @@ pub fn pad_grid(
                 ),
                 StrokeKind::Inside,
             );
-            painter.text(
+            let number = painter.text(
                 rect.left_top() + vec2(tokens::SPACE_XS, tokens::SPACE_XS),
                 Align2::LEFT_TOP,
                 format!("{}", index + 1),
                 TextRole::Note.font(),
                 colors.muted,
             );
+            if pad.muted {
+                painter.text(
+                    rect.right_top() + vec2(-tokens::SPACE_XS, tokens::SPACE_XS),
+                    Align2::RIGHT_TOP,
+                    "M",
+                    TextRole::Note.font(),
+                    colors.warning,
+                );
+            }
             let label = if pad.loaded { pad.name } else { "Empty" };
+            // Below the number where a line fits there, else beside it.
+            let below = Rect::from_min_max(
+                egui::pos2(rect.left() + tokens::SPACE_XS, number.bottom()),
+                rect.max - vec2(tokens::SPACE_XS, 2.0),
+            );
+            let place = if below.height() >= line {
+                below
+            } else {
+                Rect::from_min_max(
+                    egui::pos2(number.right() + tokens::SPACE_XS, rect.top()),
+                    rect.max - vec2(tokens::SPACE_XS + if pad.muted { 12.0 } else { 0.0 }, 0.0),
+                )
+            };
             crate::text::paint_single_line(
                 painter,
-                Rect::from_min_max(
-                    egui::pos2(rect.left() + tokens::SPACE_XS, rect.center().y),
-                    rect.max - vec2(tokens::SPACE_XS, tokens::SPACE_XS),
-                ),
+                place,
                 TextRole::Label.font(),
-                if pad.loaded {
+                if pad.loaded && !pad.muted {
                     colors.text
                 } else {
                     colors.muted
@@ -1520,12 +1558,17 @@ pub fn pad_grid(
                 WidgetType::Button,
                 true,
                 format!(
-                    "Pad {}: {}",
+                    "Pad {}: {}{}",
                     index + 1,
-                    if pad.loaded { pad.name } else { "empty" }
+                    if pad.loaded { pad.name } else { "empty" },
+                    if pad.muted { ", muted" } else { "" }
                 ),
             )
         });
+        // The whole name, which a narrow pad may cut.
+        if pad.loaded && response.hovered() {
+            response.on_hover_text(pad.name);
+        }
     }
     if ui.input(|input| input.pointer.primary_released())
         || ui.input(|input| input.key_released(egui::Key::Space))

@@ -41,7 +41,10 @@ pub use echo::{
     TapeTransport,
 };
 pub use envelope::{Adsr, Stage};
-pub use filter::{CleanShape, FilterKernel, FilterModel, FilterShape, FilterType, LatencyDelay};
+pub use filter::{
+    CleanShape, FilterKernel, FilterModel, FilterShape, FilterType, LatencyDelay, sweep_corner,
+    sweep_mix,
+};
 pub use follower::EnvelopeFollower;
 pub use lfo::{Lfo, LfoShape};
 pub use limiter::{BoxSmoother, SlidingMax, TruePeak4x};
@@ -59,8 +62,8 @@ pub use reverb::{
     hadamard, nearest_prime,
 };
 pub use shaper::{
-    Adaa1, AdaaCentered, AlgebraicSigmoid, AntialiasedShaper, BoundedCubic, BoundedSquare,
-    DroopCorrector, HyperbolicClip, Shape,
+    Adaa1, AdaaCentered, AlgebraicSigmoid, AntialiasedShaper, BoundedCubic, BoundedSquare, Drive,
+    DriveGains, DroopCorrector, HyperbolicClip, Shape,
 };
 pub use smooth::{LinearRamp, Smoothed};
 pub use svf::{OnePole, Shelf1, ShelfGlide, Svf, SvfMix, SvfMixRamp, SvfOutputs};

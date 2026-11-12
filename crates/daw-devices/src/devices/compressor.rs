@@ -215,6 +215,7 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-compressor/gentle-expander.rillpreset"),
     ],
     legacy_labels: &[],
+    fixed_on_roll: &[],
     latency: |values, sample_rate| latency(&Settings::from_normalized(values), sample_rate),
     create: || Box::new(Compressor::new()),
 };

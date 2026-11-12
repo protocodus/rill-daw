@@ -369,11 +369,111 @@ impl Shape for BoundedCubic {
     }
 }
 
+/// The gains of a [`Drive`] at one setting, worked out once per control
+/// period and ramped by the caller.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct DriveGains {
+    /// Into the curve.
+    pub input: f32,
+    /// Out of it: 1/√input, so a driven signal grows denser rather than
+    /// much louder (its peaks fall by half the drive, its body rises by
+    /// half of it).
+    pub output: f32,
+    /// Share of the shaped signal, 0 at no drive and 1 from
+    /// [`Drive::BLEND_DB`] up, so 0 dB is the input exactly.
+    pub blend: f32,
+}
+
+impl DriveGains {
+    pub fn new(drive_db: f32) -> Self {
+        let drive_db = drive_db.max(0.0);
+        let input = super::db_to_gain(drive_db);
+        Self {
+            input,
+            output: 1.0 / input.sqrt(),
+            blend: (drive_db / Drive::BLEND_DB).min(1.0),
+        }
+    }
+
+    /// Whether the stage changes nothing and can be skipped.
+    pub fn is_bypass(&self) -> bool {
+        self.blend <= 0.0
+    }
+}
+
+/// A drive in front of a soft clipper with a little more room below than
+/// above ([`AlgebraicSigmoid`] 1 / 1.25: odd harmonics and some even ones,
+/// as a transistor stage), with first-order ADAA at the running rate. No
+/// oversampler and no latency: for many instances at once (the pads of a
+/// drum machine), where an oversampler each would cost more than the
+/// sound they make. ADAA keeps the fold-back of a 24 dB drive on drums
+/// well under the signal's own noise; its half-sample delay is the same
+/// for every setting.
+#[derive(Clone, Debug)]
+pub struct Drive {
+    adaa: Adaa1<AlgebraicSigmoid>,
+}
+
+impl Default for Drive {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drive {
+    /// Drives below this blend the shaped signal in from the dry one.
+    pub const BLEND_DB: f32 = 1.5;
+
+    pub fn new() -> Self {
+        Self {
+            adaa: Adaa1::new(AlgebraicSigmoid::new(1.0, 1.25, 0.0)),
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.adaa.reset();
+    }
+
+    #[inline]
+    pub fn process(&mut self, x: f32, gains: &DriveGains) -> f32 {
+        let shaped = self.adaa.process(f64::from(x * gains.input)) as f32 * gains.output;
+        x + gains.blend * (shaped - x)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     const SHAPE: BoundedCubic = BoundedCubic { knee: 2.0 };
+
+    #[test]
+    fn a_drive_passes_at_zero_and_saturates_up_to_its_limit() {
+        let none = DriveGains::new(0.0);
+        assert!(none.is_bypass());
+        let mut drive = Drive::new();
+        for n in 0..64 {
+            let x = (n as f32 * 0.3).sin() * 0.9;
+            assert_eq!(drive.process(x, &none), x);
+        }
+        // 24 dB: a full-scale sine's peaks come out near 1.25/4, its quiet
+        // parts four times louder, and nothing is unbounded.
+        let hot = DriveGains::new(24.0);
+        let mut drive = Drive::new();
+        let mut peak = 0.0_f32;
+        for n in 0..4800 {
+            let x = (std::f32::consts::TAU * 100.0 * n as f32 / 48_000.0).sin();
+            let y = drive.process(x, &hot);
+            assert!(y.is_finite());
+            peak = peak.max(y.abs());
+        }
+        assert!(peak > 0.2 && peak < 0.32, "{peak}");
+        // The antiderivative reads between this sample and the last, so
+        // settle on the quiet input first.
+        drive.process(0.001, &hot);
+        let quiet = drive.process(0.001, &hot);
+        assert!((quiet / 0.001 - hot.input.sqrt()).abs() < 1.0, "{quiet}");
+    }
 
     #[test]
     fn antiderivative_differentiates_to_the_shape() {

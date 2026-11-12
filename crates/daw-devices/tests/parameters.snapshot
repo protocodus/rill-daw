@@ -206,3 +206,308 @@ r1-sampler 73 voice.bend "Bend" integer 0 24
 r1-sampler 74 voice.velocity "Velocity" linear 0 100
 r1-sampler 75 voice.pan "Pan" linear -100 100
 r1-sampler 76 voice.volume "Volume" linear -36 6
+r1-drums 1 volume "Volume" linear -36 6
+r1-drums 32 pad1.start "Start" linear 0 100
+r1-drums 33 pad1.end "End" linear 0 100
+r1-drums 34 pad1.reverse "Reverse" toggle
+r1-drums 35 pad1.pitch "Pitch" integer -24 24
+r1-drums 36 pad1.fine "Fine" linear -100 100
+r1-drums 37 pad1.pitch_env "Pitch env" linear -48 48
+r1-drums 38 pad1.env_decay "Env decay" log 5 500
+r1-drums 39 pad1.attack "Attack" log 0.1 100
+r1-drums 40 pad1.hold "Hold" log 1 2000
+r1-drums 41 pad1.decay "Decay" log 5 10000
+r1-drums 42 pad1.trigger "Trigger" choice One-shot|Gate
+r1-drums 43 pad1.filter "Filter" linear -100 100
+r1-drums 44 pad1.resonance "Resonance" linear 0 100
+r1-drums 45 pad1.drive "Drive" linear 0 24
+r1-drums 46 pad1.velocity "Velocity" linear 0 100
+r1-drums 47 pad1.choke "Choke" choice Off|1|2|3|4
+r1-drums 48 pad1.volume "Volume" linear -60 12
+r1-drums 49 pad1.pan "Pan" linear -100 100
+r1-drums 50 pad1.mute "Mute" toggle
+r1-drums 64 pad2.start "Start" linear 0 100
+r1-drums 65 pad2.end "End" linear 0 100
+r1-drums 66 pad2.reverse "Reverse" toggle
+r1-drums 67 pad2.pitch "Pitch" integer -24 24
+r1-drums 68 pad2.fine "Fine" linear -100 100
+r1-drums 69 pad2.pitch_env "Pitch env" linear -48 48
+r1-drums 70 pad2.env_decay "Env decay" log 5 500
+r1-drums 71 pad2.attack "Attack" log 0.1 100
+r1-drums 72 pad2.hold "Hold" log 1 2000
+r1-drums 73 pad2.decay "Decay" log 5 10000
+r1-drums 74 pad2.trigger "Trigger" choice One-shot|Gate
+r1-drums 75 pad2.filter "Filter" linear -100 100
+r1-drums 76 pad2.resonance "Resonance" linear 0 100
+r1-drums 77 pad2.drive "Drive" linear 0 24
+r1-drums 78 pad2.velocity "Velocity" linear 0 100
+r1-drums 79 pad2.choke "Choke" choice Off|1|2|3|4
+r1-drums 80 pad2.volume "Volume" linear -60 12
+r1-drums 81 pad2.pan "Pan" linear -100 100
+r1-drums 82 pad2.mute "Mute" toggle
+r1-drums 96 pad3.start "Start" linear 0 100
+r1-drums 97 pad3.end "End" linear 0 100
+r1-drums 98 pad3.reverse "Reverse" toggle
+r1-drums 99 pad3.pitch "Pitch" integer -24 24
+r1-drums 100 pad3.fine "Fine" linear -100 100
+r1-drums 101 pad3.pitch_env "Pitch env" linear -48 48
+r1-drums 102 pad3.env_decay "Env decay" log 5 500
+r1-drums 103 pad3.attack "Attack" log 0.1 100
+r1-drums 104 pad3.hold "Hold" log 1 2000
+r1-drums 105 pad3.decay "Decay" log 5 10000
+r1-drums 106 pad3.trigger "Trigger" choice One-shot|Gate
+r1-drums 107 pad3.filter "Filter" linear -100 100
+r1-drums 108 pad3.resonance "Resonance" linear 0 100
+r1-drums 109 pad3.drive "Drive" linear 0 24
+r1-drums 110 pad3.velocity "Velocity" linear 0 100
+r1-drums 111 pad3.choke "Choke" choice Off|1|2|3|4
+r1-drums 112 pad3.volume "Volume" linear -60 12
+r1-drums 113 pad3.pan "Pan" linear -100 100
+r1-drums 114 pad3.mute "Mute" toggle
+r1-drums 128 pad4.start "Start" linear 0 100
+r1-drums 129 pad4.end "End" linear 0 100
+r1-drums 130 pad4.reverse "Reverse" toggle
+r1-drums 131 pad4.pitch "Pitch" integer -24 24
+r1-drums 132 pad4.fine "Fine" linear -100 100
+r1-drums 133 pad4.pitch_env "Pitch env" linear -48 48
+r1-drums 134 pad4.env_decay "Env decay" log 5 500
+r1-drums 135 pad4.attack "Attack" log 0.1 100
+r1-drums 136 pad4.hold "Hold" log 1 2000
+r1-drums 137 pad4.decay "Decay" log 5 10000
+r1-drums 138 pad4.trigger "Trigger" choice One-shot|Gate
+r1-drums 139 pad4.filter "Filter" linear -100 100
+r1-drums 140 pad4.resonance "Resonance" linear 0 100
+r1-drums 141 pad4.drive "Drive" linear 0 24
+r1-drums 142 pad4.velocity "Velocity" linear 0 100
+r1-drums 143 pad4.choke "Choke" choice Off|1|2|3|4
+r1-drums 144 pad4.volume "Volume" linear -60 12
+r1-drums 145 pad4.pan "Pan" linear -100 100
+r1-drums 146 pad4.mute "Mute" toggle
+r1-drums 160 pad5.start "Start" linear 0 100
+r1-drums 161 pad5.end "End" linear 0 100
+r1-drums 162 pad5.reverse "Reverse" toggle
+r1-drums 163 pad5.pitch "Pitch" integer -24 24
+r1-drums 164 pad5.fine "Fine" linear -100 100
+r1-drums 165 pad5.pitch_env "Pitch env" linear -48 48
+r1-drums 166 pad5.env_decay "Env decay" log 5 500
+r1-drums 167 pad5.attack "Attack" log 0.1 100
+r1-drums 168 pad5.hold "Hold" log 1 2000
+r1-drums 169 pad5.decay "Decay" log 5 10000
+r1-drums 170 pad5.trigger "Trigger" choice One-shot|Gate
+r1-drums 171 pad5.filter "Filter" linear -100 100
+r1-drums 172 pad5.resonance "Resonance" linear 0 100
+r1-drums 173 pad5.drive "Drive" linear 0 24
+r1-drums 174 pad5.velocity "Velocity" linear 0 100
+r1-drums 175 pad5.choke "Choke" choice Off|1|2|3|4
+r1-drums 176 pad5.volume "Volume" linear -60 12
+r1-drums 177 pad5.pan "Pan" linear -100 100
+r1-drums 178 pad5.mute "Mute" toggle
+r1-drums 192 pad6.start "Start" linear 0 100
+r1-drums 193 pad6.end "End" linear 0 100
+r1-drums 194 pad6.reverse "Reverse" toggle
+r1-drums 195 pad6.pitch "Pitch" integer -24 24
+r1-drums 196 pad6.fine "Fine" linear -100 100
+r1-drums 197 pad6.pitch_env "Pitch env" linear -48 48
+r1-drums 198 pad6.env_decay "Env decay" log 5 500
+r1-drums 199 pad6.attack "Attack" log 0.1 100
+r1-drums 200 pad6.hold "Hold" log 1 2000
+r1-drums 201 pad6.decay "Decay" log 5 10000
+r1-drums 202 pad6.trigger "Trigger" choice One-shot|Gate
+r1-drums 203 pad6.filter "Filter" linear -100 100
+r1-drums 204 pad6.resonance "Resonance" linear 0 100
+r1-drums 205 pad6.drive "Drive" linear 0 24
+r1-drums 206 pad6.velocity "Velocity" linear 0 100
+r1-drums 207 pad6.choke "Choke" choice Off|1|2|3|4
+r1-drums 208 pad6.volume "Volume" linear -60 12
+r1-drums 209 pad6.pan "Pan" linear -100 100
+r1-drums 210 pad6.mute "Mute" toggle
+r1-drums 224 pad7.start "Start" linear 0 100
+r1-drums 225 pad7.end "End" linear 0 100
+r1-drums 226 pad7.reverse "Reverse" toggle
+r1-drums 227 pad7.pitch "Pitch" integer -24 24
+r1-drums 228 pad7.fine "Fine" linear -100 100
+r1-drums 229 pad7.pitch_env "Pitch env" linear -48 48
+r1-drums 230 pad7.env_decay "Env decay" log 5 500
+r1-drums 231 pad7.attack "Attack" log 0.1 100
+r1-drums 232 pad7.hold "Hold" log 1 2000
+r1-drums 233 pad7.decay "Decay" log 5 10000
+r1-drums 234 pad7.trigger "Trigger" choice One-shot|Gate
+r1-drums 235 pad7.filter "Filter" linear -100 100
+r1-drums 236 pad7.resonance "Resonance" linear 0 100
+r1-drums 237 pad7.drive "Drive" linear 0 24
+r1-drums 238 pad7.velocity "Velocity" linear 0 100
+r1-drums 239 pad7.choke "Choke" choice Off|1|2|3|4
+r1-drums 240 pad7.volume "Volume" linear -60 12
+r1-drums 241 pad7.pan "Pan" linear -100 100
+r1-drums 242 pad7.mute "Mute" toggle
+r1-drums 256 pad8.start "Start" linear 0 100
+r1-drums 257 pad8.end "End" linear 0 100
+r1-drums 258 pad8.reverse "Reverse" toggle
+r1-drums 259 pad8.pitch "Pitch" integer -24 24
+r1-drums 260 pad8.fine "Fine" linear -100 100
+r1-drums 261 pad8.pitch_env "Pitch env" linear -48 48
+r1-drums 262 pad8.env_decay "Env decay" log 5 500
+r1-drums 263 pad8.attack "Attack" log 0.1 100
+r1-drums 264 pad8.hold "Hold" log 1 2000
+r1-drums 265 pad8.decay "Decay" log 5 10000
+r1-drums 266 pad8.trigger "Trigger" choice One-shot|Gate
+r1-drums 267 pad8.filter "Filter" linear -100 100
+r1-drums 268 pad8.resonance "Resonance" linear 0 100
+r1-drums 269 pad8.drive "Drive" linear 0 24
+r1-drums 270 pad8.velocity "Velocity" linear 0 100
+r1-drums 271 pad8.choke "Choke" choice Off|1|2|3|4
+r1-drums 272 pad8.volume "Volume" linear -60 12
+r1-drums 273 pad8.pan "Pan" linear -100 100
+r1-drums 274 pad8.mute "Mute" toggle
+r1-drums 288 pad9.start "Start" linear 0 100
+r1-drums 289 pad9.end "End" linear 0 100
+r1-drums 290 pad9.reverse "Reverse" toggle
+r1-drums 291 pad9.pitch "Pitch" integer -24 24
+r1-drums 292 pad9.fine "Fine" linear -100 100
+r1-drums 293 pad9.pitch_env "Pitch env" linear -48 48
+r1-drums 294 pad9.env_decay "Env decay" log 5 500
+r1-drums 295 pad9.attack "Attack" log 0.1 100
+r1-drums 296 pad9.hold "Hold" log 1 2000
+r1-drums 297 pad9.decay "Decay" log 5 10000
+r1-drums 298 pad9.trigger "Trigger" choice One-shot|Gate
+r1-drums 299 pad9.filter "Filter" linear -100 100
+r1-drums 300 pad9.resonance "Resonance" linear 0 100
+r1-drums 301 pad9.drive "Drive" linear 0 24
+r1-drums 302 pad9.velocity "Velocity" linear 0 100
+r1-drums 303 pad9.choke "Choke" choice Off|1|2|3|4
+r1-drums 304 pad9.volume "Volume" linear -60 12
+r1-drums 305 pad9.pan "Pan" linear -100 100
+r1-drums 306 pad9.mute "Mute" toggle
+r1-drums 320 pad10.start "Start" linear 0 100
+r1-drums 321 pad10.end "End" linear 0 100
+r1-drums 322 pad10.reverse "Reverse" toggle
+r1-drums 323 pad10.pitch "Pitch" integer -24 24
+r1-drums 324 pad10.fine "Fine" linear -100 100
+r1-drums 325 pad10.pitch_env "Pitch env" linear -48 48
+r1-drums 326 pad10.env_decay "Env decay" log 5 500
+r1-drums 327 pad10.attack "Attack" log 0.1 100
+r1-drums 328 pad10.hold "Hold" log 1 2000
+r1-drums 329 pad10.decay "Decay" log 5 10000
+r1-drums 330 pad10.trigger "Trigger" choice One-shot|Gate
+r1-drums 331 pad10.filter "Filter" linear -100 100
+r1-drums 332 pad10.resonance "Resonance" linear 0 100
+r1-drums 333 pad10.drive "Drive" linear 0 24
+r1-drums 334 pad10.velocity "Velocity" linear 0 100
+r1-drums 335 pad10.choke "Choke" choice Off|1|2|3|4
+r1-drums 336 pad10.volume "Volume" linear -60 12
+r1-drums 337 pad10.pan "Pan" linear -100 100
+r1-drums 338 pad10.mute "Mute" toggle
+r1-drums 352 pad11.start "Start" linear 0 100
+r1-drums 353 pad11.end "End" linear 0 100
+r1-drums 354 pad11.reverse "Reverse" toggle
+r1-drums 355 pad11.pitch "Pitch" integer -24 24
+r1-drums 356 pad11.fine "Fine" linear -100 100
+r1-drums 357 pad11.pitch_env "Pitch env" linear -48 48
+r1-drums 358 pad11.env_decay "Env decay" log 5 500
+r1-drums 359 pad11.attack "Attack" log 0.1 100
+r1-drums 360 pad11.hold "Hold" log 1 2000
+r1-drums 361 pad11.decay "Decay" log 5 10000
+r1-drums 362 pad11.trigger "Trigger" choice One-shot|Gate
+r1-drums 363 pad11.filter "Filter" linear -100 100
+r1-drums 364 pad11.resonance "Resonance" linear 0 100
+r1-drums 365 pad11.drive "Drive" linear 0 24
+r1-drums 366 pad11.velocity "Velocity" linear 0 100
+r1-drums 367 pad11.choke "Choke" choice Off|1|2|3|4
+r1-drums 368 pad11.volume "Volume" linear -60 12
+r1-drums 369 pad11.pan "Pan" linear -100 100
+r1-drums 370 pad11.mute "Mute" toggle
+r1-drums 384 pad12.start "Start" linear 0 100
+r1-drums 385 pad12.end "End" linear 0 100
+r1-drums 386 pad12.reverse "Reverse" toggle
+r1-drums 387 pad12.pitch "Pitch" integer -24 24
+r1-drums 388 pad12.fine "Fine" linear -100 100
+r1-drums 389 pad12.pitch_env "Pitch env" linear -48 48
+r1-drums 390 pad12.env_decay "Env decay" log 5 500
+r1-drums 391 pad12.attack "Attack" log 0.1 100
+r1-drums 392 pad12.hold "Hold" log 1 2000
+r1-drums 393 pad12.decay "Decay" log 5 10000
+r1-drums 394 pad12.trigger "Trigger" choice One-shot|Gate
+r1-drums 395 pad12.filter "Filter" linear -100 100
+r1-drums 396 pad12.resonance "Resonance" linear 0 100
+r1-drums 397 pad12.drive "Drive" linear 0 24
+r1-drums 398 pad12.velocity "Velocity" linear 0 100
+r1-drums 399 pad12.choke "Choke" choice Off|1|2|3|4
+r1-drums 400 pad12.volume "Volume" linear -60 12
+r1-drums 401 pad12.pan "Pan" linear -100 100
+r1-drums 402 pad12.mute "Mute" toggle
+r1-drums 416 pad13.start "Start" linear 0 100
+r1-drums 417 pad13.end "End" linear 0 100
+r1-drums 418 pad13.reverse "Reverse" toggle
+r1-drums 419 pad13.pitch "Pitch" integer -24 24
+r1-drums 420 pad13.fine "Fine" linear -100 100
+r1-drums 421 pad13.pitch_env "Pitch env" linear -48 48
+r1-drums 422 pad13.env_decay "Env decay" log 5 500
+r1-drums 423 pad13.attack "Attack" log 0.1 100
+r1-drums 424 pad13.hold "Hold" log 1 2000
+r1-drums 425 pad13.decay "Decay" log 5 10000
+r1-drums 426 pad13.trigger "Trigger" choice One-shot|Gate
+r1-drums 427 pad13.filter "Filter" linear -100 100
+r1-drums 428 pad13.resonance "Resonance" linear 0 100
+r1-drums 429 pad13.drive "Drive" linear 0 24
+r1-drums 430 pad13.velocity "Velocity" linear 0 100
+r1-drums 431 pad13.choke "Choke" choice Off|1|2|3|4
+r1-drums 432 pad13.volume "Volume" linear -60 12
+r1-drums 433 pad13.pan "Pan" linear -100 100
+r1-drums 434 pad13.mute "Mute" toggle
+r1-drums 448 pad14.start "Start" linear 0 100
+r1-drums 449 pad14.end "End" linear 0 100
+r1-drums 450 pad14.reverse "Reverse" toggle
+r1-drums 451 pad14.pitch "Pitch" integer -24 24
+r1-drums 452 pad14.fine "Fine" linear -100 100
+r1-drums 453 pad14.pitch_env "Pitch env" linear -48 48
+r1-drums 454 pad14.env_decay "Env decay" log 5 500
+r1-drums 455 pad14.attack "Attack" log 0.1 100
+r1-drums 456 pad14.hold "Hold" log 1 2000
+r1-drums 457 pad14.decay "Decay" log 5 10000
+r1-drums 458 pad14.trigger "Trigger" choice One-shot|Gate
+r1-drums 459 pad14.filter "Filter" linear -100 100
+r1-drums 460 pad14.resonance "Resonance" linear 0 100
+r1-drums 461 pad14.drive "Drive" linear 0 24
+r1-drums 462 pad14.velocity "Velocity" linear 0 100
+r1-drums 463 pad14.choke "Choke" choice Off|1|2|3|4
+r1-drums 464 pad14.volume "Volume" linear -60 12
+r1-drums 465 pad14.pan "Pan" linear -100 100
+r1-drums 466 pad14.mute "Mute" toggle
+r1-drums 480 pad15.start "Start" linear 0 100
+r1-drums 481 pad15.end "End" linear 0 100
+r1-drums 482 pad15.reverse "Reverse" toggle
+r1-drums 483 pad15.pitch "Pitch" integer -24 24
+r1-drums 484 pad15.fine "Fine" linear -100 100
+r1-drums 485 pad15.pitch_env "Pitch env" linear -48 48
+r1-drums 486 pad15.env_decay "Env decay" log 5 500
+r1-drums 487 pad15.attack "Attack" log 0.1 100
+r1-drums 488 pad15.hold "Hold" log 1 2000
+r1-drums 489 pad15.decay "Decay" log 5 10000
+r1-drums 490 pad15.trigger "Trigger" choice One-shot|Gate
+r1-drums 491 pad15.filter "Filter" linear -100 100
+r1-drums 492 pad15.resonance "Resonance" linear 0 100
+r1-drums 493 pad15.drive "Drive" linear 0 24
+r1-drums 494 pad15.velocity "Velocity" linear 0 100
+r1-drums 495 pad15.choke "Choke" choice Off|1|2|3|4
+r1-drums 496 pad15.volume "Volume" linear -60 12
+r1-drums 497 pad15.pan "Pan" linear -100 100
+r1-drums 498 pad15.mute "Mute" toggle
+r1-drums 512 pad16.start "Start" linear 0 100
+r1-drums 513 pad16.end "End" linear 0 100
+r1-drums 514 pad16.reverse "Reverse" toggle
+r1-drums 515 pad16.pitch "Pitch" integer -24 24
+r1-drums 516 pad16.fine "Fine" linear -100 100
+r1-drums 517 pad16.pitch_env "Pitch env" linear -48 48
+r1-drums 518 pad16.env_decay "Env decay" log 5 500
+r1-drums 519 pad16.attack "Attack" log 0.1 100
+r1-drums 520 pad16.hold "Hold" log 1 2000
+r1-drums 521 pad16.decay "Decay" log 5 10000
+r1-drums 522 pad16.trigger "Trigger" choice One-shot|Gate
+r1-drums 523 pad16.filter "Filter" linear -100 100
+r1-drums 524 pad16.resonance "Resonance" linear 0 100
+r1-drums 525 pad16.drive "Drive" linear 0 24
+r1-drums 526 pad16.velocity "Velocity" linear 0 100
+r1-drums 527 pad16.choke "Choke" choice Off|1|2|3|4
+r1-drums 528 pad16.volume "Volume" linear -60 12
+r1-drums 529 pad16.pan "Pan" linear -100 100
+r1-drums 530 pad16.mute "Mute" toggle

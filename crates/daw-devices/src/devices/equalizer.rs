@@ -204,6 +204,7 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-equalizer/hum-notch-50-hz.rillpreset"),
     ],
     legacy_labels: &[],
+    fixed_on_roll: &[],
     latency: |_, _| 0,
     create: || Box::new(Equalizer::new()),
 };

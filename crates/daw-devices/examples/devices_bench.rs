@@ -1,10 +1,11 @@
 //! CPU time per 256-frame block for every registered device at 48 kHz:
 //! instruments playing a held eight-note chord, effects on noise. The sampler
-//! plays a four-second stereo recording. These are measurements on this
-//! machine, not guarantees.
+//! plays a four-second stereo recording; the drums a one-second stereo hit
+//! on every pad, all sixteen together every second, and a busy pattern.
+//! These are measurements on this machine, not guarantees.
 //!
 //! `cargo run --release -p daw-devices --example devices_bench`
-use daw_devices::devices::{compressor, modulator, sampler, saturator, spacer};
+use daw_devices::devices::{compressor, drums, modulator, sampler, saturator, spacer};
 use daw_devices::{DeviceKind, Event, EventKind, ProcessContext, SampleData, StereoIo, registry};
 use std::sync::Arc;
 use std::time::Instant;
@@ -95,6 +96,10 @@ fn recording() -> Arc<SampleData> {
 
 fn main() {
     for descriptor in registry() {
+        if descriptor.id == drums::DESCRIPTOR.id {
+            measure_drums(descriptor);
+            continue;
+        }
         let variants = variants(descriptor.id);
         if variants.is_empty() {
             measure(descriptor, "", &[], 8);
@@ -103,6 +108,154 @@ fn main() {
             measure(descriptor, &label, &settings, voices);
         }
     }
+}
+
+/// One second of decaying stereo noise at 44.1 kHz: a drum hit, played
+/// whole, resampled to the engine rate.
+fn hit() -> Arc<SampleData> {
+    let mut state = 11u32;
+    let mut noise = || {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        state as f32 / u32::MAX as f32 - 0.5
+    };
+    let decay = |n: usize| (-3.0 * n as f32 / 44_100.0).exp();
+    let left: Vec<f32> = (0..44_100).map(|n| noise() * decay(n)).collect();
+    let right: Vec<f32> = (0..44_100).map(|n| noise() * decay(n)).collect();
+    Arc::new(SampleData::new(44_100.0, &[&left, &right]))
+}
+
+fn note(pad: usize, offset: u32) -> Event {
+    let note = u32::from(drums::FIRST_NOTE) + pad as u32;
+    Event {
+        offset,
+        kind: EventKind::NoteOn {
+            note,
+            pitch: note as f32,
+            velocity: 0.8,
+        },
+    }
+}
+
+/// R1 Drums: every pad at once, once a second, so sixteen hits sound all
+/// the time, plain and with each pad's filter and drive on; and a busy
+/// pattern of sixteenth notes at 120 BPM.
+fn measure_drums(descriptor: &daw_devices::DeviceDescriptor) {
+    let blocks_per_second = (RATE / BLOCK as f32).round() as usize;
+    let together = |block: usize| -> Vec<Event> {
+        if block.is_multiple_of(blocks_per_second) {
+            (0..drums::PADS).map(|pad| note(pad, 0)).collect()
+        } else {
+            Vec::new()
+        }
+    };
+    let shaped: Vec<(u32, f32)> = (0..drums::PADS)
+        .flat_map(|pad| {
+            [
+                (
+                    drums::id(pad, drums::FILTER),
+                    if pad % 2 == 0 { -40.0 } else { 40.0 },
+                ),
+                (drums::id(pad, drums::RESONANCE), 30.0),
+                (drums::id(pad, drums::DRIVE), 9.0),
+                (drums::id(pad, drums::PITCH_ENV), 12.0),
+            ]
+        })
+        .collect();
+    run_drums(descriptor, "16 pads", &[], &together);
+    run_drums(descriptor, "16 shaped", &shaped, &together);
+    // Sixteenth notes at 120 BPM: 0.125 s a step.
+    let step_frames = (RATE * 0.125) as usize;
+    let pattern = |block: usize| -> Vec<Event> {
+        let (from, to) = (block * BLOCK, (block + 1) * BLOCK);
+        let mut events = Vec::new();
+        for step in from.div_ceil(step_frames)..to.div_ceil(step_frames) {
+            let offset = (step * step_frames - from) as u32;
+            let beat = step % 16;
+            // A closed hat on every step, open on the last but one.
+            events.push(note(if beat == 14 { 10 } else { 6 }, offset));
+            if beat % 8 == 0 || beat == 11 {
+                events.push(note(0, offset));
+            }
+            if beat % 8 == 4 {
+                events.push(note(2, offset));
+                events.push(note(3, offset));
+            }
+            if beat % 2 == 1 {
+                events.push(note(1, offset));
+            }
+            if beat >= 12 {
+                events.push(note(5 + 2 * (beat - 12), offset));
+            }
+            if beat == 0 && (step / 16) % 2 == 0 {
+                events.push(note(13, offset));
+            }
+            if beat % 4 == 2 {
+                events.push(note(15, offset));
+            }
+        }
+        events
+    };
+    let mut kit: Vec<(u32, f32)> = [6, 8, 10]
+        .into_iter()
+        .map(|pad| (drums::id(pad, drums::CHOKE), 1.0))
+        .collect();
+    kit.extend([
+        (drums::id(0, drums::DRIVE), 6.0),
+        (drums::id(0, drums::PITCH_ENV), 12.0),
+        (drums::id(6, drums::FILTER), 30.0),
+        (drums::id(2, drums::FILTER), -20.0),
+    ]);
+    run_drums(descriptor, "Pattern", &kit, &pattern);
+}
+
+fn run_drums(
+    descriptor: &daw_devices::DeviceDescriptor,
+    label: &str,
+    settings: &[(u32, f32)],
+    schedule: &dyn Fn(usize) -> Vec<Event>,
+) {
+    let mut device = (descriptor.create)();
+    device.prepare(RATE, BLOCK);
+    let recording = hit();
+    for slot in 0..descriptor.sample_slots {
+        device.set_sample(slot, Some(Arc::clone(&recording)));
+    }
+    for (id, plain) in settings {
+        let spec = descriptor.parameter(*id).expect("a drum parameter");
+        device.set_parameter(*id, spec.to_normalized(*plain));
+    }
+    let telemetry = device.telemetry();
+    let mut left = vec![0.0; BLOCK];
+    let mut right = vec![0.0; BLOCK];
+    let mut elapsed = 0.0;
+    let mut voices = 0.0;
+    for block in 0..BLOCKS {
+        let events = schedule(block);
+        let start = Instant::now();
+        device.process(
+            &ProcessContext::default(),
+            &events,
+            StereoIo {
+                left: &mut left,
+                right: &mut right,
+                sidechain: None,
+            },
+        );
+        elapsed += start.elapsed().as_secs_f64();
+        voices += f64::from(telemetry.value(drums::TELEMETRY_VOICES));
+    }
+    let per_block = elapsed / BLOCKS as f64;
+    let budget = BLOCK as f64 / f64::from(RATE);
+    println!(
+        "{:<12} {:<10} {:>7.1} µs per block, {:>5.2} % of real time ({:.1} hits sounding on average)",
+        descriptor.name,
+        label,
+        per_block * 1e6,
+        100.0 * per_block / budget,
+        voices / BLOCKS as f64
+    );
 }
 
 fn measure(

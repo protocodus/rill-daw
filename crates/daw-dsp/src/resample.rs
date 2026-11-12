@@ -13,6 +13,8 @@ use std::sync::OnceLock;
 
 /// Taps of one read.
 pub const TAPS: usize = 48;
+/// Running sums of a read, side by side.
+const LANES: usize = 8;
 /// Taps before the sample a read lands on; the rest are at or after it.
 const BEFORE: usize = TAPS / 2 - 1;
 /// Fractions of a sample tabulated per kernel; reads blend the two nearest.
@@ -234,13 +236,31 @@ impl MipMap {
     /// describes.
     #[inline]
     pub fn read(&self, tap: &Tap) -> f32 {
-        let data = &self.levels[tap.level][tap.base..tap.base + TAPS];
-        let mut sum = 0.0;
-        for (weight, sample) in tap.weights.iter().zip(data) {
-            sum += weight * sample;
-        }
-        sum
+        let data: &[f32; TAPS] = self.levels[tap.level][tap.base..tap.base + TAPS]
+            .try_into()
+            .expect("a read of TAPS samples");
+        dot(&tap.weights, data)
     }
+}
+
+/// Σ weight·sample in eight running sums, so the products add up side by
+/// side (and in vector registers) instead of one long chain of dependent
+/// adds.
+#[inline]
+fn dot(weights: &[f32; TAPS], samples: &[f32; TAPS]) -> f32 {
+    let mut sums = [0.0_f32; LANES];
+    for (weights, samples) in weights
+        .as_chunks::<LANES>()
+        .0
+        .iter()
+        .zip(samples.as_chunks::<LANES>().0)
+    {
+        for lane in 0..LANES {
+            sums[lane] += weights[lane] * samples[lane];
+        }
+    }
+    let [a, b, c, d, e, f, g, h] = sums;
+    ((a + b) + (c + d)) + ((e + f) + (g + h))
 }
 
 #[cfg(test)]
