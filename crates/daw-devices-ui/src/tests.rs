@@ -1720,3 +1720,13 @@ fn spacer_picture_places_a_synced_echo_at_the_song_tempo_while_nothing_plays() {
     panel.drag(from, from - vec2(0.0, -20.0));
     assert!(panel.plain(ECHO_LEVEL) < -8.0);
 }
+
+#[test]
+fn a_random_roll_sets_the_whole_device_as_one_step() {
+    let host = TableHost::new(&spacer::DESCRIPTOR);
+    let values = random_roll(&spacer::DESCRIPTOR, &host, 0.1, 3);
+    assert_eq!(values.len(), spacer::DESCRIPTOR.parameters.len());
+    assert!(values.iter().any(|(id, value)| *value != host.value(*id)));
+    let output = values.iter().find(|(id, _)| *id == spacer::OUTPUT).unwrap();
+    assert_eq!(output.1, host.value(spacer::OUTPUT));
+}

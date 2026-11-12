@@ -151,6 +151,11 @@ fn spacer_sits_in_its_frame_and_resumes_an_overridden_lane_from_its_control() {
             .cloned()
     };
     assert_eq!(output(&rolled), output(&before));
+    // A second roll right away is its own Undo step.
+    let again = app.click("10%");
+    assert_ne!(inserts(&again), inserts(&rolled));
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(inserts(&undone), inserts(&rolled));
     let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(inserts(&undone), inserts(&before));
     app.quit();

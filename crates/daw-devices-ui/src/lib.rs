@@ -1821,16 +1821,35 @@ fn preset_bar(
         Some(daw_ui::PresetAction::Randomize(amount)) => {
             // The time of the click picks the roll.
             let seed = ui.input(|input| input.time).to_bits();
-            let values: Vec<_> =
-                daw_devices::randomized(descriptor, |id| host.value(id) as f32, amount, seed)
-                    .into_iter()
-                    .map(|(id, value)| (id, f64::from(value)))
-                    .collect();
+            let values = random_roll(descriptor, host, amount, seed);
             host.set_values(&values);
             state.preset = None;
         }
         Some(daw_ui::PresetAction::ToggleFavorite(_)) | None => {}
     }
+}
+
+/// A roll of the dice over the whole device, every parameter included as a
+/// preset sets them: a host takes a whole device as one Undo step, never
+/// merged with the roll before it.
+fn random_roll(
+    descriptor: &DeviceDescriptor,
+    host: &dyn DeviceHost,
+    amount: f32,
+    seed: u64,
+) -> Vec<(u32, f64)> {
+    let rolled = daw_devices::randomized(descriptor, |id| host.value(id) as f32, amount, seed);
+    descriptor
+        .parameters
+        .iter()
+        .map(|spec| {
+            let value = rolled
+                .iter()
+                .find(|(id, _)| *id == spec.id)
+                .map_or(host.value(spec.id), |(_, value)| f64::from(*value));
+            (spec.id, value)
+        })
+        .collect()
 }
 
 #[cfg(test)]
