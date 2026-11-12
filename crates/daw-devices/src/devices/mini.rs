@@ -1475,19 +1475,24 @@ impl Mini {
                 mixed[1] += signal[1] * gain;
             }
         }
+        // Only frames after the last sounding span count: the filter must
+        // take its whole length in zeros before it holds nothing of a note.
         if sounding.contains(&true) {
             self.silent = 0;
         }
+        let flushing = self.silent;
         let makeup = &context.shared.ramps[RAMP_MAKEUP];
         for (frame, (sample, mixed)) in out.iter_mut().zip(mixed.as_chunks::<2>().0).enumerate() {
-            if self.silent >= DOWNSAMPLER_SPAN {
+            if flushing + frame >= DOWNSAMPLER_SPAN {
                 break;
             }
-            self.silent += 1;
             *sample = self.downsampler.downsample([
                 mixed[0] * makeup.at(2 * frame),
                 mixed[1] * makeup.at(2 * frame + 1),
             ]);
+        }
+        if !sounding.contains(&true) {
+            self.silent = (self.silent + out.len()).min(DOWNSAMPLER_SPAN);
         }
         for index in 0..MAX_VOICES {
             let voice = &mut self.voices[index];
