@@ -1,0 +1,164 @@
+{
+  "date": "2026-11-14",
+  "base_revision": "ab6a941332d60980f1f5c08229ae128e33e8206a",
+  "status": "implemented and verified in workspace",
+  "approved_proposals": [
+    "P3",
+    "P5",
+    "P6"
+  ],
+  "additional_authorized_scope": "Shared toolbar alignment, Fibonacci spacing, density, and 80% icon opacity; includes the main transport bar. Three-line Arranger/Mixer icons, explanations for toolbar actions, ruler label clearance, and a screenshot audit of small UI defects.",
+  "features": {
+    "P3": "Instrument-provided named note rows for R1 Drums and CLAP/VST3 metadata; exact-pitch audition/editing; full piano fallback and unmapped-note disclosure; selection preserved.",
+    "P5": "Fresh C-major guide with matching initial major chord, independent explicit harmony choices, neutral notes with separate blue scale marker and explanation.",
+    "P6": "Precise playback loop labels, adjacent Duplicate after / Repeat to loop end actions, visible disabled guidance, Export audio / File type / Bit depth labels.",
+    "toolbars": {
+      "icon_label_gap_px": 3,
+      "padding_x_px": 8,
+      "padding_y_px": 3,
+      "control_gap_px": 5,
+      "icon_size_px": 13,
+      "icon_opacity": 0.8,
+      "control_minimum_px": 21,
+      "control_height": "Measured font plus vertical padding; rounded before layout.",
+      "surfaces": [
+        "Arranger",
+        "MIDI editor",
+        "Audio editor",
+        "Automation editor",
+        "Main transport",
+        "Other shared toolbar consumers"
+      ],
+      "home_view_icon_lines": 3,
+      "explanatory_tooltips": true
+    }
+  },
+  "validation": [
+    {
+      "suite": "App unit tests",
+      "passed": 173,
+      "log": "toolbar-app-tests.log"
+    },
+    {
+      "suite": "Focused shared UI tests",
+      "passed": 104,
+      "log": "toolbar-shared-tests.log"
+    },
+    {
+      "suite": "New named-note and scale-guide app journeys",
+      "passed": 6,
+      "logs": [
+        "p3-p5-e2e.log",
+        "toolbar-app-tests.log"
+      ]
+    },
+    {
+      "suite": "Existing P5/P6 app regressions",
+      "passed": 104,
+      "ignored_optional_native": 2,
+      "note": "103 passed in the initial pass; the remaining Tool help overflow was fixed and all 4 tool_hints tests pass in toolbar-app-tests.log. Earlier logs retain resolved failures and old-default test migrations."
+    },
+    {
+      "suite": "Toolbar geometry",
+      "passed": 1,
+      "layout_combinations": 64,
+      "mouse_actions": 448,
+      "log": "toolbar-geometry-tests.log"
+    },
+    {
+      "suite": "Main toolbar roles",
+      "passed": 2,
+      "log": "toolbar-geometry-main-tests.log"
+    },
+    {
+      "suite": "Metadata and host tests",
+      "passed": 11,
+      "note": "Includes 4 app-cache tests also included in the 173 app unit tests."
+    },
+    {
+      "suite": "Native visual inspection",
+      "passed": true,
+      "manifest": "app-preview/capture-manifest.json",
+      "note": "Actual running-app screenshots, reviewed in light and dark themes."
+    },
+    {
+      "suite": "git diff --check",
+      "passed": true
+    }
+  ],
+  "known_baseline_check_limitation": "The standalone vendored vst3-host-helper check has four pre-existing unhandled transport commands at HEAD (see vst3-helper-baseline.txt). The production daw-plugin-host and app compiled and their relevant tests passed.",
+  "previews": {
+    "before": "app-preview/scale-guide-dark-before-toolbar.png",
+    "after": "app-preview/scale-guide-dark-after-toolbar.png",
+    "named_rows": "app-preview/named-notes-light-after-toolbar.png"
+  },
+  "binary_sha256": "440c591aae82dbdafa24a72816be177b76f02f3fb8b0695a3226b987536f756d",
+  "follow_up": {
+    "status": "implemented and verified in workspace",
+    "ruler_bottom_padding_px": 13,
+    "findings": "visual-scan/review.json",
+    "before_after": "visual-scan/before-after.html",
+    "native_captures": "visual-scan/capture-manifest.json",
+    "shared_gallery": "shared-gallery-final",
+    "validation": [
+      {
+        "suite": "App unit tests",
+        "passed": 173,
+        "log": "visual-polish-regressions.log"
+      },
+      {
+        "suite": "App E2E journeys including tooltip behavior",
+        "passed": 48,
+        "logs": [
+          "toolbar-tooltip-tests-final.log",
+          "visual-polish-regressions.log",
+          "visual-polish-final-tests.log"
+        ],
+        "note": "Final log resolves two test-oracle issues: wrapped tooltip glyph rows and Pitch wrapping onto its own row."
+      },
+      {
+        "suite": "Focused shared UI tests",
+        "passed": 51,
+        "logs": [
+          "tooltip-visual-shared-tests.log",
+          "shared-tool-hint-final.log"
+        ],
+        "note": "Four toolbar_hints, two visual_clearance, and ten value_entry tests also passed by directly running the freshly compiled test executables. The corrected tool_hint fixture uses a genuinely bounded UI slot."
+      },
+      {
+        "suite": "Shared ruler/typography and app loop regressions",
+        "passed": 19,
+        "note": "5 ruler + 5 typography + 9 app loop tests passed; the two beat_ruler_e2e journeys are already included in the 48 app journeys."
+      },
+      {
+        "suite": "Toolbar geometry matrix",
+        "layout_combinations": 64,
+        "mouse_actions": 448,
+        "passed": true,
+        "log": "visual-polish-final-tests.log"
+      },
+      {
+        "suite": "Native screenshot review",
+        "viewports": [
+          [
+            1480,
+            960
+          ],
+          [
+            1100,
+            720
+          ]
+        ],
+        "themes": [
+          "Light",
+          "Dark"
+        ],
+        "passed": true
+      },
+      {
+        "suite": "git diff --check",
+        "passed": true
+      }
+    ]
+  }
+}

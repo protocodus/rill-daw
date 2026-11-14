@@ -302,6 +302,56 @@ fn contextual_workspace_header_keeps_command_and_canvas_geometry_across_clip_kin
 }
 
 #[test]
+fn clip_header_actions_use_compact_toolbar_controls_without_shrinking_the_title_row() {
+    for density in [1.0, 2.0] {
+        let ctx = Context::default();
+        theme::apply(&ctx);
+        ctx.set_pixels_per_point(density);
+        let _ = ctx.run(input(vec![], egui::vec2(1100.0, 600.0)), |_| {});
+        let _ = ctx.run(input(vec![], egui::vec2(1100.0, 600.0)), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let header =
+                    controls::clip_workspace_header(ui, "Mixer", None, |ui, slot| match slot {
+                        controls::HeaderSlot::Actions => {
+                            assert_eq!(ui.spacing().button_padding, egui::vec2(8.0, 3.0));
+                            Some(controls::button(ui, "Add bus"))
+                        }
+                        controls::HeaderSlot::Navigation => None,
+                    });
+                let action = header.inner.unwrap();
+                assert!(action.rect.height() < controls::tokens::CONTROL_HEIGHT);
+                assert_eq!(header.back.rect.height(), controls::tokens::CONTROL_HEIGHT);
+                assert!(
+                    (action.rect.center().y - header.back.rect.center().y).abs() <= 1.0 / density
+                );
+                assert!(header.response.rect.contains_rect(action.rect));
+            });
+        });
+    }
+}
+
+#[test]
+fn segmented_toolbar_choices_share_action_height_and_keep_ordinary_form_size() {
+    let ctx = Context::default();
+    theme::apply(&ctx);
+    let mut selected = 0;
+    let _ = ctx.run(input(vec![], egui::vec2(1100.0, 600.0)), |ctx| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            let ordinary = controls::toggle_group(ui, &mut selected, &[(0, "Linear"), (1, "Step")]);
+            assert_eq!(ordinary.rect.height(), controls::tokens::CONTROL_HEIGHT);
+            controls::toolbar(ui, |ui| {
+                let group =
+                    controls::toggle_group(ui, &mut selected, &[(0, "Linear"), (1, "Step")]);
+                let action = controls::button(ui, "Fit");
+                assert_eq!(group.rect.height(), action.rect.height());
+                assert!(group.rect.height() < controls::tokens::CONTROL_HEIGHT);
+                assert!((group.rect.center().y - action.rect.center().y).abs() <= 1.0);
+            });
+        });
+    });
+}
+
+#[test]
 fn toolbar_wraps_complete_native_controls_without_eating_the_canvas() {
     let ctx = Context::default();
     theme::apply(&ctx);
@@ -324,10 +374,55 @@ fn toolbar_wraps_complete_native_controls_without_eating_the_canvas() {
             assert!(buttons.last().unwrap().rect.top() > buttons[0].rect.top());
             for button in buttons {
                 assert!(button.rect.right() <= ui.max_rect().right() + 0.1);
-                assert!(button.rect.height() >= controls::tokens::CONTROL_HEIGHT);
+                assert!(button.rect.height() >= controls::tokens::TOOLBAR_CONTROL_HEIGHT);
             }
         });
     });
+}
+
+#[test]
+fn trailing_toolbar_controls_stay_visible_after_a_measured_group_expands_the_parent() {
+    for density in [1.0, 2.0] {
+        for width in [800.0, 1200.0, 1480.0] {
+            let ctx = Context::default();
+            theme::apply(&ctx);
+            ctx.set_pixels_per_point(density);
+            let size = egui::vec2(width, 600.0);
+            let _ = ctx.run(input(vec![], size), |_| {});
+            let _ = ctx.run(input(vec![], size), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let viewport = ui.clip_rect().intersect(ctx.content_rect());
+                    controls::toolbar(ui, |ui| {
+                        ui.allocate_exact_size(
+                            egui::vec2(width - 150.0, 24.0),
+                            egui::Sense::hover(),
+                        );
+                        // A measured family may temporarily be wider than its
+                        // reservation. Trailing controls must use visible space.
+                        ui.set_min_width(width + 200.0);
+                        let trailing = controls::toolbar_trailing(ui, 200.0, |ui| {
+                            (
+                                controls::editor_tool_help(
+                                    ui,
+                                    controls::EditorTool::Select,
+                                    controls::ToolHintContext::Midi,
+                                ),
+                                controls::quiet_view_menu(ui, "View", |_| {}).response,
+                            )
+                        });
+                        assert!(viewport.contains_rect(trailing.inner.0.rect));
+                        assert!(viewport.contains_rect(trailing.inner.1.rect));
+                        assert!(trailing.inner.1.rect.right() <= trailing.inner.0.rect.left());
+                        assert!(
+                            (trailing.inner.0.rect.center().y - trailing.inner.1.rect.center().y)
+                                .abs()
+                                <= 1.0 / density
+                        );
+                    });
+                });
+            });
+        }
+    }
 }
 
 #[test]
@@ -434,7 +529,7 @@ fn trailing_toolbar_group_uses_current_row_and_wraps_only_when_needed() {
                 let (fit, choice) = trailing.inner;
                 assert!((fit.rect.center().y - choice.rect.center().y).abs() < 0.1);
                 assert!(
-                    (fit.rect.right() - row.response.rect.right() + controls::tokens::SPACE_MD)
+                    (fit.rect.right() - row.response.rect.right() + controls::tokens::SPACE_SM)
                         .abs()
                         < 0.1,
                     "Trailing controls remain right aligned after wrapping"

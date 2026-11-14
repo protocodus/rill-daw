@@ -5,7 +5,7 @@ use crate::PluginFormat;
 use anyhow::{Result, bail};
 use std::path::Path;
 use vst3_host::{
-    AudioBusLayout, BusAudioBuffers, MidiChannel, MidiEvent, Plugin, Vst3Host,
+    AudioBusLayout, BusAudioBuffers, MidiChannel, MidiEvent, NoteName, Plugin, Vst3Host,
     audio::{AudioBusDetailsLayout, BusDirection, MediaType},
     midi::{MidiController, MidiControllerAssignment, NoteExpressionInfo, PluginEvent},
     parameters::Parameter,
@@ -64,6 +64,10 @@ pub(crate) trait NativeProcessor {
     fn set_time_signature(&mut self, numerator: i32, denominator: i32) -> Result<()>;
     /// Parameter values are normalized to 0..=1 on the wire.
     fn get_parameters(&mut self) -> Result<Vec<Parameter>>;
+    /// Actual names supplied by the instrument, for the currently restored preset.
+    fn note_names(&mut self) -> Result<Vec<NoteName>> {
+        Ok(Vec::new())
+    }
     fn get_parameter(&mut self, id: u32) -> Result<f64>;
     fn set_parameter(&mut self, id: u32, value: f64) -> Result<()>;
     fn set_parameter_at(&mut self, id: u32, value: f64, offset: i32) -> Result<()>;
@@ -208,6 +212,9 @@ impl NativeProcessor for Plugin {
     }
     fn get_parameters(&mut self) -> Result<Vec<Parameter>> {
         Ok(Plugin::get_parameters(self)?)
+    }
+    fn note_names(&mut self) -> Result<Vec<NoteName>> {
+        Ok(Plugin::note_names(self)?)
     }
     fn get_parameter(&mut self, id: u32) -> Result<f64> {
         Ok(Plugin::get_parameter(self, id)?)

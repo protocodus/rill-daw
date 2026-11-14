@@ -70,7 +70,7 @@ fn failed_export_aborts_tool_owned_new_and_open_without_a_gui_guard_or_lost_erro
         std::fs::create_dir(&output).unwrap();
         app.command(json!({"command":"file_dialog","kind":"export","path":output}));
         app.click("File");
-        app.click("Export WAV…");
+        app.click("Export audio…");
         app.click("Include effect tails");
         let started = app.click("Export…");
         assert_eq!(started["export_pending"], true);

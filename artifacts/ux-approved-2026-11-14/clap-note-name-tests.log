@@ -1,0 +1,42 @@
+   Compiling wayland-sys v0.31.11
+   Compiling ahash v0.8.12
+   Compiling rustix v0.38.44
+   Compiling x11rb-protocol v0.13.2
+   Compiling wayland-backend v0.3.17
+   Compiling epaint v0.33.3
+   Compiling wayland-client v0.31.15
+   Compiling winit v0.30.13
+   Compiling egui v0.33.3
+   Compiling wayland-protocols v0.32.13
+   Compiling calloop v0.13.0
+   Compiling calloop-wayland-source v0.4.1
+   Compiling wayland-cursor v0.31.14
+   Compiling wayland-csd-frame v0.3.0
+   Compiling glutin v0.32.3
+   Compiling glutin-winit v0.5.0
+   Compiling crypto-common v0.1.7
+   Compiling memchr v2.8.3
+   Compiling egui_glow v0.33.3
+   Compiling serde_json v1.0.154
+   Compiling digest v0.10.7
+   Compiling sha2 v0.10.9
+   Compiling wayland-protocols-experimental v20250721.0.1
+   Compiling wayland-protocols-misc v0.3.12
+   Compiling wayland-protocols-wlr v0.3.12
+   Compiling vst3-host v0.10.0 (/workspace/rill-daw/vendor/vst3-host)
+   Compiling smithay-client-toolkit v0.20.0
+   Compiling smithay-clipboard v0.7.3
+   Compiling daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+   Compiling x11rb v0.13.2
+   Compiling arboard v3.7.0
+   Compiling clack-extensions v0.2.0
+   Compiling egui-winit v0.33.3
+   Compiling eframe v0.33.3
+   Compiling daw-plugins v0.1.0 (/workspace/rill-daw/crates/daw-plugins)
+    Finished `test` profile [unoptimized] target(s) in 24.10s
+     Running tests/clap.rs (target/debug/build/daw-plugins/46e08c4773e6ff41/out/clap-46e08c4773e6ff41)
+
+running 1 test
+test named_notes_follow_saved_preset_and_parameter_overrides_in_isolation ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.63s

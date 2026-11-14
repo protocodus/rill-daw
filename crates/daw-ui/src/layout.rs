@@ -6,15 +6,46 @@ use std::hash::Hash;
 
 /// A compact action row which wraps as complete controls when space is limited.
 pub fn toolbar<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResponse<R> {
-    toolbar_with_row_height(ui, tokens::CONTROL_HEIGHT, contents)
+    toolbar_with_row_height(ui, tokens::TOOLBAR_CONTROL_HEIGHT, contents)
 }
 
-/// Tighten a toolbar's padding on laptop-width windows, so labelled tools
-/// with icons stay on one row. Call first inside the toolbar.
+/// Apply the same compact, centered command-bar spacing at every window width.
+/// Shared toolbars already apply this; callers may use it in custom command rows.
 pub fn compact_toolbar_spacing(ui: &mut Ui) {
-    if ui.ctx().content_rect().width() < 1520.0 {
-        ui.spacing_mut().button_padding.x = tokens::SPACE_XS;
-        ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+    ui.spacing_mut().button_padding = egui::vec2(
+        tokens::TOOLBAR_BUTTON_PADDING_X,
+        tokens::TOOLBAR_BUTTON_PADDING_Y,
+    );
+    ui.spacing_mut().item_spacing = egui::Vec2::splat(tokens::TOOLBAR_ITEM_SPACING);
+    ui.spacing_mut().icon_spacing = tokens::ICON_LABEL_GAP;
+    ui.spacing_mut().icon_width = tokens::TOOLBAR_ICON_SIZE;
+    ui.spacing_mut().icon_width_inner = tokens::SPACE_SM;
+    // Native ComboBox starts a nested horizontal row at interact_size. Reserve
+    // the measured label height there too, before it paints any child controls.
+    ui.spacing_mut().interact_size.y = tokens::TOOLBAR_CONTROL_HEIGHT.max(
+        (ui.text_style_height(&egui::TextStyle::Button) + 2.0 * tokens::TOOLBAR_BUTTON_PADDING_Y)
+            .ceil(),
+    );
+}
+
+pub(crate) fn compact_toolbar(ui: &Ui) -> bool {
+    !egui::containers::menu::is_in_menu(ui)
+        && ui.spacing().button_padding.y == tokens::TOOLBAR_BUTTON_PADDING_Y
+        && ui.spacing().icon_width == tokens::TOOLBAR_ICON_SIZE
+}
+
+pub(crate) fn control_height(ui: &Ui) -> f32 {
+    ui.spacing()
+        .interact_size
+        .y
+        .max(ui.text_style_height(&egui::TextStyle::Button) + 2.0 * ui.spacing().button_padding.y)
+}
+
+pub(crate) fn button_icon_size(ui: &Ui) -> f32 {
+    if compact_toolbar(ui) {
+        tokens::TOOLBAR_ICON_SIZE
+    } else {
+        tokens::ICON_SIZE
     }
 }
 
@@ -68,13 +99,13 @@ fn toolbar_with_row_height<R>(
     let row = egui::Frame::new()
         .fill(colors.panel)
         .inner_margin(egui::Margin::symmetric(
-            tokens::SPACE_MD as i8,
             tokens::SPACE_SM as i8,
+            tokens::SPACE_XS as i8,
         ))
         .show(ui, |ui| {
             ui.set_min_width(ui.available_width());
-            ui.spacing_mut().item_spacing = egui::vec2(tokens::SPACE_SM, tokens::SPACE_SM);
-            row_with_height(ui, row_height, true, contents).inner
+            compact_toolbar_spacing(ui);
+            row_with_height(ui, row_height.max(control_height(ui)), true, contents).inner
         });
     ui.painter().hline(
         row.response.rect.x_range(),
@@ -259,7 +290,7 @@ pub fn toolbar_group_sized_with_spacing<R>(
 ) -> InnerResponse<R> {
     let width = minimum_width.max(0.0).min(ui.max_rect().width().max(0.0));
     ui.allocate_ui_with_layout(
-        egui::vec2(width, tokens::CONTROL_HEIGHT),
+        egui::vec2(width, control_height(ui)),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
             ui.spacing_mut().item_spacing.x = spacing.max(0.0);
@@ -278,7 +309,7 @@ pub fn command_group<R>(
     let colors = theme::palette(ui.ctx());
     let width = minimum_width.max(0.0).min(ui.max_rect().width().max(0.0));
     ui.allocate_ui_with_layout(
-        egui::vec2(width, tokens::CONTROL_HEIGHT + tokens::SPACE_XS * 2.0),
+        egui::vec2(width, control_height(ui) + tokens::SPACE_XS * 2.0),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
             let background = ui.painter().add(egui::Shape::Noop);
@@ -317,14 +348,27 @@ pub fn toolbar_trailing<R>(
     // In a wrapping layout available_width includes subsequent rows. Asking
     // for that width always pushes trailing controls onto a fresh row, even
     // when there is enough room beside the leading tools.
-    let remaining = ui.available_size_before_wrap().x;
-    let width = if remaining >= minimum_width {
-        remaining
-    } else {
-        ui.max_rect().width()
-    };
+    // Earlier unbounded measuring groups can enlarge max_rect beyond the
+    // window. Keep the trailing anchor inside the actual visible toolbar.
+    let visible = ui
+        .max_rect()
+        .intersect(ui.clip_rect())
+        .intersect(ui.ctx().content_rect());
+    let remaining = ui
+        .available_rect_before_wrap()
+        .intersect(visible)
+        .width()
+        .max(0.0);
+    if remaining < minimum_width.min(visible.width()).max(0.0) {
+        ui.end_row();
+    }
+    let width = ui
+        .available_rect_before_wrap()
+        .intersect(visible)
+        .width()
+        .max(0.0);
     ui.allocate_ui_with_layout(
-        egui::vec2(width, tokens::CONTROL_HEIGHT),
+        egui::vec2(width, control_height(ui)),
         egui::Layout::right_to_left(egui::Align::Center),
         contents,
     )

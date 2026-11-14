@@ -1,0 +1,19 @@
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 23.74s
+     Running tests/named_note_rows_e2e.rs (target/debug/build/daw-app/8826a71205ab7d52/out/named_note_rows_e2e-8826a71205ab7d52)
+
+running 4 tests
+test a_pitched_instrument_without_note_names_keeps_the_complete_piano_roll ... ok
+test an_empty_named_map_fits_every_pad_and_space_below_the_rows_is_not_an_extra_pad ... ok
+test drum_names_audition_and_draw_their_midi_pitch_and_other_notes_remain_reachable ... ok
+test hosted_instrument_names_support_nonconsecutive_pitches_and_refresh_after_parameter_changes ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.71s
+
+     Running tests/scale_guide_e2e.rs (target/debug/build/daw-app/98dc70e6c90e01fc/out/scale_guide_e2e-98dc70e6c90e01fc)
+
+running 2 tests
+test fresh_major_guide_matches_the_initial_chord_and_explicit_harmony_choices_stay_independent ... ok
+test outside_scale_marker_preserves_neutral_velocity_fill_and_selected_outline_in_both_themes ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.79s

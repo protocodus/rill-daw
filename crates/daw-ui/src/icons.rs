@@ -176,7 +176,9 @@ impl Icon {
             }
             "Copy" | "Copy notes" | "Copy path" => Self::Copy,
             "Paste" | "Paste notes at cursor" => Self::Paste,
-            "Duplicate" | "Duplicate clip" | "Duplicate selection" => Self::Duplicate,
+            "Duplicate" | "Duplicate after" | "Duplicate clip" | "Duplicate selection" => {
+                Self::Duplicate
+            }
             "Ghost copy" => Self::Link,
             "Stretch" => Self::Stretch,
             "Slip" => Self::Slip,
@@ -230,7 +232,7 @@ impl Icon {
             "Disk-streamed audio" => Self::Disk,
             "Open…" => Self::Open,
             "Open editor" | "Show editor" => Self::Editor,
-            "Export WAV…" | "Export MIDI…" => Self::Export,
+            "Export audio…" | "Export MIDI…" => Self::Export,
             "Search" => Self::Search,
             "Scan" | "Rescan" | "Refresh" | "Refresh preview" | "Refresh parameters" => {
                 Self::Refresh
@@ -685,14 +687,14 @@ impl Icon {
                 line(&[(10., 8.), (14., 12.), (10., 16.)]);
                 line(&[(17., 4.), (21., 4.), (21., 20.), (17., 20.)]);
             }
-            // The two home views: five track rows, five channel strips.
+            // The two home views: three track rows, three channel strips.
             Self::Arranger => {
-                for y in [4., 8., 12., 16., 20.] {
+                for y in [5., 12., 19.] {
                     line(&[(3., y), (21., y)]);
                 }
             }
             Self::Mixer => {
-                for x in [4., 8., 12., 16., 20.] {
+                for x in [5., 12., 19.] {
                     line(&[(x, 3.), (x, 21.)]);
                 }
             }
@@ -809,7 +811,7 @@ pub struct IconButton {
     label_color: Option<Color32>,
     sense: Option<egui::Sense>,
     small: bool,
-    min_size: Vec2,
+    min_size: Option<Vec2>,
     truncate: bool,
     wrap_mode: Option<egui::TextWrapMode>,
 }
@@ -986,7 +988,7 @@ impl IconButton {
             label_color: None,
             sense: None,
             small: false,
-            min_size: egui::vec2(0.0, crate::tokens::CONTROL_HEIGHT),
+            min_size: None,
             truncate: false,
             wrap_mode: None,
         }
@@ -1018,7 +1020,7 @@ impl IconButton {
         self
     }
     pub fn min_size(mut self, size: Vec2) -> Self {
-        self.min_size = size;
+        self.min_size = Some(size);
         self
     }
     pub fn frame(mut self, frame: bool) -> Self {
@@ -1048,6 +1050,11 @@ impl Widget for IconButton {
         // prevents horizontal_wrapped from wrapping individual buttons.
         let previous_style = ui.style().clone();
         let in_menu = egui::containers::menu::is_in_menu(ui);
+        let toolbar = crate::layout::compact_toolbar(ui);
+        // Atom spacing belongs to the icon/label pair, not the surrounding row.
+        if toolbar {
+            ui.spacing_mut().icon_spacing = crate::tokens::ICON_LABEL_GAP;
+        }
         if in_menu {
             // Native menus install compact defaults after the shared theme.
             // Keep ordinary label padding on shared controls in those menus.
@@ -1064,7 +1071,7 @@ impl Widget for IconButton {
         let disclosure_id = Id::new("rill-button-disclosure");
         let mut atoms = egui::Atoms::new(self.label.clone());
         if icon.is_some() {
-            let atom = Atom::custom(icon_id, Vec2::splat(crate::tokens::ICON_SIZE));
+            let atom = Atom::custom(icon_id, Vec2::splat(crate::layout::button_icon_size(ui)));
             if icon_only {
                 atoms = egui::Atoms::new(atom);
             } else {
@@ -1075,7 +1082,16 @@ impl Widget for IconButton {
             atoms.push_right(Atom::custom(disclosure_id, Vec2::splat(12.0)));
         }
         let mut button = Button::new(atoms)
-            .min_size(self.min_size)
+            .min_size(self.min_size.unwrap_or_else(|| {
+                egui::vec2(
+                    0.0,
+                    if toolbar {
+                        ui.spacing().interact_size.y
+                    } else {
+                        crate::tokens::CONTROL_HEIGHT
+                    },
+                )
+            }))
             .corner_radius(crate::tokens::RADIUS)
             .selected(self.selected);
         if self.small {
@@ -1179,6 +1195,13 @@ impl Widget for IconButton {
             .frame(has_frame)
             .atom_ui(ui);
         let response = &output.response;
+        #[cfg(test)]
+        ui.ctx().data_mut(|data| {
+            data.insert_temp(
+                Id::new("tested_icon_button_geometry"),
+                (response.rect, output.rect(icon_id)),
+            )
+        });
         if has_frame
             && (frame_when_inactive
                 || response.hovered()
@@ -1277,15 +1300,28 @@ impl Widget for IconButton {
             } else {
                 colors.muted
             };
-            icon.paint(ui.painter(), rect, color);
+            icon.paint(
+                ui.painter(),
+                rect,
+                if toolbar {
+                    color.gamma_multiply(crate::tokens::BUTTON_ICON_OPACITY)
+                } else {
+                    color
+                },
+            );
         }
         if self.disclosure
             && let Some(rect) = output.rect(disclosure_id)
         {
+            let color = ui.style().interact(&output.response).text_color();
             Icon::ChevronDown.paint(
                 ui.painter(),
                 rect,
-                ui.style().interact(&output.response).text_color(),
+                if toolbar {
+                    color.gamma_multiply(crate::tokens::BUTTON_ICON_OPACITY)
+                } else {
+                    color
+                },
             );
         }
         output.response
@@ -1294,7 +1330,137 @@ impl Widget for IconButton {
 
 #[cfg(test)]
 mod tests {
-    use super::Icon;
+    use super::{Icon, IconButton};
+
+    #[test]
+    fn toolbar_icon_atoms_keep_fibonacci_insets_and_centered_undimmed_labels() {
+        for appearance in [
+            crate::theme::Appearance::Light,
+            crate::theme::Appearance::Dark,
+        ] {
+            for density in [1.0, 2.0] {
+                for (selected, enabled) in [(false, true), (true, true), (false, false)] {
+                    let ctx = egui::Context::default();
+                    crate::theme::apply(&ctx);
+                    crate::theme::set_appearance(&ctx, appearance);
+                    ctx.set_pixels_per_point(density);
+                    let output = ctx.run(egui::RawInput::default(), |ctx| {
+                        egui::CentralPanel::default().show(ctx, |ui| {
+                            crate::toolbar(ui, |ui| {
+                                ui.add_enabled(enabled, IconButton::tool(selected, "Pencil"));
+                            });
+                        });
+                    });
+                    let (target, icon) = ctx
+                        .data(|data| {
+                            data.get_temp::<(egui::Rect, Option<egui::Rect>)>(egui::Id::new(
+                                "tested_icon_button_geometry",
+                            ))
+                        })
+                        .unwrap();
+                    let icon = icon.unwrap();
+                    let text = output
+                        .shapes
+                        .iter()
+                        .find_map(|shape| match &shape.shape {
+                            egui::Shape::Text(text) if text.galley.text() == "Pencil" => Some(text),
+                            _ => None,
+                        })
+                        .unwrap();
+                    let label = text.galley.rect.translate(text.pos.to_vec2());
+                    let tolerance = 1.0 / density;
+                    assert!((icon.width() - crate::tokens::TOOLBAR_ICON_SIZE).abs() <= tolerance);
+                    assert!(
+                        (label.left() - icon.right() - crate::tokens::ICON_LABEL_GAP).abs()
+                            <= tolerance
+                    );
+                    assert!(
+                        (icon.left() - target.left() - crate::tokens::TOOLBAR_BUTTON_PADDING_X)
+                            .abs()
+                            <= tolerance
+                    );
+                    assert!(
+                        (target.right() - label.right() - crate::tokens::TOOLBAR_BUTTON_PADDING_X)
+                            .abs()
+                            <= tolerance
+                    );
+                    assert!((label.center().y - icon.center().y).abs() <= tolerance);
+                    assert!((label.center().y - target.center().y).abs() <= tolerance);
+                    let vertical = (target.height() - label.height().max(icon.height())) / 2.0;
+                    assert!(
+                        (vertical - crate::tokens::TOOLBAR_BUTTON_PADDING_Y).abs() <= tolerance
+                    );
+                    assert!(crate::tokens::TOOLBAR_BUTTON_PADDING_X > vertical);
+                    assert!(target.height() < crate::tokens::CONTROL_HEIGHT);
+                    if enabled {
+                        let foreground = crate::theme::palette(&ctx).text;
+                        assert!(
+                            text.galley
+                                .job
+                                .sections
+                                .iter()
+                                .all(|section| section.format.color == foreground),
+                            "labels retain their explicit foreground at full contrast"
+                        );
+                        let colors: Vec<_> = output
+                            .shapes
+                            .iter()
+                            .filter_map(|shape| match &shape.shape {
+                                egui::Shape::Path(path)
+                                    if path.points.iter().all(|point| icon.contains(*point)) =>
+                                {
+                                    Some(path.stroke.color.clone())
+                                }
+                                egui::Shape::LineSegment { points, stroke }
+                                    if points.iter().all(|point| icon.contains(*point)) =>
+                                {
+                                    Some(egui::epaint::ColorMode::Solid(stroke.color))
+                                }
+                                _ => None,
+                            })
+                            .collect();
+                        assert!(!colors.is_empty());
+                        assert!(colors.iter().all(|color| *color
+                            == egui::epaint::ColorMode::Solid(
+                                foreground.gamma_multiply(crate::tokens::BUTTON_ICON_OPACITY)
+                            )));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn ordinary_button_targets_and_icon_spacing_remain_unchanged_outside_toolbars() {
+        let ctx = egui::Context::default();
+        crate::theme::apply(&ctx);
+        let output = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.add(IconButton::tool(false, "Pencil"));
+            });
+        });
+        let (target, icon) = ctx
+            .data(|data| {
+                data.get_temp::<(egui::Rect, Option<egui::Rect>)>(egui::Id::new(
+                    "tested_icon_button_geometry",
+                ))
+            })
+            .unwrap();
+        let icon = icon.unwrap();
+        let text = output
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.text() == "Pencil" => Some(text),
+                _ => None,
+            })
+            .unwrap();
+        let label = text.galley.rect.translate(text.pos.to_vec2());
+        assert_eq!(target.height(), crate::tokens::CONTROL_HEIGHT);
+        assert_eq!(icon.width(), crate::tokens::ICON_SIZE);
+        assert!((label.left() - icon.right() - crate::tokens::SPACE_SM).abs() <= 1.0);
+        assert!((icon.left() - target.left() - crate::tokens::BUTTON_PADDING_X).abs() <= 1.0);
+    }
 
     #[test]
     fn labels_resolve_to_consistent_icons() {

@@ -1119,7 +1119,13 @@ pub fn envelope_editor(
 ) -> EnvelopeOutput {
     let (rect, mut response) = ui.allocate_exact_size(size, Sense::hover());
     let colors = theme::palette(ui.ctx());
-    let plot = rect.shrink2(vec2(tokens::SPACE_MD, tokens::SPACE_MD));
+    let caption_font = TextRole::Note.font();
+    let caption_height = ui.fonts_mut(|fonts| fonts.row_height(&caption_font));
+    let caption_bottom = rect.bottom() - tokens::SPACE_XS;
+    let mut plot = rect.shrink2(vec2(tokens::SPACE_MD, tokens::SPACE_MD));
+    // The release reaches the baseline. Reserve a separate measured caption
+    // band so its endpoint and line cannot run through the stage names.
+    plot.max.y = (caption_bottom - caption_height - tokens::SPACE_SM).max(plot.top());
     let zones = envelope_zones(shape);
     let zone_width = plot.width() / 4.0;
     let level_y = |level: f32| plot.bottom() - plot.height() * level.clamp(0.0, 1.0);
@@ -1325,7 +1331,6 @@ pub fn envelope_editor(
             Stroke::new(tokens::BORDER_WIDTH, colors.line),
             StrokeKind::Inside,
         );
-        let font = TextRole::Note.font();
         for (index, name) in ["Attack", "Decay", "Sustain", "Release"]
             .into_iter()
             .enumerate()
@@ -1333,11 +1338,11 @@ pub fn envelope_editor(
             painter.text(
                 egui::pos2(
                     plot.left() + zone_width * (index as f32 + 0.5),
-                    rect.bottom() - 2.0,
+                    caption_bottom,
                 ),
                 Align2::CENTER_BOTTOM,
                 name,
-                font.clone(),
+                caption_font.clone(),
                 colors.muted,
             );
         }

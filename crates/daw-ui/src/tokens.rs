@@ -39,6 +39,15 @@ pub const MIXER_ROUTE_HEAD: f32 = 9.0;
 pub const MIXER_ROUTE_LANE_HEIGHT: f32 = 40.0;
 pub const BUTTON_PADDING_X: f32 = SPACE_MD;
 pub const BUTTON_PADDING_Y: f32 = SPACE_SM;
+/// Compact command bars use Fibonacci insets while ordinary forms keep full targets.
+pub const TOOLBAR_CONTROL_HEIGHT: f32 = SPACE_LG;
+pub const TOOLBAR_BUTTON_PADDING_X: f32 = SPACE_SM;
+pub const TOOLBAR_BUTTON_PADDING_Y: f32 = 3.0;
+pub const TOOLBAR_ITEM_SPACING: f32 = SPACE_XS;
+pub const TOOLBAR_ICON_SIZE: f32 = SPACE_MD;
+pub const ICON_LABEL_GAP: f32 = 3.0;
+/// Supporting glyphs stay slightly quieter than their readable labels.
+pub const BUTTON_ICON_OPACITY: f32 = 0.8;
 pub const POPUP_MARGIN: f32 = SPACE_LG;
 // egui's native titlebar reserves 32 points at each side for its controls.
 // Keep its close target outside the overlapping titlebar click region.
@@ -62,8 +71,12 @@ pub const FONT_HEADING: f32 = 21.0;
 pub const FONT_CANVAS: f32 = FONT_CAPTION;
 /// Bounded parameter-scale captions in dense canvas controls.
 pub const FONT_SCALE: f32 = SPACE_SM + 3.0 * GOLDEN_RATIO_INVERSE;
-/// Two proportional label rows with clear space between their glyph bounds.
-pub const TIMELINE_RULER_HEIGHT: f32 = SPACE_XL + SPACE_XS;
+/// Space below the clock row keeps the cursor head clear of the time labels.
+pub const TIMELINE_RULER_BOTTOM_PADDING: f32 = SPACE_MD;
+/// Clock-row anchor, including its original two-point text inset.
+pub const TIMELINE_RULER_CLOCK_INSET: f32 = 2.0 + TIMELINE_RULER_BOTTOM_PADDING;
+/// Two proportional label rows, followed by space for the cursor head.
+pub const TIMELINE_RULER_HEIGHT: f32 = SPACE_XL + SPACE_XS + TIMELINE_RULER_BOTTOM_PADDING;
 /// One loop strip height for every timeline, directly below the ruler.
 pub const TIMELINE_LOOP_HEIGHT: f32 = SPACE_LG;
 /// Song markers and meter changes below the arranger's loop lane.
@@ -89,6 +102,8 @@ pub const MIXER_FADER_MIN: f32 = 144.0;
 /// A stereo meter beside the fader: two bars and their gap.
 pub const MIXER_METER_WIDTH: f32 = SPACE_MD;
 pub const PIANO_KEYS_WIDTH: f32 = SPACE_XL + SPACE_LG + SPACE_XS;
+/// Instrument-provided note names need a wider gutter than pitch labels.
+pub const NAMED_NOTE_KEYS_WIDTH: f32 = 160.0;
 pub const VELOCITY_LANE_HEIGHT: f32 = 89.0;
 pub const NOTE_RADIUS: f32 = 3.0;
 /// Icon glyph box inside buttons and rows: the control height minus the button padding.

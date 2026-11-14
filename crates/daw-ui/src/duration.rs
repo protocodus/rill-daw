@@ -89,6 +89,8 @@ pub fn duration_presets(ui: &mut Ui, seconds: f64, maximum_seconds: f64) -> Opti
                     duration <= maximum_seconds,
                     crate::button_widget(format!("{duration:.0} seconds")),
                 )
+                .on_hover_text(format!("Set the loop end {duration:.0} seconds after the current loop start"))
+                .on_disabled_hover_text("This duration would extend beyond the project limit")
                 .clicked()
             {
                 chosen = Some(duration);

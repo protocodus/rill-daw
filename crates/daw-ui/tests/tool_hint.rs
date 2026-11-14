@@ -345,10 +345,84 @@ fn toolbar_caption_uses_only_remaining_space_without_moving_controls_or_canvas()
                     for control in &controls {
                         assert!(!caption.rect.intersects(*control));
                     }
-                    let painted = text_rect(&output, ToolHintContext::Arrangement.gesture(tool));
+                    let gesture = ToolHintContext::Arrangement.gesture(tool);
+                    let shown = output
+                        .shapes
+                        .iter()
+                        .find_map(|shape| match &shape.shape {
+                            Shape::Text(text) if gesture.starts_with(text.galley.text()) => {
+                                assert!(!text.galley.elided, "Guidance must use complete clauses");
+                                Some(text.galley.text())
+                            }
+                            _ => None,
+                        })
+                        .expect("A visible caption paints a complete gesture");
+                    assert!(
+                        shown == gesture || gesture.strip_prefix(shown).unwrap().starts_with(" · ")
+                    );
+                    let painted = text_rect(&output, shown);
                     assert!(toolbar.contains_rect(painted));
                     assert!(painted.height() <= tokens::CONTROL_HEIGHT);
                 }
+            }
+        }
+    }
+}
+
+#[test]
+fn narrow_tool_captions_hide_instead_of_cutting_off_words() {
+    for density in [1.0, 2.0] {
+        let ctx = Context::default();
+        theme::apply(&ctx);
+        ctx.set_pixels_per_point(density);
+        let _ = ctx.run(input(800.0, vec![]), |_| {});
+        let first_clause_width = ctx.fonts_mut(|fonts| {
+            fonts
+                .layout_no_wrap(
+                    "Select notes".to_owned(),
+                    daw_ui::text::TextRole::Note.font(),
+                    egui::Color32::PLACEHOLDER,
+                )
+                .size()
+                .x
+        });
+        for width in [50.0, 76.0, 110.0, 400.0] {
+            let mut response = None;
+            let output = ctx.run(input(800.0, vec![]), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let slot = Rect::from_min_size(ui.min_rect().min, egui::vec2(width, 34.0));
+                    let mut caption_ui = ui.new_child(
+                        egui::UiBuilder::new()
+                            .max_rect(slot)
+                            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+                    );
+                    caption_ui.set_clip_rect(slot);
+                    assert_eq!(caption_ui.available_rect_before_wrap().width(), width);
+                    response = daw_ui::editor_tool_caption(
+                        &mut caption_ui,
+                        EditorTool::Select,
+                        ToolHintContext::Midi,
+                    );
+                });
+            });
+            let caption = output.shapes.iter().find_map(|shape| match &shape.shape {
+                Shape::Text(text) if text.galley.text().starts_with("Select") => Some(text),
+                _ => None,
+            });
+            if width < first_clause_width {
+                assert!(response.is_none());
+                assert!(
+                    caption.is_none(),
+                    "A narrow slot must not show 'Select not…'"
+                );
+            } else {
+                let caption = caption.expect("A full first clause fits");
+                assert!(!caption.galley.elided);
+                assert!(matches!(
+                    caption.galley.text(),
+                    "Select notes" | "Select notes · Drag to move or resize"
+                ));
+                assert_eq!(response.unwrap().sense, egui::Sense::hover());
             }
         }
     }

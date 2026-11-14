@@ -1,0 +1,56 @@
+RILL DAW — five simulated first-time music sessions
+14 November 2026
+
+Fetched origin/main: ab6a941332d60980f1f5c08229ae128e33e8206a.
+Checkout already matched it. No application source was changed.
+
+Start with review.html. It links each participant report, chronological
+expectations/actions/outcomes, screenshots, desktop/audio recording, and music.
+Raw structured observations are in session-N/report.json and session-notes.jsonl.
+Native input history is in mouse-actions.jsonl.
+
+Completed: five independent native UI sessions, approximately 15–17 minutes
+of interaction each; 543 input operations, 321 screenshots, 67 chronological
+observation entries. All five saved .rill projects and exported non-silent WAVs.
+Participant 1 also exported MP3. Participant 2's drum goal remains partial:
+all inspected drum pads were Empty and its drum-only audition excerpt was silent;
+its final export contains signal after adding R1 Mini. No subjective audio-quality
+judgment or successful drum-sound claim is made.
+
+Artifacts
+1 — Neon steps: 4-bar synth melody over starter drums, high final variation.
+2 — neon-steps: 4-bar rhythmic MIDI attempt plus synth phrase; drums unverified.
+3 — C-minor-guitarist-idea: bass and higher melody over starter drums.
+4 — Soft-Song: C–F–G–C chords, 15-note tune, echo/reverb.
+5 — Mist-study: atmospheric synth layers and echo/reverb.
+
+Candidate themes for the later evaluation
+- All five encountered pattern double-click leading to Rename before discovering
+  right-click > Edit notes. Some mistook the naming form's Keyboard for piano keys.
+- Three encountered sampler/drum presets that left No sample/Empty states.
+- The drum participant could not discover a clear mapping between pad sounds
+  and piano-roll pitch rows.
+- Several questioned the 0 plug-ins count despite visible built-in devices.
+- Other observations cover major/minor color defaults, instrument/track identity,
+  loop terminology, export naming, and dialog movement. Individual reports preserve
+  exact steps, evidence, recovery, confidence, and successful discoveries.
+These are simulated observations, not confirmed defect counts or prevalence estimates.
+No fixes or final priority decisions were made.
+
+Environment notes
+- Rust 1.92 could not compile the fetched source (experimental if-let match guard).
+  The exact unmodified source built with stable Rust 1.100.0.
+- Five isolated Xvfb desktops and paced PulseAudio null sinks were used, with a
+  development build on four shared CPU cores. Repeated ALSA I/O errors affected
+  live audition. Root cause is unresolved; hardware playback was not tested.
+- Missing GTK chooser schemas and post-picker window focus were repaired during
+  the study. Affected attempts are documented separately from product findings.
+- Reports contain concise public simulated expectations and observations, not
+  private internal reasoning. Agents used UI screenshots, mouse and keyboard;
+  they did not consult source, user guides or previous studies for their actions.
+
+Verification
+All five project archives passed CRC checks. All exported WAVs have nonzero audio
+signal. Every MP4 recording fully decoded without errors; midpoint video frames
+were visually inspected. Full per-file metadata is in verification.json.
+Keep the directory structure intact for the offline review links.

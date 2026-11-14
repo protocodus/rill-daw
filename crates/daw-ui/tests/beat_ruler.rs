@@ -115,6 +115,69 @@ fn a_view_between_whole_beats_keeps_musical_and_clock_anchors_aligned() {
 }
 
 #[test]
+fn clock_labels_leave_clear_space_before_the_cursor_head_and_loop_strip() {
+    for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
+        for density in [1.0, 2.0] {
+            let ctx = Context::default();
+            theme::apply(&ctx);
+            theme::set_appearance(&ctx, appearance);
+            ctx.set_pixels_per_point(density);
+            let ruler = Rect::from_min_size(
+                pos2(30.0, 30.0),
+                Vec2::new(900.0, tokens::TIMELINE_RULER_HEIGHT),
+            );
+            let canvas = Rect::from_min_max(
+                pos2(ruler.left(), ruler.bottom() + tokens::TIMELINE_LOOP_HEIGHT),
+                pos2(ruler.right(), 300.0),
+            );
+            let output = ctx.run(RawInput::default(), |ctx| {
+                let painter = ctx.layer_painter(egui::LayerId::background());
+                paint_timeline_ruler(
+                    &painter,
+                    ruler,
+                    TimelineViewport::default(),
+                    120.0,
+                    &daw_ui::MeterMap::uniform(4),
+                );
+                daw_ui::paint_timeline_cursor(&painter, ruler, canvas, ruler.left());
+            });
+            let clock = output
+                .shapes
+                .iter()
+                .find_map(|painted| match &painted.shape {
+                    Shape::Text(text) if text.galley.text() == "0:00" => Some(
+                        text.galley
+                            .rect
+                            .union(text.galley.mesh_bounds)
+                            .translate(text.pos.to_vec2()),
+                    ),
+                    _ => None,
+                })
+                .expect("clock label at the same beat as the cursor");
+            assert!(clock.bottom() + tokens::SPACE_MD <= ruler.bottom());
+            let mut head_count = 0;
+            for painted in &output.shapes {
+                if let Shape::Path(path) = &painted.shape {
+                    head_count += 1;
+                    let head = painted.shape.visual_bounding_rect();
+                    assert!(
+                        clock.bottom() < head.top(),
+                        "Cursor glow crowds the clock at {density}x: {clock:?}, {head:?}"
+                    );
+                    if path.fill != egui::Color32::TRANSPARENT {
+                        assert!(
+                            clock.bottom() + tokens::SPACE_XS <= head.top(),
+                            "Cursor head needs a clear gap below the time: {clock:?}, {head:?}"
+                        );
+                    }
+                }
+            }
+            assert_eq!(head_count, 2, "solid cursor head and its glow are present");
+        }
+    }
+}
+
+#[test]
 fn zoom_levels_add_useful_detail_without_overlapping_or_partial_labels() {
     for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
         for density in [1.0, 2.0] {

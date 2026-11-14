@@ -1,0 +1,17 @@
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 1.54s
+     Running tests/device_toolbar_tooltips_e2e.rs (target/debug/build/daw-app/1fb18568b51443a8/out/device_toolbar_tooltips_e2e-1fb18568b51443a8)
+
+running 2 tests
+test integrated_instrument_preset_toolbar_explains_actions_without_changing_sound ... ok
+test integrated_effect_preset_toolbar_explains_actions_without_changing_sound ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.51s
+
+     Running tests/toolbar_geometry_e2e.rs (target/debug/build/daw-app/0c5702aba2cdb67c/out/toolbar_geometry_e2e-0c5702aba2cdb67c)
+
+running 1 test
+test toolbar_glyphs_labels_and_targets_align_wrap_and_remain_clickable_across_editors has been running for over 60 seconds
+test toolbar_glyphs_labels_and_targets_align_wrap_and_remain_clickable_across_editors ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 72.87s

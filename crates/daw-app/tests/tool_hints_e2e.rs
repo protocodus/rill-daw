@@ -339,7 +339,7 @@ fn duplicate_caption_leads_to_a_canvas_gesture_without_changing_the_command() {
     let selected = pointer_at_rect(&mut app, &clip_rect(&repeated, &source), "primary");
     assert_eq!(selected["timeline"]["tool"], "Select");
     pointer_at_rect(&mut app, &clip_rect(&selected, &source), "secondary");
-    let menu_copy = app.click("Duplicate");
+    let menu_copy = app.click("Duplicate after");
     assert_eq!(
         menu_copy["project"]["tracks"][0]["clips"]
             .as_array()

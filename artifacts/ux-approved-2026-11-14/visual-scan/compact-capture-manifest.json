@@ -1,0 +1,71 @@
+{
+  "binary_sha256": "440c591aae82dbdafa24a72816be177b76f02f3fb8b0695a3226b987536f756d",
+  "captures": [
+    {
+      "view": "arranger",
+      "theme": "Dark",
+      "image": "arranger-dark-compact.png",
+      "exit_code": 0,
+      "dimensions": [
+        1100,
+        720
+      ],
+      "sha256": "cb45cc291f5c9735d2bb2d73593fff4f55068e2bd281059118f4d7c75e980c1c"
+    },
+    {
+      "view": "mixer",
+      "theme": "Light",
+      "image": "mixer-light-compact.png",
+      "exit_code": 0,
+      "dimensions": [
+        1100,
+        720
+      ],
+      "sha256": "8174862be0fa1911150fc2084bb95cb9ff4a3b97041426a8d71a1d76b9050d36"
+    },
+    {
+      "view": "audio",
+      "theme": "Dark",
+      "image": "audio-dark-compact.png",
+      "exit_code": 0,
+      "dimensions": [
+        1100,
+        720
+      ],
+      "sha256": "2d3121c6d08c1f91984d8dab78637c19f0d92ef9e7d6534fd2ba219961f3c449"
+    },
+    {
+      "view": "piano",
+      "theme": "Light",
+      "image": "piano-light-compact.png",
+      "exit_code": 0,
+      "dimensions": [
+        1100,
+        720
+      ],
+      "sha256": "c18cd3b2fecc266b9647772a9cbb55eb971039ed6db46214c5c7e400ec217377"
+    },
+    {
+      "view": "library",
+      "theme": "Dark",
+      "image": "library-dark-compact.png",
+      "exit_code": 0,
+      "dimensions": [
+        1100,
+        720
+      ],
+      "sha256": "66c72aa82e3c7eaf2037b0633a9d2eb83868159173979b6050645cc6659ebb11"
+    },
+    {
+      "view": "instrument",
+      "theme": "Light",
+      "image": "instrument-light-compact.png",
+      "exit_code": 0,
+      "dimensions": [
+        1100,
+        720
+      ],
+      "sha256": "bf603eeaffa49387fc55e2015924032520b79a76b4aa18354e0f202753c02d10"
+    }
+  ]
+}

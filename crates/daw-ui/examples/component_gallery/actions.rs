@@ -6,6 +6,7 @@ pub struct State {
     tool: usize,
     editor_tool: ui::EditorTool,
     looped: bool,
+    page: usize,
 }
 
 pub fn show(ui: &mut Ui, state: &mut State) {
@@ -33,7 +34,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             ui.add_space(ui::tokens::SPACE_MD);
             ui.horizontal(|ui| {
                 ui.add_enabled(false, ui::button_widget("Save"));
-                ui::button(ui, "Export WAV…");
+                ui::button(ui, "Export audio…");
             });
         });
         left.add_space(ui::tokens::SPACE_LG);
@@ -87,6 +88,24 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                 ui::tab_choice(ui, false, "Mixer");
                 ui::timeline_fit_button(ui);
             });
+            ui.add_space(ui::tokens::SPACE_MD);
+            ui::popup_tabs_with_hints(
+                ui,
+                &mut state.page,
+                &[
+                    (
+                        0,
+                        "Instruments",
+                        "Browse sound generators to play with MIDI notes",
+                    ),
+                    (
+                        1,
+                        "Effects",
+                        "Browse processors for audio passing through a channel",
+                    ),
+                ],
+                |_| (),
+            );
             ui.add_space(ui::tokens::SPACE_MD);
             ui::quiet_toggle(ui, &mut state.looped, "Loop");
         });

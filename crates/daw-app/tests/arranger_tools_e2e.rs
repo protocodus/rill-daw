@@ -232,7 +232,7 @@ fn wait_join(app: &mut Harness) -> Value {
 }
 fn export_exact(app: &mut Harness, name: &str) -> AudioData {
     let path = app.directory.path().join(name);
-    let state = menu(app, "File", "Export WAV…");
+    let state = menu(app, "File", "Export audio…");
     if state["export_include_effect_tails"] == true {
         app.click("Include effect tails");
     }

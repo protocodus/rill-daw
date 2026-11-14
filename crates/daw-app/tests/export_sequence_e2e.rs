@@ -83,7 +83,7 @@ fn tail_summary_changes_with_the_checkbox_and_matches_the_rendered_boundary() {
     let mut app = Harness::new();
     seed(&mut app, 60.0);
     let before = app.inspect();
-    let options = menu(&mut app, "Export WAV…");
+    let options = menu(&mut app, "Export audio…");
     assert_eq!(options["export_include_effect_tails"], true);
     assert!(has(&options, "Arrangement · 0:30 + tails"));
     assert!(has(&options, "48 kHz · Stereo · 32-bit float"));
@@ -101,7 +101,7 @@ fn tail_summary_changes_with_the_checkbox_and_matches_the_rendered_boundary() {
     app.click("44100 Hz");
     let settings = app.click("Apply");
     assert_eq!(settings["settings"]["sample_rate"], 44_100);
-    let options = menu(&mut app, "Export WAV…");
+    let options = menu(&mut app, "Export audio…");
     assert!(has(&options, "44.1 kHz · Stereo · 32-bit float"));
     let exact_options = app.click("Include effect tails");
     assert_eq!(exact_options["export_include_effect_tails"], false);
@@ -123,7 +123,7 @@ fn tail_summary_changes_with_the_checkbox_and_matches_the_rendered_boundary() {
 fn midi_results_replace_wav_feedback_without_losing_previous_success_on_failure() {
     let mut app = Harness::new();
     seed(&mut app, 0.2);
-    menu(&mut app, "Export WAV…");
+    menu(&mut app, "Export audio…");
     app.click("Include effect tails");
     let wav = app.directory.path().join("Mix.wav");
     let done = export_wav(&mut app, &wav);
@@ -253,7 +253,7 @@ fn midi_results_replace_wav_feedback_without_losing_previous_success_on_failure(
 fn recent_exports_keep_five_completed_outputs_and_move_repeated_paths_to_the_front() {
     let mut app = Harness::new();
     seed(&mut app, 0.2);
-    menu(&mut app, "Export WAV…");
+    menu(&mut app, "Export audio…");
     let wav = app.directory.path().join("Original.wav");
     let done = export_wav(&mut app, &wav);
     let wav_target = done["finishing"]["last_export"].clone();
@@ -338,7 +338,7 @@ fn pending_wav_disables_midi_picker_and_reexport_without_consuming_the_next_dest
     app.command(json!({"command":"open", "path":project_path}));
     let wav = app.directory.path().join("Patient.wav");
     picker(&mut app, "export", Some(&wav));
-    menu(&mut app, "Export WAV…");
+    menu(&mut app, "Export audio…");
     let pending = app.click("Export…");
     assert_eq!(pending["export_pending"], true);
     let midi = app.directory.path().join("Patient.mid");

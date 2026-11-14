@@ -75,6 +75,7 @@ pub(crate) fn is_slow_command(command: &HostCommand) -> bool {
             | HostCommand::GetAllParameters
             | HostCommand::AudioBusDetails
             | HostCommand::NoteExpressions { .. }
+            | HostCommand::NoteNames
             | HostCommand::MidiControllerAssignments { .. }
             | HostCommand::SaveState
             | HostCommand::LoadState { .. }
@@ -762,6 +763,8 @@ pub enum HostCommand {
         /// Program index.
         program_index: i32,
     },
+    /// Query instrument note names for the current program and input routing.
+    NoteNames,
     /// Read opaque data for a program.
     GetProgramData {
         /// Program-list id.
@@ -1068,6 +1071,11 @@ pub enum HostResponse {
     ProgramPitchNames {
         /// Advertised pitch names.
         names: Vec<crate::plugin::ProgramPitchName>,
+    },
+    /// Current instrument note names.
+    NoteNames {
+        /// Advertised names with their input port and MIDI channel.
+        names: Vec<crate::plugin::NoteName>,
     },
     /// Opaque program/unit data.
     OpaqueData {
@@ -2181,6 +2189,39 @@ mod wire_tests {
     }
 
     #[test]
+    fn note_names_preserve_native_routing_across_the_wire() {
+        let command = serde_json::to_string(&HostCommand::NoteNames).expect("serialize NoteNames");
+        assert!(matches!(
+            serde_json::from_str::<HostCommand>(&command).expect("deserialize NoteNames"),
+            HostCommand::NoteNames
+        ));
+        let names = vec![
+            crate::plugin::NoteName {
+                port: 0,
+                channel: 9,
+                pitch: 36,
+                name: "Kick".into(),
+            },
+            crate::plugin::NoteName {
+                port: -1,
+                channel: -1,
+                pitch: 38,
+                name: "Snare – Rim".into(),
+            },
+        ];
+        let response = serde_json::to_string(&HostResponse::NoteNames {
+            names: names.clone(),
+        })
+        .expect("serialize NoteNames response");
+        match serde_json::from_str::<HostResponse>(&response)
+            .expect("deserialize NoteNames response")
+        {
+            HostResponse::NoteNames { names: restored } => assert_eq!(restored, names),
+            other => panic!("NoteNames round-trip changed the variant: {other:?}"),
+        }
+    }
+
+    #[test]
     fn latency_and_tail_round_trip_across_the_wire() {
         let latency_cmd = serde_json::to_string(&HostCommand::LatencySamples).expect("serialize");
         assert!(matches!(
@@ -2821,6 +2862,7 @@ mod wire_tests {
             HostCommand::CreateGui,
             HostCommand::CloseGui,
             HostCommand::GetAllParameters,
+            HostCommand::NoteNames,
         ] {
             assert!(
                 is_slow_command(&command),

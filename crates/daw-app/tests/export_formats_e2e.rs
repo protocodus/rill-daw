@@ -68,7 +68,7 @@ fn open_song(app: &mut Harness, master_gain: f32) -> Value {
 
 fn dialog(app: &mut Harness) -> Value {
     app.click("File");
-    let state = app.click("Export WAV…");
+    let state = app.click("Export audio…");
     assert_eq!(state["popups"]["export"], true);
     state
 }

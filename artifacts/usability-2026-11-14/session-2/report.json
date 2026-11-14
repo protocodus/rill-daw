@@ -1,0 +1,130 @@
+{
+  "participant_id": "simulated-novice-2",
+  "persona": {"description": "Rhythm-game fan with no DAW experience", "prior_rill_knowledge": "None", "musical_intent": "An original short dance beat, with a steady pulse and alternating accents"},
+  "goal": "Create an original short dance beat using included drum instruments, hear it loop, add another sound if possible, save and export it.",
+  "session": {"date": "2026-11-14", "first_ui_action_utc": "16:33:19", "last_ui_mutation_utc": "16:49:23", "duration_minutes_approx": 16, "ui_actions": "More than 100 genuine mouse/keyboard actions; exact events preserved by driver input log", "method": "Screenshot-driven isolated native UI exploration; no RILL source, internal state, prior studies, tests, application MCP, or headless application commands used", "required_document_read": "/workspace/rill-daw/AGENTS.md"},
+  "outcome": {
+    "status": "Partial musical success; project and WAV saved through UI",
+    "created": "Four-bar, 8-second arrangement at 120 BPM with two instrument tracks and eight clips. Each repeated drum clip contains ten manually drawn notes; each repeated Mini clip contains four manually drawn notes.",
+    "drums": "R1 Drums added; Electro and GM Kit presets inspected. All pads remained Empty, so usable included drum sounds were not established. Notes were drawn without a known kick/snare mapping.",
+    "second_sound": "R1 Mini added and Acid Line preset selected; four-note bass-like phrase drawn and repeated. Green Mini track meters observed during final playback.",
+    "loop": "Loop playback over selection successfully set one-bar and later four-bar ranges. Final Play remained active at a later screenshot. Hearing the loop was not verified by participant.",
+    "save": "Project title changed to neon-steps; Ctrl+S repeated after final arrangement expansion.",
+    "export": "Both initial and final Exported neon-steps.wav confirmations observed. Final re-export used the visible Re-export last WAV (replace) menu action.",
+    "audio_evidence": "Coordinator measured silence in a 12-second capture around earlier 16:40:17 drum playback. Final playback interval 16:48:46–16:49:07 and final WAV were handed to coordinator for independent verification. No personal hearing claim is made."
+  },
+  "chronological_discoveries": [
+    {"order": 1, "discovery": "App opens a named audio example. File > New reveals a useful Start a song call to action.", "evidence": "screenshots/003-new-project.png"},
+    {"order": 2, "discovery": "Choose instrument opens three built-in instrument cards; R1 Drums and Add instrument track are easy to identify.", "evidence": "screenshots/004-choose-instrument.png"},
+    {"order": 3, "discovery": "New drums and two kit presets show only Empty pads and No sample.", "evidence": "screenshots/008-gm-kit-empty.png"},
+    {"order": 4, "discovery": "Double-clicking the pattern label renames it; right-click > Edit notes opens the editor.", "evidence": "screenshots/013-pattern-context.png"},
+    {"order": 5, "discovery": "Editor is a piano grid with note names, while Notes/View/Generate menus did not expose drum names or drum patterns.", "evidence": "screenshots/022-generate.png"},
+    {"order": 6, "discovery": "Length 1/16 and Pencil allow direct beat placement; note marks and velocity bars provide clear feedback.", "evidence": "screenshots/024-drawn-rhythm.png"},
+    {"order": 7, "discovery": "Loop playback over selection sets the intended range visibly.", "evidence": "screenshots/026-loop-play.png"},
+    {"order": 8, "discovery": "R1 Mini can be added through the same browser; Acid Line provides a recognizable preset name for bass.", "evidence": "screenshots/031-mini-presets.png"},
+    {"order": 9, "discovery": "Native save and WAV export work after environment file-chooser repair; clear export confirmation is provided.", "evidence": "screenshots/044-export-finished.png"},
+    {"order": 10, "discovery": "Load sample opens the previous file location, not a supplied sample library.", "evidence": "screenshots/049-load-chooser.png"},
+    {"order": 11, "discovery": "Box selection and Duplicate tool can copy both tracks at once; helpful toolbar instruction explains the extra click.", "evidence": "screenshots/054-duplicate-result.png"},
+    {"order": 12, "discovery": "Eight selected clips can define the full four-bar loop, and Re-export last WAV updates the result conveniently.", "evidence": "screenshots/061-final-export-confirmed.png"}
+  ],
+  "issues": [
+    {
+      "id": "P2-01",
+      "title": "Included drum kit choices do not lead a beginner to ready drum sounds",
+      "severity": "high",
+      "steps": ["File > New", "Choose instrument > R1 Drums > Add instrument track", "Open preset dropdown", "Choose Kits > Electro", "Try pad 1", "Choose Kits > GM Kit"],
+      "expected": "A named built-in drum kit supplies identifiable playable kick, snare and hat sounds.",
+      "observed": "All sixteen pads remain Empty; selected pad says No sample and offers Load sample. Electro changes some knobs but does not visibly load sounds. GM Kit also remains Empty. Final captured drum meter was unlit while Mini meter was green, but this does not independently prove the drum engine was silent.",
+      "impact": "Participant could draw a rhythm but could not establish a usable included drum kit, the main task goal.",
+      "evidence_image_paths": ["/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/005-drums-added.png", "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/006-drum-presets.png", "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/007-electro-kit.png", "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/008-gm-kit-empty.png"],
+      "recovery": "Tried a second preset and Load sample. No included sample source found through visible UI. Added Mini to establish another sound source.",
+      "confidence": "High for visible empty-pad behavior; medium for task-blocking effect because audio environment was confounded and no implementation inspected."
+    },
+    {
+      "id": "P2-02",
+      "title": "Drum pattern editor provides pitch names without a visible pad mapping",
+      "severity": "high",
+      "steps": ["Create an R1 Drums pattern", "Right-click > Edit notes", "Inspect Notes, View and Generate menus", "Try drawing a rhythm"],
+      "expected": "Drum rows identify kick, snare or numbered pads so the beginner can place a beat intentionally.",
+      "observed": "Piano grid labels C3/C4/C5; no visible drum or pad labels discovered. Generate offers Chord, Arpeggio and Melody. Participant placed C4, D4 and F4 notes without knowing which drum they addressed.",
+      "impact": "Even if samples were available, note-to-drum mapping remained unresolved for the beginner.",
+      "evidence_image_paths": ["/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/014-edit-notes.png", "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/020-notes-menu.png", "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/021-view-menu.png", "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/022-generate.png", "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/024-drawn-rhythm.png"],
+      "recovery": "Drew a visually rhythmic pattern but did not resolve mapping.",
+      "confidence": "High for discoverability problem within this path; not a claim that no alternate drum view exists anywhere."
+    },
+    {
+      "id": "P2-03",
+      "title": "Double-clicking a blank pattern label opens rename instead of note editing",
+      "severity": "medium",
+      "steps": ["Close newly added instrument", "Double-click New pattern label", "Apply a new name", "Double-click the label again"],
+      "expected": "Open the pattern to add beats.",
+      "observed": "Inline rename form appears repeatedly. Its Keyboard button also does not clearly suggest note editing. Context menu eventually reveals Edit notes.",
+      "impact": "Several extra actions before the first note can be created.",
+      "evidence_image_paths": ["/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/011-pattern-editor.png", "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/012-edit-pattern-options.png", "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/013-pattern-context.png"],
+      "recovery": "Right-click > Edit notes; reused successfully for second instrument.",
+      "confidence": "High; confined to the clip-label target actually clicked."
+    },
+    {
+      "id": "P2-04",
+      "title": "Device browser count appears inconsistent with visible built-ins",
+      "severity": "low",
+      "steps": ["Open Choose instrument"],
+      "expected": "The visible total agrees with available instrument cards.",
+      "observed": "Top says 0 plug-ins while All plug-ins and Built-in collections say 3 and three cards are visible.",
+      "impact": "Brief uncertainty about whether available instruments are installed or usable.",
+      "evidence_image_paths": ["/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/004-choose-instrument.png"],
+      "recovery": "Ignored count and used visible Add instrument track button.",
+      "confidence": "High for wording inconsistency; may reflect external versus built-in counting semantics."
+    },
+    {
+      "id": "P2-05",
+      "title": "Reopened drum instrument loses recognizable selected preset label",
+      "severity": "low",
+      "steps": ["Select GM Kit", "Close instrument", "Create notes and save project", "Track > Channel > Instrument"],
+      "expected": "Previously chosen kit name remains visible or its change is explained.",
+      "observed": "Preset reads Custom on reopening despite no intentional drum-parameter edit after GM Kit selection.",
+      "impact": "Adds uncertainty about whether the selected kit was applied or preserved.",
+      "evidence_image_paths": ["/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/008-gm-kit-empty.png", "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/047-drums-reopened.png"],
+      "recovery": "No recovery attempted; did not change final project to chase label.",
+      "confidence": "Medium; visible observation reliable, underlying preset semantics uninspected."
+    }
+  ],
+  "environment_confounds": [
+    {"title": "Repeated output stream failure", "observed": "Play initially moves cursor/meters then reports Audio output stream failed or disconnected. Details show ALSA snd_pcm_avail_delay I/O error (5). Retry and alternate Rill lab paced output did not immediately recover; final playback later remained active.", "recovery_attempts": ["Retry playback", "Details", "Audio setup > alternate output > Apply", "Play"], "evidence_image_paths": ["/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/015-audio-details.png", "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/018-output-menu.png", "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/027-loop-later.png", "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/058-final-playback-later.png"], "attribution": "Environment-confounded; no source investigation or definitive product attribution"},
+    {"title": "Initial native file picker failure", "observed": "First Load sample click showed no picker. Coordinator repaired missing compiled GTK schemas; subsequent save/export/load pickers worked.", "attribution": "Confirmed environment intervention; not counted as a RILL defect"},
+    {"title": "Picker keyboard focus", "observed": "Coordinator reported root keyboard focus after native dialogs and repaired driver focus behavior. No clear task-blocking typing failure was isolated in this participant session.", "attribution": "Environment limitation"}
+  ],
+  "successes": [
+    "Blank-project Start a song screen leads clearly to instrument selection.",
+    "Three built-in instrument cards and the Add instrument track action are easy to understand.",
+    "Pencil and note-length controls produce clear note and velocity feedback once editing is found.",
+    "Context menu Loop playback over selection makes loop range visible and correctly adapts to selected clips.",
+    "Second instrument creation repeats an already learned workflow.",
+    "Box selection plus Duplicate preserves alignment across both tracks.",
+    "Save accepts an explicit project path and changes the project title.",
+    "WAV export uses workable defaults, displays progress and confirms completion with filename and Copy path.",
+    "Re-export last WAV provides a concise way to update the deliverable."
+  ],
+  "unresolved_questions": [
+    "Are R1 Drums presets intended to include samples, and where would a beginner discover any bundled drum sounds?",
+    "Which piano pitches correspond to the numbered drum pads?",
+    "Does an undiscovered drum-oriented editor or mapping view exist?",
+    "Does preset Custom on reopening reflect a deliberate display convention or lost preset identity?",
+    "Does final exported audio contain only Mini, and does final playback capture have nonzero audio? Coordinator verification requested."
+  ],
+  "saved_artifacts": [
+    {"path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/exports/neon-steps.rill", "type": "RILL project", "verification": "Saved through native UI; title changed and final Ctrl+S issued"},
+    {"path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/exports/neon-steps.wav", "type": "WAV export", "verification": "Native chooser showed initial file; final Exported neon-steps.wav confirmation observed"},
+    {"path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/session-notes.jsonl", "type": "Chronological public observation notes"},
+    {"path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots", "type": "62 numbered screenshots including initial state"},
+    {"path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/coordinator-playback-excerpt.wav", "type": "Earlier playback audio excerpt supplied by coordinator"}
+  ],
+  "limitations": [
+    "This is one simulated novice participant, not an empirical human usability result.",
+    "No personal hearing claim; screenshot meters and coordinator-measured audio evidence are explicitly distinguished.",
+    "Audio transport and initial native picker had environment confounds that limit product conclusions about sound and picker behavior.",
+    "Only discovered visible paths were tested; absence of a discovered feature is not proof of global absence.",
+    "No project internals or exported samples read by participant; coordinator owns independent artifact/audio validation.",
+    "No fixes or source changes were made."
+  ]
+}

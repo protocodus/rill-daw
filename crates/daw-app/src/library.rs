@@ -362,7 +362,11 @@ impl DawApp {
             if !self.error {
                 self.status = format!(
                     "Found {}",
-                    daw_ui::text::count(self.vst_catalog.len(), "plug-in", "plug-ins")
+                    daw_ui::text::count(
+                        self.vst_catalog.len() + crate::builtin_devices::catalog().len(),
+                        "device",
+                        "devices"
+                    )
                 );
             }
         }
@@ -534,12 +538,12 @@ impl DawApp {
                 let compact_footer = ui.max_rect().height()
                     < daw_ui::tokens::CONTROL_HEIGHT * 13.0;
                 let mut kind = state.kind;
-                daw_ui::popup_tabs(ui, &mut kind, &[
-                    (DeviceKind::Instrument, "Instruments"),
-                    (DeviceKind::Effect, "Effects"),
-                    (DeviceKind::Unknown, "Unverified"),
+                daw_ui::popup_tabs_with_hints(ui, &mut kind, &[
+                    (DeviceKind::Instrument, "Instruments", "Browse instruments that turn MIDI notes into sound"),
+                    (DeviceKind::Effect, "Effects", "Browse effects for processing audio on a channel"),
+                    (DeviceKind::Unknown, "Unverified", "Inspect plug-ins whose instrument or effect type has not been verified"),
                 ], |ui| {
-                    if daw_ui::quiet_button(ui, "Plug-in folders…").clicked() {
+                    if daw_ui::quiet_button(ui, "Plug-in folders…").on_hover_text("Choose the folders RILL scans for installed plug-ins").clicked() {
                         folders = true;
                     }
                     refresh = ui
@@ -548,13 +552,14 @@ impl DawApp {
                             daw_ui::quiet_button_widget(if scanning { "Scanning…" } else { "Refresh" }),
                         )
                         .on_hover_text("Rescan plug-in folders and capture missing previews")
+                        .on_disabled_hover_text("A plug-in scan is already in progress")
                         .clicked();
                     let text = match status.phase {
                         SyncPhase::Capturing => format!(
                             "Capturing previews · {} left",
                             status.queued + usize::from(status.current.is_some())
                         ),
-                        _ => daw_ui::text::count(self.vst_catalog.len(), "plug-in", "plug-ins"),
+                        _ => daw_ui::text::count(self.vst_catalog.len() + crate::builtin_devices::catalog().len(), "device", "devices"),
                     };
                     daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, text);
                 });
@@ -603,6 +608,7 @@ impl DawApp {
                                 clear_search = ui
                                     .add_enabled(has_search, daw_ui::view_button_widget("Clear").small())
                                     .on_hover_text("Clear the plug-in search")
+                                    .on_disabled_hover_text("The search is already empty")
                                     .clicked();
                             },
                             |ui| daw_ui::text_field(
@@ -641,7 +647,7 @@ impl DawApp {
                             "All categories",
                             "Search categories",
                             categories,
-                        );
+                        ).on_hover_text("Filter devices by their instrument or effect category");
                     });
                     let producers: BTreeSet<_> = kind_items.iter()
                         .map(|item| &item.entry.plugin.vendor)
@@ -656,13 +662,13 @@ impl DawApp {
                             "All producers",
                             "Search producers",
                             producers,
-                        );
+                        ).on_hover_text("Filter devices by the developer or manufacturer");
                     });
                     if !compact_filters {
                         daw_ui::toolbar_group_sized(ui, sort_width, |ui| {
                             ui.add_enabled_ui(state.collection != Collection::RecentlyUsed, |ui| {
                                 daw_ui::choice(ui, "library_sort", &mut state.sort, &Sort::ALL.map(|sort| (sort, sort.label())))
-                                    .on_hover_text("Sort by")
+                                    .on_hover_text("Choose the order of devices in the browser")
                                     .on_disabled_hover_text("Recently used plug-ins are listed latest first");
                             });
                         });
@@ -694,7 +700,7 @@ impl DawApp {
                                     }
                                 }
                             }
-                        });
+                        }).response.on_hover_text("Choose grid or list view, sorting, and visible collections");
                     });
                     search
                 }).inner;
@@ -717,7 +723,7 @@ impl DawApp {
                                 }
                             }
                         }
-                        if daw_ui::small_button(ui, "Clear filters").clicked() {
+                        if daw_ui::small_button(ui, "Clear filters").on_hover_text("Show all collections, producers, and categories; keep the search text").clicked() {
                             state.collection = Collection::All;
                             state.developer.clear();
                             state.developer_query.clear();
@@ -1116,10 +1122,19 @@ impl DawApp {
                     DeviceAction::Insert => "Add to effect chain",
                     DeviceAction::Send => "Create send track",
                 };
+                let action_hint = |action| match action {
+                    DeviceAction::Instrument => "Create a MIDI track with the selected instrument",
+                    DeviceAction::Assign => "Replace the selected MIDI track’s instrument with this device",
+                    DeviceAction::Insert => "Add this effect to the selected channel’s effect chain",
+                    DeviceAction::Send => "Create an effect return track and route a send from the selected channel to it",
+                };
+                let unavailable = if selected.is_none() { "Select a device first" }
+                    else if state.kind == DeviceKind::Instrument { "Select a MIDI track to assign an instrument" }
+                    else { "Select a channel to add an effect" };
                 daw_ui::dialog_actions(ui, |ui| {
                     if state.kind != DeviceKind::Unknown {
                     ui.add_enabled_ui(enabled && selected.is_some(), |ui| {
-                        if daw_ui::dialog_primary(ui, primary_label).clicked()
+                        if daw_ui::dialog_primary(ui, primary_label).on_hover_text(action_hint(primary)).on_disabled_hover_text(unavailable).clicked()
                             && let Some(item) = selected
                         { action = Some((item.entry.plugin.clone(), primary)); }
                     });
@@ -1141,19 +1156,19 @@ impl DawApp {
                                 if daw_ui::button(ui, "Try as instrument").on_hover_text("Type is unverified; the isolated host will validate the device").clicked() {
                                     action = Some((entry.plugin.clone(), DeviceAction::Instrument)); ui.close();
                                 }
-                                if source.is_some() && daw_ui::button(ui, "Try as effect").clicked() {
+                                if source.is_some() && daw_ui::button(ui, "Try as effect").on_hover_text("Try this unverified device in the selected channel’s effect chain; the isolated host will validate its type").clicked() {
                                     action = Some((entry.plugin.clone(), DeviceAction::Insert)); ui.close();
                                 }
                             }
                             if state.kind == DeviceKind::Instrument {
                                 let can_assign = self.selected_track.and_then(|id| self.project.track(id)).is_some_and(|track| track.kind == TrackKind::Midi);
-                                if !assign && can_assign && daw_ui::button(ui, "Assign to selected track").clicked() {
+                                if !assign && can_assign && daw_ui::button(ui, "Assign to selected track").on_hover_text(action_hint(DeviceAction::Assign)).clicked() {
                                     action = Some((entry.plugin.clone(), DeviceAction::Assign));
                                     ui.close();
                                 }
                             } else if state.kind == DeviceKind::Effect && source.is_some() {
                                 let (label, alternate) = if primary == DeviceAction::Send { ("Add to effect chain", DeviceAction::Insert) } else { ("Create send track", DeviceAction::Send) };
-                                if daw_ui::button(ui, label).clicked() {
+                                if daw_ui::button(ui, label).on_hover_text(action_hint(alternate)).clicked() {
                                     action = Some((entry.plugin.clone(), alternate));
                                     ui.close();
                                 }
@@ -1179,16 +1194,17 @@ impl DawApp {
                                 daw_ui::text::note(ui, if entry.plugin.category.is_empty() { kind_label(&entry.plugin).to_owned() } else { format!("{} · {}", crate::builtin_devices::format_label(&entry.plugin), entry.plugin.category.replace('|', " · ")) });
                                 daw_ui::text::note(ui, entry.plugin.path.display().to_string()).on_hover_text(entry.plugin.class_id.as_deref().unwrap_or("Unverified class"));
                             }
-                        });
+                        }).response.on_hover_text("More ways to use the selected device, manage favorites, and capture its preview")
+                            .on_disabled_hover_text("Select a device first");
                     });
-                    if daw_ui::dialog_button(ui, "Device details").clicked() && let Some(item) = selected {
+                    if daw_ui::dialog_button(ui, "Device details").on_hover_text("Open the selected device’s information and controls").clicked() && let Some(item) = selected {
                         if state.kind == DeviceKind::Unknown {
                             diagnostic_request = Some(device_diagnostics(item.entry));
                         } else {
                             details_request = Some(item.entry.clone());
                         }
                     }
-                    if state.kind == DeviceKind::Unknown && daw_ui::dialog_button(ui, "Inspect device").clicked() && let Some(item) = selected { diagnostic_request = Some(device_diagnostics(item.entry)); }
+                    if state.kind == DeviceKind::Unknown && daw_ui::dialog_button(ui, "Inspect device").on_hover_text("Show identification and validation details for the unverified device").clicked() && let Some(item) = selected { diagnostic_request = Some(device_diagnostics(item.entry)); }
                 }, |ui| {
                     // The selected device and where it will go share one status
                     // column, so the actions keep a fixed corner.

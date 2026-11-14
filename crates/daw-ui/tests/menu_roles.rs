@@ -479,7 +479,7 @@ fn actions_choices_and_views_stay_visually_distinct_and_wrap_in_both_themes() {
                     assert_eq!(*ui.style(), original, "menu styles must not leak");
                     for (index, control) in row.inner.iter().enumerate() {
                         assert!(ui.max_rect().contains_rect(control.rect));
-                        assert!(control.rect.height() >= controls::tokens::CONTROL_HEIGHT);
+                        assert!(control.rect.height() >= controls::tokens::TOOLBAR_CONTROL_HEIGHT);
                         for previous in &row.inner[..index] {
                             assert!(
                                 !control.rect.intersects(previous.rect),

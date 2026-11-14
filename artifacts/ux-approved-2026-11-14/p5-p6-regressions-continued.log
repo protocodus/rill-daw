@@ -1,0 +1,69 @@
+   Compiling daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+   Compiling daw-plugins v0.1.0 (/workspace/rill-daw/crates/daw-plugins)
+   Compiling daw-devices-ui v0.1.0 (/workspace/rill-daw/crates/daw-devices-ui)
+   Compiling daw-engine v0.1.0 (/workspace/rill-daw/crates/daw-engine)
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 39.40s
+     Running tests/midi_editor_e2e.rs (target/debug/build/daw-app/c7e31561e8db66e4/out/midi_editor_e2e-c7e31561e8db66e4)
+
+running 20 tests
+test anchored_zoom_pan_fit_both_axes_and_held_key_audition_release ... ok
+test chord_and_scale_stacks_highlight_keys_and_velocity_lane_edits_multiple_notes ... ok
+test compact_notes_menu_scrolls_to_velocity_and_edits_the_note_with_the_mouse ... ok
+test double_click_places_notes_exactly_at_pointer_in_select_and_cursor_tools ... ok
+test draw_resize_both_edges_double_click_and_history_use_real_pointer_gestures ... ok
+test drawn_note_length_group_move_and_pencil_double_delete_are_undoable ... ok
+test folded_fit_and_root_changes_handle_hidden_only_clips_without_edits ... ok
+test folded_scale_draw_move_resize_audition_velocity_and_delete_protect_hidden_notes ... ok
+test held_audition_changes_pitch_and_stops_on_focus_loss_and_view_dismissal ... ok
+test legato_preserves_chords_and_transpose_and_nudge_preserve_group_spacing ... ok
+test overlapping_note_body_does_not_hide_another_notes_resize_edge ... ok
+test pitch_and_selection_controls_are_disclosed_without_changing_notes ... ok
+test quantize_preview_strength_swing_ends_apply_cancel_and_history ... ok
+test scale_view_highlights_fold_and_hidden_selection_never_change_source_notes ... ok
+test selected_note_clipboard_pastes_at_cursor_with_new_ids_and_relative_spacing ... ok
+test shared_tools_split_glue_duplicate_erase_cursor_and_keyboard_shortcuts ... ok
+test shift_drag_duplicates_once_and_shift_edge_resize_temporarily_bypasses_snap ... ok
+test short_notes_move_from_center_and_fast_copy_paste_keeps_audible_lengths ... ok
+test unfolding_never_restores_selection_after_deselect_replace_select_all_or_navigation ... ok
+test unselected_notes_move_and_trim_at_either_edge_even_with_cursor_tool ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.51s
+
+     Running tests/midi_generate_e2e.rs (target/debug/build/daw-app/1de80a6637bf29f2/out/midi_generate_e2e-1de80a6637bf29f2)
+
+running 8 tests
+test arpeggio_direction_speed_octaves_and_seeded_variations_match_added_notes ... ok
+test generate_action_and_multi_draw_options_wrap_without_expanding_the_note_canvas ... ok
+test generated_chord_commits_exact_preview_to_stretched_ghost_once_and_recalls ... ok
+test generation_preview_never_promotes_folded_notes_into_the_editing_selection ... FAILED
+test harmony_root_and_chord_choices_control_preview_pitches_without_changing_editor_scale ... ok
+test melody_algorithms_default_to_editor_scale_and_offer_counterpoint_and_tintinnabuli ... ok
+test no_complete_bar_requires_an_explicit_range_before_adding_notes ... ok
+test visible_complete_bars_preview_toggle_numeric_range_and_cancel_are_non_destructive ... ok
+
+failures:
+
+---- generation_preview_never_promotes_folded_notes_into_the_editing_selection stdout ----
+
+thread 'generation_preview_never_promotes_folded_notes_into_the_editing_selection' (21336) panicked at crates/daw-app/tests/midi_generate_e2e.rs:626:17:
+assertion `left == right` failed: Delete removes only the two visible generated chord tones
+  left: 3
+ right: 4
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+   1: core::panicking::panic_fmt
+   2: core::panicking::assert_failed_inner
+   3: core::panicking::assert_failed::<usize, usize>
+   4: midi_generate_e2e::generation_preview_never_promotes_folded_notes_into_the_editing_selection
+   5: midi_generate_e2e::generation_preview_never_promotes_folded_notes_into_the_editing_selection::{closure#0}
+   6: <midi_generate_e2e::generation_preview_never_promotes_folded_notes_into_the_editing_selection::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+
+failures:
+    generation_preview_never_promotes_folded_notes_into_the_editing_selection
+
+test result: FAILED. 7 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.69s
+
+error: test failed, to rerun pass `-p daw-app --test midi_generate_e2e`

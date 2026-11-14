@@ -1,0 +1,204 @@
+{
+  "binary_sha256": "440c591aae82dbdafa24a72816be177b76f02f3fb8b0695a3226b987536f756d",
+  "captures": [
+    {
+      "view": "arranger",
+      "theme": "Dark",
+      "image": "arranger-dark.png",
+      "exit_code": 0,
+      "sha256": "125fce89723b4d9e9fc597dfcbbb0bf18235fa7fc7d2187d088a1dc750e893eb",
+      "dimensions": [
+        1480,
+        960
+      ]
+    },
+    {
+      "view": "mixer",
+      "theme": "Light",
+      "image": "mixer-light.png",
+      "exit_code": 0,
+      "sha256": "d1f7833c7e8a1e2791f81390070210637cc861c9457a9de527e9ba236f789320",
+      "dimensions": [
+        1480,
+        960
+      ]
+    },
+    {
+      "view": "audio",
+      "theme": "Dark",
+      "image": "audio-dark.png",
+      "exit_code": 0,
+      "sha256": "e9c922b39c7b80def041ce10d228ff8fda84c59f4941a9801c392e5e76bfa936",
+      "dimensions": [
+        1480,
+        960
+      ]
+    },
+    {
+      "view": "automation",
+      "theme": "Light",
+      "image": "automation-light.png",
+      "exit_code": 0,
+      "sha256": "c2aeabd8659fd925c44ce8e8675b318b6645c4bc871ecfc2ff838abd446e3e15",
+      "dimensions": [
+        1480,
+        960
+      ]
+    },
+    {
+      "view": "library",
+      "theme": "Light",
+      "image": "library-light.png",
+      "exit_code": 0,
+      "sha256": "709bea7e7d1d6ee34a6dd107ef8290eaee5c6c5170e52bd4ef48760a01fa89c9",
+      "dimensions": [
+        1480,
+        960
+      ]
+    },
+    {
+      "view": "library",
+      "theme": "Dark",
+      "image": "library-dark.png",
+      "exit_code": 0,
+      "sha256": "7a4bd7dd637d9d9099b87d07f10c473193c6eddd73b3d6c44116d493409fc5f9",
+      "dimensions": [
+        1480,
+        960
+      ]
+    },
+    {
+      "view": "instrument",
+      "theme": "Dark",
+      "image": "instrument-dark.png",
+      "exit_code": 0,
+      "sha256": "295e3873e20096c862cbf9d7b47e1f9c655e650589b66d0d4221864c4605fb9d",
+      "dimensions": [
+        1480,
+        960
+      ]
+    },
+    {
+      "view": "effects",
+      "theme": "Light",
+      "image": "effects-light.png",
+      "exit_code": 0,
+      "sha256": "1db02e1d317afc4c4dee5efe004553be33c10d5b76863d8716f261c357c1a765",
+      "dimensions": [
+        1480,
+        960
+      ]
+    },
+    {
+      "view": "setup-appearance",
+      "theme": "Dark",
+      "image": "setup-appearance-dark.png",
+      "exit_code": 0,
+      "sha256": "107a9e9520219c006059d54f7774c418ac120a1c291465ac3dbd12e6f0f61bc7",
+      "dimensions": [
+        1480,
+        960
+      ]
+    },
+    {
+      "view": "export",
+      "theme": "Light",
+      "image": "export-light.png",
+      "exit_code": 0,
+      "sha256": "b943a45eaf0ad339d0ecbb3c154e8e792e55acda4972d222871ec58953def3d0",
+      "dimensions": [
+        1480,
+        960
+      ]
+    },
+    {
+      "view": "analysis",
+      "theme": "Dark",
+      "image": "analysis-dark.png",
+      "exit_code": 0,
+      "sha256": "3d378e438b387c01b4b9d6f00c64c40b0da57add348911f7fe86aa10cc5323e6",
+      "dimensions": [
+        1480,
+        960
+      ]
+    },
+    {
+      "view": "routing",
+      "theme": "Light",
+      "image": "routing-light.png",
+      "exit_code": 0,
+      "sha256": "762f41bc706e9aff879c05cc851c0196714d3019546dc35af649a86e94c11353",
+      "dimensions": [
+        1480,
+        960
+      ]
+    },
+    {
+      "view": "arranger",
+      "theme": "Dark",
+      "image": "arranger-dark-compact.png",
+      "exit_code": 0,
+      "dimensions": [
+        1100,
+        720
+      ],
+      "sha256": "cb45cc291f5c9735d2bb2d73593fff4f55068e2bd281059118f4d7c75e980c1c"
+    },
+    {
+      "view": "mixer",
+      "theme": "Light",
+      "image": "mixer-light-compact.png",
+      "exit_code": 0,
+      "dimensions": [
+        1100,
+        720
+      ],
+      "sha256": "8174862be0fa1911150fc2084bb95cb9ff4a3b97041426a8d71a1d76b9050d36"
+    },
+    {
+      "view": "audio",
+      "theme": "Dark",
+      "image": "audio-dark-compact.png",
+      "exit_code": 0,
+      "dimensions": [
+        1100,
+        720
+      ],
+      "sha256": "2d3121c6d08c1f91984d8dab78637c19f0d92ef9e7d6534fd2ba219961f3c449"
+    },
+    {
+      "view": "piano",
+      "theme": "Light",
+      "image": "piano-light-compact.png",
+      "exit_code": 0,
+      "dimensions": [
+        1100,
+        720
+      ],
+      "sha256": "c18cd3b2fecc266b9647772a9cbb55eb971039ed6db46214c5c7e400ec217377"
+    },
+    {
+      "view": "library",
+      "theme": "Dark",
+      "image": "library-dark-compact.png",
+      "exit_code": 0,
+      "dimensions": [
+        1100,
+        720
+      ],
+      "sha256": "66c72aa82e3c7eaf2037b0633a9d2eb83868159173979b6050645cc6659ebb11"
+    },
+    {
+      "view": "instrument",
+      "theme": "Light",
+      "image": "instrument-light-compact.png",
+      "exit_code": 0,
+      "dimensions": [
+        1100,
+        720
+      ],
+      "sha256": "bf603eeaffa49387fc55e2015924032520b79a76b4aa18354e0f202753c02d10"
+    }
+  ],
+  "note": "Final native screenshots; the audio view was recaptured with the pointer outside the canvas."
+}

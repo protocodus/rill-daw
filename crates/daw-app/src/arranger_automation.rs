@@ -395,7 +395,7 @@ pub(crate) fn automation_lane(
                         result.command = Some(LaneCommand::EditAutomation(clip.id));
                         ui.close();
                     }
-                    if daw_ui::button(ui, "Loop this clip")
+                    if daw_ui::button(ui, "Loop playback over clip")
                         .on_hover_text(
                             "Set the loop to this clip's exact bounds and enable looping",
                         )
@@ -411,7 +411,7 @@ pub(crate) fn automation_lane(
                         result.command = Some(LaneCommand::Copy(clip.id));
                         ui.close();
                     }
-                    if daw_ui::button(ui, "Duplicate").clicked() {
+                    if daw_ui::button(ui, "Duplicate after").clicked() {
                         result
                             .edits
                             .push(AutomationEdit::Copy(clip.id, clip.end(), false));

@@ -201,7 +201,7 @@ fn missing_instrument_warning_follows_track_folder_and_solo_bus_eligibility() {
         let saved = app.directory.path().join(format!("{case}.rill"));
         project.save(&saved).unwrap();
         app.command(json!({"command":"open", "path":saved}));
-        let state = menu(&mut app, "File", "Export WAV…");
+        let state = menu(&mut app, "File", "Export audio…");
         assert_eq!(
             has(&state, "MIDI notes need an instrument"),
             should_warn,
@@ -251,7 +251,7 @@ fn wav_export_warns_for_visible_unassigned_notes_and_allows_cancel_or_explicit_e
         let before = app.inspect();
         let output = app.directory.path().join("Chosen mix.wav");
         picker(&mut app, "export", Some(&output));
-        let warning = menu(&mut app, "File", "Export WAV…");
+        let warning = menu(&mut app, "File", "Export audio…");
         assert_eq!(
             warning["export_missing_instruments"],
             json!(["Bass needs instrument"])
@@ -275,7 +275,7 @@ fn wav_export_warns_for_visible_unassigned_notes_and_allows_cancel_or_explicit_e
         assert_eq!(cancelled["history"], before["history"]);
         assert!(!output.exists());
 
-        menu(&mut app, "File", "Export WAV…");
+        menu(&mut app, "File", "Export audio…");
         let exporting = app.click("Export…");
         assert_eq!(exporting["popups"]["export"], false);
         app.command(json!({"command":"wait_export"}));
@@ -314,7 +314,7 @@ fn ordinary_audio_export_has_no_instrument_warning_and_midi_completion_names_the
     app.command(json!({"command":"drop", "paths":[source], "beat":0.0}));
     let output = app.directory.path().join("Audio.wav");
     picker(&mut app, "export", Some(&output));
-    let state = menu(&mut app, "File", "Export WAV…");
+    let state = menu(&mut app, "File", "Export audio…");
     assert_eq!(state["export_missing_instruments"], json!([]));
     assert!(!has(&state, "MIDI notes need an instrument"));
     app.click("Export…");

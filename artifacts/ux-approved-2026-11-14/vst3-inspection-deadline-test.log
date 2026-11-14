@@ -1,0 +1,7 @@
+    Finished `test` profile [unoptimized] target(s) in 0.23s
+     Running unittests src/lib.rs (target/debug/build/vst3-host/42b8b072670ae109/out/vst3_host-42b8b072670ae109)
+
+running 1 test
+test process_isolation::wire_tests::slow_commands_are_classified_apart_from_the_per_block_ones ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 250 filtered out; finished in 0.00s

@@ -53,83 +53,9 @@ pub fn inspect_plugin_with_configuration(
     state: &[u8],
     parameters: &[(u32, f64)],
 ) -> Result<PluginInspection> {
-    ensure!(
-        state.len() <= 64 * 1024 * 1024,
-        "Plug-in state exceeds 64 MiB"
-    );
-    ensure!(
-        parameters.len() <= 4096,
-        "Too many plug-in parameter overrides for inspection"
-    );
-    ensure!(
-        parameters
-            .iter()
-            .all(|(_, value)| value.is_finite() && (0.0..=1.0).contains(value)),
-        "Invalid normalized plug-in parameter override"
-    );
-    let budget = Duration::from_secs(30);
-    let deadline = Instant::now() + budget;
-    let mut worker = PluginHostProcess::new(Some(helper_path()?), budget)
-        .map_err(anyhow::Error::msg)
-        .context("Starting isolated plug-in inspection")?;
-    let mut send = |command| -> Result<HostResponse> {
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        ensure!(
-            !remaining.is_zero(),
-            "Plug-in inspection exceeded 30 seconds"
-        );
-        worker.set_timeout(remaining);
-        worker.set_slow_command_timeout(remaining);
-        let response = worker.send_command(command).map_err(anyhow::Error::msg)?;
-        if let HostResponse::Error { message } = response {
-            bail!("{message}");
-        }
-        Ok(response)
-    };
-    let loaded = send(HostCommand::LoadPlugin {
-        path: plugin.path.to_string_lossy().into_owned(),
-        sample_rate: 48_000.0,
-        block_size: 512,
-        tempo: 120.0,
-        time_sig_numerator: 4,
-        time_sig_denominator: 4,
-        class_id: plugin.class_id.clone(),
-    })
-    .context("Loading plug-in details")?;
-    let HostResponse::PluginInfo {
-        has_midi_input,
-        has_midi_output,
-        ..
-    } = loaded
-    else {
-        bail!("Unexpected plug-in inspection response");
-    };
-    if !state.is_empty() {
-        let response = send(HostCommand::LoadState {
-            data: state.to_vec(),
-            context: vst3_host::plugin::StateContext::Project,
-        })?;
-        ensure!(
-            matches!(response, HostResponse::Success { .. }),
-            "Plug-in state restore failed during inspection"
-        );
-    }
-    for &(id, value) in parameters {
-        let response = send(HostCommand::SetParameter { id, value })?;
-        ensure!(
-            matches!(response, HostResponse::Success { .. }),
-            "Plug-in parameter override failed during inspection"
-        );
-    }
-    if !state.is_empty() || !parameters.is_empty() {
-        ensure!(
-            matches!(
-                send(HostCommand::ServiceHostRequests)?,
-                HostResponse::RestartFlags { .. }
-            ),
-            "Unexpected plug-in restart response during inspection"
-        );
-    }
+    let mut inspection = InspectionWorker::new(plugin, state, parameters)?;
+    let (has_midi_input, has_midi_output) = (inspection.has_midi_input, inspection.has_midi_output);
+    let mut send = |command| inspection.send(command);
     let HostResponse::AudioBusLayout { layout } = send(HostCommand::AudioBusLayout)? else {
         bail!("Plug-in did not report an audio bus layout");
     };
@@ -190,4 +116,129 @@ pub fn inspect_plugin_with_configuration(
             })
             .collect(),
     })
+}
+
+/// Read optional, instrument-provided names for the saved preset. This uses the same
+/// bounded isolation as bus inspection and must be called from a worker thread.
+/// Port/channel -1 is a wildcard. The caller chooses its MIDI destination.
+pub fn inspect_note_names_with_configuration(
+    plugin: &PluginInfo,
+    state: &[u8],
+    parameters: &[(u32, f64)],
+) -> Result<Vec<crate::NoteName>> {
+    let mut inspection = InspectionWorker::new(plugin, state, parameters)?;
+    let HostResponse::NoteNames { names } = inspection.send(HostCommand::NoteNames)? else {
+        bail!("Plug-in did not report a note-name catalogue");
+    };
+    ensure!(names.len() <= 4096, "Too many plug-in note names");
+    ensure!(
+        names.iter().all(|note| note.name.len() <= 1024),
+        "Plug-in note name exceeds the metadata limit"
+    );
+    Ok(names)
+}
+
+struct InspectionWorker {
+    worker: PluginHostProcess,
+    deadline: Instant,
+    has_midi_input: bool,
+    has_midi_output: bool,
+}
+
+impl InspectionWorker {
+    fn new(plugin: &PluginInfo, state: &[u8], parameters: &[(u32, f64)]) -> Result<Self> {
+        ensure!(
+            state.len() <= 64 * 1024 * 1024,
+            "Plug-in state exceeds 64 MiB"
+        );
+        ensure!(
+            parameters.len() <= 4096,
+            "Too many plug-in parameter overrides for inspection"
+        );
+        ensure!(
+            parameters
+                .iter()
+                .all(|(_, value)| value.is_finite() && (0.0..=1.0).contains(value)),
+            "Invalid normalized plug-in parameter override"
+        );
+        let budget = Duration::from_secs(30);
+        let mut inspection = Self {
+            deadline: Instant::now() + budget,
+            worker: PluginHostProcess::new(Some(helper_path()?), budget)
+                .map_err(anyhow::Error::msg)
+                .context("Starting isolated plug-in inspection")?,
+            has_midi_input: false,
+            has_midi_output: false,
+        };
+        let loaded = inspection
+            .send(HostCommand::LoadPlugin {
+                path: plugin.path.to_string_lossy().into_owned(),
+                sample_rate: 48_000.0,
+                block_size: 512,
+                tempo: 120.0,
+                time_sig_numerator: 4,
+                time_sig_denominator: 4,
+                class_id: plugin.class_id.clone(),
+            })
+            .context("Loading plug-in details")?;
+        let HostResponse::PluginInfo {
+            has_midi_input,
+            has_midi_output,
+            ..
+        } = loaded
+        else {
+            bail!("Unexpected plug-in inspection response");
+        };
+        inspection.has_midi_input = has_midi_input;
+        inspection.has_midi_output = has_midi_output;
+        if !state.is_empty() {
+            ensure!(
+                matches!(
+                    inspection.send(HostCommand::LoadState {
+                        data: state.to_vec(),
+                        context: vst3_host::plugin::StateContext::Project,
+                    })?,
+                    HostResponse::Success { .. }
+                ),
+                "Plug-in state restore failed during inspection"
+            );
+        }
+        for &(id, value) in parameters {
+            ensure!(
+                matches!(
+                    inspection.send(HostCommand::SetParameter { id, value })?,
+                    HostResponse::Success { .. }
+                ),
+                "Plug-in parameter override failed during inspection"
+            );
+        }
+        if !state.is_empty() || !parameters.is_empty() {
+            ensure!(
+                matches!(
+                    inspection.send(HostCommand::ServiceHostRequests)?,
+                    HostResponse::RestartFlags { .. }
+                ),
+                "Unexpected plug-in restart response during inspection"
+            );
+        }
+        Ok(inspection)
+    }
+
+    fn send(&mut self, command: HostCommand) -> Result<HostResponse> {
+        let remaining = self.deadline.saturating_duration_since(Instant::now());
+        ensure!(
+            !remaining.is_zero(),
+            "Plug-in inspection exceeded 30 seconds"
+        );
+        self.worker.set_timeout(remaining);
+        self.worker.set_slow_command_timeout(remaining);
+        let response = self
+            .worker
+            .send_command(command)
+            .map_err(anyhow::Error::msg)?;
+        if let HostResponse::Error { message } = response {
+            bail!("{message}");
+        }
+        Ok(response)
+    }
 }

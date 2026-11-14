@@ -189,7 +189,7 @@ fn number(app: &mut Harness, field: &str, value: &str) -> Value {
 }
 
 #[test]
-fn velocity_color_scale_warning_and_quiet_rows_remain_independent_visual_aids() {
+fn velocity_color_scale_marker_and_quiet_rows_remain_independent_visual_aids() {
     let soft = Note::new(60, 0.0, 0.5, 8);
     let loud = Note::new(60, 1.0, 0.5, 124);
     let outside = Note::new(61, 2.0, 0.5, 92);
@@ -213,11 +213,12 @@ fn velocity_color_scale_warning_and_quiet_rows_remain_independent_visual_aids() 
                 + color[2].as_f64().unwrap() * 0.0722
         };
         assert!((luma(loud_color) - luma(soft_color)) * if dark { 1.0 } else { -1.0 } > 35.0);
-        let warning = painted(&state, ids[2]);
-        assert_eq!(warning["out_of_scale"], true);
+        let outside = painted(&state, ids[2]);
+        assert_eq!(outside["out_of_scale"], true);
         assert!(
-            warning["fill_color"][0].as_u64().unwrap() > warning["fill_color"][2].as_u64().unwrap()
+            outside["fill_color"][2].as_u64().unwrap() > outside["fill_color"][0].as_u64().unwrap()
         );
+        assert!(!outside["scale_marker"].is_null());
 
         // Menu interactions separate these clicks; revisiting the same note
         // after changing theme must not become a delete double-click.
@@ -256,10 +257,14 @@ fn velocity_color_scale_warning_and_quiet_rows_remain_independent_visual_aids() 
         painted(&without_rows, ids[2])["fill_color"],
         painted(&before_view, ids[2])["fill_color"]
     );
-    let no_warning = menu(&mut app, "View", "Color out-of-scale notes");
-    let color = &painted(&no_warning, ids[2])["fill_color"];
-    assert!(color[2].as_u64().unwrap() > color[0].as_u64().unwrap());
-    let restored = menu(&mut app, "View", "Color out-of-scale notes");
+    let no_marker = menu(&mut app, "View", "Mark out-of-scale notes");
+    assert!(painted(&no_marker, ids[2])["scale_marker"].is_null());
+    assert_eq!(
+        painted(&no_marker, ids[2])["fill_color"],
+        painted(&before_view, ids[2])["fill_color"]
+    );
+    let restored = menu(&mut app, "View", "Mark out-of-scale notes");
+    assert!(!painted(&restored, ids[2])["scale_marker"].is_null());
     assert_eq!(
         painted(&restored, ids[2])["fill_color"],
         painted(&before_view, ids[2])["fill_color"]
@@ -297,7 +302,7 @@ fn randomize_preview_reroll_cancel_and_selected_source_timing_match_the_semantic
             "Glue",
             "Erase",
             "Cursor",
-            "Key C · Natural minor",
+            "Scale guide C · Major",
             "Notes",
         ],
     );
@@ -417,7 +422,7 @@ fn visible_quantize_and_legato_preserve_scope_chords_and_source_mapping() {
             "Glue",
             "Erase",
             "Cursor",
-            "Key C · Natural minor",
+            "Scale guide C · Major",
             "Notes",
         ],
     );

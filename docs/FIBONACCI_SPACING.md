@@ -1,5 +1,22 @@
 # Fibonacci spacing audit
 
+## Toolbar refinement — 2026-11-14
+
+Command bars now use a denser Fibonacci sequence: 3 points between icon and
+label and above/below button content, 5 points between controls and at the bar's
+vertical edges, and 8 points of horizontal button/bar padding. Toolbar icons
+use 13-point boxes and 80% foreground opacity; labels keep their full contrast.
+The 21-point minimum grows to fit the measured label and padding, and every
+control shares a vertical center. These metrics apply at all window widths.
+Ordinary forms, dialogs, and menu contents retain their 34-point targets and
+13 × 8 padding. Explicit custom button sizes remain authoritative.
+
+Trailing toolbar controls wrap against the visible viewport rather than a
+potentially expanded measurement region. Shared geometry tests cover exact
+icon/label spacing, light/dark selected/disabled states, 1×/2× density, mixed
+control alignment, and expanded-parent trailing controls at 800/1200/1480 points.
+The earlier audit below records its original baseline and evidence.
+
 Date: 2026-11-01. Baseline: `68062d0`, following the expert UI refinements.
 
 This change gives RILL workspaces, utilities, dialogs, and controls more room,

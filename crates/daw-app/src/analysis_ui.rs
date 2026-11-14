@@ -142,9 +142,9 @@ impl DawApp {
                 })));
                 footer.show(ui, |ui| {
                     daw_ui::dialog_actions(ui, |ui| {
-                        done = daw_ui::dialog_button(ui, "Done").clicked();
-                        reset = daw_ui::dialog_button(ui, "Reset measurement").clicked();
-                    }, |ui| { daw_ui::hover_text(daw_ui::text::note(ui, status), match self.analysis.target {
+                        done = daw_ui::dialog_button(ui, "Done").on_hover_text("Close Signal analysis and return to the workspace").clicked();
+                        reset = daw_ui::dialog_button(ui, "Reset measurement").on_hover_text("Clear held peaks, loudness, and accumulated readings; measure again from now").clicked();
+                    }, |ui| { daw_ui::hover_text(daw_ui::text::note(ui, if data.is_none() && !playing { "Post-fader signal" } else { status }), match self.analysis.target {
                         SignalMonitorTarget::Master => "Post-insert Master output, after volume and pan; before device clipping, dry input monitoring and metronome",
                         SignalMonitorTarget::Channel(_) => "Channel after inserts, volume, pan and mute; before output/send destination gain",
                     }); });

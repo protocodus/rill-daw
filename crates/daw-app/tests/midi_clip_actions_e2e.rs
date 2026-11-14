@@ -437,7 +437,7 @@ fn loop_this_clip_context_uses_exact_audio_midi_and_automation_pattern_bounds() 
         } else {
             context(&mut app, id)
         };
-        let looped = app.click("Loop this clip");
+        let looped = app.click("Loop playback over clip");
         assert_eq!(looped["project"]["loop_enabled"], true);
         near(&looped["project"]["loop_start"], start);
         near(&looped["project"]["loop_end"], end);

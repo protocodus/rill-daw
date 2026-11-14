@@ -1,0 +1,5 @@
+This repository contains the study summaries, findings, session reports, and public expectation/action/outcome notes.
+
+The complete local study remains in this directory in the original workspace: review.html, screenshot chronology, recordings, rendered audio, project bundles, and rill-five-novice-sessions.zip. Those raw artifacts are not included in Git. References to them in the study records identify local evidence.
+
+Approved changes and portable before/after evidence are in ../ux-approved-2026-11-14/visual-scan/before-after.html.

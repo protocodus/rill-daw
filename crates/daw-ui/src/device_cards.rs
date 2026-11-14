@@ -361,7 +361,11 @@ fn paint_preview(painter: &egui::Painter, rect: Rect, card: &DeviceCard<'_>) {
             painter,
             Rect::from_center_size(
                 rect.center(),
-                egui::Vec2::splat((rect.height() * 0.3).min(34.0)),
+                egui::Vec2::splat(
+                    (rect.height() * 0.3)
+                        .clamp(tokens::COMPACT_HEIGHT, tokens::CONTROL_HEIGHT)
+                        .min((rect.width().min(rect.height()) - 2.0 * tokens::SPACE_XS).max(0.0)),
+                ),
             ),
             colors.muted,
         );

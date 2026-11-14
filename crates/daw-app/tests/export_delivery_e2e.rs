@@ -17,7 +17,7 @@ fn has(state: &Value, label: &str) -> bool {
 
 fn options(app: &mut Harness) -> Value {
     app.click("File");
-    let state = app.click("Export WAV…");
+    let state = app.click("Export audio…");
     assert_eq!(state["popups"]["export"], true);
     state
 }

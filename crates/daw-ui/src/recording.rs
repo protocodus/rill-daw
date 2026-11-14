@@ -37,7 +37,8 @@ pub fn recording_timing_controls(
                         crate::selectable_value(ui, precount, value, title);
                     }
                 }).response.labelled_by(label.id)
-                .on_hover_text("Count in before recording from stopped. Recording during playback starts immediately.");
+                .on_hover_text("Count in before recording from stopped. Recording during playback starts immediately.")
+                .on_disabled_hover_text("Stop recording before changing the pre-count");
         });
         ui.end_row();
         crate::form_label(ui, "Metronome");
@@ -46,7 +47,11 @@ pub fn recording_timing_controls(
         );
         ui.end_row();
         let label = crate::form_label(ui, "Click level");
-        ui.add(crate::slider(gain, 0.0..=1.0)).labelled_by(label.id);
+        ui.add(crate::slider(gain, 0.0..=1.0))
+            .labelled_by(label.id)
+            .on_hover_text(
+                "Set metronome and pre-count loudness; the click is not recorded or exported",
+            );
         ui.end_row();
     });
     before != (*precount, *click, *gain)

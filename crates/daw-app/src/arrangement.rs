@@ -242,6 +242,7 @@ impl DawApp {
             self.arranger_selection.plain_click_candidate = None;
         }
         let selected_loop_range = self.loop_selection_range();
+        let has_selected_phrase_span = self.arranger_phrase_span().is_some();
         let can_change_loop = !self.recording_busy();
         let viewport_id = egui::Id::new("arrangement_timeline_viewport");
         let mut viewport = ui
@@ -350,7 +351,10 @@ impl DawApp {
                         max_header,
                     );
                 });
-                let controls = help.rect.union(view.response.rect);
+                let view = view.response.on_hover_text(
+                    "Change timeline zoom, track layout, and waveform display without editing clips",
+                );
+                let controls = help.rect.union(view.rect);
                 ui.ctx()
                     .data_mut(|data| data.insert_temp(trailing_id, controls.width()));
             });
@@ -632,6 +636,7 @@ impl DawApp {
         let mut arm_toggles = Vec::new();
         let mut open_editor = false;
         let mut clip_clipboard = None;
+        let mut repeat_clip = None;
         let mut clip_diagnostics = Vec::new();
         let mut automation_diagnostics = Vec::new();
         let mut selection_items = Vec::new();
@@ -735,7 +740,10 @@ impl DawApp {
             "arrangement_tracks",
             "Tracks",
             |ui| {
-                if daw_ui::button(ui, "Add folder").clicked() {
+                if daw_ui::button(ui, "Add folder")
+                    .on_hover_text("Add an empty folder to organize related tracks")
+                    .clicked()
+                {
                     edits.push(Edit::Folder(None));
                     ui.close();
                 }
@@ -744,6 +752,8 @@ impl DawApp {
                         selected_folder.is_some(),
                         daw_ui::button_widget("Add subfolder"),
                     )
+                    .on_hover_text("Add a folder inside the selected folder")
+                    .on_disabled_hover_text("Select a folder before adding a subfolder")
                     .clicked()
                 {
                     edits.push(Edit::Folder(selected_folder));
@@ -758,6 +768,7 @@ impl DawApp {
                                 .is_some_and(|track| track.parent_folder.is_none()),
                             "Top level",
                         )
+                        .on_hover_text("Move the selected track out of its folder to the top level")
                         .clicked()
                         {
                             edits.push(Edit::Parent(track, None));
@@ -771,18 +782,23 @@ impl DawApp {
                                     .is_some_and(|track| track.parent_folder == Some(folder.id)),
                                 &folder.name,
                             )
+                            .on_hover_text(format!("Move the selected track into {}", folder.name))
                             .clicked()
                             {
                                 edits.push(Edit::Parent(track, Some(folder.id)));
                                 ui.close();
                             }
                         }
-                    });
+                    })
+                    .response
+                    .on_hover_text(
+                        "Choose a folder for the selected track, or move it to the top level",
+                    );
                 }
             },
         )
         .0
-        .on_hover_text("Organize tracks and folders");
+        .on_hover_text("Organize tracks and folders: add folders or move the selected track");
         let grid_left = ruler.left() + header_width + daw_ui::tokens::SPACE_SM;
         let view = viewport;
         let origin = grid_left - (view.start_beat * self.zoom as f64) as f32;
@@ -1753,13 +1769,6 @@ impl DawApp {
                                 popup = Some(PopupKind::Inspector);
                                 ui.close();
                             }
-                            if daw_ui::button(ui, "Loop this clip")
-                                .on_hover_text("Set the loop to this clip's exact bounds and enable looping")
-                                .clicked()
-                            {
-                                edits.push(Edit::LoopRange(clip.start, clip.end()));
-                                ui.close();
-                            }
                             if ui.add_enabled(freeze_channels.contains(&track.id) && !clip.muted, daw_ui::button_widget("Freeze clip"))
                                 .on_hover_text("Print this clip with its channel's insert processing to new audio below; retain and mute the original")
                                 .clicked()
@@ -1790,8 +1799,8 @@ impl DawApp {
                                     }
                                 });
                             }
-                            // Same order as the Edit menu: open, select, clipboard,
-                            // name, structure, transitions, playback, delete.
+                            // Keep playback looping and the copy actions together so
+                            // their distinct effects are visible in one place.
                             ui.separator();
                             let member = self.arranger_selection.ids.contains(&clip.id);
                             if daw_ui::selection_membership_action(ui, member) {
@@ -1814,8 +1823,38 @@ impl DawApp {
                                     ui.close();
                                 }
                             }
-                            if daw_ui::button(ui, "Duplicate").clicked() {
+                            ui.separator();
+                            let selection_range = member
+                                && (selected_count > 1 || has_selected_phrase_span);
+                            if ui.add_enabled(can_change_loop, daw_ui::button_widget(
+                                if selection_range { "Loop playback over selection" } else { "Loop playback over clip" },
+                            ))
+                                .on_hover_text(if selection_range {
+                                    "Enable playback looping over the selected clips or time range, including rests. This does not create copies."
+                                } else {
+                                    "Enable playback looping over this clip. This does not create copies."
+                                })
+                                .on_disabled_hover_text("Finish recording before changing the loop range")
+                                .clicked()
+                            {
+                                let range = if member { selected_loop_range }
+                                    else { Some((clip.start, clip.end())) };
+                                if let Some((start, end)) = range {
+                                    edits.push(Edit::LoopRange(start, end));
+                                }
+                                ui.close();
+                            }
+                            if daw_ui::button(ui, "Duplicate after")
+                                .on_hover_text("Create one independent copy immediately after the selected phrase, including rests")
+                                .clicked()
+                            {
                                 edits.push(Edit::Command(track.id, clip.id, ClipCommand::Duplicate));
+                                ui.close();
+                            }
+                            let repeat_span = if member { selected_loop_range }
+                                else { Some((clip.start, clip.end())) };
+                            if Self::repeat_to_loop_end_button(ui, repeat_span, self.project.loop_end) {
+                                repeat_clip = Some((track.id, clip.id, member));
                                 ui.close();
                             }
                             ui.separator();
@@ -1869,25 +1908,6 @@ impl DawApp {
                                     popup = Some(PopupKind::Crossfade);
                                     ui.close();
                                 }
-                            }
-                            ui.separator();
-                            if ui.add_enabled(can_change_loop, daw_ui::button_widget(
-                                if member { "Loop playback over selection" } else { "Loop playback over clip" },
-                            ))
-                                .on_hover_text(if member {
-                                    "Enable playback looping over the selected clips or time range, including rests. To create copies, set a later loop end, then choose Edit → Repeat to loop end."
-                                } else {
-                                    "Enable playback looping over this clip, preserving the selection. To create copies, select this clip, set a later loop end, then choose Edit → Repeat to loop end."
-                                })
-                                .on_disabled_hover_text("Finish recording before changing the loop range")
-                                .clicked()
-                            {
-                                let range = if member { selected_loop_range }
-                                    else { Some((clip.start, clip.end())) };
-                                if let Some((start, end)) = range {
-                                    edits.push(Edit::LoopRange(start, end));
-                                }
-                                ui.close();
                             }
                             ui.separator();
                             if daw_ui::button(ui, "Delete").clicked() {
@@ -2380,6 +2400,12 @@ impl DawApp {
                 self.arranger_select_only_clip(track, clip);
             }
             self.arranger_clipboard_action(ui.ctx(), action);
+        }
+        if let Some((track, clip, member)) = repeat_clip {
+            if !member {
+                self.arranger_select_only_clip(track, clip);
+            }
+            self.repeat_selection_to_loop_end();
         }
         if ui.input(|i| i.pointer.primary_released())
             && self.arranger_selection.drag.is_some()

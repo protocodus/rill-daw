@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 pub use vst3_host::audio::{AudioBusDetails, AudioBusDetailsLayout};
 use vst3_host::process_isolation::{BlockCommand, HostCommand, HostResponse, PluginHostProcess};
 pub use vst3_host::process_isolation::{BlockTransport, IpcStats};
-pub use vst3_host::{AudioBusConfig, AudioBusLayout};
+pub use vst3_host::{AudioBusConfig, AudioBusLayout, NoteName};
 use vst3_host::{BusAudioBuffers, MidiChannel, MidiEvent, Plugin, TransportPosition, Vst3Host};
 
 mod audio_buffers;
@@ -69,8 +69,9 @@ pub mod sync;
 pub use catalog::{CatalogEntry, PluginCatalog, ThumbnailStatus};
 pub use editor::{EditorEvent, EditorSession, capture_editor, capture_editor_info, launch_editor};
 pub use inspection::{
-    PluginAudioBus, PluginInspection, PluginParameterMetadata, inspect_plugin,
-    inspect_plugin_with_configuration, inspect_plugin_with_state,
+    PluginAudioBus, PluginInspection, PluginParameterMetadata,
+    inspect_note_names_with_configuration, inspect_plugin, inspect_plugin_with_configuration,
+    inspect_plugin_with_state,
 };
 
 /// Leaves headroom in the host's 4,096-event queue for panic note-offs.

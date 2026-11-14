@@ -89,10 +89,19 @@ pub fn audio_grid_slice_controls(ui: &mut Ui, grid: &mut f64, cuts: usize) -> bo
             for value in [0.125, 0.25, 0.5, 1.0, 2.0, 4.0] {
                 crate::selectable_value(ui, grid, value, format!("{value} beats"));
             }
-        });
+        })
+        .response
+        .on_hover_text(
+            "Choose the spacing between previewed cuts in the selected time range or whole clip",
+        );
     ui.label(format!("{cuts} cuts"));
     ui.add_enabled(cuts > 0 && cuts <= 2048, crate::button_widget("Split grid"))
         .on_hover_text("Split at the previewed grid positions; keep every resulting cue selected")
+        .on_disabled_hover_text(if cuts == 0 {
+            "Choose a smaller grid or a longer time range to place a cut"
+        } else {
+            "Choose a wider grid or a shorter time range to stay within 2048 cuts"
+        })
         .clicked()
 }
 
@@ -132,10 +141,15 @@ pub fn audio_quantize_controls(
         ] {
             crate::selectable_value(ui, grid, value, name);
         }
-    });
+    })
+    .response
+    .on_hover_text("Choose the musical grid that detected audio hits will move toward");
     let mut percent = *strength * 100.0;
     if ui
         .add(crate::slider(&mut percent, 0.0..=100.0).text("Strength %"))
+        .on_hover_text(
+            "Move each hit part of the way toward its nearest grid line; 100% reaches the grid",
+        )
         .changed()
     {
         *strength = (percent / 100.0).clamp(0.0, 1.0);
@@ -154,6 +168,9 @@ pub fn audio_quantize_controls(
     if ui
         .add_enabled(ready, crate::button_widget("Apply quantize"))
         .on_hover_text("Place warp markers on the hits and move them toward the grid as one edit")
+        .on_disabled_hover_text(
+            "Available after detection produces a valid preview with at least one hit",
+        )
         .clicked()
     {
         action = Some(AudioQuantizeAction::Quantize);
@@ -161,11 +178,17 @@ pub fn audio_quantize_controls(
     if ui
         .add_enabled(ready, crate::button_widget("Markers only"))
         .on_hover_text("Place warp markers on the hits without moving them")
+        .on_disabled_hover_text(
+            "Available after detection produces a valid preview with at least one hit",
+        )
         .clicked()
     {
         action = Some(AudioQuantizeAction::MarkersOnly);
     }
-    if crate::button(ui, "Cancel").clicked() {
+    if crate::button(ui, "Cancel")
+        .on_hover_text("Close the quantize preview without changing the clip")
+        .clicked()
+    {
         action = Some(AudioQuantizeAction::Cancel);
     }
     action
@@ -206,7 +229,12 @@ pub fn clip_workspace_header<R>(
                 ui.set_min_height(height);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.set_min_height(height);
-                    let inner = contents(ui, HeaderSlot::Actions);
+                    let inner = ui
+                        .scope(|ui| {
+                            crate::compact_toolbar_spacing(ui);
+                            contents(ui, HeaderSlot::Actions)
+                        })
+                        .inner;
                     ui.add_space(tokens::SPACE_MD);
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                         ui.set_min_height(height);

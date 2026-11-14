@@ -39,7 +39,7 @@ fn hover_target(app: &mut Harness, name: &str) -> [f64; 4] {
                 && *y0 <= top
                 && *x1 >= right
                 && *y1 >= bottom
-                && *y1 - *y0 >= f64::from(daw_ui::tokens::CONTROL_HEIGHT)
+                && *y1 - *y0 >= f64::from(daw_ui::tokens::TOOLBAR_CONTROL_HEIGHT)
         })
         .min_by(|a, b| {
             let area = |r: &[f64; 4]| (r[2] - r[0]) * (r[3] - r[1]);
@@ -102,7 +102,7 @@ fn exposed_piano_tools_preserve_mouse_and_key_access_and_wrap_within_the_editor(
         for width in [800, 1100, 1480] {
             app.command(json!({"command":"viewport", "width":width, "height":720, "pixels_per_point":density}));
             let initial = app.click("Select");
-            let settings = label(&initial, "Key C · Natural minor").clone();
+            let settings = label(&initial, "Scale guide C · Major").clone();
             for name in [
                 "Select",
                 "Pencil",
@@ -116,7 +116,7 @@ fn exposed_piano_tools_preserve_mouse_and_key_access_and_wrap_within_the_editor(
                 "Notes",
                 "Snap grid",
                 "Length last",
-                "Key C · Natural minor",
+                "Scale guide C · Major",
                 "Tool help",
                 "View",
                 "Fit",
@@ -187,7 +187,7 @@ fn exposed_piano_tools_preserve_mouse_and_key_access_and_wrap_within_the_editor(
                 label(&chosen, name);
                 unchanged(&chosen, &before);
                 assert_eq!(
-                    label(&chosen, "Key C · Natural minor"),
+                    label(&chosen, "Scale guide C · Major"),
                     &settings,
                     "Direct tool selection keeps adjacent controls in place"
                 );
@@ -201,10 +201,10 @@ fn exposed_piano_tools_preserve_mouse_and_key_access_and_wrap_within_the_editor(
                 unchanged(&shortcut, &before);
             }
             app.click("Select");
-            let drawing = app.click("Key C · Natural minor");
+            let drawing = app.click("Scale guide C · Major");
             label(&drawing, "Root");
             label(&drawing, "Scale");
-            label(&drawing, "Natural minor");
+            label(&drawing, "Major");
             unchanged(&drawing, &before);
             let dismissed = app.key("Escape");
             unchanged(&dismissed, &before);

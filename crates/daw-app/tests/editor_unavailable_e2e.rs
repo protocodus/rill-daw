@@ -171,7 +171,7 @@ fn save_as(app: &mut Harness, path: &Path) -> Value {
 fn export(app: &mut Harness, path: &Path) -> Value {
     app.command(json!({"command":"file_dialog","kind":"export","path":path}));
     app.click("File");
-    app.click("Export WAV…");
+    app.click("Export audio…");
     app.click("Export…")
 }
 

@@ -37,8 +37,9 @@ impl DawApp {
             .response
             .on_hover_text(source.and_then(|id| self.project.track(id)).map_or_else(
                 || "Select a channel to add a send".to_owned(),
-                |track| format!("Add a post-fader send from {}", track.name),
-            ));
+                |track| format!("Choose a bus for a post-fader send from {}. The channel keeps its main output.", track.name),
+            ))
+            .on_disabled_hover_text("Select an audio, MIDI, or bus channel to add a send");
         });
         if let Some((source, destination)) = source.zip(destination) {
             self.mixer_create_send(source, destination);

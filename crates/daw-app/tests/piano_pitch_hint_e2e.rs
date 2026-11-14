@@ -112,7 +112,7 @@ fn toolbar(state: &Value) -> Vec<Value> {
     [
         "Snap grid",
         "Length last",
-        "Key C · Natural minor",
+        "Scale guide C · Major",
         "Notes",
         "Generate…",
     ]
@@ -217,9 +217,9 @@ fn pointer_pitch_is_painted_before_entry_and_on_short_dense_and_folded_notes() {
                     .unwrap()
                     .contains(&json!(61))
             );
-            let at = point(&folded, 63);
+            let at = point(&folded, 64);
             let hovered = pointer(&mut app, "move", at);
-            assert_hint(&hovered, 63, at);
+            assert_hint(&hovered, 64, at);
             unchanged(&hovered, &before);
             app.quit();
         }
@@ -362,7 +362,7 @@ fn held_multi_draw_keeps_the_pressed_pitch_for_chord_and_scale_stacks() {
         assert_eq!(
             created,
             if scale_stack {
-                vec![60, 62, 63, 65, 67, 68, 70]
+                vec![60, 62, 64, 65, 67, 69, 71]
             } else {
                 vec![60, 63, 67]
             },

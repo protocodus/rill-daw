@@ -84,7 +84,7 @@ fn full_button_text_width(text: &str, density: f32) -> f32 {
 }
 
 #[test]
-fn main_bar_groups_full_size_targets_and_gives_play_visual_priority() {
+fn main_bar_groups_compact_targets_and_gives_play_visual_priority() {
     let mut app = Harness::new();
     let before = app.inspect();
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
@@ -105,7 +105,7 @@ fn main_bar_groups_full_size_targets_and_gives_play_visual_priority() {
             same_row(&state, &["1.1.1", "0:00.00"]);
             same_row(&state, &["120.0 BPM", "4/4", "Click"]);
             same_row(&state, &["Loop", "Range"]);
-            // Visible tempo steps add two full mouse targets. Below 1280 the
+            // Visible tempo steps keep independent mouse targets. Below 1280 the
             // complete guide group may wrap; common laptop widths keep one row.
             if width >= 1280 {
                 same_row(
@@ -165,7 +165,18 @@ fn main_bar_groups_full_size_targets_and_gives_play_visual_priority() {
                     .unwrap_or_else(|| panic!("{text} needs a visible hover/focus target"));
                 let rect = bounds(&control["rect"]);
                 assert!(rect[0] >= 0.0 && rect[1] >= 40.0, "{text}: {rect:?}");
-                assert!(rect[3] - rect[1] >= 34.0, "{text} keeps a full-size target");
+                let target_height = rect[3] - rect[1];
+                let text_height = bottom - top;
+                let expected_height =
+                    text_height + 2.0 * f64::from(daw_ui::tokens::TOOLBAR_BUTTON_PADDING_Y);
+                assert!(
+                    (target_height - expected_height).abs() <= 1.0 / density,
+                    "{text} retains full text with compact vertical padding: {rect:?}"
+                );
+                assert!(
+                    target_height < f64::from(daw_ui::tokens::CONTROL_HEIGHT),
+                    "{text} uses the shared compact toolbar target"
+                );
                 assert!(
                     rect[2] <= f64::from(width) && rect[3] < 240.0,
                     "{text}: {rect:?}"

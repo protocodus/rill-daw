@@ -1,0 +1,75 @@
+   Compiling daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+    Finished `test` profile [unoptimized] target(s) in 9.46s
+     Running tests/assistant.rs (target/debug/build/daw-ui/c3452424ca4ad536/out/assistant-c3452424ca4ad536)
+
+running 11 tests
+test browsing_and_inserting_an_example_preserves_draft_and_requires_send ... ok
+test enter_edits_multiline_prompt_and_blank_prompt_cannot_submit ... ok
+test oversized_example_never_replaces_or_truncates_an_existing_draft ... ok
+test oversized_tool_prompt_never_clobbers_a_draft ... ok
+test popup_browsing_actions_fit_below_reserved_transport_at_minimum_app_size ... ok
+test secret_field_paints_masked_text_only ... ok
+test submit_shortcut_requires_prompt_focus_and_respects_busy_state ... ok
+test scoped_tool_browser_selects_a_tool_and_preserves_an_unsent_draft ... ok
+test tool_search_filters_supplied_tools_and_clears_stale_selection ... ok
+test all_guidance_pages_keep_composer_and_actions_inside_compact_viewport ... ok
+test long_history_and_unicode_prompt_keep_actions_in_viewport ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+
+     Running tests/layout.rs (target/debug/build/daw-ui/62df34c139160ecf/out/layout-62df34c139160ecf)
+
+running 17 tests
+test clip_header_actions_use_compact_toolbar_controls_without_shrinking_the_title_row ... ok
+test mixer_card_padding_and_parent_gutters_survive_display_scaling ... ok
+test mixer_strips_stack_their_contents_and_meter_rejects_nonfinite_readings ... ok
+test command_families_wrap_together_without_shrinking_targets_or_leaking_styles ... ok
+test segmented_toolbar_choices_share_action_height_and_keep_ordinary_form_size ... ok
+test sized_toolbar_choices_use_remaining_row_space_and_wrap_as_one_group ... ok
+test parameter_rows_align_slider_rails_with_fields_labels_and_actions ... ok
+test thumbnail_arrival_keeps_catalog_text_position_and_row_height_stable ... ok
+test take_lane_labels_keep_clearance_from_the_waveform_at_display_scales ... ok
+test toolbar_wraps_complete_native_controls_without_eating_the_canvas ... ok
+test contextual_workspace_header_keeps_command_and_canvas_geometry_across_clip_kinds ... ok
+test trailing_toolbar_group_uses_current_row_and_wraps_only_when_needed ... ok
+test trailing_toolbar_controls_stay_visible_after_a_measured_group_expands_the_parent ... ok
+test workspace_header_stays_at_the_top_and_back_keeps_native_keyboard_accessibility ... ok
+test utility_popup_is_centered_bounded_and_scrolls_long_content ... ok
+test mixed_control_rows_keep_targets_and_text_centered_during_numeric_entry ... ok
+test utility_popup_can_reach_actions_after_asynchronous_body_growth ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/tool_hint.rs (target/debug/build/daw-ui/9407edf3bdd18334/out/tool_hint-9407edf3bdd18334)
+
+running 7 tests
+test help_stays_reachable_when_a_previous_control_widens_the_parent ... ok
+test narrow_tool_captions_hide_instead_of_cutting_off_words ... FAILED
+test tool_help_is_keyboard_accessible_without_stealing_focus_or_consuming_tool_keys ... ok
+test disclosure_is_context_specific_and_retains_help_when_the_tool_changes ... ok
+test toolbar_help_has_a_full_target_and_native_keyboard_open_and_dismiss ... ok
+test toolbar_caption_uses_only_remaining_space_without_moving_controls_or_canvas ... ok
+test compact_hints_keep_one_row_and_full_help_wraps_in_both_themes_and_densities ... ok
+
+failures:
+
+---- narrow_tool_captions_hide_instead_of_cutting_off_words stdout ----
+
+thread 'narrow_tool_captions_hide_instead_of_cutting_off_words' (30985) panicked at crates/daw-ui/tests/tool_hint.rs:403:17:
+assertion failed: response.is_none()
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+   1: core::panicking::panic_fmt
+   2: core::panicking::panic
+   3: tool_hint::narrow_tool_captions_hide_instead_of_cutting_off_words
+   4: tool_hint::narrow_tool_captions_hide_instead_of_cutting_off_words::{closure#0}
+   5: <tool_hint::narrow_tool_captions_hide_instead_of_cutting_off_words::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+
+failures:
+    narrow_tool_captions_hide_instead_of_cutting_off_words
+
+test result: FAILED. 6 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+error: test failed, to rerun pass `-p daw-ui --test tool_hint`

@@ -36,7 +36,7 @@ fn source(app: &Harness) -> std::path::PathBuf {
 }
 
 fn export_mix(app: &mut Harness, name: &str) -> AudioData {
-    let options = menu(app, "File", "Export WAV…");
+    let options = menu(app, "File", "Export audio…");
     if options["export_include_effect_tails"] == true {
         app.click("Include effect tails");
     }
@@ -275,7 +275,7 @@ fn reexport_reuses_only_successful_destination_and_tail_choice_then_resets_on_op
     let path = app.directory.path().join("Export.rill");
     project.save(&path).unwrap();
     app.command(json!({"command":"open","path":path}));
-    menu(&mut app, "File", "Export WAV…");
+    menu(&mut app, "File", "Export audio…");
     app.click("Include effect tails");
     let mix = app.directory.path().join("Mix.wav");
     app.command(json!({"command":"file_dialog","kind":"export","path":mix}));
@@ -291,12 +291,12 @@ fn reexport_reuses_only_successful_destination_and_tail_choice_then_resets_on_op
     assert_eq!(receipt["report"]["sample_rate"], expected.sample_rate);
     // Change the popup preference and cancel; quick export still remembers the
     // successful render's tail option, not an abandoned options edit.
-    menu(&mut app, "File", "Export WAV…");
+    menu(&mut app, "File", "Export audio…");
     app.click("Include effect tails");
     app.click("Cancel");
     // A render that reaches the worker but cannot create its destination must
     // not turn the last-success command into a retry of that failed location.
-    menu(&mut app, "File", "Export WAV…");
+    menu(&mut app, "File", "Export audio…");
     let failed = app
         .directory
         .path()

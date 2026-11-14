@@ -364,6 +364,11 @@ fn generated_chord_merges_its_covered_tone_without_rewriting_existing_velocity()
             false,
         );
         if folded {
+            // Keep the generated E hidden while testing that its merge does
+            // not promote it into the visible editing selection.
+            app.click("Scale guide C · Major");
+            app.click("Major");
+            app.click("Natural minor");
             app.click("View");
             app.click("Only scale keys");
             app.key("Escape");

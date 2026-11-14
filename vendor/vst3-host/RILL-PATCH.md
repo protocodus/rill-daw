@@ -165,3 +165,14 @@ exposes its embedding handle, follows editor resizes and DPI changes, and report
 user close. `PluginWindow` keeps its API and behaviour on top of it. Rill's CLAP
 editor embeds into the same window, so close handling, titles and capture match
 VST3 editors on every platform.
+
+`Plugin::note_names` and the additive `NoteNames` isolation command expose native
+instrument note labels for the current state. VST3 resolves event input bus 0 and
+each MIDI channel through `IUnitInfo::getUnitByBus`, then queries pitch names for
+that unit's current program. A single-program list needs no program-change
+parameter; ambiguous or unsupported routing produces no names. The query is
+control-thread-only, uses the slow metadata deadline, and returns at most 2,048
+names. The public `NoteName` representation retains port/channel specificity and
+native-format wildcards so Rill's other format adapters can share this protocol.
+No General MIDI names are inferred. Protocol and current-program decoding tests
+cover routing preservation, Unicode labels and malformed controller values.

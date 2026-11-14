@@ -437,7 +437,7 @@ fn slip_one_source_beat(app: &mut Harness, id: u64) {
 }
 
 fn export(app: &mut Harness, path: &Path) -> AudioData {
-    menu(app, "File", "Export WAV…");
+    menu(app, "File", "Export audio…");
     if app.inspect()["export_include_effect_tails"] == true {
         app.click("Include effect tails");
     }

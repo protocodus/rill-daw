@@ -583,7 +583,7 @@ impl DawApp {
                         }
                     }).response.labelled_by(label.id);
                     ui.end_row();
-                    let label = daw_ui::form_label(ui, "Type");
+                    let label = daw_ui::form_label(ui, "File type");
                     daw_ui::form_select("export_type", format.label()).show_ui(ui, |ui| {
                         for choice in [
                             daw_engine::ExportFormat::Wav,
@@ -606,7 +606,7 @@ impl DawApp {
                     ui.end_row();
                     match format {
                         daw_engine::ExportFormat::Wav | daw_engine::ExportFormat::Flac => {
-                            let label = daw_ui::form_label(ui, "Format");
+                            let label = daw_ui::form_label(ui, "Bit depth");
                             daw_ui::form_select("wav_format", encoding_label(self.settings.export.encoding)).show_ui(ui, |ui| {
                                 let float = format == daw_engine::ExportFormat::Wav;
                                 for encoding in [daw_engine::WavEncoding::Pcm16, daw_engine::WavEncoding::Pcm24, daw_engine::WavEncoding::Float32] {

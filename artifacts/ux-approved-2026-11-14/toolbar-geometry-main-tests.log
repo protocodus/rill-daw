@@ -1,0 +1,40 @@
+   Compiling daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+   Compiling daw-plugins v0.1.0 (/workspace/rill-daw/crates/daw-plugins)
+   Compiling daw-devices-ui v0.1.0 (/workspace/rill-daw/crates/daw-devices-ui)
+   Compiling daw-engine v0.1.0 (/workspace/rill-daw/crates/daw-engine)
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 34.70s
+     Running tests/main_toolbar_roles_e2e.rs (target/debug/build/daw-app/70360d8ab5db658f/out/main_toolbar_roles_e2e-70360d8ab5db658f)
+
+running 2 tests
+test main_bar_groups_compact_targets_and_gives_play_visual_priority ... ok
+test view_navigation_and_playback_guides_preserve_their_existing_transport_and_edit_semantics ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.90s
+
+     Running tests/toolbar_geometry_e2e.rs (target/debug/build/daw-app/0c5702aba2cdb67c/out/toolbar_geometry_e2e-0c5702aba2cdb67c)
+
+running 1 test
+test toolbar_glyphs_labels_and_targets_align_wrap_and_remain_clickable_across_editors ... FAILED
+
+failures:
+
+---- toolbar_glyphs_labels_and_targets_align_wrap_and_remain_clickable_across_editors stdout ----
+
+thread 'toolbar_glyphs_labels_and_targets_align_wrap_and_remain_clickable_across_editors' (26316) panicked at crates/daw-app/tests/toolbar_geometry_e2e.rs:363:29:
+Arranger: trailing Fit remains visible at 800, density1: [208.0, 206.5, 242.0, 240.5], canvas top 204
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+   1: core::panicking::panic_fmt
+   2: toolbar_geometry_e2e::toolbar_glyphs_labels_and_targets_align_wrap_and_remain_clickable_across_editors
+   3: toolbar_geometry_e2e::toolbar_glyphs_labels_and_targets_align_wrap_and_remain_clickable_across_editors::{closure#0}
+   4: <toolbar_geometry_e2e::toolbar_glyphs_labels_and_targets_align_wrap_and_remain_clickable_across_editors::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+
+failures:
+    toolbar_glyphs_labels_and_targets_align_wrap_and_remain_clickable_across_editors
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+
+error: test failed, to rerun pass `-p daw-app --test toolbar_geometry_e2e`

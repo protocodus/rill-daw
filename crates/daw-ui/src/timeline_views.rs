@@ -35,11 +35,19 @@ impl TimelineViewAction {
 /// with the selection. Actions only describe presentation changes; the caller
 /// owns the viewport.
 pub fn timeline_zoom_controls(ui: &mut Ui, selection_available: bool) -> TimelineViewAction {
-    let square = crate::tokens::CONTROL_HEIGHT;
-    let width = square * 4.0 + 3.0 * crate::tokens::SPACE_XS;
+    let height = crate::layout::control_height(ui);
+    let toolbar = crate::layout::compact_toolbar(ui);
+    let width_each = if toolbar {
+        crate::layout::button_icon_size(ui) + 2.0 * ui.spacing().button_padding.x
+    } else {
+        crate::tokens::CONTROL_HEIGHT
+    };
+    let width = width_each * 4.0 + 3.0 * crate::tokens::SPACE_XS;
     crate::toolbar_group_sized_with_spacing(ui, width, crate::tokens::SPACE_XS, |ui| {
-        // Square targets: an 18-point glyph plus 8 points of padding each side.
-        ui.spacing_mut().button_padding.x = crate::tokens::SPACE_SM;
+        // Shared horizontal/vertical insets keep these aligned with labelled tools.
+        if !toolbar {
+            ui.spacing_mut().button_padding.x = crate::tokens::SPACE_SM;
+        }
         let mut action = TimelineViewAction::None;
         for (symbol, label, hint, value) in [
             (
@@ -57,7 +65,7 @@ pub fn timeline_zoom_controls(ui: &mut Ui, selection_available: bool) -> Timelin
         ] {
             let button = ui
                 .add_sized(
-                    egui::vec2(square, square),
+                    egui::vec2(width_each, height),
                     crate::button_widget(symbol).presentation().quiet(),
                 )
                 .on_hover_text(hint);
@@ -70,7 +78,7 @@ pub fn timeline_zoom_controls(ui: &mut Ui, selection_available: bool) -> Timelin
         }
         if ui
             .add_sized(
-                egui::vec2(square, square),
+                egui::vec2(width_each, height),
                 crate::IconButton::icon_only(crate::Icon::Fit, "Fit")
                     .presentation()
                     .quiet(),
@@ -83,18 +91,17 @@ pub fn timeline_zoom_controls(ui: &mut Ui, selection_available: bool) -> Timelin
         if ui
             .add_enabled_ui(selection_available, |ui| {
                 ui.add_sized(
-                    egui::vec2(square, square),
+                    egui::vec2(width_each, height),
                     crate::IconButton::icon_only(crate::Icon::FitSelection, "Fit selection")
                         .presentation()
                         .quiet(),
                 )
             })
             .inner
-            .on_hover_text(if selection_available {
-                "Fit the selected clips, notes or time range. Return with View → Previous view."
-            } else {
-                "Select clips, notes or a time range to fit the selection"
-            })
+            .on_hover_text(
+                "Fit the selected clips, notes or time range. Return with View → Previous view.",
+            )
+            .on_disabled_hover_text("Select clips, notes or a time range to fit the selection")
             .clicked()
         {
             action = TimelineViewAction::FitSelection;
@@ -182,7 +189,7 @@ pub fn transport_position(
         ui.spacing_mut().item_spacing.x = crate::tokens::SPACE_SM;
         let slot = |ui: &mut Ui, width: f32, text: String, font: egui::FontId, color| {
             ui.allocate_ui_with_layout(
-                egui::vec2(width, crate::tokens::CONTROL_HEIGHT),
+                egui::vec2(width, crate::layout::control_height(ui)),
                 egui::Layout::left_to_right(egui::Align::Center),
                 |ui| {
                     ui.set_min_width(width);
@@ -214,7 +221,8 @@ pub fn transport_position(
             ),
             clock,
             colors.muted,
-        );
+        )
+        .on_hover_text("Playhead elapsed time in minutes and seconds");
         bar_beat
     })
     .inner
@@ -248,6 +256,7 @@ pub fn timeline_selection_view_actions(
             crate::view_button_widget("Fit selection"),
         )
         .on_hover_text("Fit the selected items while preserving their data")
+        .on_disabled_hover_text("Select clips, notes or a time range to fit the selection")
         .clicked()
     {
         ui.close();
@@ -256,6 +265,7 @@ pub fn timeline_selection_view_actions(
     if ui
         .add_enabled(has_previous, crate::view_button_widget("Previous view"))
         .on_hover_text("Return to the view before the last pan, zoom or Fit")
+        .on_disabled_hover_text("Pan, zoom or use Fit before returning to a previous view")
         .clicked()
     {
         ui.close();

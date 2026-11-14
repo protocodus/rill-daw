@@ -793,7 +793,9 @@ fn view_cluster(
 ) -> crate::TimelineViewAction {
     {
         let help = crate::editor_tool_help(ui, tool, context);
-        let view = crate::quiet_view_menu(ui, "View", view_menu).response;
+        let view = crate::quiet_view_menu(ui, "View", view_menu)
+            .response
+            .on_hover_text("Open zoom and display options for this editor");
         let zoom = header_zoom_id(context);
         let frame = ui.ctx().cumulative_frame_nr();
         let (in_header, header_action) = ui.ctx().data_mut(|data| {
@@ -828,7 +830,7 @@ pub fn editor_status_caption(ui: &mut Ui, status: &str) -> Option<Response> {
     }
     Some(
         ui.allocate_ui_with_layout(
-            egui::vec2(available.width(), crate::tokens::CONTROL_HEIGHT),
+            egui::vec2(available.width(), crate::layout::control_height(ui)),
             egui::Layout::left_to_right(egui::Align::Center),
             |ui| {
                 // Drop whole trailing clauses before truncating, so a narrow
@@ -915,6 +917,7 @@ pub fn clip_nudge_section(ui: &mut Ui, enabled: bool) -> i32 {
         if ui
             .add_enabled(enabled, crate::button_widget(label))
             .on_hover_text(hint)
+            .on_disabled_hover_text("Open a clip to nudge its position in the arrangement")
             .clicked()
         {
             direction = value;

@@ -405,12 +405,16 @@ impl DawApp {
                                 ui.close();
                             }
                         }
-                    });
+                    }).0.on_hover_text("Choose which set of alternate takes to compare and edit");
                 }
-                if ui.add_enabled(!busy, daw_ui::button_widget("Add takes…")).clicked() { self.choose_take_files(); }
+                if ui.add_enabled(!busy, daw_ui::button_widget("Add takes…"))
+                    .on_hover_text("Import audio files as alternate takes for this clip")
+                    .on_disabled_hover_text("Wait for the current take import to finish").clicked() { self.choose_take_files(); }
                 if group.is_none() {
                     let ids: Vec<_> = std::iter::once(anchor.id).chain(self.project.track(track_id).into_iter().flat_map(|track| &track.clips).filter(|clip| clip.id != anchor.id && !clip.is_take_source() && clip.take_group().is_none() && clip.start < anchor.end() && clip.end() > anchor.start).map(|clip| clip.id)).collect();
-                    if ui.add_enabled(!busy && ids.len() > 1, daw_ui::button_widget("Group overlapping clips")).clicked() {
+                    if ui.add_enabled(!busy && ids.len() > 1, daw_ui::button_widget("Group overlapping clips"))
+                        .on_hover_text("Collect overlapping clips on this track as alternate takes for one comp")
+                        .on_disabled_hover_text(if busy { "Wait for the current take import to finish" } else { "This track needs at least two overlapping audio clips" }).clicked() {
                         let mut project = self.project.clone();
                         match project.group_audio_takes(track_id, &ids) {
                             Ok(_) => self.commit_take_project(project, "Group audio takes"),
@@ -421,6 +425,7 @@ impl DawApp {
                 if let Some(group) = group
                     && ui.add_enabled(!busy && !regions.is_empty(), daw_ui::button_widget("Keep comp only"))
                         .on_hover_text("Remove retained alternatives from the project. Keep the audible comp and original files. Undo restores the takes.")
+                        .on_disabled_hover_text(if busy { "Wait for the current take import to finish" } else { "Choose a take for the comp first" })
                         .clicked()
                 {
                     let mut project = self.project.clone();
@@ -438,7 +443,8 @@ impl DawApp {
                 }
                 if busy { ui.spinner(); daw_ui::text::note(ui, "Importing takes…"); }
                 daw_ui::toolbar_trailing(ui, daw_ui::tokens::SPACE_XL * 2.0 + daw_ui::tokens::SPACE_LG, |ui| {
-                    daw_ui::view_menu(ui, "View", crate::spectrogram::view_options);
+                    daw_ui::view_menu(ui, "View", crate::spectrogram::view_options).response
+                        .on_hover_text("Choose waveform and spectrogram display options for comparing takes");
                 });
             });
             daw_ui::text::note(ui, "Choose a take, then use it for the whole clip or just your time selection.");
@@ -485,14 +491,14 @@ impl DawApp {
             ui.horizontal_wrapped(|ui| {
                 ui.set_min_height(daw_ui::tokens::CONTROL_HEIGHT);
                 let mut use_range = self.audio_takes_ui.range.is_some();
-                if daw_ui::checkbox(ui, &mut use_range, "Time selection").changed() {
+                if daw_ui::checkbox(ui, &mut use_range, "Time selection").on_hover_text("Use only the chosen time range of a take instead of the whole take").changed() {
                     self.audio_takes_ui.range = use_range.then_some((anchor.start, anchor.end()));
                 }
                 if let Some((a, b)) = &mut self.audio_takes_ui.range {
                     // Bar.beat positions, as on the rulers.
                     let (mut start, mut end) = (*a, *b);
-                    ui.add(daw_ui::musical_position_field(&mut start, &meter, "From ").range(0.0..=(end - 0.001)).speed(0.25));
-                    ui.add(daw_ui::musical_position_field(&mut end, &meter, "To ").range((start + 0.001)..=daw_core::MAX_BEAT).speed(0.25));
+                    ui.add(daw_ui::musical_position_field(&mut start, &meter, "From ").range(0.0..=(end - 0.001)).speed(0.25)).on_hover_text("Set where the selected take starts replacing the comp");
+                    ui.add(daw_ui::musical_position_field(&mut end, &meter, "To ").range((start + 0.001)..=daw_core::MAX_BEAT).speed(0.25)).on_hover_text("Set where the selected take stops replacing the comp");
                     (*a, *b) = (start, end);
                 }
             });
@@ -509,7 +515,7 @@ impl DawApp {
                 ui.set_min_height(daw_ui::tokens::CONTROL_HEIGHT);
                 if !selection_valid && let Some(take) = &selected {
                     daw_ui::action_row(ui, |ui| {
-                        if daw_ui::button(ui, "Fit selection to take").clicked() {
+                        if daw_ui::button(ui, "Fit selection to take").on_hover_text("Trim the time selection to audio available in this take").clicked() {
                             let (start, end) = self.audio_takes_ui.range.unwrap_or((take.start, take.end()));
                             let overlap = (start.max(take.start), end.min(take.end()));
                             self.audio_takes_ui.range = Some(if overlap.1 > overlap.0 { overlap } else { (take.start, take.end()) });
@@ -523,15 +529,17 @@ impl DawApp {
             let selection_valid = selected.as_ref().is_some_and(|take| self.audio_takes_ui.range.is_none_or(|(start, end)| start >= take.start && end <= take.end() && end > start));
             footer.show(window_ui, |ui| ui.horizontal_wrapped(|ui| {
                 ui.add_enabled_ui(!busy && group.is_some() && selection_valid, |ui| {
-                    if daw_ui::primary_button(ui, if self.audio_takes_ui.range.is_some() { "Use selection" } else { "Use whole take" }).clicked() {
+                    if daw_ui::primary_button(ui, if self.audio_takes_ui.range.is_some() { "Use selection" } else { "Use whole take" })
+                        .on_hover_text("Replace this part of the comp with the selected take; keep the alternatives available")
+                        .on_disabled_hover_text(if busy { "Wait for the current take import to finish" } else if group.is_none() { "Add or group alternate takes first" } else { "Select a take with audio covering the chosen time range" }).clicked() {
                         self.use_audio_take(track_id, group.unwrap(), selected.as_ref().unwrap().id, self.audio_takes_ui.range);
                     }
                 });
-                if ui.add_enabled(!busy && selected.is_some(), daw_ui::button_widget("Layer as overdub")).on_hover_text("Copy this take to a separate audio track, aligned in time and routed to the same bus. Both tracks will play.").clicked() {
+                if ui.add_enabled(!busy && selected.is_some(), daw_ui::button_widget("Layer as overdub")).on_hover_text("Copy this take to a separate audio track, aligned in time and routed to the same bus. Both tracks will play.").on_disabled_hover_text(if busy { "Wait for the current take import to finish" } else { "Select a take first" }).clicked() {
                     self.layer_audio_take(track_id, selected.as_ref().unwrap());
                 }
                 let return_clip = regions.first().map(|clip| clip.id).or_else(|| (!anchor.is_take_source()).then_some(anchor.id));
-                if daw_ui::button(ui, if return_clip.is_some() { "Back to editor" } else { "Done" }).clicked() {
+                if daw_ui::button(ui, if return_clip.is_some() { "Back to editor" } else { "Done" }).on_hover_text(if return_clip.is_some() { "Close Audio takes and return to the comp in the Clip Editor" } else { "Close Audio takes and return to the workspace" }).clicked() {
                     self.close_popup();
                     if let Some(clip) = return_clip {
                         self.selected_track = Some(track_id);

@@ -374,7 +374,7 @@ docker run --rm rill-e2e
 
 The suite runs on macOS and in a Linux arm64 container with Rust 1.92. The headless app tests need no display server, audio device, or installed VST plug-in. The container also starts a temporary Xvfb display for native tests that check real window pixels, offscreen embedded-child pixels, and full application startup/rendering/shutdown across Arrangement, Instrument, Mixer, Setup, and Properties. Xvfb uses software OpenGL; the container and Linux CI explicitly install the dynamically loaded X11 input/cursor and GL/EGL runtime libraries.
 
-The integration tests launch the production `rill --headless` executable as a separate process. It runs the real application and egui frame processing without opening a native window or audio device. Pointer clicks use visible labels, and WAV imports use normal hover and file-drop events. Mixdown uses the same asynchronous export worker as File → Export WAV. Each test supplies a separate temporary configuration, cache, and scratch directory; closing exercises the application's session recovery path there.
+The integration tests launch the production `rill --headless` executable as a separate process. It runs the real application and egui frame processing without opening a native window or audio device. Pointer clicks use visible labels, and WAV imports use normal hover and file-drop events. Mixdown uses the same asynchronous export worker as **File → Export audio…**. Each test supplies a separate temporary configuration, cache, and scratch directory; closing exercises the application's session recovery path there.
 
 The runner executes scenarios one at a time, including in CI and containers. Each app still runs its concurrent audio and isolated plugin workers with the production response deadlines. Serial scenario scheduling avoids turning functional tests into a test of several complete DAWs competing for limited runner CPUs; sample, continuity, crash-isolation and deadline assertions remain unchanged.
 
@@ -895,7 +895,7 @@ checks that the stems line up with the mix, cancels a running stem export
 verifies no files remain, and drives `document_action` export with `format`,
 `stems`, `channels`, `include_mix` and `replace_existing`.
 
-`export_options_e2e` opens File → Export WAV, checks the displayed duration,
+`export_options_e2e` opens File → Export audio…, checks the displayed duration,
 toggles Include effect tails, and validates an exact 60-second WAV versus the
 default release tail. Popup and destination-picker cancellation preserve the
 project and caller. Its opt-in native test uses `RILL_TEST_VST_INSTRUMENT`
@@ -1457,11 +1457,23 @@ and continued healthy auxiliary outputs after a primary insert crash. The
 stereo and final mono inputs, shared output processing, invalid-pair rejection
 and child recovery.
 
+### Action names and copy behavior
+
+`action_names_e2e` exercises the running app's clip context menu and all four
+export formats. It checks that there is one **Loop playback over clip/selection**
+action, playback looping leaves clip contents unchanged, **Duplicate after**
+creates an adjacent independent copy, and **Repeat to loop end** preserves
+phrase rests and trims a partial final copy in one undoable edit. Disabled
+repeat shows **Extend the loop beyond the phrase**. The export test opens
+**File → Export audio…**, checks **File type** and format-specific **Bit depth**,
+and decodes the completed WAV, FLAC, Ogg Vorbis and MP3 files under their correct
+extensions.
+
 ### MIDI editing and expressive data
 
 `midi_clip_actions_e2e` covers mouse-accessible Half/Double time, semitone/octave
 transpose, selected-note flips, whole-audible-clip Quantize/Humanize previews,
-and **Loop this clip** for audio, MIDI and automation. It checks source/ghost
+and **Loop playback over clip** for audio, MIDI and automation. It checks source/ghost
 semantics, trimmed hidden material, bounds rejection, cancellation and exact
 Undo/Redo and portable recall.
 
@@ -1510,3 +1522,18 @@ the last selected clip's length, that the default **Snap grid** follows the
 zoom-dependent arranger grid, and that **Add track…** below the tracks and **Add
 track** in a track's context menu add tracks (the latter right after that track).
 Run with `cargo test --locked -p daw-app --test arranger_clip_consistency_e2e`.
+
+`named_note_rows_e2e` exercises instrument-provided note rows through the running app: R1 Drums and a real CLAP fixture, exact-pitch audition/drawing, sparse maps, piano fallback, and unmapped-note preservation. `scale_guide_e2e` verifies consistent fresh C-major harmony, independent explicit choices, and neutral note fills with a separate optional scale marker.
+
+`toolbar_geometry_e2e` drives Arranger, MIDI, audio, and automation toolbars in both themes at 1×/2× density and 800/1100/1200/1480-point widths. It inspects rendered icon colors and glyph bounds, label alignment, padding, complete hit targets, wrapping, and mouse tool actions without changing the project. The 1200-point case also guards the trailing View/Tool help controls against horizontal overflow.
+
+Toolbar explanations are exercised with real pointer hover and the normal tooltip
+delay in `toolbar_tooltips_e2e`, `editor_toolbar_tooltips_e2e`,
+`library_takes_toolbar_tooltips_e2e`, and `device_toolbar_tooltips_e2e`. These
+journeys check painted explanations and unavailable-action prerequisites while
+asserting that hovering leaves the project, history, and selection unchanged.
+`toolbar_geometry_e2e` also checks compact audio gain alignment; `beat_ruler_e2e`
+checks clock/cursor clearance and the MIDI local-origin baseline across editors.
+Shared `toolbar_hints`, `visual_clearance`, `tool_hint`, and `layout` regressions
+cover tooltip identity, complete hint clauses, envelope captions, readable
+fallback glyphs, and segmented-control alignment.

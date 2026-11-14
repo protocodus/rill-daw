@@ -1,0 +1,89 @@
+{
+  "status": "implemented and verified",
+  "reviewed_surfaces": [
+    "Arranger",
+    "Mixer",
+    "MIDI piano roll and named-note rows",
+    "Audio editor",
+    "Automation editor",
+    "Device browser",
+    "R1 instrument panel",
+    "Effects panel",
+    "Signal analysis",
+    "Routing",
+    "Setup appearance",
+    "Export audio",
+    "shared device components"
+  ],
+  "native_viewports": [
+    [
+      1480,
+      960
+    ],
+    [
+      1100,
+      720
+    ]
+  ],
+  "fixes": [
+    {
+      "issue": "Clock label collided with cursor head and loop ribbon",
+      "after": "13 px shared clearance below the ruler text, with Local remaining aligned",
+      "evidence": "../app-preview/scale-guide-dark-after-time-padding.png"
+    },
+    {
+      "issue": "Arranger and Mixer icons had five strokes",
+      "after": "Three clear track rows / channel strips"
+    },
+    {
+      "issue": "Toolbar hints were absent or only repeated control names",
+      "after": "Contextual explanations, values, outcomes and disabled prerequisites across transport/editors/browser/takes/device presets"
+    },
+    {
+      "issue": "Audio gain/fade numeric controls forced a taller height",
+      "after": "Use shared compact interaction height; gain and Pitch align with their row",
+      "before": "audio-dark-before-polish.png",
+      "after_image": "audio-dark-compact.png"
+    },
+    {
+      "issue": "MIDI Clip action disappeared at some wrapped widths",
+      "after": "Reserve measured group width before painting the controls"
+    },
+    {
+      "issue": "Toolbar guidance clipped a word as Select not\u2026",
+      "after": "Show only complete gesture clauses that fit; full instructions remain in Tool help"
+    },
+    {
+      "issue": "Workspace header actions used old icon spacing and height",
+      "after": "Apply compact toolbar metrics inside the unchanged title row"
+    },
+    {
+      "issue": "Automation segmented selector retained a 34 px height",
+      "after": "Use the same measured height as adjacent toolbar controls; normal forms keep their dimensions",
+      "before": "automation-light-before-polish.png"
+    },
+    {
+      "issue": "Envelope release line and endpoint handle overlapped its caption",
+      "after": "Reserve a measured caption band below the graph"
+    },
+    {
+      "issue": "Device fallback preview icons shrank below a readable size",
+      "after": "Maintain a 21 px icon box when preview space permits"
+    },
+    {
+      "issue": "Hovering a segmented selector could collide with a tooltip widget ID and panic",
+      "after": "Namespace selector option IDs; verify hover followed by click"
+    },
+    {
+      "issue": "Device browser total showed zero plug-ins while built-in devices were visible",
+      "after": "Count installed and built-in devices in the total"
+    },
+    {
+      "issue": "Signal analysis repeated its empty-state prompt in the footer",
+      "after": "Keep the prompt in the plot and identify the signal position in the footer"
+    }
+  ],
+  "native_screenshot_count": 18,
+  "before_after": "before-after.html",
+  "validation": "../verification.json"
+}

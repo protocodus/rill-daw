@@ -1,0 +1,269 @@
+{
+  "participant": "simulated novice 3",
+  "persona": "Hobby guitarist who understands pitches and rhythm but has never produced music on a computer; no prior RILL knowledge.",
+  "goal": "Create a short bass riff and a second higher melody using included instruments, adjust their balance, save and export the idea.",
+  "session": {
+    "first_interaction_utc": "2026-11-14T16:33:25Z",
+    "last_interaction_utc": "2026-11-14T16:49:08Z",
+    "duration_minutes": 15.72,
+    "genuine_input_actions": 111,
+    "screenshots": 65,
+    "input_log": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/mouse-actions.jsonl",
+    "chronological_notes": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/session-notes.jsonl",
+    "recording": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/session-recording.mkv"
+  },
+  "outcome": {
+    "status": "Mostly completed; audition blocked/confounded by audio environment",
+    "created": "Four-bar C minor sketch at 112 BPM, with existing Circuit drums, newly added R1 Mini Rubber Bass and R1 Mini Sync Lead.",
+    "bass": "One-bar C2, C2, D#2, G2 quarter-note riff repeated across four bars.",
+    "melody": "Two-bar eight-note C4, D#4, G4, A#4, G4, C5, A#4, G4 phrase repeated twice.",
+    "balance": "Visually set drums -10 dB, bass -2.5 dB, lead -8 dB; not judged by hearing.",
+    "saved_project": true,
+    "exported_wav": true,
+    "sound_verified_by_participant": false,
+    "final_evidence": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/064-final-arrangement.png"
+    ]
+  },
+  "chronological_discoveries": [
+    {
+      "order": 1,
+      "observation": "Add track > Add instrument track is readily visible. Browser has three built-in choices, but names do not immediately identify a bass sound.",
+      "evidence": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/002-instruments.png"
+      ]
+    },
+    {
+      "order": 2,
+      "observation": "R1 Mini preset menu offers clear Bass and Lead categories; presets provide a path through otherwise unfamiliar synthesis controls.",
+      "evidence": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/005-presets.png"
+      ]
+    },
+    {
+      "order": 3,
+      "observation": "Adding an instrument automatically creates a one-bar New pattern. Double-clicking it opens rename, while right-click Edit notes opens the piano editor.",
+      "evidence": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/007-note-editor.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/010-clip-context.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/011-edit-notes.png"
+      ]
+    },
+    {
+      "order": 4,
+      "observation": "Pencil tool hint explains note drawing and dragging for duration. Mouse wheel reaches bass register; displayed note names confirm chosen pitches.",
+      "evidence": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/012-bass-register.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/013-bass-notes.png"
+      ]
+    },
+    {
+      "order": 5,
+      "observation": "Duplicate is a tool activated before clicking the desired clip; its inline hint made this clear after first click had not duplicated anything.",
+      "evidence": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/018-duplicate.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/019-duplicate-result.png"
+      ]
+    },
+    {
+      "order": 6,
+      "observation": "Drawing melody notes beyond the existing clip end extends the clip automatically to two bars.",
+      "evidence": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/029-second-melody-bar.png"
+      ]
+    },
+    {
+      "order": 7,
+      "observation": "Audio failure banner offers Details, Retry playback, and Audio setup; switching the output briefly advanced transport but the failure returned.",
+      "evidence": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/031-audio-details.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/034-output-options.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/036-reconnected-later.png"
+      ]
+    },
+    {
+      "order": 8,
+      "observation": "Mixer faders and editable numeric values make provisional balance changes straightforward.",
+      "evidence": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/040-balanced-levels.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/041-volume-number.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/045-project-saved.png"
+      ]
+    },
+    {
+      "order": 9,
+      "observation": "Save as updates project title; Export audio displays duration, uses project filename/folder, and confirms completion.",
+      "evidence": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/045-project-saved.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/046-export-options.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/050-export-result.png"
+      ]
+    },
+    {
+      "order": 10,
+      "observation": "Mixer channel header context menu has Rename. Blue track color carries through to bass clips.",
+      "evidence": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/062-lead-context.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/064-final-arrangement.png"
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "id": "P3-01",
+      "title": "Opening a new pattern led to renaming before note entry",
+      "steps": [
+        "Add R1 Mini instrument track.",
+        "Close instrument panel.",
+        "Double-click New pattern rectangle.",
+        "Click Keyboard in resulting rename form.",
+        "Cancel and right-click pattern."
+      ],
+      "expected": "Open the pattern to enter musical notes; Keyboard might show musical keys.",
+      "observed": "Double-click opened a rename form. Keyboard showed a typing keyboard. Edit notes was discovered in context menu after roughly one minute.",
+      "severity": "moderate discoverability friction",
+      "evidence_image_paths": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/007-note-editor.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/009-keyboard.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/010-clip-context.png"
+      ],
+      "recovery": "Right-click > Edit notes. Subsequent melody editing used that route directly.",
+      "confidence": "high for observed behavior and participant detour; simulated novice expectation"
+    },
+    {
+      "id": "P3-02",
+      "title": "Bass/lead choice requires opening a technically dense instrument panel",
+      "steps": [
+        "Open Add instrument track.",
+        "Inspect built-in R1 Drums, R1 Mini, R1 Sampler.",
+        "Choose R1 Mini and Add instrument track."
+      ],
+      "expected": "Find a plainly named bass sound among included instruments.",
+      "observed": "Browser names alone did not communicate bass suitability. New panel initially showed Custom with many oscillator/filter/envelope controls. Bass and Lead names became clear in preset dropdown. Browser also said 0 plug-ins while All plug-ins showed 3.",
+      "severity": "minor learning friction",
+      "evidence_image_paths": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/002-instruments.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/004-mini-track.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/005-presets.png"
+      ],
+      "recovery": "Preset dropdown provided Bass Rubber Bass and Lead Sync Lead.",
+      "confidence": "high for visible content; medium for impact beyond this persona"
+    },
+    {
+      "id": "P3-03",
+      "title": "Loop this clip meaning differed from expected phrase repetition",
+      "steps": [
+        "Right-click one-bar Bass riff.",
+        "Choose Loop this clip while wanting a repeating bass phrase."
+      ],
+      "expected": "Create or expose repeated phrase blocks across arrangement.",
+      "observed": "Green playback range shortened to one bar; the arrangement still contained one bass clip.",
+      "severity": "minor terminology friction",
+      "evidence_image_paths": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/016-loop-riff-menu.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/017-loop-enabled.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/018-duplicate.png"
+      ],
+      "recovery": "Used Duplicate tool and its visible instruction to create three additional bars.",
+      "confidence": "high for observed result; medium for terminology interpretation"
+    },
+    {
+      "id": "P3-E1",
+      "title": "Audio output failures blocked reliable audition",
+      "classification": "environment-confounded; do not treat as established RILL defect",
+      "steps": [
+        "Click Play after drawing bass.",
+        "Observe unchanged time across screenshots.",
+        "Later respond to Audio output stream failed banner.",
+        "Choose Retry playback, Details, Audio setup.",
+        "Switch System default to visible Rill lab paced output and Apply."
+      ],
+      "expected": "Hear composition and see advancing playhead.",
+      "observed": "Initial Pause state stayed at 0:00.00. Later banner reported ALSA I/O error (5). Alternate output advanced to 0:00.83 then failed again.",
+      "severity": "high session limitation",
+      "evidence_image_paths": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/014-bass-play.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/015-bass-play-later.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/029-second-melody-bar.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/031-audio-details.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/036-reconnected-later.png"
+      ],
+      "recovery": "Continued composition visually; saved and exported successfully. Reliable audition remained unresolved.",
+      "confidence": "high for UI failure and limited transport; cause unassigned"
+    },
+    {
+      "id": "P3-E2",
+      "title": "Track name typing after native file picker was ignored",
+      "classification": "environment-confounded; coordinator identified Xvfb focus issue",
+      "steps": [
+        "After native save/export dialogs, double-click mixer bass header.",
+        "Open Track tab and click Name.",
+        "Type Rubber bass using physical keys."
+      ],
+      "expected": "Name field changes to entered text.",
+      "observed": "Name remained R1 Mini. Keyboard button opened a rename form where typing and Apply name succeeded. Coordinator reported keyboard focus on Xvfb root after native pickers and corrected driver.",
+      "severity": "minor session delay",
+      "evidence_image_paths": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/058-track-reopen.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/059-track-name-typed.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/060-track-keyboard.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/061-name-applied.png"
+      ],
+      "recovery": "Keyboard rename form; later direct context-menu Rename worked.",
+      "confidence": "high that typing was ignored; low as application finding due known focus confound"
+    }
+  ],
+  "successes": [
+    "Added two built-in instruments without documentation.",
+    "Used musically labeled presets to obtain bass and lead roles.",
+    "Created intentional pitches and rhythmic durations with mouse drags.",
+    "Extended a clip naturally by drawing beyond its endpoint.",
+    "Built four-bar arrangement through visible Duplicate tool.",
+    "Adjusted three track levels with faders and precise numeric entry.",
+    "Renamed tracks and colored bass for easier identification.",
+    "Saved editable project and exported WAV through native UI with success feedback."
+  ],
+  "unresolved_questions": [
+    "How does this arrangement actually sound and is the provisional balance musically appropriate?",
+    "Was export-banner Play supposed to preview in RILL or launch another player? It disappeared with no other visible change.",
+    "Does the exported WAV contain the intended full musical result? UI success and nonzero file size were verified, but no listening judgment was made."
+  ],
+  "saved_artifacts": [
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/exports/C-minor-guitarist-idea.rill",
+      "kind": "editable project",
+      "verification": "Save as title change, later Ctrl+S cleared unsaved marker; file exists with nonzero size"
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/exports/C-minor-guitarist-idea.wav",
+      "kind": "audio export",
+      "verification": "Exported confirmation banner, file exists with nonzero size"
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/session-notes.jsonl",
+      "kind": "chronological observations"
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/mouse-actions.jsonl",
+      "kind": "native input and screenshot log"
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/session-recording.mkv",
+      "kind": "coordinator desktop/audio recording"
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots",
+      "kind": "65 screenshots"
+    }
+  ],
+  "limitations": [
+    "This is a simulated novice participant, not an empirical human interview.",
+    "Actions were chosen from native screenshots only. No source, tests, repository docs beyond mandatory AGENTS.md, application internals, other participant findings, or headless music edits were used.",
+    "Started with provided Midnight circuit project containing a drum loop; task was not tested from completely empty project.",
+    "No audio was personally heard or evaluated. Coordinator separately reported nonzero recording signal, which is insufficient to establish correct musical playback.",
+    "Audio output failure and Xvfb keyboard focus issue confound audition and some input observations.",
+    "First loop-range drag ended short of target; second reached bar five. Coordinate/drag mechanics may contribute, so this is not presented as a confirmed application bug.",
+    "Final project was saved after track name/color changes. WAV was exported before those non-audio changes; musical content and level settings match.",
+    "Artifact existence/size listing at end was bookkeeping only; project internals and exported audio contents were not inspected."
+  ]
+}

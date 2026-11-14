@@ -1,0 +1,30 @@
+
+running 1 test
+test tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboard ... FAILED
+
+failures:
+
+---- tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboard stdout ----
+
+thread 'tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboard' (22736) panicked at crates/daw-app/tests/tool_hints_e2e.rs:67:5:
+assertion `left == right` failed: Missing or repeated tool help Select · Q: ["Previous","Next","Tool help","Fit","Fit selection","RILL","File","Edit","Track","Window","Help","AI","Hints · 0:04","Arranger","Mixer","Start","Play","Stop","Record","1.1.1","0:00.00","120.0 BPM","−","+","123","4/4","Click","Loop","Range","Properties","AI for this context","Choose instrument…","Back","Clip Editor · Hint phrase","Song 1:1–3:1 · Hint notes","Select","Cursor","Pencil","Multi-draw","Cut","Glue","Erase","Duplicate","Snap grid","Length last","Scale guide C · Major","Notes","Generate…","View","−","+","Select notes · Drag to move or resize","C4","1","0:00","2","0:02","3","0:04","4","0:06","Local","Clip end","Velocity","C4"]
+  left: 0
+ right: 1
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+   1: core::panicking::panic_fmt
+   2: core::panicking::assert_failed_inner
+   3: core::panicking::assert_failed::<usize, usize>
+   4: tool_hints_e2e::hint
+   5: tool_hints_e2e::disclosed_hint
+   6: tool_hints_e2e::tools
+   7: tool_hints_e2e::tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboard
+   8: tool_hints_e2e::tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboard::{closure#0}
+   9: <tool_hints_e2e::tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboard::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+
+failures:
+    tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboard
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 10.88s

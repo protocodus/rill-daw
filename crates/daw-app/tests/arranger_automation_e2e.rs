@@ -109,7 +109,7 @@ fn pattern_copy_paste_derivation_and_both_trim_edges_preserve_source_points() {
     assert_eq!(lane(&pasted)["clips"][2]["start"], 8.0);
     assert!(lane(&pasted)["clips"][2]["link_group"].is_null());
     click(&mut app, pattern_header(&pasted, 0), "secondary");
-    let copied = app.click("Duplicate");
+    let copied = app.click("Duplicate after");
     let duplicate = lane(&copied)["clips"][3]["id"].as_u64().unwrap();
     assert_ne!(duplicate, original);
     app.click("Select");

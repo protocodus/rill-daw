@@ -144,7 +144,7 @@ impl DawApp {
                     daw_ui::IconButton::with_icon(daw_ui::Icon::Arranger, "Show in Arranger")
                         .quiet()
                 })
-                .on_hover_text("Reveal this channel's track in Arrangement")
+                .on_hover_text("Open Arrangement and reveal this channel's track")
                 .clicked()
         {
             self.show_channel_in_arranger(track);
@@ -170,8 +170,8 @@ impl DawApp {
         })
         .response
         .on_hover_text(match order {
-            MixerOrder::SignalFlow => "Channel order follows the signal graph. Choose Song order to drag channels.",
-            MixerOrder::Song => "Channel order follows Arrangement. Drag channel names to reorder.",
+            MixerOrder::SignalFlow => "Choose how channels are arranged. Channel order follows the signal graph; choose Song order to drag channels.",
+            MixerOrder::Song => "Choose how channels are arranged. Channel order follows Arrangement; drag channel names to reorder.",
         });
         if order != previous {
             egui::DragAndDrop::clear_payload(ui.ctx());

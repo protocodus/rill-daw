@@ -1,0 +1,298 @@
+<div id="rill-ux-proposals">
+  <div class="viz-controls">
+    <label class="form-label">Proposal
+      <select class="form-select" id="rill-proposal-choice">
+        <option value="P1">P1 · Open the music editor directly</option>
+        <option value="P2">P2 · Playable starter sounds</option>
+        <option value="P3">P3 · Named drum rows</option>
+        <option value="P4">P4 · Sound choices and device identity</option>
+        <option value="P5">P5 · Coherent scale guidance</option>
+        <option value="P6">P6 · Clear action names</option>
+      </select>
+    </label>
+  </div>
+  <div id="rill-proposal-meta" class="text-small text-muted" aria-live="polite">5/5 sessions · First priority · Medium scope</div>
+
+  <section data-proposal="P1" aria-label="Direct note editing comparison">
+    <div class="rill-comparison">
+      <div><h3>Before</h3><div class="rill-mock" aria-label="Current clip interaction">
+        <div class="rill-shell"><strong>RILL</strong><span>Arranger</span><span class="rill-dim">Select</span></div>
+        <div class="rill-track"><span>R1 Mini</span><button class="rill-clip cursor-interaction" data-before-edit aria-label="Double-click New pattern">New pattern<span class="rill-hint">Double-click</span></button></div>
+        <div class="rill-dialog" data-before-dialog>
+          <div class="rill-heading">Rename clip</div>
+          <label>Name<input value="New pattern" aria-label="Current clip name"></label>
+          <div class="rill-actions"><button class="cursor-interaction" data-typing>Keyboard</button><button class="cursor-interaction">Apply name</button></div>
+          <div class="rill-typing" hidden>Q W E R T Y U I O P<br>A S D F G H J K L</div>
+        </div>
+        <div class="rill-foot">Right-click → Edit notes</div>
+      </div></div>
+      <div><h3>After · proposed</h3><div class="rill-mock" aria-label="Proposed direct note editing">
+        <div class="rill-shell"><strong>RILL</strong><span data-after-workspace>Clip Editor</span><button class="cursor-interaction" data-back-arranger>Back</button></div>
+        <div class="rill-track" data-after-arranger hidden><span>R1 Mini</span><button class="rill-clip cursor-interaction" data-after-edit aria-label="Double-click to edit notes">New pattern<span class="rill-hint">Double-click to edit notes</span></button></div>
+        <div class="rill-editor" data-after-editor>
+          <div class="rill-heading">Clip Editor · New pattern</div>
+          <div class="rill-actions"><button class="rill-active cursor-interaction">Pencil</button><span>Draw notes · Drag to set length</span></div>
+          <div class="rill-note-grid" aria-label="Illustrative piano roll"><div>C5</div><div></div><div>G4<span class="rill-note" style="left:34%;width:24%"></span></div><div></div><div>C4<span class="rill-note" style="left:8%;width:24%"></span></div></div>
+        </div>
+        <div class="rill-foot">Right-click → Rename… · Typing keyboard</div>
+      </div></div>
+    </div>
+  </section>
+
+  <section data-proposal="P2" aria-label="Playable sampled instruments comparison" hidden>
+    <div class="rill-comparison">
+      <div><h3>Before</h3><div class="rill-mock">
+        <div class="rill-shell"><strong>R1 Drums</strong><span>Preset · Electro</span></div>
+        <div class="rill-pad-grid">
+          <button class="cursor-interaction">1<small>Empty</small></button><button class="cursor-interaction">2<small>Empty</small></button><button class="cursor-interaction">3<small>Empty</small></button><button class="cursor-interaction">4<small>Empty</small></button>
+          <button class="cursor-interaction">5<small>Empty</small></button><button class="cursor-interaction">6<small>Empty</small></button><button class="cursor-interaction">7<small>Empty</small></button><button class="cursor-interaction">8<small>Empty</small></button>
+        </div>
+        <div class="rill-empty">No sample<button class="cursor-interaction">Load sample…</button></div>
+        <div class="rill-divider"></div>
+        <div class="rill-heading">R1 Sampler · Plucked Keys</div>
+        <div class="rill-empty">No sample<button class="cursor-interaction">Load sample…</button></div>
+      </div></div>
+      <div><h3>After · proposed</h3><div class="rill-mock">
+        <div class="rill-shell"><strong>R1 Drums</strong><span>Rill Starter Kit</span></div>
+        <label class="rill-field">Preset<select aria-label="Proposed drum preset"><optgroup label="Sounds — includes samples"><option>Rill Starter Kit</option></optgroup><optgroup label="Settings — keeps your samples"><option>Kit settings · Electro</option><option>Kit settings · GM mapping</option></optgroup></select></label>
+        <div class="rill-pad-grid" data-demo-pads>
+          <button class="cursor-interaction" data-pad="Kick">1<small>Kick</small></button><button class="cursor-interaction" data-pad="Rim">2<small>Rim</small></button><button class="cursor-interaction" data-pad="Snare">3<small>Snare</small></button><button class="cursor-interaction" data-pad="Clap">4<small>Clap</small></button>
+          <button class="cursor-interaction" data-pad="Low tom">5<small>Low tom</small></button><button class="cursor-interaction" data-pad="Closed hat">7<small>Closed hat</small></button><button class="cursor-interaction" data-pad="Open hat">11<small>Open hat</small></button><button class="cursor-interaction" data-pad="Shaker">12<small>Shaker</small></button>
+        </div>
+        <div class="rill-foot" data-pad-status aria-live="polite">Starter kit loaded · 16 pads</div>
+        <div class="rill-divider"></div>
+        <div class="rill-heading">R1 Sampler · Starter Keys</div>
+        <div class="rill-sample"><span class="rill-wave" aria-hidden="true">▂▆█▅▃▇▅▂▃▅▂▁</span><span>Starter Keys · Sample loaded</span></div>
+        <div class="rill-actions"><button class="cursor-interaction">Use starter sound</button><button class="cursor-interaction">Load sample…</button></div>
+      </div></div>
+    </div>
+  </section>
+
+  <section data-proposal="P3" aria-label="Named drum editor comparison" hidden>
+    <div class="rill-comparison">
+      <div><h3>Before</h3><div class="rill-mock">
+        <div class="rill-shell"><strong>Clip Editor</strong><span>R1 Drums</span></div>
+        <div class="rill-actions"><button class="cursor-interaction">Generate chord…</button><span>Key C · Natural minor</span></div>
+        <div class="rill-note-grid rill-tall" aria-label="Current pitched drum grid"><div>C5</div><div></div><div>F4<span class="rill-note" style="left:31%;width:10%"></span></div><div>D4<span class="rill-note" style="left:56%;width:10%"></span></div><div>C4<span class="rill-note" style="left:7%;width:10%"></span><span class="rill-note" style="left:81%;width:10%"></span></div><div>C3</div></div>
+        <div class="rill-foot">Pitched rows · No pad names</div>
+      </div></div>
+      <div><h3>After · proposed</h3><div class="rill-mock">
+        <div class="rill-shell"><strong>Clip Editor</strong><span>R1 Drums</span></div>
+        <div class="rill-actions"><button class="rill-active cursor-interaction">Drum rows</button><button class="cursor-interaction" data-other-notes>Piano roll</button><span>Snap 1/16</span></div>
+        <div class="rill-drum-grid" data-drum-grid aria-label="Proposed drum rows; click a cell to toggle a note">
+          <div class="rill-drum-row"><button class="rill-row-label cursor-interaction" data-pad="Kick">Kick<small>Pad 1 · MIDI 36</small></button><div class="rill-steps"><button class="is-note cursor-interaction" aria-label="Kick beat 1" aria-pressed="true"></button><button class="cursor-interaction" aria-label="Kick beat 1 and" aria-pressed="false"></button><button class="is-note cursor-interaction" aria-label="Kick beat 2" aria-pressed="true"></button><button class="cursor-interaction" aria-label="Kick beat 2 and" aria-pressed="false"></button><button class="is-note cursor-interaction" aria-label="Kick beat 3" aria-pressed="true"></button><button class="cursor-interaction" aria-label="Kick beat 3 and" aria-pressed="false"></button><button class="is-note cursor-interaction" aria-label="Kick beat 4" aria-pressed="true"></button><button class="cursor-interaction" aria-label="Kick beat 4 and" aria-pressed="false"></button></div></div>
+          <div class="rill-drum-row"><button class="rill-row-label cursor-interaction" data-pad="Snare">Snare<small>Pad 3 · MIDI 38</small></button><div class="rill-steps"><button class="cursor-interaction" aria-label="Snare step 1" aria-pressed="false"></button><button class="cursor-interaction" aria-label="Snare step 2" aria-pressed="false"></button><button class="is-note cursor-interaction" aria-label="Snare step 3" aria-pressed="true"></button><button class="cursor-interaction" aria-label="Snare step 4" aria-pressed="false"></button><button class="cursor-interaction" aria-label="Snare step 5" aria-pressed="false"></button><button class="cursor-interaction" aria-label="Snare step 6" aria-pressed="false"></button><button class="is-note cursor-interaction" aria-label="Snare step 7" aria-pressed="true"></button><button class="cursor-interaction" aria-label="Snare step 8" aria-pressed="false"></button></div></div>
+          <div class="rill-drum-row"><button class="rill-row-label cursor-interaction" data-pad="Closed hat">Closed hat<small>Pad 7 · MIDI 42</small></button><div class="rill-steps"><button class="is-note cursor-interaction" aria-label="Hat step 1" aria-pressed="true"></button><button class="is-note cursor-interaction" aria-label="Hat step 2" aria-pressed="true"></button><button class="is-note cursor-interaction" aria-label="Hat step 3" aria-pressed="true"></button><button class="is-note cursor-interaction" aria-label="Hat step 4" aria-pressed="true"></button><button class="is-note cursor-interaction" aria-label="Hat step 5" aria-pressed="true"></button><button class="is-note cursor-interaction" aria-label="Hat step 6" aria-pressed="true"></button><button class="is-note cursor-interaction" aria-label="Hat step 7" aria-pressed="true"></button><button class="is-note cursor-interaction" aria-label="Hat step 8" aria-pressed="true"></button></div></div>
+          <div class="rill-drum-row"><button class="rill-row-label cursor-interaction" data-pad="Pad 16">Pad 16<small>Empty · Load sample</small></button><div class="rill-steps rill-empty-row"></div></div>
+        </div>
+        <div class="rill-actions"><button class="cursor-interaction" data-other-notes>Other MIDI notes (40)</button><span data-drum-status aria-live="polite">Velocity · 100</span></div>
+        <div class="rill-foot">Existing Clip Editor · All note data retained</div>
+      </div></div>
+    </div>
+  </section>
+
+  <section data-proposal="P4" aria-label="Sound discovery and device identity comparison" hidden>
+    <div class="rill-comparison">
+      <div><h3>Before</h3><div class="rill-mock">
+        <div class="rill-shell"><strong>Device browser</strong><span>0 plug-ins</span></div>
+        <div class="rill-actions">All plug-ins · 3</div>
+        <div class="rill-device"><strong>R1 Mini</strong><span>Rill</span><div class="rill-controls-abstract">VCO · DCO · ENV · LFO</div></div>
+        <div class="rill-actions"><button class="cursor-interaction">Add instrument track</button></div>
+        <div class="rill-divider"></div>
+        <div class="rill-heading">Instrument of R1 Sampler</div>
+        <div class="rill-actions">Preset · Custom</div><div class="rill-controls-abstract">OSC 1 · OSC 2 · FILTER · ENVELOPE</div>
+      </div></div>
+      <div><h3>After · proposed</h3><div class="rill-mock">
+        <div class="rill-shell"><strong>Device browser</strong><span>3 instruments</span></div>
+        <div class="rill-actions">All devices · 3<span>Built-in (R1) · 3</span></div>
+        <div class="rill-device"><strong>R1 Mini</strong><span>Synth · bass, leads, pads</span>
+          <label>Sound<select aria-label="Built-in synth sound"><optgroup label="Bass"><option>Rubber Bass</option><option>Acid Line</option></optgroup><optgroup label="Lead"><option>Sync Lead</option></optgroup><optgroup label="Pad"><option>String Pad</option></optgroup></select></label></div>
+        <div class="rill-actions"><button class="rill-active cursor-interaction" data-add-sound>Add instrument track</button></div>
+        <div class="rill-divider"></div>
+        <div class="rill-heading">R1 Mini</div><div class="rill-actions">Track: R1 Sampler<span data-sound-status>Preset · Rubber Bass</span></div>
+        <div class="rill-foot">Track name stays yours · Device name stays accurate</div>
+      </div></div>
+    </div>
+  </section>
+
+  <section data-proposal="P5" aria-label="Scale guidance comparison" hidden>
+    <div class="rill-comparison">
+      <div><h3>Before</h3><div class="rill-mock">
+        <div class="rill-shell"><strong>Clip Editor</strong><span>Key C · Natural minor</span></div>
+        <div class="rill-actions">Generate · C major triad<button class="cursor-interaction">Add notes</button></div>
+        <div class="rill-note-grid rill-tall"><div>G4<span class="rill-note" style="left:12%;width:66%">G4</span></div><div></div><div>E4<span class="rill-note rill-warning" style="left:12%;width:66%">E4</span></div><div></div><div>C4<span class="rill-note" style="left:12%;width:66%">C4</span></div></div>
+        <div class="rill-foot">Major chord · Minor scale coloring</div>
+      </div></div>
+      <div><h3>After · proposed</h3><div class="rill-mock">
+        <div class="rill-shell"><strong>Clip Editor</strong><label>Scale guide<select aria-label="Proposed scale guide" data-scale-choice><option value="major">C major</option><option value="minor">C natural minor</option></select></label></div>
+        <div class="rill-actions">Generate · C major triad<button class="cursor-interaction">Add notes</button></div>
+        <div class="rill-note-grid rill-tall"><div>G4<span class="rill-note" style="left:12%;width:66%">G4</span></div><div></div><div>E4<span class="rill-note" data-third style="left:12%;width:66%">E4</span></div><div></div><div>C4<span class="rill-note" style="left:12%;width:66%">C4</span></div></div>
+        <div class="rill-foot" data-scale-status aria-live="polite">C major guide · C major chord</div>
+      </div></div>
+    </div>
+  </section>
+
+  <section data-proposal="P6" aria-label="Action naming comparison" hidden>
+    <div class="rill-comparison">
+      <div><h3>Before</h3><div class="rill-mock">
+        <div class="rill-shell"><strong>Clip menu</strong></div>
+        <div class="rill-menu"><div>Loop this clip</div><div>Freeze clip</div><div>Mute clip</div><div class="rill-menu-gap"></div><div>Duplicate</div><div>Loop playback over selection</div></div>
+        <div class="rill-divider"></div><div class="rill-heading">File</div>
+        <div class="rill-menu"><div>Export WAV…</div></div>
+        <div class="rill-actions">Type · WAV<span>Format · 32-bit float</span></div>
+      </div></div>
+      <div><h3>After · proposed</h3><div class="rill-mock">
+        <div class="rill-shell"><strong>Clip menu</strong></div>
+        <div class="rill-menu"><button class="cursor-interaction" data-result="Playback range set to clip; clip count stays the same.">Loop playback over clip</button><button class="cursor-interaction" data-result="One independent copy placed after the clip.">Duplicate after</button><button class="cursor-interaction" data-result="Copies fill the existing loop range; one Undo operation.">Repeat to loop end</button><div class="rill-dim">Freeze clip</div><div class="rill-dim">Mute clip</div></div>
+        <div class="rill-foot" data-action-status aria-live="polite">Playback range and arrangement copies are distinct</div>
+        <div class="rill-divider"></div><div class="rill-heading">File</div>
+        <div class="rill-menu"><button class="cursor-interaction" data-export-menu>Export audio…</button></div>
+        <div class="rill-actions"><label>File type<select data-export-type aria-label="Export file type"><option>WAV</option><option>FLAC</option><option>Ogg Vorbis</option><option>MP3</option></select></label><label data-bit-depth>Bit depth<select aria-label="Export bit depth"><option value="32-bit float">32-bit float</option><option>24-bit PCM</option><option>16-bit PCM</option></select></label></div>
+      </div></div>
+    </div>
+  </section>
+  <div class="text-small text-muted rill-preview-label">Interaction mockups · No audio playback · Proposed behavior awaiting approval</div>
+</div>
+
+<style>
+#rill-ux-proposals{display:grid;gap:calc(var(--font-size-base)*1)}
+#rill-ux-proposals [hidden]{display:none!important}
+#rill-ux-proposals .rill-comparison{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:calc(var(--font-size-base)*1)}
+#rill-ux-proposals .rill-comparison h3{margin-bottom:calc(var(--font-size-base)*.5)}
+#rill-ux-proposals .rill-mock{--r-bg:light-dark(#f4f5f6,#171a1e);--r-panel:light-dark(#ffffff,#22262c);--r-fg:light-dark(#202832,#e2e5ea);--r-dim:light-dark(#586471,#abb3bd);--r-line:light-dark(#d7dce2,#3c424c);--r-field:light-dark(#e9edf1,#2c3139);--r-blue:light-dark(#1763a1,#83bff2);--r-note:light-dark(#8dacc5,#a2b2c2);--r-note-ink:light-dark(#112736,#142735);--r-warn:light-dark(#a32236,#f79aa4);--r-outside:light-dark(#8e6815,#eac270);background:var(--r-bg);color:var(--r-fg);font:14px/1.45 Inter,system-ui,sans-serif;border:1px solid var(--r-line);border-radius:9px;overflow:hidden;min-width:0;min-height:390px;padding-bottom:12px}
+#rill-ux-proposals .rill-mock *{box-sizing:border-box}
+#rill-ux-proposals .rill-mock strong{font-weight:600}
+#rill-ux-proposals .rill-shell{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:12px 14px;background:var(--r-panel);border-bottom:1px solid var(--r-line)}
+#rill-ux-proposals .rill-shell>span:last-child{margin-left:auto}
+#rill-ux-proposals .rill-mock label{display:grid;gap:5px;min-width:0}
+#rill-ux-proposals .rill-mock button,#rill-ux-proposals .rill-mock select,#rill-ux-proposals .rill-mock input{font:inherit;color:var(--r-fg);background:var(--r-field);border:1px solid var(--r-line);border-radius:5px;min-height:32px;padding:5px 9px;max-width:100%}
+#rill-ux-proposals .rill-mock button:hover{border-color:var(--r-blue)}
+#rill-ux-proposals .rill-mock select,#rill-ux-proposals .rill-mock input{width:100%}
+#rill-ux-proposals .rill-mock small{display:block;font-size:12px;color:var(--r-dim)}
+#rill-ux-proposals .rill-mock .rill-active{background:var(--r-blue);color:light-dark(#fff,#132635);border-color:var(--r-blue)}
+#rill-ux-proposals .rill-dim,#rill-ux-proposals .rill-hint{color:var(--r-dim)}
+#rill-ux-proposals .rill-heading{font-weight:600;padding:10px 14px}
+#rill-ux-proposals .rill-track{display:grid;grid-template-columns:80px minmax(0,1fr);align-items:center;gap:12px;padding:20px 14px;border-bottom:1px solid var(--r-line)}
+#rill-ux-proposals .rill-mock .rill-clip{min-height:62px;text-align:left;border-left:3px solid var(--r-blue);background:var(--r-field)}
+#rill-ux-proposals .rill-hint{display:block;font-size:12px;margin-top:8px}
+#rill-ux-proposals .rill-dialog{margin:16px 14px;background:var(--r-panel);border:1px solid var(--r-line);border-radius:7px;padding:0 12px 12px}
+#rill-ux-proposals .rill-dialog .rill-heading{padding-left:0}
+#rill-ux-proposals .rill-actions{display:flex;flex-wrap:wrap;align-items:center;gap:9px;padding:10px 14px;color:var(--r-dim)}
+#rill-ux-proposals .rill-dialog .rill-actions{padding:10px 0 0}
+#rill-ux-proposals .rill-actions label{flex:1;min-width:100px}
+#rill-ux-proposals .rill-foot{padding:10px 14px;color:var(--r-dim);font-size:12px;min-height:36px}
+#rill-ux-proposals .rill-note-grid{margin:0 14px;border:1px solid var(--r-line);background:repeating-linear-gradient(to right,transparent 0,transparent calc(25% - 1px),var(--r-line) calc(25% - 1px),var(--r-line) 25%)}
+#rill-ux-proposals .rill-note-grid>div{height:26px;position:relative;border-bottom:1px solid var(--r-line);font-size:12px;padding-left:4px;color:var(--r-dim)}
+#rill-ux-proposals .rill-note-grid.rill-tall>div{height:39px}
+#rill-ux-proposals .rill-note{position:absolute;top:3px;bottom:3px;background:var(--r-note);border-radius:3px;color:var(--r-note-ink);padding:2px 5px;min-width:0}
+#rill-ux-proposals .rill-note.rill-warning{background:var(--r-warn);color:light-dark(#fff,#35171e)}
+#rill-ux-proposals .rill-note.rill-outside{outline:2px solid var(--r-outside);outline-offset:-2px}
+#rill-ux-proposals .rill-typing{line-height:2;letter-spacing:4px;margin-top:12px;overflow-wrap:anywhere}
+#rill-ux-proposals .rill-pad-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;padding:14px}
+#rill-ux-proposals .rill-pad-grid button{height:62px;text-align:left}
+#rill-ux-proposals .rill-pad-grid button.is-hit{border-color:var(--r-blue);box-shadow:inset 0 0 0 1px var(--r-blue)}
+#rill-ux-proposals .rill-empty{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px;flex-wrap:wrap;color:var(--r-dim)}
+#rill-ux-proposals .rill-divider{height:1px;background:var(--r-line);margin:8px 14px}
+#rill-ux-proposals .rill-field{margin:14px 14px 0}
+#rill-ux-proposals .rill-sample{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:0 14px;padding:12px;background:var(--r-panel);border-radius:5px}
+#rill-ux-proposals .rill-wave{color:var(--r-blue);letter-spacing:3px}
+#rill-ux-proposals .rill-drum-grid{margin:8px 14px;border-top:1px solid var(--r-line)}
+#rill-ux-proposals .rill-drum-row{display:grid;grid-template-columns:112px minmax(0,1fr);border-bottom:1px solid var(--r-line);min-height:48px}
+#rill-ux-proposals .rill-mock .rill-row-label{border:0;border-radius:0;background:var(--r-panel);text-align:left;padding:6px}
+#rill-ux-proposals .rill-steps{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:0;background:var(--r-bg)}
+#rill-ux-proposals .rill-steps button{border:0;border-radius:0;border-left:1px solid var(--r-line);background:transparent;padding:0;min-height:48px;position:relative}
+#rill-ux-proposals .rill-steps button.is-note:after{content:"";position:absolute;inset:12px 3px;background:var(--r-note);border-radius:3px}
+#rill-ux-proposals .rill-empty-row{background:repeating-linear-gradient(to right,transparent 0,transparent calc(12.5% - 1px),var(--r-line) calc(12.5% - 1px),var(--r-line) 12.5%)}
+#rill-ux-proposals .rill-device{display:grid;gap:8px;padding:14px;margin:5px 14px;background:var(--r-panel);border:1px solid var(--r-line);border-radius:6px}
+#rill-ux-proposals .rill-controls-abstract{margin:10px 14px;padding:24px 12px;border:1px solid var(--r-line);border-radius:5px;color:var(--r-dim);line-height:2;letter-spacing:1px}
+#rill-ux-proposals .rill-device .rill-controls-abstract{margin:0}
+#rill-ux-proposals .rill-menu{display:grid;margin:10px 14px;gap:3px}
+#rill-ux-proposals .rill-menu>div,#rill-ux-proposals .rill-menu>button{padding:6px 9px;text-align:left}
+#rill-ux-proposals .rill-menu .rill-menu-gap{height:16px;padding:0}
+@media(max-width:740px){#rill-ux-proposals .rill-comparison{grid-template-columns:minmax(0,1fr)}#rill-ux-proposals .rill-mock{min-height:0}}
+@media(pointer:coarse){#rill-ux-proposals .rill-mock button,#rill-ux-proposals .rill-mock select,#rill-ux-proposals .rill-mock input{min-height:44px}#rill-ux-proposals .rill-mock input,#rill-ux-proposals .rill-mock select{font-size:16px}#rill-ux-proposals .rill-steps{grid-template-columns:repeat(4,minmax(44px,1fr))}#rill-ux-proposals .rill-drum-row{grid-template-columns:92px minmax(0,1fr)}}
+</style>
+
+<script>
+(() => {
+  const root = document.getElementById('rill-ux-proposals');
+  const choice = root.querySelector('#rill-proposal-choice');
+  const meta = root.querySelector('#rill-proposal-meta');
+  const descriptions = {
+    P1: '5/5 sessions · First priority · Medium scope',
+    P2: '3/5 sessions · First priority · Medium–large scope: original samples + loading',
+    P3: '1/5 sessions + saved-project proof · First priority · Medium scope',
+    P4: '4/5 noticed device counts · Next priority · Small–medium scope',
+    P5: '1/5 sessions · Next priority · Small–medium scope',
+    P6: '2/5 sessions · Next priority · Small scope'
+  };
+  function show(id) {
+    if (!descriptions[id]) id = 'P1';
+    choice.value = id;
+    root.querySelectorAll('[data-proposal]').forEach(panel => { panel.hidden = panel.dataset.proposal !== id; });
+    meta.textContent = descriptions[id];
+  }
+  show(window.openai?.widgetState?.privateContent?.proposal || 'P1');
+  choice.addEventListener('change', () => {
+    show(choice.value);
+    window.openai?.setWidgetState?.({ modelContent: null, privateContent: { proposal: choice.value } })?.catch(() => {});
+  });
+  window.addEventListener('openai:set_globals', event => {
+    const state = event.detail?.globals?.widgetState?.privateContent;
+    if (state?.proposal) show(state.proposal);
+  });
+  root.querySelector('[data-typing]').addEventListener('click', () => {
+    const keyboard = root.querySelector('.rill-typing'); keyboard.hidden = !keyboard.hidden;
+  });
+  root.querySelector('[data-before-edit]').addEventListener('dblclick', () => {
+    root.querySelector('[data-before-dialog] input').focus();
+  });
+  root.querySelector('[data-after-edit]').addEventListener('dblclick', () => {
+    root.querySelector('[data-after-arranger]').hidden = true;
+    root.querySelector('[data-after-editor]').hidden = false;
+    root.querySelector('[data-back-arranger]').hidden = false;
+    root.querySelector('[data-after-workspace]').textContent = 'Clip Editor';
+    root.querySelector('[data-after-editor] button').focus();
+  });
+  root.querySelector('[data-back-arranger]').addEventListener('click', () => {
+    root.querySelector('[data-after-arranger]').hidden = false;
+    root.querySelector('[data-after-editor]').hidden = true;
+    root.querySelector('[data-back-arranger]').hidden = true;
+    root.querySelector('[data-after-workspace]').textContent = 'Arranger';
+  });
+  root.querySelectorAll('[data-demo-pads] button').forEach(button => button.addEventListener('click', () => {
+    root.querySelectorAll('[data-demo-pads] button').forEach(pad => pad.classList.remove('is-hit'));
+    button.classList.add('is-hit');
+    root.querySelector('[data-pad-status]').textContent = button.dataset.pad + ' selected · Mockup only, no audio';
+  }));
+  root.querySelectorAll('.rill-steps button').forEach(button => button.addEventListener('click', () => {
+    const active = button.classList.toggle('is-note'); button.setAttribute('aria-pressed', String(active));
+    root.querySelector('[data-drum-status]').textContent = active ? 'Note added to the mapped pad row' : 'Note removed from the mapped pad row';
+  }));
+  root.querySelectorAll('.rill-row-label').forEach(button => button.addEventListener('click', () => {
+    root.querySelector('[data-drum-status]').textContent = button.dataset.pad + ' selected · Mockup only, no audio';
+  }));
+  root.querySelectorAll('[data-other-notes]').forEach(button => button.addEventListener('click', () => {
+    root.querySelector('[data-drum-status]').textContent = 'Piano roll: unmapped notes remain available and unchanged';
+  }));
+  root.querySelector('[data-add-sound]').addEventListener('click', () => {
+    const select = root.querySelector('[data-proposal="P4"] .rill-device select');
+    root.querySelector('[data-sound-status]').textContent = 'Preset · ' + select.value;
+  });
+  root.querySelector('[data-scale-choice]').addEventListener('change', event => {
+    const outside = event.target.value === 'minor';
+    root.querySelector('[data-third]').classList.toggle('rill-outside', outside);
+    root.querySelector('[data-scale-status]').textContent = outside ? 'E4 · Outside the selected scale guide · Notes unchanged' : 'C major guide · C major chord';
+  });
+  root.querySelectorAll('[data-result]').forEach(button => button.addEventListener('click', () => {
+    root.querySelector('[data-action-status]').textContent = button.dataset.result;
+  }));
+  root.querySelector('[data-export-menu]').addEventListener('click', () => { root.querySelector('[data-export-type]').focus(); });
+  root.querySelector('[data-export-type]').addEventListener('change', event => {
+    const type = event.target.value; const depth = root.querySelector('[data-bit-depth]');
+    depth.hidden = type === 'MP3' || type === 'Ogg Vorbis';
+    depth.querySelector('option[value="32-bit float"]').disabled = type === 'FLAC';
+    if (type === 'FLAC') depth.querySelector('select').value = '24-bit PCM';
+  });
+})();
+</script>

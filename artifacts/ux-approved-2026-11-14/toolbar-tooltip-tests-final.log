@@ -1,0 +1,30 @@
+   Compiling daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+   Compiling daw-plugins v0.1.0 (/workspace/rill-daw/crates/daw-plugins)
+   Compiling daw-devices-ui v0.1.0 (/workspace/rill-daw/crates/daw-devices-ui)
+   Compiling daw-engine v0.1.0 (/workspace/rill-daw/crates/daw-engine)
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 32.62s
+     Running tests/editor_toolbar_tooltips_e2e.rs (target/debug/build/daw-app/86fe097ff73cd360/out/editor_toolbar_tooltips_e2e-86fe097ff73cd360)
+
+running 3 tests
+test automation_toolbar_and_selected_point_controls_describe_their_effect_without_editing ... ok
+test audio_toolbar_and_expanded_fade_and_processing_options_explain_outcomes_and_prerequisites ... ok
+test midi_and_named_note_toolbars_explain_their_actions_and_unavailable_edits_on_hover ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.23s
+
+     Running tests/library_takes_toolbar_tooltips_e2e.rs (target/debug/build/daw-app/eed2080832f9c088/out/library_takes_toolbar_tooltips_e2e-eed2080832f9c088)
+
+running 2 tests
+test take_toolbar_explains_import_comp_and_disabled_actions ... ok
+test browser_toolbar_explains_filters_actions_and_destinations ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.00s
+
+     Running tests/toolbar_tooltips_e2e.rs (target/debug/build/daw-app/347f23e1093ba816/out/toolbar_tooltips_e2e-347f23e1093ba816)
+
+running 2 tests
+test mixer_header_explains_navigation_channel_order_and_routing_without_edits ... ok
+test transport_and_arranger_controls_explain_their_actions_without_edits ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.53s

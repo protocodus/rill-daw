@@ -154,15 +154,10 @@ fn selection(state: &Value, editor: Editor) -> Value {
     ])
 }
 
-fn ruler_label<'a>(
-    state: &'a Value,
-    editor: Editor,
-    text: &str,
-    plot: [f64; 4],
-) -> Option<&'a Value> {
+fn ruler_vertical_bounds(state: &Value, editor: Editor, plot: [f64; 4]) -> (f64, f64) {
     // The arranger has a separate labelled loop lane between ruler and canvas.
     // Use its actual ruler bounds rather than assuming a fixed canvas offset.
-    let (top, bottom) = match editor {
+    match editor {
         Editor::Arrangement => (
             state["timeline"]["ruler"]["min"][1].as_f64().unwrap(),
             state["timeline"]["ruler"]["max"][1].as_f64().unwrap(),
@@ -182,7 +177,16 @@ fn ruler_label<'a>(
             plot[1] - 12.0 - f64::from(daw_ui::tokens::TIMELINE_RULER_HEIGHT),
             plot[1] - 12.0,
         ),
-    };
+    }
+}
+
+fn ruler_label<'a>(
+    state: &'a Value,
+    editor: Editor,
+    text: &str,
+    plot: [f64; 4],
+) -> Option<&'a Value> {
+    let (top, bottom) = ruler_vertical_bounds(state, editor, plot);
     state["label_rects"]
         .as_array()
         .unwrap()
@@ -223,7 +227,20 @@ fn close_zoom_rulers_show_aligned_beat_and_clock_anchors_in_all_music_editors() 
                     "{editor:?}: {label}"
                 );
             }
+            let clock = ruler_label(&close, editor, "0:00.15", rect).unwrap();
+            let (_, ruler_bottom) = ruler_vertical_bounds(&close, editor, rect);
+            assert!(
+                clock["max"][1].as_f64().unwrap() + f64::from(daw_ui::tokens::SPACE_MD)
+                    <= ruler_bottom,
+                "{editor:?}: the clock needs space above the cursor/loop strip: {clock}"
+            );
             if matches!(editor, Editor::Midi) {
+                let local = ruler_label(&close, editor, "Local", rect).unwrap();
+                assert!(
+                    (local["max"][1].as_f64().unwrap() - clock["max"][1].as_f64().unwrap()).abs()
+                        < 1.0,
+                    "Local time origin must stay on the clock baseline: {local}, {clock}"
+                );
                 let note = &close["midi_editor"]["notes"][0]["rect"];
                 let label = ruler_label(&close, editor, "1.1.2", rect).unwrap();
                 assert!(

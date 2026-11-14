@@ -127,7 +127,7 @@ fn write_phrase(path: &Path, voice: usize) {
 }
 
 fn export_exact(app: &mut Harness, path: &Path) -> AudioData {
-    menu(app, "File", "Export WAV…");
+    menu(app, "File", "Export audio…");
     if app.inspect()["export_include_effect_tails"] == true {
         app.click("Include effect tails");
     }

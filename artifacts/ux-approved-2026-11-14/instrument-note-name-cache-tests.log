@@ -1,0 +1,16 @@
+   Compiling daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+   Compiling vst3-host v0.10.0 (/workspace/rill-daw/vendor/vst3-host)
+   Compiling daw-devices-ui v0.1.0 (/workspace/rill-daw/crates/daw-devices-ui)
+   Compiling daw-plugins v0.1.0 (/workspace/rill-daw/crates/daw-plugins)
+   Compiling daw-engine v0.1.0 (/workspace/rill-daw/crates/daw-engine)
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 41.86s
+     Running unittests src/main.rs (target/debug/build/daw-app/dfcdd6ae2e84f8d9/out/rill-dfcdd6ae2e84f8d9)
+
+running 4 tests
+test instrument_note_names::tests::drum_names_follow_sample_assignment_and_keep_empty_pads_explicit ... ok
+test instrument_note_names::tests::named_notes_use_only_the_destination_and_prefer_specific_names ... ok
+test instrument_note_names::tests::late_native_response_cannot_replace_a_new_instruments_names ... ok
+test instrument_note_names::tests::cache_invalidates_on_sample_undo_track_or_document_changes ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 169 filtered out; finished in 0.00s

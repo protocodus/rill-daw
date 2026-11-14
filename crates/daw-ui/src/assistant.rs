@@ -161,14 +161,30 @@ pub fn assistant(
     }
     // Pages lead, as in every tabbed popup; the scope and its live context
     // open the body beneath the tab rule.
-    crate::popup_tabs(
+    crate::popup_tabs_with_hints(
         ui,
         &mut state.page,
         &[
-            (AssistantPage::Conversation, "Conversation"),
-            (AssistantPage::Examples, "Examples"),
-            (AssistantPage::Tools, "Tools"),
-            (AssistantPage::Tips, "Tips"),
+            (
+                AssistantPage::Conversation,
+                "Conversation",
+                "Read the conversation and follow the assistant's progress",
+            ),
+            (
+                AssistantPage::Examples,
+                "Examples",
+                "Browse example prompts to adapt for your music",
+            ),
+            (
+                AssistantPage::Tools,
+                "Tools",
+                "Inspect the actions available to the assistant in the current scope",
+            ),
+            (
+                AssistantPage::Tips,
+                "Tips",
+                "Read guidance for working with the music assistant",
+            ),
         ],
         |ui| {
             crate::quiet_action_menu(ui, "More", |ui| {
@@ -202,15 +218,23 @@ pub fn assistant(
                     new_chat = true;
                     ui.close();
                 }
-            });
+            })
+            .response
+            .on_hover_text("Edit the previous prompt or start a new conversation");
             settings = ui
                 .add_enabled_ui(!options.busy, |ui| crate::ai_button(ui, "AI settings"))
                 .inner
                 .on_hover_text(if options.configured {
-                    format!("{} · Connected", bounded(options.provider, 120))
+                    format!(
+                        "Open AI provider settings · {} is connected. Your draft stays here.",
+                        bounded(options.provider, 120)
+                    )
                 } else {
                     "Choose a provider. Your draft stays here.".into()
                 })
+                .on_disabled_hover_text(
+                    "Wait for the current request to finish before changing AI settings",
+                )
                 .clicked();
         },
     );

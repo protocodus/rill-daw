@@ -1,4 +1,4 @@
-//! Shared piano-key and velocity-marker primitives for music editors.
+//! Shared pitch-row and velocity-marker primitives for music editors.
 use crate::{TimelineViewport, text::TextRole, theme, tokens};
 use egui::{Align2, Color32, Painter, Pos2, Rect, Stroke, StrokeKind, Vec2, emath::GuiRounding};
 
@@ -12,7 +12,20 @@ pub struct PianoRows {
 
 impl PianoRows {
     pub fn new(mut visible: impl FnMut(u8) -> bool) -> Self {
-        let mut pitches: Vec<_> = (0..=127).rev().filter(|pitch| visible(*pitch)).collect();
+        Self::from_pitches((0..=127).rev().filter(|pitch| visible(*pitch)))
+    }
+
+    /// Preserve an instrument's named-note order while keeping each MIDI pitch
+    /// unique. Invalid pitches are ignored; an empty map uses the full keyboard.
+    pub fn from_pitches(pitches: impl IntoIterator<Item = u8>) -> Self {
+        let mut seen = [false; 128];
+        let mut pitches: Vec<_> = pitches
+            .into_iter()
+            .filter(|pitch| {
+                seen.get_mut(usize::from(*pitch))
+                    .is_some_and(|seen| !std::mem::replace(seen, true))
+            })
+            .collect();
         // Keep pointer mapping total even if an external filter is empty.
         if pitches.is_empty() {
             pitches.extend((0..=127).rev());
@@ -162,6 +175,59 @@ pub fn piano_key(
             theme::contrast_text(fill),
         );
     }
+}
+
+/// A named instrument row replaces piano-key geometry with a full-width label.
+/// The caller owns audition input and a tooltip containing the complete name.
+pub fn named_note_key(painter: &Painter, rect: Rect, label: &str, active: bool) {
+    if !rect.is_positive() || !rect.is_finite() {
+        return;
+    }
+    let colors = theme::palette(painter.ctx());
+    let fill = if active {
+        colors.raised.lerp_to_gamma(colors.guide, 0.35)
+    } else {
+        colors.raised
+    };
+    let painter = painter.with_clip_rect(rect);
+    painter.rect_filled(rect, 0.0, fill);
+    let y = rect
+        .bottom()
+        .round_to_pixel_center(painter.pixels_per_point());
+    painter.hline(
+        rect.x_range(),
+        y,
+        Stroke::new(1.0 / painter.pixels_per_point(), colors.line),
+    );
+    crate::text::paint_single_line(
+        &painter,
+        rect.shrink2(Vec2::new(tokens::SPACE_SM, 0.0)),
+        TextRole::Note.font(),
+        theme::contrast_text(fill),
+        label,
+    );
+}
+
+/// A small blue underline offers scale guidance without changing velocity fill
+/// or taking the contrasting outline reserved for selection. Paint before that
+/// outline. The returned mark stays inside even very short or dense notes.
+pub fn paint_outside_scale_marker(painter: &Painter, rect: Rect) -> Option<Rect> {
+    let marker = outside_scale_marker_rect(rect)?;
+    painter.rect_filled(marker, 0.0, theme::palette(painter.ctx()).action);
+    Some(marker)
+}
+
+fn outside_scale_marker_rect(rect: Rect) -> Option<Rect> {
+    if !rect.is_positive() || !rect.is_finite() {
+        return None;
+    }
+    let small = rect.width().min(rect.height());
+    let margin = 3.0_f32.min(small / 4.0);
+    let thickness = 1.5_f32.min(small / 4.0);
+    Some(Rect::from_min_size(
+        Pos2::new(rect.left() + margin, rect.bottom() - margin - thickness),
+        Vec2::new(12.0_f32.min(rect.width() - 2.0 * margin), thickness),
+    ))
 }
 
 /// Grid line weight for a beat: bars, then beats, then snap subdivisions.
@@ -363,6 +429,45 @@ mod tests {
         assert_eq!(rows.pitch_at(-500.0), 127);
         assert_eq!(rows.pitch_at(500.0), 0);
         assert_eq!(PianoRows::new(|_| false).pitches().len(), 128);
+    }
+
+    #[test]
+    fn named_pitch_rows_keep_provider_order_and_mouse_mapping() {
+        let rows = PianoRows::from_pitches([36, 40, 38, 40, 255]);
+        assert_eq!(rows.pitches(), &[36, 40, 38]);
+        for (row, pitch) in [36, 40, 38].into_iter().enumerate() {
+            assert_eq!(rows.row(pitch), Some(row));
+            assert_eq!(rows.pitch_at(row as f32 + 0.5), pitch);
+        }
+        assert_eq!(rows.row(255), None);
+        assert_eq!(rows.pitch_at(-1.0), 36);
+        assert_eq!(rows.pitch_at(20.0), 38);
+        assert_eq!(rows.clamp_move([36, 40].into_iter(), 5), 1);
+        assert_eq!(rows.clamp_move([40, 38].into_iter(), -5), -1);
+        assert_eq!(PianoRows::from_pitches([255]), PianoRows::new(|_| true));
+    }
+
+    #[test]
+    fn scale_markers_leave_selection_space_in_dense_and_short_notes() {
+        for size in [
+            Vec2::new(48.0, 18.0),
+            Vec2::new(48.0, 2.0),
+            Vec2::new(2.0, 18.0),
+        ] {
+            let rect = Rect::from_min_size(Pos2::new(10.0, 20.0), size);
+            let marker = outside_scale_marker_rect(rect).unwrap();
+            assert!(marker.is_positive());
+            assert!(rect.contains_rect(marker));
+            assert!(marker.width() <= 12.0);
+            for colors in [theme::DARK, theme::LIGHT] {
+                let fill = colors.piano_note_fill(96, true);
+                let selection = colors.piano_note_stroke_in_rect(true, fill, rect);
+                assert!(rect.shrink(selection.width).contains_rect(marker));
+            }
+        }
+        assert!(outside_scale_marker_rect(Rect::NOTHING).is_none());
+        assert!(outside_scale_marker_rect(Rect::EVERYTHING).is_none());
+        assert!(outside_scale_marker_rect(Rect::from_min_size(Pos2::ZERO, Vec2::ZERO)).is_none());
     }
 
     #[test]

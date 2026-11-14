@@ -216,10 +216,10 @@ fn generator_remembers_each_clips_choices_after_cancel_and_add_without_editing_o
     );
     // Grid scale is visual/multi-draw context. Changing it must leave both the
     // accepted notes and the generator's independently chosen harmony intact.
-    app.click("Key C · Natural minor");
-    app.click("Natural minor");
+    app.click("Scale guide C · Major");
     app.click("Major");
-    app.click("Key C · Major");
+    app.click("Natural minor");
+    app.click("Scale guide C · Natural minor");
     app.click("C");
     app.click("F♯");
     let changed_grid = app.inspect();

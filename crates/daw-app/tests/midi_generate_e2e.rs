@@ -484,7 +484,7 @@ fn melody_algorithms_default_to_editor_scale_and_offer_counterpoint_and_tintinna
     app.key("U");
     app.click("Chord stack");
     app.click("Scale stack");
-    app.click("Natural minor");
+    app.click("Major");
     app.click("Dorian");
     app.key("Q");
     let before = app.inspect();
@@ -567,6 +567,11 @@ fn generation_preview_never_promotes_folded_notes_into_the_editing_selection() {
                     Note::new(67, 3.0, 0.5, 101),
                 ],
             );
+            // Preserve this scenario's intentionally hidden generated E even
+            // though fresh editors now guide C major.
+            app.click("Scale guide C · Major");
+            app.click("Major");
+            app.click("Natural minor");
             let before = app.inspect();
             let original_ids: HashSet<_> = notes(&before, id)
                 .iter()

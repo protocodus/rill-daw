@@ -1,0 +1,36 @@
+{
+  "status": "approved changes implemented and verified",
+  "source_revision": "ab6a941332d60980f1f5c08229ae128e33e8206a",
+  "proposal_ids": [
+    "P1",
+    "P2",
+    "P3",
+    "P4",
+    "P5",
+    "P6"
+  ],
+  "approved": [
+    "P3",
+    "P5",
+    "P6"
+  ],
+  "application_source_modified": true,
+  "specification": "PROPOSALS.txt",
+  "mockups": "rill-before-after.html",
+  "clarification": "P3 applies to any special instrument providing named notes, not only R1 Drums.",
+  "implementation_artifacts": "../ux-approved-2026-11-14/",
+  "additional_authorized_scope": {
+    "toolbar_spacing": {
+      "icon_label_gap": "closer",
+      "padding": "horizontal greater than vertical",
+      "density": "denser",
+      "scale": "Fibonacci",
+      "icon_opacity": 0.8
+    },
+    "home_view_icon_lines": 3,
+    "toolbar_action_explanations": true,
+    "timeline_clock_clearance": true,
+    "screenshot_visual_polish": true
+  },
+  "validation": "../ux-approved-2026-11-14/verification.json"
+}

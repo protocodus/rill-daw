@@ -80,6 +80,7 @@ pub fn spectrum_view_controls(
             ui.spacing_mut().slider_width = 100.0;
             slider_changed = ui
                 .add(crate::slider(&mut intensity, 0.0..=100.0).show_value(false))
+                .on_hover_text("Set spectrum strength in all waveform views; this changes the display, not the audio")
                 .changed();
         });
         ui.add(
@@ -101,13 +102,17 @@ pub fn spectrum_view_controls(
             &mut options.palette,
             SpectrumPalette::Monochrome,
             "Monochrome",
+        )
+        .on_hover_text(
+            "Show spectrum energy as a neutral light overlay; stronger frequencies appear brighter",
         );
         let color = crate::selectable_value(
             ui,
             &mut options.palette,
             SpectrumPalette::BlueYellow,
             "Blue–yellow",
-        );
+        )
+        .on_hover_text("Show weaker spectrum energy in blue and stronger energy in yellow");
         mono.union(color)
     });
     SpectrumViewResponse {

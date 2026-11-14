@@ -1,0 +1,86 @@
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 2.06s
+     Running tests/midi_toolbar_stability_e2e.rs (target/debug/build/daw-app/fd9cce02b3d0f503/out/midi_toolbar_stability_e2e-fd9cce02b3d0f503)
+
+running 3 tests
+test drawing_controls_keep_their_positions_across_mouse_tools_and_selection ... ok
+test hovering_the_keyboard_or_a_note_row_reveals_pitch_names_without_editing ... ok
+test selection_commands_still_preview_apply_and_undo_from_the_pencil_tool ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 22.42s
+
+     Running tests/piano_pitch_hint_e2e.rs (target/debug/build/daw-app/777f76fb1575a504/out/piano_pitch_hint_e2e-777f76fb1575a504)
+
+running 4 tests
+test drawing_through_the_previous_hint_keeps_the_pressed_pitch_and_one_undo_step ... ok
+test held_multi_draw_keeps_the_pressed_pitch_for_chord_and_scale_stacks ... ok
+test pitch_hint_stays_in_the_plot_and_disappears_over_other_surfaces_and_menus ... ok
+test pointer_pitch_is_painted_before_entry_and_on_short_dense_and_folded_notes ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.85s
+
+     Running tests/piano_roll_refinement_e2e.rs (target/debug/build/daw-app/717d9e09fe660ed4/out/piano_roll_refinement_e2e-717d9e09fe660ed4)
+
+running 8 tests
+test editing_folded_notes_does_not_restore_the_hidden_old_selection_when_unfolding ... ok
+test final_note_transform_previews_grow_the_original_clip_only_when_applied ... ok
+test quantize_overlap_keeps_the_existing_note_identity_and_velocity_in_one_undo ... ok
+test randomize_preview_reroll_cancel_and_selected_source_timing_match_the_semantic_tool ... ok
+test top_to_bottom_legato_connects_voice_ranks_across_missing_chord_tones ... ok
+test velocity_color_scale_marker_and_quiet_rows_remain_independent_visual_aids ... ok
+test velocity_only_randomize_preserves_an_existing_trimmed_note_tail ... ok
+test visible_quantize_and_legato_preserve_scope_chords_and_source_mapping ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.39s
+
+     Running tests/piano_toolbar_e2e.rs (target/debug/build/daw-app/d4841683a965c24d/out/piano_toolbar_e2e-d4841683a965c24d)
+
+running 1 test
+test exposed_piano_tools_preserve_mouse_and_key_access_and_wrap_within_the_editor ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.42s
+
+     Running tests/shared_theory_e2e.rs (target/debug/build/daw-app/f49017dd38daf101/out/shared_theory_e2e-f49017dd38daf101)
+
+running 2 tests
+test deep_scale_picker_highlights_filters_draws_and_generates_the_composer_scale ... ok
+test extended_chord_lookup_grid_stack_and_both_generators_share_pitch_classes ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.35s
+
+     Running tests/tool_hints_e2e.rs (target/debug/build/daw-app/c10900eb3a7b5301/out/tool_hints_e2e-c10900eb3a7b5301)
+
+running 4 tests
+test active_tool_captions_preserve_toolbar_and_canvas_geometry_in_each_editor ... ok
+test compact_help_preserves_canvas_space_and_toggles_with_the_mouse ... ok
+test duplicate_caption_leads_to_a_canvas_gesture_without_changing_the_command ... ok
+test tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboard ... FAILED
+
+failures:
+
+---- tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboard stdout ----
+
+thread 'tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboard' (22608) panicked at crates/daw-app/tests/tool_hints_e2e.rs:67:5:
+assertion `left == right` failed: Missing or repeated tool help Select · Q: ["Previous","Next","Tool help","Fit","Fit selection","RILL","File","Edit","Track","Window","Help","AI","Hints · 0:04","Arranger","Mixer","Start","Play","Stop","Record","1.1.1","0:00.00","120.0 BPM","−","+","123","4/4","Click","Loop","Range","Properties","AI for this context","Choose instrument…","Back","Clip Editor · Hint phrase","Song 1:1–3:1 · Hint notes","Select","Cursor","Pencil","Multi-draw","Cut","Glue","Erase","Duplicate","Snap grid","Length last","Scale guide C · Major","Notes","Generate…","View","−","+","Select notes · Drag to move or resize","C4","1","0:00","2","0:02","3","0:04","4","0:06","Local","Clip end","Velocity","C4"]
+  left: 0
+ right: 1
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+   1: core::panicking::panic_fmt
+   2: core::panicking::assert_failed_inner
+   3: core::panicking::assert_failed::<usize, usize>
+   4: tool_hints_e2e::hint
+   5: tool_hints_e2e::disclosed_hint
+   6: tool_hints_e2e::tools
+   7: tool_hints_e2e::tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboard
+   8: tool_hints_e2e::tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboard::{closure#0}
+   9: <tool_hints_e2e::tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboard::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+
+failures:
+    tool_help_discloses_all_supported_gestures_and_updates_for_pointer_and_keyboard
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 18.10s
+
+error: test failed, to rerun pass `-p daw-app --test tool_hints_e2e`

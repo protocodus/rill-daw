@@ -909,6 +909,7 @@ impl DawApp {
             local_region
         };
         daw_ui::toolbar(ui, |ui| {
+            let control_height = ui.spacing().interact_size.y;
             daw_ui::editor_tools_with_context(
                 ui,
                 &mut state.tool,
@@ -921,20 +922,24 @@ impl DawApp {
                 &mut self.snap,
                 &self.project.meter_map(),
                 Some(&mut |ui: &mut egui::Ui| {
-                    daw_ui::checkbox(ui, &mut state.snap_edges, "Clip edges");
-                    daw_ui::checkbox(ui, &mut state.snap_transients, "Transient markers");
+                    daw_ui::checkbox(ui, &mut state.snap_edges, "Clip edges")
+                        .on_hover_text("Snap edits to the starts and ends of nearby clips");
+                    daw_ui::checkbox(ui, &mut state.snap_transients, "Transient markers")
+                        .on_hover_text("Snap edits to detected attacks in the audio");
                     daw_ui::checkbox(ui, &mut state.snap_zero_crossings, "Source zero crossings")
                         .on_hover_text("Use a quiet source crossing within 5 ms after grid snap. All channels stay aligned; pitch processing may change the final waveform.");
                 }),
             );
             daw_ui::quiet_action_menu(ui, "Clip", |ui| {
                 daw_ui::command_menu_contents(ui, |ui| {
-                    if daw_ui::button(ui, "Copy").clicked() {
+                    if daw_ui::button(ui, "Copy")
+                        .on_hover_text("Copy selected time, or the whole clip when no time is selected · Ctrl/Cmd+C")
+                        .clicked() {
                         clipboard_action = Some(AudioClipboardAction::Copy);
                         ui.close();
                     }
                     if daw_ui::button(ui, "Cut selection")
-                        .on_hover_text("Cut selected time, leaving a gap · Ctrl/Cmd+X")
+                        .on_hover_text("Cut selected time, or the whole clip when no time is selected, leaving a gap · Ctrl/Cmd+X")
                         .clicked()
                     {
                         clipboard_action = Some(AudioClipboardAction::Cut);
@@ -942,6 +947,8 @@ impl DawApp {
                     }
                     if ui
                         .add_enabled(state.clipboard.is_some(), daw_ui::button_widget("Paste"))
+                        .on_hover_text("Insert the copied audio as a new clip at the playback cursor · Ctrl/Cmd+V")
+                        .on_disabled_hover_text("Copy or cut audio before pasting it at the cursor")
                         .clicked()
                     {
                         clipboard_action = Some(AudioClipboardAction::Paste);
@@ -966,7 +973,7 @@ impl DawApp {
                         ui.close();
                     }
                     if daw_ui::button(ui, "Delete selection")
-                        .on_hover_text("Remove selected time, leaving a gap · Delete")
+                        .on_hover_text("Remove selected time, or the whole clip when no time is selected, leaving a gap · Delete")
                         .clicked()
                     {
                         clipboard_action = Some(AudioClipboardAction::Delete);
@@ -975,11 +982,15 @@ impl DawApp {
                     ui.separator();
                     nudge = daw_ui::clip_nudge_section(ui, true);
                     ui.separator();
-                    if daw_ui::button(ui, "Clip start").clicked() {
+                    if daw_ui::button(ui, "Clip start")
+                        .on_hover_text("Move the playback cursor to the beginning of this clip")
+                        .clicked() {
                         self.seek(clip.start);
                         ui.close();
                     }
-                    if daw_ui::button(ui, "Clip end").clicked() {
+                    if daw_ui::button(ui, "Clip end")
+                        .on_hover_text("Move the playback cursor to the end of this clip")
+                        .clicked() {
                         self.seek(clip.end());
                         ui.close();
                     }
@@ -987,6 +998,7 @@ impl DawApp {
                     if ui
                         .add_enabled(self.cursor < clip.end(), daw_ui::button_widget("Set start"))
                         .on_hover_text("Trim the clip start to the cursor")
+                        .on_disabled_hover_text("Place the cursor before the clip end to set a new start")
                         .clicked()
                     {
                         edit = Some(Edit::Trim(self.cursor, clip.end() - self.cursor));
@@ -995,6 +1007,7 @@ impl DawApp {
                     if ui
                         .add_enabled(self.cursor > clip.start, daw_ui::button_widget("Set end"))
                         .on_hover_text("Trim the clip end to the cursor")
+                        .on_disabled_hover_text("Place the cursor after the clip start to set a new end")
                         .clicked()
                     {
                         edit = Some(Edit::Trim(clip.start, self.cursor - clip.start));
@@ -1016,6 +1029,8 @@ impl DawApp {
                             self.cursor > clip.start && self.cursor < clip.end(),
                             daw_ui::button_widget("Split at cursor"),
                         )
+                        .on_hover_text("Divide this clip into two clips at the playback cursor")
+                        .on_disabled_hover_text("Place the cursor inside the clip to split it")
                         .clicked()
                     {
                         edit = Some(Edit::Split(self.cursor));
@@ -1026,6 +1041,8 @@ impl DawApp {
                             state.range.is_some(),
                             daw_ui::button_widget("Split selection"),
                         )
+                        .on_hover_text("Cut at both edges of the selected time range, keeping all audio")
+                        .on_disabled_hover_text("Drag across the waveform with the Cursor tool to select time first")
                         .clicked()
                     {
                         let (start, end) = state.range.unwrap();
@@ -1048,6 +1065,8 @@ impl DawApp {
                             state.range.is_some(),
                             daw_ui::button_widget("Trim to selection"),
                         )
+                        .on_hover_text("Keep only the selected time range in this clip")
+                        .on_disabled_hover_text("Select a time range to keep before trimming the clip")
                         .clicked()
                     {
                         let (start, end) = state.range.unwrap();
@@ -1059,18 +1078,23 @@ impl DawApp {
                             state.range.is_some(),
                             daw_ui::button_widget("Clear selection"),
                         )
+                        .on_hover_text("Deselect the highlighted time range without editing the audio")
+                        .on_disabled_hover_text("No time range is selected")
                         .clicked()
                     {
                         state.range = None;
                         ui.close();
                     }
-                    if daw_ui::button(ui, "Takes…").clicked() {
+                    if daw_ui::button(ui, "Takes…")
+                        .on_hover_text("Compare alternate recordings and choose takes for this clip or selected time range")
+                        .clicked() {
                         self.open_audio_takes(&clip, state.range);
                         ui.close();
                     }
                     ui.separator();
                     if ui.add_enabled(state.range.is_some(), daw_ui::button_widget("Ripple delete selection"))
                     .on_hover_text("Remove this time from the selected audio track and close the gap. Other tracks stay in place.")
+                    .on_disabled_hover_text("Select a time range to remove before closing the gap")
                     .clicked() {
                     let (start, end) = state.range.unwrap();
                     edit = Some(Edit::RippleRange(start, end));
@@ -1094,22 +1118,29 @@ impl DawApp {
                         ui.close();
                     }
                 });
-            });
+            })
+            .response
+            .on_hover_text("Copy, trim, split or arrange this audio clip and its selected time range");
             daw_ui::quiet_action_menu(ui, "Process", |ui| {
                 let mut reversed = *reverse;
-                if daw_ui::checkbox(ui, &mut reversed, "Reverse").changed() {
+                if daw_ui::checkbox(ui, &mut reversed, "Reverse")
+                    .on_hover_text("Play the clip's audio backwards while keeping the original recording intact")
+                    .changed() {
                     edit = Some(Edit::Reverse);
                     ui.close();
                 }
                 if ui
                     .add_enabled(state.pending.is_none(), daw_ui::button_widget("Normalize"))
                     .on_hover_text("Set the source peak to -1 dBFS before fades")
+                    .on_disabled_hover_text("Wait for the current analysis to finish, or cancel it first")
                     .clicked()
                 {
                     analyze = Some(AnalyzeKind::Gain);
                     ui.close();
                 }
-                if daw_ui::button(ui, "Transients").clicked() {
+                if daw_ui::button(ui, "Transients")
+                    .on_hover_text("Detect attacks in the audio, preview their markers and split the clip at those hits")
+                    .clicked() {
                     state.transients_open = true;
                     state.grid_slice_open = false;
                     state.quantize_open = false;
@@ -1120,6 +1151,8 @@ impl DawApp {
                         state.pending.is_none(),
                         daw_ui::button_widget("Strip silence…"),
                     )
+                    .on_hover_text("Preview quiet sections to remove, keeping the remaining audio in place")
+                    .on_disabled_hover_text("Wait for the current analysis to finish, or cancel it first")
                     .clicked()
                 {
                     self.open_audio_silence(ui.ctx(), track, clip.id, state.range);
@@ -1139,12 +1172,15 @@ impl DawApp {
                         daw_ui::button_widget("Clear warp markers"),
                     )
                     .on_hover_text("Return the whole clip to one stretch rate, keeping its start")
+                    .on_disabled_hover_text("This clip has no warp markers to clear")
                     .clicked()
                 {
                     edit = Some(Edit::Warp(Vec::new(), "Clear warp markers"));
                     ui.close();
                 }
-            });
+            })
+            .response
+            .on_hover_text("Reverse, normalize, detect hits, remove silence or adjust the timing of this audio");
             let mut db = 20.0 * gain.max(0.00001).log10();
             // A fixed width keeps the field under the pointer when a click
             // switches it to text entry.
@@ -1152,7 +1188,7 @@ impl DawApp {
                 .add_sized(
                     Vec2::new(
                         daw_ui::tokens::SELECT_WIDTH - daw_ui::tokens::SPACE_LG,
-                        daw_ui::tokens::CONTROL_HEIGHT,
+                        control_height,
                     ),
                     daw_ui::number(&mut db)
                         .range(-100.0..=36.0)
@@ -1162,7 +1198,7 @@ impl DawApp {
                         .prefix("Gain ")
                         .suffix(" dB"),
                 )
-                .on_hover_text("Clip gain");
+                .on_hover_text("Adjust this clip's volume in decibels without changing the original recording; drag or double-click to type");
             gain_rect = response.rect;
             if response.changed() {
                 edit = Some(Edit::Gain(10.0_f32.powf(db / 20.0)));
@@ -1212,6 +1248,8 @@ impl DawApp {
                                     "Cancel analysis"
                                 }),
                             )
+                            .on_hover_text("Stop the current audio analysis without applying its result")
+                            .on_disabled_hover_text("Cancellation is already requested; waiting for the analysis to stop")
                             .clicked()
                         {
                             pending.cancel.store(true, Ordering::Release);
@@ -1225,7 +1263,7 @@ impl DawApp {
                         let mut changed = false;
                         changed |= ui
                             .add_sized(
-                                Vec2::new(field_width, daw_ui::tokens::CONTROL_HEIGHT),
+                                Vec2::new(field_width, control_height),
                                 daw_ui::number(duration)
                                     .range(0.0..=fade_region.length / clip.source_rate)
                                     .clamp_existing_to_range(false)
@@ -1234,9 +1272,9 @@ impl DawApp {
                                     .suffix(" beats"),
                             )
                             .on_hover_text(if tool == EditorTool::FadeIn {
-                                "Fade-in length"
+                                "Set how many beats the audio takes to rise from silence at the start; drag or double-click to type"
                             } else {
-                                "Fade-out length"
+                                "Set how many beats the audio takes to fall to silence at the end; drag or double-click to type"
                             })
                             .changed();
                         changed |= daw_ui::choice(
@@ -1245,6 +1283,7 @@ impl DawApp {
                             curve,
                             &FadeCurve::ALL.map(|value| (value, value.name())),
                         )
+                        .on_hover_text("Choose how the volume changes through the fade, from a straight ramp to a curved transition")
                         .changed();
                         if changed {
                             // Only an intentional independent edit reanchors both
@@ -1273,8 +1312,10 @@ impl DawApp {
                     ui.separator();
                     view_action = daw_ui::timeline_selection_view_actions(ui, "audio", true);
                     ui.separator();
-                    daw_ui::checkbox(ui, &mut state.show_markers, "Show transient markers");
-                    daw_ui::checkbox(ui, &mut state.show_neighbours, "Show neighbouring clips");
+                    daw_ui::checkbox(ui, &mut state.show_markers, "Show transient markers")
+                        .on_hover_text("Show or hide detected attack markers over the waveform without changing the audio");
+                    daw_ui::checkbox(ui, &mut state.show_neighbours, "Show neighbouring clips")
+                        .on_hover_text("Show nearby clips behind this clip for timing context");
                     crate::spectrogram::view_options(ui);
                 },
                 |_| {},
@@ -1296,7 +1337,10 @@ impl DawApp {
                 if grid_points.len() > 2048 {
                     ui.label("Choose a wider grid or a shorter time selection");
                 }
-                if daw_ui::button(ui, "Close grid slicing").clicked() {
+                if daw_ui::button(ui, "Close grid slicing")
+                    .on_hover_text("Close the grid-slicing controls and discard the cut preview")
+                    .clicked()
+                {
                     state.grid_slice_open = false;
                     grid_points.clear();
                 }
@@ -1310,10 +1354,12 @@ impl DawApp {
                     "transient_algorithm",
                     &mut state.settings.algorithm,
                     &TransientAlgorithm::ALL.map(|algorithm| (algorithm, algorithm.name())),
-                );
+                )
+                .on_hover_text("Choose whether hits are detected from sudden energy rises or crossings of an amplitude threshold");
                 let response = ui.add(
                     daw_ui::slider(&mut state.settings.sensitivity, 0.0..=1.0).text("Sensitivity"),
-                );
+                )
+                .on_hover_text("Raise sensitivity to detect quieter attacks; lower it to keep only stronger hits");
                 sensitivity_rect = Rect::from_min_size(
                     response.rect.min,
                     Vec2::new(ui.spacing().slider_width, response.rect.height()),
@@ -1322,6 +1368,9 @@ impl DawApp {
                     daw_ui::number(&mut state.settings.minimum_gap_ms)
                         .range(20.0..=2000.0)
                         .suffix(" ms gap"),
+                )
+                .on_hover_text(
+                    "Set the shortest allowed time between detected hits, in milliseconds",
                 );
                 if previous != state.settings {
                     state.preview.clear();
@@ -1334,6 +1383,8 @@ impl DawApp {
                 }
                 if ui
                     .add_enabled(state.pending.is_none(), daw_ui::button_widget("Analyze"))
+                    .on_hover_text("Find attacks using these settings and preview markers without splitting the clip")
+                    .on_disabled_hover_text("Wait for the current analysis to finish, or cancel it first")
                     .clicked()
                 {
                     analyze = Some(AnalyzeKind::Transients);
@@ -1348,6 +1399,7 @@ impl DawApp {
                     } else {
                         "Split at every detected marker"
                     })
+                    .on_disabled_hover_text("Analyze the audio first; at least one detected marker must lie in the selected time range")
                     .clicked()
                 {
                     edit = Some(Edit::Transients(
@@ -1359,6 +1411,10 @@ impl DawApp {
                         !state.preview.is_empty(),
                         daw_ui::button_widget("Previous transient"),
                     )
+                    .on_hover_text(
+                        "Move the playback cursor to the previous detected hit and reveal it",
+                    )
+                    .on_disabled_hover_text("Analyze the audio first to find hits to navigate")
                     .clicked()
                     && let Some(beat) =
                         adjacent_transient(&state.preview, clip.start, self.cursor, false)
@@ -1371,6 +1427,10 @@ impl DawApp {
                         !state.preview.is_empty(),
                         daw_ui::button_widget("Next transient"),
                     )
+                    .on_hover_text(
+                        "Move the playback cursor to the next detected hit and reveal it",
+                    )
+                    .on_disabled_hover_text("Analyze the audio first to find hits to navigate")
                     .clicked()
                     && let Some(beat) =
                         adjacent_transient(&state.preview, clip.start, self.cursor, true)
@@ -1387,7 +1447,12 @@ impl DawApp {
                 } else {
                     format!("{} markers", state.preview.len())
                 });
-                if daw_ui::button(ui, "Close transients").clicked() {
+                if daw_ui::button(ui, "Close transients")
+                    .on_hover_text(
+                        "Close the transient controls and stop any transient analysis in progress",
+                    )
+                    .clicked()
+                {
                     state.transients_open = false;
                     if let Some(pending) = &state.pending
                         && pending.transients
@@ -1455,7 +1520,8 @@ impl DawApp {
                 let previous = state.settings;
                 let response = ui.add(
                     daw_ui::slider(&mut state.settings.sensitivity, 0.0..=1.0).text("Sensitivity"),
-                );
+                )
+                .on_hover_text("Raise sensitivity to detect quieter attacks; lower it to keep only stronger hits");
                 sensitivity_rect = Rect::from_min_size(
                     response.rect.min,
                     Vec2::new(ui.spacing().slider_width, response.rect.height()),
@@ -1464,6 +1530,9 @@ impl DawApp {
                     daw_ui::number(&mut state.settings.minimum_gap_ms)
                         .range(20.0..=2000.0)
                         .suffix(" ms gap"),
+                )
+                .on_hover_text(
+                    "Set the shortest allowed time between detected hits, in milliseconds",
                 );
                 if previous != state.settings
                     && let Some(pending) = &state.pending
@@ -2796,11 +2865,15 @@ pub(crate) fn audio_processing_menu(ui: &mut egui::Ui, processing: &mut AudioPro
                 processing.transpose_semitones != 0.0,
                 daw_ui::button_widget("Reset pitch"),
             )
+            .on_hover_text("Return this clip to its original pitch while keeping its duration")
+            .on_disabled_hover_text("This clip is already at its original pitch")
             .clicked()
         {
             processing.transpose_semitones = 0.0;
         }
-    });
+    })
+    .response
+    .on_hover_text("Transpose this clip without changing its duration, and choose the pitch and stretch algorithm");
     *processing != before
 }
 

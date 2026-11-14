@@ -329,6 +329,22 @@ pub struct ProgramPitchName {
     pub name: String,
 }
 
+/// An instrument-provided note name for its current state.
+///
+/// Ports and channels are zero-based. `-1` denotes a wildcard where the native format
+/// supports one; hosts should prefer a concrete port/channel over a wildcard match.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct NoteName {
+    /// Event-input port, or `-1` for all ports.
+    pub port: i16,
+    /// MIDI channel (`0..=15`), or `-1` for all channels.
+    pub channel: i16,
+    /// MIDI pitch number (`0..=127`).
+    pub pitch: i16,
+    /// Instrument-provided display name.
+    pub name: String,
+}
+
 /// Host automation mode reported to controllers implementing `IAutomationState`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum AutomationState {
@@ -1133,6 +1149,10 @@ pub(crate) trait PluginInternal: Send {
     ) -> Result<Vec<ProgramPitchName>> {
         Ok(Vec::new())
     }
+    /// Query names for the instrument's current program and event-input routing.
+    fn note_names(&self) -> Result<Vec<NoteName>> {
+        Ok(Vec::new())
+    }
     fn get_program_data(
         &self,
         _program_list_id: i32,
@@ -1692,6 +1712,18 @@ impl Plugin {
             .as_ref()
             .ok_or_else(|| Error::Other("Plugin not initialized".to_string()))?
             .program_pitch_names(program_list_id, program_index)
+    }
+
+    /// Query instrument-provided note names for the current program on event-input port 0.
+    ///
+    /// VST3 names are resolved through `IUnitInfo` for each MIDI channel's unit and current
+    /// program. Returns an empty list when names or their routing cannot be determined.
+    /// This metadata query runs on the plugin control thread (or its isolated helper).
+    pub fn note_names(&self) -> Result<Vec<NoteName>> {
+        self.internal
+            .as_ref()
+            .ok_or_else(|| Error::Other("Plugin not initialized".to_string()))?
+            .note_names()
     }
 
     /// Read opaque per-program data, or `None` when `IProgramListData` is absent/unsupported.

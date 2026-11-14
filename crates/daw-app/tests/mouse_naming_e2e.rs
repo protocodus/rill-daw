@@ -401,7 +401,7 @@ fn project_clip_and_track_names_use_pointer_text_and_supply_personalized_save_ex
         assert_eq!(daw_core::Project::load(&save).unwrap().name, "Blue 7!");
         let wav = app.directory.path().join("Blue 7!.wav");
         app.command(json!({"command":"file_dialog", "kind":"export", "path":wav}));
-        menu(&mut app, "File", "Export WAV…");
+        menu(&mut app, "File", "Export audio…");
         app.click("Export…");
         app.command(json!({"command":"wait_export"}));
         assert!(

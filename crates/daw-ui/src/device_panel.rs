@@ -268,7 +268,7 @@ pub fn preset_group(
                     .galley(rect.left_top(), title, egui::Color32::PLACEHOLDER);
                 if ui
                     .add(IconButton::icon_only(Icon::Back, "Previous preset"))
-                    .on_hover_text("Previous preset")
+                    .on_hover_text("Load the previous preset's parameter values into this device")
                     .clicked()
                 {
                     *action = Some(PresetAction::Previous);
@@ -278,21 +278,29 @@ pub fn preset_group(
                     .truncate()
                     .show_ui(ui, |ui| {
                         for (index, choice) in choices.iter().enumerate() {
-                            let response =
-                                crate::selectable(ui, current == Some(index), choice.label);
-                            let response = if choice.description.is_empty() {
-                                response
+                            let help = if choice.description.is_empty() {
+                                "Load this preset's parameter values into this device".to_owned()
                             } else {
-                                response.on_hover_text(choice.description)
+                                format!(
+                                    "Load this preset's parameter values into this device\n{}",
+                                    choice.description
+                                )
                             };
-                            if response.clicked() {
+                            if crate::selectable(ui, current == Some(index), choice.label)
+                                .on_hover_text(help)
+                                .clicked()
+                            {
                                 *action = Some(PresetAction::Load(index));
                             }
                         }
-                    });
+                    })
+                    .response
+                    .on_hover_text(
+                        "Choose a factory or saved preset to replace this device's parameter values",
+                    );
                 if ui
                     .add(IconButton::icon_only(Icon::ChevronRight, "Next preset"))
-                    .on_hover_text("Next preset")
+                    .on_hover_text("Load the next preset's parameter values into this device")
                     .clicked()
                 {
                     *action = Some(PresetAction::Next);
@@ -300,24 +308,37 @@ pub fn preset_group(
             };
             let mut actions = |ui: &mut Ui, action: &mut Option<PresetAction>| {
                 if let Some(mut name) = draft.take() {
-                    crate::text_field(ui, &mut name, "Preset name", tokens::SELECT_WIDTH);
+                    crate::text_field(ui, &mut name, "Preset name", tokens::SELECT_WIDTH)
+                        .on_hover_text("Name this preset so you can find it in the preset chooser");
                     let valid = !name.trim().is_empty() && name.len() <= 128;
                     let mut keep = true;
                     if ui
                         .add_enabled(valid, crate::button_widget("Save"))
+                        .on_hover_text("Save the device's current parameter values under this name")
+                        .on_disabled_hover_text(if name.trim().is_empty() {
+                            "Enter a preset name before saving"
+                        } else {
+                            "Enter a shorter preset name before saving"
+                        })
                         .clicked()
                     {
                         *action = Some(PresetAction::SaveAs(name.trim().to_owned()));
                         keep = false;
                     }
-                    if crate::small_button(ui, "Cancel").clicked() {
+                    if crate::small_button(ui, "Cancel")
+                        .on_hover_text("Close preset naming without saving; keep the current sound")
+                        .clicked()
+                    {
                         keep = false;
                     }
                     if keep {
                         *draft = Some(name);
                     }
                 } else {
-                    if crate::small_button(ui, "Save as…").clicked() {
+                    if crate::small_button(ui, "Save as…")
+                        .on_hover_text("Name and save the device's current parameter values as a reusable preset")
+                        .clicked()
+                    {
                         *draft = Some(String::new());
                     }
                     if crate::small_button(ui, "Reset")
@@ -342,8 +363,9 @@ pub fn preset_group(
                     for (label, amount) in [("1%", 0.01), ("10%", 0.1), ("100%", 1.0)] {
                         if crate::small_button(ui, label)
                             .on_hover_text(format!(
-                                "Move every control at random by up to {label} of its range; \
-                                 a choice or switch changes with a {label} chance"
+                                "Make a random variation of this sound. Controls move by up to {label} of their range; \
+                                 a choice or switch changes with a {label} chance. \
+                                 Output, volume, and protected controls stay unchanged."
                             ))
                             .clicked()
                         {

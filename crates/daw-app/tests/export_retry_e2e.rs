@@ -24,7 +24,7 @@ fn has(state: &Value, label: &str) -> bool {
 fn start(app: &mut Harness, path: &Path, without_tails: bool) {
     app.command(json!({"command":"file_dialog","kind":"export","path":path}));
     app.click("File");
-    app.click("Export WAV…");
+    app.click("Export audio…");
     if without_tails {
         app.click("Include effect tails");
     }
@@ -135,7 +135,7 @@ fn retry_uses_the_failed_mix_destination_and_options_after_later_edits() {
 
     // Even changing the preference for future exports must not change this retry.
     app.click("File");
-    app.click("Export WAV…");
+    app.click("Export audio…");
     app.click("Include effect tails");
     app.click("Cancel");
     std::fs::create_dir(&parent).unwrap();

@@ -30,11 +30,15 @@ fn fixture(dark: bool) -> Harness {
 }
 
 fn label_bounds(state: &Value, prefix: &str) -> [f64; 4] {
-    let rect = state["label_rects"]
-        .as_array()
-        .unwrap()
+    let labels = state["label_rects"].as_array().unwrap();
+    let rect = labels
         .iter()
-        .find(|rect| rect["text"].as_str().unwrap().starts_with(prefix))
+        .find(|rect| rect["text"] == prefix)
+        .or_else(|| {
+            labels
+                .iter()
+                .find(|rect| rect["text"].as_str().unwrap().starts_with(prefix))
+        })
         .unwrap_or_else(|| panic!("Missing {prefix}: {}", state["visible_labels"]));
     [
         rect["min"][0].as_f64().unwrap(),
@@ -66,11 +70,11 @@ fn drawing_controls_keep_their_positions_across_mouse_tools_and_selection() {
     let controls = [
         "Snap grid",
         "Length last",
-        "Key C · Natural minor",
+        "Scale guide C · Major",
         "Generate…",
         "Notes",
     ];
-    let draw_controls = ["Root", "Natural minor"];
+    let draw_controls = ["Root", "Major"];
     for dark in [false, true] {
         let mut app = fixture(dark);
         let original = app.inspect();
@@ -84,12 +88,12 @@ fn drawing_controls_keep_their_positions_across_mouse_tools_and_selection() {
                 .iter()
                 .map(|control| label_bounds(&before, control))
                 .collect();
-            let settings = app.click("Key C · Natural minor");
+            let settings = app.click("Scale guide C · Major");
             let draw_positions: Vec<_> = draw_controls
                 .iter()
                 .map(|control| label_bounds(&settings, control))
                 .collect();
-            unchanged(&app.click("Key C · Natural minor"), &original);
+            unchanged(&app.click("Scale guide C · Major"), &original);
             for (control, bounds) in controls.iter().zip(&positions) {
                 assert!(
                     bounds[0] >= 0.0 && bounds[1] >= 0.0,
@@ -133,7 +137,7 @@ fn drawing_controls_keep_their_positions_across_mouse_tools_and_selection() {
                             );
                         }
                     }
-                    let settings = app.click("Key C · Natural minor");
+                    let settings = app.click("Scale guide C · Major");
                     unchanged(&settings, &original);
                     for (control, expected) in draw_controls.iter().zip(&draw_positions) {
                         let actual = label_bounds(&settings, control);
@@ -144,7 +148,7 @@ fn drawing_controls_keep_their_positions_across_mouse_tools_and_selection() {
                             );
                         }
                     }
-                    app.click("Key C · Natural minor");
+                    app.click("Scale guide C · Major");
                     if !selected {
                         // The stable Notes menu keeps unavailable commands visible and inert.
                         for command in ["Humanize…", "Quantize…"] {

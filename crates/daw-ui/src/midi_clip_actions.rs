@@ -95,9 +95,18 @@ pub fn midi_note_length_preview(
                     .suffix(" beats"),
             )
             .labelled_by(label.id)
+            .on_hover_text(if settings.mode == MidiNoteLengthMode::Fixed {
+                "Set the previewed duration of every selected note, measured in beats"
+            } else {
+                "Set how many beats the preview adds to or removes from selected note lengths"
+            })
             .rect;
-        result.apply = crate::primary_button(ui, "Apply lengths").clicked();
-        result.cancel = crate::button(ui, "Cancel lengths").clicked();
+        result.apply = crate::primary_button(ui, "Apply lengths")
+            .on_hover_text("Commit the previewed note lengths as one undoable edit")
+            .clicked();
+        result.cancel = crate::button(ui, "Cancel lengths")
+            .on_hover_text("Discard the length preview and keep the original notes")
+            .clicked();
     });
     result
 }
@@ -108,7 +117,15 @@ fn length_modes(ui: &mut Ui, settings: &mut MidiNoteLengthSettings, minimum: f64
         MidiNoteLengthMode::Grow,
         MidiNoteLengthMode::Shrink,
     ] {
-        if crate::selectable_value(ui, &mut settings.mode, mode, mode.label()).changed()
+        if crate::selectable_value(ui, &mut settings.mode, mode, mode.label())
+            .on_hover_text(match mode {
+                MidiNoteLengthMode::Fixed => "Give every selected note the same duration",
+                MidiNoteLengthMode::Grow => "Add the same amount of time to selected note lengths",
+                MidiNoteLengthMode::Shrink => {
+                    "Remove the same amount of time from selected note lengths"
+                }
+            })
+            .changed()
             && mode == MidiNoteLengthMode::Fixed
         {
             settings.beats = settings.beats.max(minimum);
@@ -143,13 +160,14 @@ pub fn midi_note_flip_menu_contents(ui: &mut Ui, enabled: bool) -> Option<MidiNo
         ),
         (
             "Flip vertically",
-            "Invert selected pitches within their range; keep timing, lengths and velocities",
+            "Mirror selected notes vertically within their range; keep timing, lengths and velocities",
             MidiNoteFlip::Vertical,
         ),
     ] {
         if ui
             .add_enabled(enabled, crate::button_widget(label))
             .on_hover_text(hint)
+            .on_disabled_hover_text("Select notes to mirror their time or pitch positions")
             .clicked()
         {
             action = Some(axis);
@@ -194,6 +212,7 @@ pub fn midi_clip_action_menu_contents(
         if ui
             .add_enabled(enabled, crate::button_widget(label))
             .on_hover_text(hint)
+            .on_disabled_hover_text("This timing change would exceed the clip or project limits")
             .clicked()
         {
             result = Some(action);
@@ -209,6 +228,7 @@ pub fn midi_clip_action_menu_contents(
     ] {
         if ui.add_enabled(enabled, crate::button_widget(label))
             .on_hover_text("Transpose all source notes, including trimmed notes and linked occurrences; timing and velocity stay unchanged")
+            .on_disabled_hover_text("Add notes to this clip, or choose a smaller pitch change to stay within the MIDI range")
             .clicked()
         {
             result = Some(MidiClipAction::Transpose(semitones));
@@ -231,6 +251,9 @@ pub fn midi_clip_action_menu_contents(
         if ui
             .add_enabled(available.has_notes, crate::button_widget(label))
             .on_hover_text(hint)
+            .on_disabled_hover_text(
+                "Add notes inside this clip’s visible time range to preview this edit",
+            )
             .clicked()
         {
             result = Some(action);

@@ -1,0 +1,19 @@
+{
+  "binary_sha256": "e1f9dd3d89a6a6b6a654c9af158feecf9fcae3d7114c734f747e56734d4ca840",
+  "logical_viewport": [
+    1480,
+    960
+  ],
+  "captures": [
+    {
+      "file": "named-notes-light-after-toolbar.png",
+      "theme": "Light",
+      "sha256": "46712174f1f0eec2c1b7fa92fbf7cd4c49da267fe090d17efc976a07a8e2555e"
+    },
+    {
+      "file": "scale-guide-dark-after-toolbar.png",
+      "theme": "Dark",
+      "sha256": "8d8f4ca888f7f89cfd4093c1409e868ea7da0894879e16453d7c87bf2cbba618"
+    }
+  ]
+}

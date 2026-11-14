@@ -46,6 +46,53 @@ fn scan_reads_every_descriptor_in_the_helper_with_format_and_category() {
 }
 
 #[test]
+fn named_notes_follow_saved_preset_and_parameter_overrides_in_isolation() {
+    let fixture = ClapProbeFixture::build();
+    let info = PluginInfo {
+        path: fixture.path.clone(),
+        class_id: Some(SYNTH_ID.into()),
+        format: PluginFormat::Clap,
+        ..Default::default()
+    };
+    let names = daw_plugins::inspect_note_names_with_configuration(&info, &[], &[]).unwrap();
+    assert_eq!(
+        names
+            .iter()
+            .map(|note| (note.pitch, note.name.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            (36, "Kick"),
+            (40, "Snare"),
+            (42, "Closed Hat"),
+            (38, "Other channel")
+        ]
+    );
+    assert_eq!((names[0].port, names[0].channel), (-1, -1));
+    assert_eq!((names[2].port, names[3].channel), (0, 1));
+
+    let mut plugin = synth(&fixture);
+    plugin.set_parameter(1, 1.0 / 3.0).unwrap();
+    let state = plugin.save_state().unwrap();
+    let names = daw_plugins::inspect_note_names_with_configuration(&info, &state, &[]).unwrap();
+    assert_eq!((names[0].pitch, names[0].name.as_str()), (60, "Slice A"));
+    assert!(
+        daw_plugins::inspect_note_names_with_configuration(&info, &state, &[(1, 2.0 / 3.0)])
+            .unwrap()
+            .is_empty()
+    );
+
+    let effect = PluginInfo {
+        class_id: Some(GAIN_ID.into()),
+        ..info
+    };
+    assert!(
+        daw_plugins::inspect_note_names_with_configuration(&effect, &[], &[])
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn instrument_renders_notes_parameters_state_and_transport_in_isolation() {
     let fixture = ClapProbeFixture::build();
     let info = daw_plugins::scan_paths(std::slice::from_ref(&fixture.path))

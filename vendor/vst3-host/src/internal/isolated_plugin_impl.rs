@@ -1050,6 +1050,14 @@ impl PluginInternal for IsolatedPluginImpl {
         }
     }
 
+    fn note_names(&self) -> Result<Vec<crate::plugin::NoteName>> {
+        match self.send_command(HostCommand::NoteNames)? {
+            HostResponse::NoteNames { names } => Ok(names),
+            HostResponse::Error { message } => Err(Error::Other(format!("NoteNames: {message}"))),
+            _ => Err(Error::Other("NoteNames: unexpected response".to_string())),
+        }
+    }
+
     fn get_program_data(
         &self,
         program_list_id: i32,

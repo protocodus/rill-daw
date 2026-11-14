@@ -55,12 +55,18 @@ pub fn batch_route_choices(
 ) -> Option<BatchRouteChoice> {
     let mut choice = None;
     crate::text::note(ui, "Main output");
-    if crate::button(ui, "Master output").clicked() {
+    if crate::button(ui, "Master output")
+        .on_hover_text("Send the selected channels directly to the master output")
+        .clicked()
+    {
         choice = Some(BatchRouteChoice::Output(None));
         ui.close();
     }
     for (id, name) in outputs {
-        if crate::button(ui, name).clicked() {
+        if crate::button(ui, name)
+            .on_hover_text(format!("Route the selected channels through {name}"))
+            .clicked()
+        {
             choice = Some(BatchRouteChoice::Output(Some(*id)));
             ui.close();
         }
@@ -74,13 +80,30 @@ pub fn batch_route_choices(
     }
     ui.separator();
     crate::text::note(ui, "Existing sends keep their settings");
-    for (label, pre_fader) in [("Add post-fader send", false), ("Add pre-fader send", true)] {
+    for (label, pre_fader, hint) in [
+        (
+            "Add post-fader send",
+            false,
+            "Send an additional copy to a bus; each channel's volume fader also changes its send level",
+        ),
+        (
+            "Add pre-fader send",
+            true,
+            "Send an additional copy to a bus independently of each channel's volume fader",
+        ),
+    ] {
         crate::menu_button(ui, label, |ui| {
             if sends.is_empty() {
                 crate::text::note(ui, "No eligible buses");
             }
             for (id, name) in sends {
-                if crate::button(ui, name).clicked() {
+                if crate::button(ui, name)
+                    .on_hover_text(format!(
+                        "Add a {} send from the selected channels to {name}; existing sends keep their settings",
+                        if pre_fader { "pre-fader" } else { "post-fader" },
+                    ))
+                    .clicked()
+                {
                     choice = Some(BatchRouteChoice::Send {
                         bus: *id,
                         pre_fader,
@@ -88,7 +111,9 @@ pub fn batch_route_choices(
                     ui.close();
                 }
             }
-        });
+        })
+        .response
+        .on_hover_text(hint);
     }
     choice
 }

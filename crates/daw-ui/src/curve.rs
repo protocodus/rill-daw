@@ -262,7 +262,7 @@ pub fn curve_fit_song_button(ui: &mut Ui) -> Response {
 /// Retain the point-based Fit/F action beside a caller's broader song fit.
 pub fn curve_fit_points_button(ui: &mut Ui) -> Response {
     ui.add(crate::view_button_widget("Fit").quiet())
-        .on_hover_text("Fit automation points · F")
+        .on_hover_text("Zoom to show all automation points without changing their values · F")
 }
 
 /// Responsive editor actions using the shared toolbar's styling and layout.
@@ -288,9 +288,25 @@ pub fn curve_segment_controls(ui: &mut Ui, curve: &mut f32) -> Response {
     let mut changed = false;
     let row = ui.horizontal(|ui| {
         crate::text::label(ui, "Segment");
-        for (label, value) in [("Log", -1.0_f32), ("Linear", 0.0), ("Exp", 1.0)] {
+        for (label, value, hint) in [
+            (
+                "Log",
+                -1.0_f32,
+                "Change quickly after the selected point, then ease toward the next point",
+            ),
+            (
+                "Linear",
+                0.0,
+                "Change at an even rate from the selected point to the next point",
+            ),
+            (
+                "Exp",
+                1.0,
+                "Change gradually after the selected point, then accelerate toward the next point",
+            ),
+        ] {
             if crate::selectable_value(ui, curve, value, label)
-                .on_hover_text("Shape the segment after the selected point")
+                .on_hover_text(hint)
                 .clicked()
             {
                 changed = true;

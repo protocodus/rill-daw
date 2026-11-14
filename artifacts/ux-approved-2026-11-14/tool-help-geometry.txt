@@ -1,0 +1,13 @@
+Isolated on existing built rill before toolbar-spacing follow-up.
+
+800-point viewport, light theme, density 1: all Arrangement and MIDI Tool help interactions passed.
+1200-point viewport, dark theme, density 2: Clip Editor Select Tool help inaccessible.
+
+Tool help: min [1231.46875, 265.0], max [1265.46875, 299.0]
+View: min [1157.8125, 273.0], max [1192.46875, 291.0]
+Scale guide C · Major: min [983.03125, 231.0], max [1132.625, 249.0]
+Generate…: min [164.34375, 273.0], max [241.6875, 291.0]
+
+Tool help lies entirely beyond the 1200-point viewport. Clicking the accessible label returns no open popup. Existing tool_hints_e2e assertion remains unchanged.
+
+Minimal sequence: fresh app, set viewport/theme, Track → Add MIDI track, dismiss instrument panel, exercise Arrangement toolbar Tool help for each tool with pointer and keyboard, Window → Clip Editor, Select, Tool help. Exact regression test reproduces consistently.

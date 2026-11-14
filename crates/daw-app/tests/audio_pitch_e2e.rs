@@ -126,7 +126,7 @@ fn export(app: &mut Harness, name: &str) -> AudioData {
     close_pitch(app);
     let path = app.directory.path().join(name);
     app.click("File");
-    let state = app.click("Export WAV…");
+    let state = app.click("Export audio…");
     if state["export_include_effect_tails"] == true {
         app.click("Include effect tails");
     }

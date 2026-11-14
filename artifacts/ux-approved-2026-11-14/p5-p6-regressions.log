@@ -1,0 +1,159 @@
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 6.86s
+     Running tests/action_names_e2e.rs (target/debug/build/daw-app/2317f33f4e4d5d1b/out/action_names_e2e-2317f33f4e4d5d1b)
+
+running 2 tests
+test context_names_distinguish_playback_looping_from_independent_phrase_copies ... ok
+test export_audio_names_file_types_and_shows_bit_depth_only_for_pcm_formats ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.32s
+
+     Running tests/appearance_e2e.rs (target/debug/build/daw-app/f2ff182cdf14816b/out/appearance_e2e-f2ff182cdf14816b)
+
+running 2 tests
+test appearance_applies_cancels_persists_and_system_follows_live_os_events ... ok
+test piano_rows_preserve_subtle_key_contrast_with_green_harmony_guides_in_both_modes ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.02s
+
+     Running tests/arranger_automation_e2e.rs (target/debug/build/daw-app/5e9bee434f2e9da0/out/arranger_automation_e2e-5e9bee434f2e9da0)
+
+running 2 tests
+test pattern_copy_paste_derivation_and_both_trim_edges_preserve_source_points ... ok
+test points_patterns_ghosts_placement_precedence_undo_and_archive_work_in_arranger ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.08s
+
+     Running tests/export_formats_e2e.rs (target/debug/build/daw-app/5d7d670dfcc7ac36/out/export_formats_e2e-5d7d670dfcc7ac36)
+
+running 4 tests
+test cancelling_a_running_stem_export_leaves_no_files ... ok
+test stems_are_chosen_with_the_mouse_and_line_up_with_the_mix ... ok
+test the_application_tool_exports_formats_and_stems_and_lists_the_files ... ok
+test the_mix_exports_as_flac_ogg_vorbis_and_mp3_with_their_own_settings ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 17.96s
+
+     Running tests/export_options_e2e.rs (target/debug/build/daw-app/50315becbea2bcf4/out/export_options_e2e-50315becbea2bcf4)
+
+running 2 tests
+test minute_export_can_exclude_tails_and_cancellation_preserves_the_editor_and_project ... ok
+test native_instrument_export_choice_keeps_or_trims_the_real_plugin_tail ... ignored, requires a real instrument with a reported tail in RILL_TEST_VST_INSTRUMENT (Surge XT)
+
+test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 5.42s
+
+     Running tests/features_e2e.rs (target/debug/build/daw-app/d8c9bfcfe5a3bd03/out/features_e2e-d8c9bfcfe5a3bd03)
+
+running 12 tests
+test adding_midi_track_immediately_assigns_instrument_and_cancel_keeps_ready_pattern ... ok
+test custom_plugin_folders_scan_search_and_preserve_multiclass_metadata ... ok
+test effects_routing_and_mixer_controls_update_the_same_channel_graph ... ok
+test escape_closes_dropdown_and_menu_before_leaving_editor_and_new_clears_return_paths ... ok
+test installed_instrument_editor_thumbnail_parameter_automation_save_export_and_quit ... ignored, requires an installed instrument and desktop via RILL_TEST_VST_INSTRUMENT
+test instrument_and_library_selection_are_undoable_and_escape_closes_the_popup ... ok
+test instrument_chooser_keyboard_and_double_click_create_ready_patterns_and_assign_preserves_them ... ok
+test midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_tracks ... ok
+test nested_utilities_return_to_the_selected_notes_and_scroll_position ... ok
+test properties_assign_folder_membership_and_compact_tracks_without_losing_channels ... ok
+test setup_cancel_preserves_active_settings_and_apply_persists_in_the_isolated_config ... ok
+test track_menu_creates_each_track_type_and_edit_menu_undoes_and_redoes_creation ... ok
+
+test result: ok. 11 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 10.05s
+
+     Running tests/finishing_actions_e2e.rs (target/debug/build/daw-app/cc9f1626d36d7367/out/finishing_actions_e2e-cc9f1626d36d7367)
+
+running 4 tests
+test mixer_arrows_select_and_extend_across_tracks_and_buses_without_editing ... ok
+test mouse_only_channel_selection_routes_and_sends_as_one_undoable_batch ... ok
+test reexport_reuses_only_successful_destination_and_tail_choice_then_resets_on_open ... ok
+test repeat_to_loop_end_keeps_phrase_rests_and_trims_the_last_source_window ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.80s
+
+     Running tests/generation_workflow_e2e.rs (target/debug/build/daw-app/5c786d24513c131e/out/generation_workflow_e2e-5c786d24513c131e)
+
+running 7 tests
+test all_roots_are_visible_and_scale_sync_is_explicit_and_view_only ... ok
+test full_requested_range_extends_only_the_trimmed_stretched_ghost_occurrence ... ok
+test generator_add_and_next_targets_stay_fixed_through_feedback_and_repeated_mouse_additions ... ok
+test generator_length_mouse_keypad_rejects_fractional_drafts_before_applying_whole_bars ... ok
+test open_generator_reflows_when_resized_to_a_short_viewport ... ok
+test requested_ranges_respect_both_timeline_and_stretched_source_limits ... ok
+test short_arpeggio_notes_keep_whole_bars_and_next_range_adds_without_reopening ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 19.40s
+
+     Running tests/loop_selection_e2e.rs (target/debug/build/daw-app/8ebc8881ca93e504/out/loop_selection_e2e-8ebc8881ca93e504)
+
+running 4 tests
+test clip_editor_range_loops_only_the_open_clip_instead_of_the_retained_arranger_group ... ok
+test context_loop_selection_keeps_phrase_rests_and_loop_clip_keeps_existing_selection ... ok
+test loop_selection_is_disabled_without_selection_and_while_recording ... ok
+test range_loops_discontiguous_clips_exactly_in_one_undo_and_preserves_context ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.64s
+
+     Running tests/menu_order_e2e.rs (target/debug/build/daw-app/e8e62070ba49750f/out/menu_order_e2e-e8e62070ba49750f)
+
+running 1 test
+test edit_track_and_window_menus_follow_workflow_with_a_shortcut_column ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+
+     Running tests/midi_clip_actions_e2e.rs (target/debug/build/daw-app/ea903b1bb4c41fbf/out/midi_clip_actions_e2e-ea903b1bb4c41fbf)
+
+running 5 tests
+test clip_timing_and_pitch_actions_keep_sources_ghosts_and_exact_undo_recall ... ok
+test loop_this_clip_context_uses_exact_audio_midi_and_automation_pattern_bounds ... ok
+test pitch_bounds_reject_the_entire_clip_action_including_trimmed_source_notes ... ok
+test selected_note_flips_are_involutions_keep_unselected_notes_and_ghost_identity ... ok
+test whole_clip_quantize_and_humanize_preview_all_audible_notes_but_keep_hidden_material ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.84s
+
+     Running tests/midi_editor_e2e.rs (target/debug/build/daw-app/c7e31561e8db66e4/out/midi_editor_e2e-c7e31561e8db66e4)
+
+running 20 tests
+test anchored_zoom_pan_fit_both_axes_and_held_key_audition_release ... ok
+test chord_and_scale_stacks_highlight_keys_and_velocity_lane_edits_multiple_notes ... ok
+test compact_notes_menu_scrolls_to_velocity_and_edits_the_note_with_the_mouse ... ok
+test double_click_places_notes_exactly_at_pointer_in_select_and_cursor_tools ... ok
+test draw_resize_both_edges_double_click_and_history_use_real_pointer_gestures ... ok
+test drawn_note_length_group_move_and_pencil_double_delete_are_undoable ... ok
+test folded_fit_and_root_changes_handle_hidden_only_clips_without_edits ... ok
+test folded_scale_draw_move_resize_audition_velocity_and_delete_protect_hidden_notes ... FAILED
+test held_audition_changes_pitch_and_stops_on_focus_loss_and_view_dismissal ... ok
+test legato_preserves_chords_and_transpose_and_nudge_preserve_group_spacing ... ok
+test overlapping_note_body_does_not_hide_another_notes_resize_edge ... ok
+test pitch_and_selection_controls_are_disclosed_without_changing_notes ... ok
+test quantize_preview_strength_swing_ends_apply_cancel_and_history ... ok
+test scale_view_highlights_fold_and_hidden_selection_never_change_source_notes ... ok
+test selected_note_clipboard_pastes_at_cursor_with_new_ids_and_relative_spacing ... ok
+test shared_tools_split_glue_duplicate_erase_cursor_and_keyboard_shortcuts ... ok
+test shift_drag_duplicates_once_and_shift_edge_resize_temporarily_bypasses_snap ... ok
+test short_notes_move_from_center_and_fast_copy_paste_keeps_audible_lengths ... ok
+test unfolding_never_restores_selection_after_deselect_replace_select_all_or_navigation ... ok
+test unselected_notes_move_and_trim_at_either_edge_even_with_cursor_tool ... ok
+
+failures:
+
+---- folded_scale_draw_move_resize_audition_velocity_and_delete_protect_hidden_notes stdout ----
+
+thread 'folded_scale_draw_move_resize_audition_velocity_and_delete_protect_hidden_notes' (20378) panicked at crates/daw-app/tests/midi_editor_e2e.rs:912:5:
+assertion failed: notes(&state).iter().any(|note| note["pitch"] == 63 && note["start"] == 2.0)
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+   1: core::panicking::panic_fmt
+   2: core::panicking::panic
+   3: midi_editor_e2e::folded_scale_draw_move_resize_audition_velocity_and_delete_protect_hidden_notes
+   4: midi_editor_e2e::folded_scale_draw_move_resize_audition_velocity_and_delete_protect_hidden_notes::{closure#0}
+   5: <midi_editor_e2e::folded_scale_draw_move_resize_audition_velocity_and_delete_protect_hidden_notes::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+
+failures:
+    folded_scale_draw_move_resize_audition_velocity_and_delete_protect_hidden_notes
+
+test result: FAILED. 19 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.64s
+
+error: test failed, to rerun pass `-p daw-app --test midi_editor_e2e`

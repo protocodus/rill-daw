@@ -1,0 +1,60 @@
+{
+  "study": "RILL integrated-instrument first-use exploration",
+  "requested_by_user": "Fetch latest main; run five agents making music as early-alpha novice users; record UI discovery and confusion for later evaluation.",
+  "participants": [
+    {
+      "id": 1,
+      "background": "Casual music listener; no DAW experience",
+      "goal": "Catchy electronic melody; repeat, save, export"
+    },
+    {
+      "id": 2,
+      "background": "Rhythm-game fan; no DAW experience",
+      "goal": "Original dance beat; second sound; save, export"
+    },
+    {
+      "id": 3,
+      "background": "Hobby guitarist; knows music but no DAW",
+      "goal": "Bass riff and higher melody; balance; save, export"
+    },
+    {
+      "id": 4,
+      "background": "Beginner pianist/songwriter; no DAW experience",
+      "goal": "Soft chord progression and tune; space effect; save, export"
+    },
+    {
+      "id": 5,
+      "background": "Visual artist; no DAW experience",
+      "goal": "Atmospheric loop from included sampler or synth; layer and add space; save, export"
+    }
+  ],
+  "task_method": {
+    "interface": "Native application under independent Xvfb displays; screenshot inspection and native mouse/keyboard events",
+    "fresh_state": "Separate config, cache, scratch and PulseAudio sink per participant. Default application demo is allowed on launch.",
+    "allowed_knowledge": "Visible UI, supplied persona and goal, driver mechanics, required AGENTS.md contributor rules",
+    "disallowed_shortcuts": "No source/user guide/prior-study inspection, no headless automation, MCP, injected project files or prewritten compositions",
+    "independence": "Agents started without parent conversation history and were not shown other participants findings. Coordinator relayed only environmental facts and requested recording measurements.",
+    "recording": "3 fps desktop recording plus actual monitor output, screenshot milestones, timestamped input log and chronological observation notes",
+    "notes_scope": "Concise simulated expectations, intentions, actions, observed outcomes and discoveries; not private internal reasoning",
+    "duration": "Approximately 15\u201320 minute exploratory sessions; count actual input operations and outcomes, no success quota"
+  },
+  "limitations": [
+    "Simulated beginner perspectives from AI agents, not recruited humans; musical goals provide context the actual product may not provide.",
+    "Agents share a model family and coordinator; cross-session themes are signals for evaluation, not population prevalence estimates.",
+    "Required AGENTS.md included contributor-level interface conventions, though agents did not read source or user workflow documentation.",
+    "No physical headphones, MIDI controller or recording hardware; sound quality and tactile timing not assessed.",
+    "Unoptimized development build on four shared CPU cores; repeated ALSA/PulseAudio errors confound real-time audition.",
+    "Native chooser missing GTK schema setup was repaired during early exploration; earlier affected attempts are environment-confounded.",
+    "No code fixes were made during the study.",
+    "Missing window-manager focus restoration caused some keyboard/shortcut noops after native file pickers; input driver restored normal focus behavior mid-study. Relevant earlier attempts remain recorded and are environment-confounded."
+  ],
+  "deliverables": [
+    "Per-session report.json",
+    "Chronological session-notes.jsonl",
+    "Native mouse-actions.jsonl",
+    "Screenshot evidence",
+    "Desktop and audio recordings",
+    "Music files saved/exported by participants",
+    "Offline review.html and artifact verification"
+  ]
+}

@@ -58,7 +58,7 @@ fn invoke(app: &mut Harness, kind: &str) -> Value {
             app.command(json!({"command":"wait_project"}))
         }
         "export" => {
-            menu(app, "File", "Export WAV…");
+            menu(app, "File", "Export audio…");
             app.click("Export…")
         }
         "export_midi" => menu(app, "File", "Export MIDI…"),
@@ -212,7 +212,7 @@ fn raw_and_normalized_source_aliases_are_rejected_before_replacement_approval() 
                     menu(&mut app, "File", "Save as…");
                 }
                 "export" => {
-                    menu(&mut app, "File", "Export WAV…");
+                    menu(&mut app, "File", "Export audio…");
                     app.click("Export…");
                 }
                 "export_midi" => {

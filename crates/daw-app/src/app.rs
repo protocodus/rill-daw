@@ -430,7 +430,7 @@ impl DawApp {
             last_clip_length: 4.0,
             new_track_after: None,
             root: 0,
-            scale: Scale::Minor,
+            scale: Scale::Major,
             tool: Tool::Select,
             workspace_tools: Default::default(),
             drag: None,
@@ -2376,25 +2376,18 @@ impl DawApp {
     fn transport(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("transport")
             .frame(daw_ui::panel(ctx).inner_margin(egui::Margin::symmetric(
-                daw_ui::tokens::SPACE_MD as i8,
                 daw_ui::tokens::SPACE_SM as i8,
+                daw_ui::tokens::SPACE_XS as i8,
             )).corner_radius(0))
             .show(ctx, |ui| {
                 // Groups by signal flow: view, playback, position, tempo, loop.
                 // Each group reserves the width it measured last frame and wraps intact.
-                let compact = ui.available_width() < 1400.0;
-                let group_spacing = if compact {
-                    daw_ui::tokens::SPACE_XS
-                } else {
-                    daw_ui::tokens::SPACE_SM
-                };
-                ui.spacing_mut().item_spacing = egui::vec2(
-                    if compact { daw_ui::tokens::SPACE_SM } else { daw_ui::tokens::SPACE_MD },
-                    daw_ui::tokens::SPACE_SM,
+                daw_ui::compact_toolbar_spacing(ui);
+                let group_spacing = daw_ui::tokens::TOOLBAR_ITEM_SPACING;
+                let control_height = ui.spacing().interact_size.y.max(
+                    ui.text_style_height(&egui::TextStyle::Button)
+                        + 2.0 * ui.spacing().button_padding.y,
                 );
-                if compact {
-                    ui.spacing_mut().button_padding.x = daw_ui::tokens::SPACE_SM;
-                }
                 let recording_busy = self.recording_busy();
                 let count_in = self.engine.as_ref().and_then(|engine| {
                     let timing = engine.timing_snapshot();
@@ -2402,7 +2395,7 @@ impl DawApp {
                 });
                 let refining = self.engine.as_ref().is_some_and(|engine| engine.snapshot().refining_audio);
                 ui.horizontal_wrapped(|ui| {
-                    let row_height = daw_ui::tokens::CONTROL_HEIGHT + daw_ui::tokens::SPACE_XS * 2.0;
+                    let row_height = control_height + daw_ui::tokens::SPACE_XS * 2.0;
                     ui.set_min_height(row_height);
                     ui.set_row_height(row_height);
                     daw_ui::measured_toolbar_group(ui, "transport_views", group_spacing, |ui| {
@@ -2410,11 +2403,16 @@ impl DawApp {
                             FocusedView::Workspace(view) => Some(view),
                             _ => None,
                         }).filter(|_| matches!(self.focused_view(), FocusedView::Popup(_))).unwrap_or(self.view);
-                        for (view, label, icon) in [
-                            (WorkspaceView::Arrangement, "Arranger", daw_ui::Icon::Arranger),
-                            (WorkspaceView::Mixer, "Mixer", daw_ui::Icon::Mixer),
+                        for (view, label, icon, hint) in [
+                            (WorkspaceView::Arrangement, "Arranger", daw_ui::Icon::Arranger,
+                                "Arrange clips on the song timeline."),
+                            (WorkspaceView::Mixer, "Mixer", daw_ui::Icon::Mixer,
+                                "Mix channel volume and pan, add effects, and route audio."),
                         ] {
-                            if ui.add(daw_ui::IconButton::tab(active == view, label).icon(icon)).clicked() {
+                            if ui.add(daw_ui::IconButton::tab(active == view, label).icon(icon))
+                                .on_hover_text(hint)
+                                .clicked()
+                            {
                                 self.open_workspace(view);
                             }
                         }
@@ -2424,28 +2422,43 @@ impl DawApp {
                             daw_ui::text::note(ui, "Refining audio…");
                         }
                         if ui.add_enabled(!self.recording_busy(), daw_ui::quiet_button_widget("Start"))
-                            .on_hover_text("Return to start · Home")
+                            .on_hover_text("Move playback to the beginning of the song · Home")
+                            .on_disabled_hover_text("Finish recording before moving playback to the beginning")
                             .clicked()
                         {
                             self.seek(0.0);
                         }
                         let playing = self.recording_busy() || self.playing() || (self.loading.is_some() && self.desired_playing);
                         if ui.add_sized(
-                            egui::vec2(100.0, daw_ui::tokens::CONTROL_HEIGHT),
+                            egui::vec2(100.0, control_height),
                             daw_ui::primary_button_widget(ui, if playing { "Pause" } else { "Play" }),
                         )
-                            .on_hover_text("Space")
+                            .on_hover_text(if self.recording_busy() {
+                                "Finish recording and pause playback at the current position · Space"
+                            } else if playing {
+                                "Pause playback and keep the current position · Space"
+                            } else {
+                                "Play the song from the current cursor position · Space"
+                            })
                             .clicked()
                         {
                             self.play();
                         }
                         if daw_ui::quiet_button(ui, "Stop")
-                            .on_hover_text("Stop and reset instruments")
+                            .on_hover_text("Stop playback, return to the beginning, and reset instruments")
                             .clicked()
                         {
                             self.stop();
                         }
-                        if daw_ui::record_button(ui, self.recording_busy(), !self.recording_finalizing()).clicked() {
+                        if daw_ui::record_button(ui, self.recording_busy(), !self.recording_finalizing())
+                            .on_hover_text(if self.recording_busy() {
+                                "Finish the current recording and keep playback running"
+                            } else {
+                                "Record the armed audio and MIDI tracks. Arm tracks and choose inputs in Window → Recording."
+                            })
+                            .on_disabled_hover_text("Wait for the current recording to finish saving")
+                            .clicked()
+                        {
                             if self.recording_busy() { self.finish_recording(crate::recording_ui::AfterRecording::Continue); }
                             else { self.begin_recording(); }
                         }
@@ -2470,7 +2483,11 @@ impl DawApp {
                                     .suffix(" BPM"))
                             })
                         }).inner;
-                        if tempo_edit.response.changed() {
+                        if tempo_edit.response
+                            .on_hover_text("Set the song speed in beats per minute; higher values make each beat shorter.")
+                            .on_disabled_hover_text("Finish recording before changing the song tempo")
+                            .changed()
+                        {
                             if tempo_edit.stepped {
                                 self.history.seal_group();
                             }
@@ -2482,21 +2499,36 @@ impl DawApp {
                         let mut beats_per_bar = self.project.beats_per_bar;
                         if ui.add_enabled_ui(!recording_busy, |ui| {
                             daw_ui::time_signature_choice(ui, &mut beats_per_bar)
-                        }).inner.changed() {
+                        }).inner
+                            .on_disabled_hover_text("Finish recording before changing the time signature")
+                            .changed()
+                        {
                             self.begin_edit();
                             self.project.beats_per_bar = beats_per_bar;
                             self.edit_label = Some("Time signature".into());
                             self.changed();
                         }
                         let mut click = self.project.metronome_enabled;
-                        if daw_ui::quiet_toggle(ui, &mut click, "Click").on_hover_text("Metronome · Pre-count and level are in Window → Recording").changed() {
+                        if daw_ui::quiet_toggle(ui, &mut click, "Click")
+                            .on_hover_text(if self.project.metronome_enabled {
+                                "Turn off metronome clicks during playback. Pre-count and level are in Window → Recording."
+                            } else {
+                                "Play metronome clicks to hear the beat. Pre-count and level are in Window → Recording."
+                            })
+                            .changed()
+                        {
                             self.begin_edit(); self.project.metronome_enabled = click; self.edit_label = Some("Metronome".into()); self.changed();
                         }
                     });
                     daw_ui::measured_toolbar_group(ui, "transport_loop", group_spacing, |ui| {
                         let mut looping = self.project.loop_enabled;
                         if ui.add_enabled_ui(!recording_busy, |ui| daw_ui::quiet_toggle(ui, &mut looping, "Loop")).inner
-                            .on_hover_text("Repeat the range between Start beat and End beat")
+                            .on_hover_text(if self.project.loop_enabled {
+                                "Turn off repeating playback of the range between Start beat and End beat"
+                            } else {
+                                "Repeat playback of the range between Start beat and End beat"
+                            })
+                            .on_disabled_hover_text("Finish recording before changing playback looping")
                             .changed()
                         {
                             self.begin_edit();
@@ -2530,6 +2562,11 @@ impl DawApp {
                             let arrangement_end = self.project.end_beat();
                             if ui.add_enabled(arrangement_end > 0.0, daw_ui::button_widget("Loop playback over arrangement"))
                                 .on_hover_text("Enable playback looping from the beginning through the last clip. To create copies, select a phrase, set a later loop end, then choose Edit → Repeat to loop end.")
+                                .on_disabled_hover_text(if recording_busy {
+                                    "Finish recording before changing the loop range"
+                                } else {
+                                    "Add a clip to the arrangement before looping its contents"
+                                })
                                 .clicked()
                             {
                                 let changed = !self.project.loop_enabled || self.project.loop_start != 0.0 || self.project.loop_end != arrangement_end;
@@ -2567,7 +2604,7 @@ impl DawApp {
                                 },
                             );
                             let start_changed = start_edit.response
-                                .on_hover_text("First beat to repeat. Use −/+ for quarter-beat steps, drag for adjustment, or click to type.")
+                                .on_hover_text("First beat to repeat; changes where each playback loop begins.")
                                 .changed();
                             let end_edit = daw_ui::number_stepper(
                                 ui, &mut end, 0.25, (start + minimum_length)..=(daw_core::MAX_BEAT + 1.0), "loop end", |ui, value| {
@@ -2580,7 +2617,7 @@ impl DawApp {
                                 },
                             );
                             let end_changed = end_edit.response
-                                .on_hover_text("Exclusive end: playback jumps to Start before this beat. Use −/+ for quarter-beat steps, or drag for adjustment.")
+                                .on_hover_text("Exclusive end: playback jumps to Start before this beat.")
                                 .changed();
                             if (start_changed || end_changed)
                                 && start.is_finite()
@@ -2605,7 +2642,8 @@ impl DawApp {
                                 );
                             });
                         });
-                        range.0.on_hover_text(format!("Loop beats {:.2}–{:.2} · Set start and end", self.project.loop_start + 1.0, self.project.loop_end + 1.0));
+                        range.0.on_hover_text(format!("Set the loop start and end, or choose a playback range and duration.
+Current loop: beats {:.2}–{:.2}", self.project.loop_start + 1.0, self.project.loop_end + 1.0));
                     });
                 });
             });
@@ -2671,7 +2709,7 @@ impl DawApp {
                             self.import_dialog();
                             ui.close();
                         }
-                        if daw_ui::button(ui, "Export WAV…").clicked() {
+                        if daw_ui::button(ui, "Export audio…").clicked() {
                             self.export();
                             ui.close();
                         }
@@ -3741,7 +3779,7 @@ impl DawApp {
                                 daw_ui::IconButton::with_icon(daw_ui::Icon::Settings, "Properties")
                                     .quiet(),
                             )
-                            .on_hover_text("Clip position, duration, name and other properties")
+                            .on_hover_text("Open this clip’s position, duration, name and other properties")
                             .clicked()
                     {
                         self.open_popup(PopupKind::Inspector);
@@ -3766,7 +3804,7 @@ impl DawApp {
                                 daw_ui::ai_button_widget(if compact { "AI" } else { "AI for this context" })
                                     .quiet(),
                             )
-                            .on_hover_text(format!("Open AI scoped to {label}"))
+                            .on_hover_text(format!("Open the AI assistant with {label} as its editing context"))
                         } else {
                             daw_ui::contextual_ai_button(ui, &label)
                         };
@@ -3789,7 +3827,10 @@ impl DawApp {
                         self.mixer_track_navigation(ui);
                         self.mixer_order_menu(ui);
                         self.mixer_add_send_menu(ui);
-                        if daw_ui::button(ui, "Add bus").clicked() {
+                        if daw_ui::button(ui, "Add bus")
+                            .on_hover_text("Add a bus channel to combine tracks or receive effect sends")
+                            .clicked()
+                        {
                             self.mixer_add_bus(ui.ctx());
                         }
                     }
@@ -3802,7 +3843,7 @@ impl DawApp {
                         let unassigned = track.instrument == Instrument::None;
                         let response = if unassigned {
                             daw_ui::primary_button(ui, "Choose instrument…")
-                                .on_hover_text("These MIDI notes are silent until an instrument is assigned")
+                                .on_hover_text("Choose an instrument to hear this track’s MIDI notes. These notes are silent until an instrument is assigned.")
                         } else {
                             ui.add(
                                 daw_ui::IconButton::with_icon(daw_ui::Icon::Instrument, "Instrument")

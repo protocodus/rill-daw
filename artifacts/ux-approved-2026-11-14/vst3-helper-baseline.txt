@@ -1,0 +1,5 @@
+Baseline HEAD standalone vendor helper coverage:
+ProcessingCapabilities: in protocol=True; handled in helper=False
+ReleaseSharedAudio: in protocol=True; handled in helper=False
+ConfigureSharedAudio: in protocol=True; handled in helper=False
+ProcessBlock: in protocol=True; handled in helper=False

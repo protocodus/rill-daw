@@ -375,6 +375,11 @@ impl Worker {
                     params: plugin.get_parameters()?,
                 });
             }
+            HostCommand::NoteNames => {
+                return Ok(HostResponse::NoteNames {
+                    names: plugin.note_names()?,
+                });
+            }
             HostCommand::FormatParameter { id, normalized } => {
                 return Ok(HostResponse::ParameterString {
                     value: plugin.format_parameter(id, normalized)?,

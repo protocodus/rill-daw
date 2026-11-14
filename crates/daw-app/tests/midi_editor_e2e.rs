@@ -275,7 +275,7 @@ fn chord_and_scale_stacks_highlight_keys_and_velocity_lane_edits_multiple_notes(
     assert!(keys.iter().any(|k| k["pitch"] == 64 && k["chord"] == true));
     app.click("Chord stack");
     app.click("Scale stack");
-    app.click("Natural minor");
+    app.click("Major");
     app.click("Major");
     let state = app.inspect();
     let state = pointer(&mut app, "click", point(&state, 5.0, 60), None);
@@ -615,16 +615,11 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
             .iter()
             .any(|value| value == label)
     };
-    for label in [
-        "Natural minor",
-        "Major triad",
-        "Chord stack",
-        "Glue selected",
-    ] {
+    for label in ["Major", "Major triad", "Chord stack", "Glue selected"] {
         assert!(!visible(&before, label), "{label} should be contextual");
     }
-    let pitch = app.click("Key C · Natural minor");
-    assert!(visible(&pitch, "Natural minor"));
+    let pitch = app.click("Scale guide C · Major");
+    assert!(visible(&pitch, "Major"));
     assert!(visible(&pitch, "Major triad"));
     assert_eq!(app.key("Escape")["view"], "Clip");
     app.command(json!({"command":"key","key":"A","cmd":true}));
@@ -645,7 +640,7 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
     let multi = app.key("U");
     assert!(visible(&multi, "Chord stack"));
     assert!(visible(&multi, "Major triad"), "{}", multi["label_rects"]);
-    assert!(visible(&multi, "Key C · Natural minor"));
+    assert!(visible(&multi, "Scale guide C · Major"));
     let plot = &multi["midi_editor"]["plot"];
     let top = plot["min"][1].as_f64().unwrap();
     let bottom = plot["max"][1].as_f64().unwrap();
@@ -837,7 +832,7 @@ fn scale_view_highlights_fold_and_hidden_selection_never_change_source_notes() {
     let mut app = open(vec![
         Note::new(60, 1.0, 1.0, 90),
         Note::new(61, 2.0, 1.0, 75),
-        Note::new(63, 3.0, 1.0, 100),
+        Note::new(64, 3.0, 1.0, 100),
     ]);
     app.command(json!({"command":"key","key":"A","cmd":true}));
     let original = app.inspect();
@@ -854,7 +849,7 @@ fn scale_view_highlights_fold_and_hidden_selection_never_change_source_notes() {
             .as_array()
             .unwrap()
             .iter()
-            .all(|pitch| daw_core::Scale::Minor.contains(0, pitch.as_u64().unwrap() as u8))
+            .all(|pitch| daw_core::Scale::Major.contains(0, pitch.as_u64().unwrap() as u8))
     );
     assert_eq!(folded["project"], original["project"]);
     assert_eq!(folded["history"], original["history"]);
@@ -917,7 +912,7 @@ fn folded_scale_draw_move_resize_audition_velocity_and_delete_protect_hidden_not
     assert!(
         notes(&state)
             .iter()
-            .any(|note| note["pitch"] == 63 && note["start"] == 2.0)
+            .any(|note| note["pitch"] == 64 && note["start"] == 2.0)
     );
     app.key("W");
     let state = app.inspect();
@@ -1062,7 +1057,7 @@ fn folded_fit_and_root_changes_handle_hidden_only_clips_without_edits() {
         assert_eq!(disabled["history"], original["history"]);
         app.click("Fit");
     }
-    app.click("Key C · Natural minor");
+    app.click("Scale guide C · Major");
     app.click("C");
     let revealed = app.click("C♯");
     assert_eq!(revealed["midi_editor"]["hidden_notes"], 0);

@@ -88,7 +88,7 @@ pub fn snap_choice(
         crate::text::note(ui, "Hold Shift to bypass snapping");
     });
     let mut response = response.on_hover_text(
-        "Grid step for moving, trimming and drawing; Grid follows the lines shown at this zoom",
+        "Grid step for moving, trimming and drawing; Grid follows the lines shown at this zoom. Hold Shift to bypass snapping.",
     );
     if *snap != before {
         response.mark_changed();

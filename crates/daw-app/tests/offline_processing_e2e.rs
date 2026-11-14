@@ -64,7 +64,7 @@ fn open_native_song(app: &mut Harness, plugin: &EditorProbeFixture) -> Value {
 fn start_export(app: &mut Harness, path: &Path) {
     app.command(json!({"command":"file_dialog", "kind":"export", "path":path}));
     app.click("File");
-    app.click("Export WAV…");
+    app.click("Export audio…");
     app.click("Export…");
 }
 

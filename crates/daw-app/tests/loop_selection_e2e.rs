@@ -204,7 +204,7 @@ fn loop_selection_is_disabled_without_selection_and_while_recording() {
     assert_eq!(disabled["recording"]["phase"], "recording");
     app.key("Escape");
     context(&mut app, "First phrase");
-    let disabled = app.click("Loop playback over selection");
+    let disabled = app.click("Loop playback over clip");
     assert_eq!(disabled["project"], recording["project"]);
     assert_eq!(disabled["history"], recording["history"]);
     assert_eq!(disabled["recording"]["phase"], "recording");

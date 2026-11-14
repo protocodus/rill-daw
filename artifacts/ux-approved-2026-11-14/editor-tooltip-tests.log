@@ -1,0 +1,52 @@
+   Compiling daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+   Compiling daw-plugins v0.1.0 (/workspace/rill-daw/crates/daw-plugins)
+   Compiling daw-devices-ui v0.1.0 (/workspace/rill-daw/crates/daw-devices-ui)
+   Compiling daw-engine v0.1.0 (/workspace/rill-daw/crates/daw-engine)
+   Compiling daw-app v0.1.0 (/workspace/rill-daw/crates/daw-app)
+    Finished `test` profile [unoptimized] target(s) in 37.71s
+     Running tests/editor_toolbar_tooltips_e2e.rs (target/debug/build/daw-app/86fe097ff73cd360/out/editor_toolbar_tooltips_e2e-86fe097ff73cd360)
+
+running 3 tests
+test audio_toolbar_and_expanded_fade_and_processing_options_explain_outcomes_and_prerequisites ... FAILED
+test automation_toolbar_and_selected_point_controls_describe_their_effect_without_editing ... ok
+test midi_and_named_note_toolbars_explain_their_actions_and_unavailable_edits_on_hover ... FAILED
+
+failures:
+
+---- audio_toolbar_and_expanded_fade_and_processing_options_explain_outcomes_and_prerequisites stdout ----
+
+thread 'audio_toolbar_and_expanded_fade_and_processing_options_explain_outcomes_and_prerequisites' (30599) panicked at crates/daw-app/tests/editor_toolbar_tooltips_e2e.rs:159:28:
+Missing 0 beats: ["Previous","Next","Tool help","Fit","Fit selection","RILL","File","Edit","Track","Window","Help","AI","toolbar-tooltips · 0:04","Arranger","Mixer","Start","Play","Stop","Record","1.1.1","0:00.00","120.0 BPM","−","+","123","4/4","Click","Loop","Range","Properties","AI for this context","Back","Clip Editor · Hover audio","Song 1:1–2:1 · Recording","Select","Cursor","Cut","Stretch","Slip","Warp","Fade in","Fade out","Snap grid","Clip","Process","Gain 0.0 dB","Pitch","0.00 beats","Linear","View","−","+","1","0:00","2","1.1.3","0:00.25","1.2","0:00.5","1.2.3","0:00.75","1.3","0:01","1.3.3","0:01.25","1.4","0:01.5","1.4.3","0:01.75"]
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+   1: core::panicking::panic_fmt
+   2: editor_toolbar_tooltips_e2e::hover::{closure#1}
+   3: <core::option::Option<&serde_json::value::Value>>::unwrap_or_else::<editor_toolbar_tooltips_e2e::hover::{closure#1}>
+   4: editor_toolbar_tooltips_e2e::hover
+   5: editor_toolbar_tooltips_e2e::audio_toolbar_and_expanded_fade_and_processing_options_explain_outcomes_and_prerequisites
+   6: editor_toolbar_tooltips_e2e::audio_toolbar_and_expanded_fade_and_processing_options_explain_outcomes_and_prerequisites::{closure#0}
+   7: <editor_toolbar_tooltips_e2e::audio_toolbar_and_expanded_fade_and_processing_options_explain_outcomes_and_prerequisites::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+---- midi_and_named_note_toolbars_explain_their_actions_and_unavailable_edits_on_hover stdout ----
+
+thread 'midi_and_named_note_toolbars_explain_their_actions_and_unavailable_edits_on_hover' (30630) panicked at crates/daw-app/tests/editor_toolbar_tooltips_e2e.rs:134:5:
+Missing hover explanation "Choose the root note for the scale guide": ["Previous","Next","Tool help","Fit","Fit selection","RILL","File","Edit","Track","Window","Help","AI","toolbar-tooltips · 0:04","Arranger","Mixer","Start","Play","Stop","Record","1.1.1","0:00.00","120.0 BPM","−","+","123","4/4","Click","Loop","Range","Properties","AI for this context","Instrument","Back","Clip Editor · Hover keys","Song 1:1–3:1 · Hover keys","Select","Cursor","Pencil","Multi-draw","Cut","Glue","Erase","Duplicate","Snap grid","Length last","Scale guide C · Major","Clip","Notes","Generate…","View","−","+","Select notes · Drag to move or resize","C5","C4","C3","1","0:00","2","0:02","3","0:04","4","0:06","Local","Clip end","Velocity","C4","Root","C","Scale","Major","Chord","Major triad","C","C♯","D","D♯","E","F","F♯","G","G♯","A","A♯","B"]
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+   1: core::panicking::panic_fmt
+   2: editor_toolbar_tooltips_e2e::hover_at
+   3: editor_toolbar_tooltips_e2e::hover
+   4: editor_toolbar_tooltips_e2e::midi_and_named_note_toolbars_explain_their_actions_and_unavailable_edits_on_hover
+   5: editor_toolbar_tooltips_e2e::midi_and_named_note_toolbars_explain_their_actions_and_unavailable_edits_on_hover::{closure#0}
+   6: <editor_toolbar_tooltips_e2e::midi_and_named_note_toolbars_explain_their_actions_and_unavailable_edits_on_hover::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+
+failures:
+    audio_toolbar_and_expanded_fade_and_processing_options_explain_outcomes_and_prerequisites
+    midi_and_named_note_toolbars_explain_their_actions_and_unavailable_edits_on_hover
+
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.59s
+
+error: test failed, to rerun pass `-p daw-app --test editor_toolbar_tooltips_e2e`

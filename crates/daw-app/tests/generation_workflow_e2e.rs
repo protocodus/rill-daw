@@ -526,8 +526,8 @@ fn all_roots_are_visible_and_scale_sync_is_explicit_and_view_only() {
         let pitch = key["pitch"].as_u64().unwrap() % 12;
         assert_eq!(
             key["scale"],
-            [0, 2, 3, 5, 7, 8, 10].contains(&pitch),
-            "Generator choices must not silently change the C minor grid"
+            [0, 2, 4, 5, 7, 9, 11].contains(&pitch),
+            "Generator choices must not silently change the C major grid"
         );
     }
     let use_scale = control(&mut app, "use_grid_scale");
@@ -550,7 +550,7 @@ fn all_roots_are_visible_and_scale_sync_is_explicit_and_view_only() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|label| label == "Key D · Dorian")
+            .any(|label| label == "Scale guide D · Dorian")
     );
     assert_eq!(drawing["project"], before_sync["project"]);
     assert_eq!(drawing["history"], before_sync["history"]);

@@ -129,13 +129,43 @@ pub fn popup_tabs<T: PartialEq + Copy, R>(
     pages: &[(T, &str)],
     trailing: impl FnOnce(&mut Ui) -> R,
 ) -> R {
-    let result = action_row(ui, trailing, |ui| {
-        ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+    popup_tab_row(ui, trailing, |ui| {
         for (value, label) in pages {
             if tab_choice(ui, *page == *value, *label).clicked() {
                 *page = *value;
             }
         }
+    })
+}
+
+/// The same popup tabs with caller-supplied explanations of each destination.
+/// Hints stay attached to their tab, including the currently selected page.
+pub fn popup_tabs_with_hints<T: PartialEq + Copy, R>(
+    ui: &mut Ui,
+    page: &mut T,
+    pages: &[(T, &str, &str)],
+    trailing: impl FnOnce(&mut Ui) -> R,
+) -> R {
+    popup_tab_row(ui, trailing, |ui| {
+        for (value, label, hint) in pages {
+            if tab_choice(ui, *page == *value, *label)
+                .on_hover_text(*hint)
+                .clicked()
+            {
+                *page = *value;
+            }
+        }
+    })
+}
+
+fn popup_tab_row<R>(
+    ui: &mut Ui,
+    trailing: impl FnOnce(&mut Ui) -> R,
+    tabs: impl FnOnce(&mut Ui),
+) -> R {
+    let result = action_row(ui, trailing, |ui| {
+        ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+        tabs(ui);
     })
     .inner
     .0;
@@ -163,8 +193,20 @@ pub fn small_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
 // and target height. Keep the widget in the parent Ui so wrapping stays native.
 fn compact_button(ui: &mut Ui, button: crate::IconButton) -> Response {
     let padding = ui.spacing().button_padding;
-    ui.spacing_mut().button_padding = egui::vec2(tokens::SPACE_SM, tokens::BUTTON_PADDING_Y);
-    let response = ui.add(button.min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT)));
+    let toolbar = crate::layout::compact_toolbar(ui);
+    ui.spacing_mut().button_padding = egui::vec2(
+        tokens::SPACE_SM,
+        if toolbar {
+            tokens::TOOLBAR_BUTTON_PADDING_Y
+        } else {
+            tokens::BUTTON_PADDING_Y
+        },
+    );
+    let response = ui.add(if toolbar {
+        button
+    } else {
+        button.min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT))
+    });
     ui.spacing_mut().button_padding = padding;
     response
 }
@@ -468,7 +510,10 @@ fn semantic_picker<R>(
     let disclosure_id = egui::Id::new("rill-menu-disclosure");
     let mut atoms = egui::Atoms::new(label);
     if icon.is_some() {
-        atoms.push_left(egui::Atom::custom(icon_id, egui::Vec2::splat(18.0)));
+        atoms.push_left(egui::Atom::custom(
+            icon_id,
+            egui::Vec2::splat(crate::layout::button_icon_size(ui)),
+        ));
     }
     atoms.push_right(egui::Atom::custom(disclosure_id, egui::Vec2::splat(13.0)));
 
@@ -476,13 +521,21 @@ fn semantic_picker<R>(
     // Avoid a nested Ui scope so horizontal_wrapped can wrap each whole control.
     let previous_style = ui.style().clone();
     let colors = theme::palette(ui.ctx());
+    let toolbar = crate::layout::compact_toolbar(ui);
+    if toolbar {
+        ui.spacing_mut().icon_spacing = tokens::ICON_LABEL_GAP;
+    }
     ui.spacing_mut().button_padding = egui::vec2(
-        horizontal_padding.unwrap_or(if compact {
+        horizontal_padding.unwrap_or(if toolbar || compact {
             tokens::SPACE_SM
         } else {
             tokens::BUTTON_PADDING_X
         }),
-        tokens::BUTTON_PADDING_Y,
+        if toolbar {
+            tokens::TOOLBAR_BUTTON_PADDING_Y
+        } else {
+            tokens::BUTTON_PADDING_Y
+        },
     );
     if horizontal_padding.is_some() {
         ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
@@ -551,7 +604,14 @@ fn semantic_picker<R>(
         .fill(egui::Color32::TRANSPARENT)
         .stroke(egui::Stroke::NONE)
         .frame(has_frame)
-        .min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT))
+        .min_size(egui::vec2(
+            0.0,
+            if nested {
+                tokens::CONTROL_HEIGHT
+            } else {
+                ui.spacing().interact_size.y
+            },
+        ))
         .corner_radius(tokens::RADIUS)
         .wrap_mode(egui::TextWrapMode::Truncate)
         .atom_ui(ui);
@@ -597,7 +657,15 @@ fn semantic_picker<R>(
         );
     }
     if let (Some(icon), Some(rect)) = (icon, button.rect(icon_id)) {
-        icon.paint(ui.painter(), rect, color);
+        icon.paint(
+            ui.painter(),
+            rect,
+            if toolbar {
+                color.gamma_multiply(tokens::BUTTON_ICON_OPACITY)
+            } else {
+                color
+            },
+        );
     }
     if let Some(rect) = button.rect(disclosure_id) {
         if nested {
@@ -605,7 +673,15 @@ fn semantic_picker<R>(
         } else {
             crate::Icon::ChevronDown
         }
-        .paint(ui.painter(), rect, color);
+        .paint(
+            ui.painter(),
+            rect,
+            if toolbar {
+                color.gamma_multiply(tokens::BUTTON_ICON_OPACITY)
+            } else {
+                color
+            },
+        );
     }
     ui.set_style(previous_style);
 
@@ -731,9 +807,15 @@ pub fn switch(ui: &mut Ui, value: &mut bool, label: impl Into<WidgetText>) -> Re
     } else {
         tokens::SPACE_SM
     };
+    let toolbar = crate::layout::compact_toolbar(ui);
     let desired = egui::vec2(
         tokens::SWITCH_WIDTH + gap + galley.size().x,
-        tokens::CONTROL_HEIGHT.max(galley.size().y + 2.0 * tokens::BUTTON_PADDING_Y),
+        if toolbar {
+            crate::layout::control_height(ui)
+                .max(galley.size().y + 2.0 * tokens::TOOLBAR_BUTTON_PADDING_Y)
+        } else {
+            tokens::CONTROL_HEIGHT.max(galley.size().y + 2.0 * tokens::BUTTON_PADDING_Y)
+        },
     );
     let (rect, mut response) = ui.allocate_exact_size(desired, egui::Sense::click());
     if response.clicked() {
@@ -1168,10 +1250,11 @@ fn toggle_track<T: Copy + PartialEq>(
             widest * columns as f32,
             TOGGLE_ROW_HEIGHT * options.len().div_ceil(columns) as f32,
         ),
-        TrackLayout::Row => egui::vec2(widths.iter().sum(), tokens::CONTROL_HEIGHT),
-        TrackLayout::Fixed(width) => {
-            egui::vec2(width * options.len() as f32, tokens::CONTROL_HEIGHT)
-        }
+        TrackLayout::Row => egui::vec2(widths.iter().sum(), crate::layout::control_height(ui)),
+        TrackLayout::Fixed(width) => egui::vec2(
+            width * options.len() as f32,
+            crate::layout::control_height(ui),
+        ),
     };
     let (rect, mut response) = ui.allocate_exact_size(size, egui::Sense::hover());
     if ui.is_rect_visible(rect) {
@@ -1211,7 +1294,14 @@ fn toggle_track<T: Copy + PartialEq>(
             }
         };
         next = segment.right_top();
-        let mut button = ui.interact(segment, response.id.with(index), egui::Sense::click());
+        // Native tooltip areas use response.id.with(0). Namespace option IDs
+        // so adding help to the complete group cannot collide with its first
+        // input target and move one widget between content/tooltip layers.
+        let mut button = ui.interact(
+            segment,
+            response.id.with(("toggle_option", index)),
+            egui::Sense::click(),
+        );
         if button.clicked() && current != value {
             *current = *value;
             changed = true;
@@ -1371,17 +1461,26 @@ pub fn picker_at<R>(
 
 pub fn text_field(ui: &mut Ui, value: &mut String, hint: &str, width: f32) -> Response {
     let background = ui.painter().add(egui::Shape::Noop);
+    let toolbar = crate::layout::compact_toolbar(ui);
     let response = ui.add(
         egui::TextEdit::singleline(value)
             .frame(false)
             .hint_text(hint)
             .desired_width(width.max(0.0))
-            .margin(egui::vec2(
-                tokens::BUTTON_PADDING_X,
-                tokens::BUTTON_PADDING_Y,
-            ))
+            .margin(if toolbar {
+                ui.spacing().button_padding
+            } else {
+                egui::vec2(tokens::BUTTON_PADDING_X, tokens::BUTTON_PADDING_Y)
+            })
             .vertical_align(egui::Align::Center)
-            .min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT)),
+            .min_size(egui::vec2(
+                0.0,
+                if toolbar {
+                    ui.spacing().interact_size.y
+                } else {
+                    tokens::CONTROL_HEIGHT
+                },
+            )),
     );
     paint_input_material(ui, background, &response, ui.visuals().text_edit_bg_color());
     response
@@ -1440,6 +1539,10 @@ pub fn number_at(
 
 fn menu_item_spacing(style: &mut egui::Style) {
     style.spacing.button_padding = egui::vec2(tokens::BUTTON_PADDING_X, tokens::BUTTON_PADDING_Y);
+    style.spacing.interact_size.y = tokens::CONTROL_HEIGHT;
+    style.spacing.icon_width = egui::style::Spacing::default().icon_width;
+    style.spacing.icon_width_inner = egui::style::Spacing::default().icon_width_inner;
+    style.spacing.icon_spacing = tokens::SPACE_SM;
     // Full-height targets already supply text padding; use a tighter gap
     // between rows so long menus do not spend their height on empty space.
     style.spacing.item_spacing = egui::vec2(tokens::SPACE_SM, tokens::SPACE_XS);
@@ -1463,7 +1566,16 @@ pub fn select(id_salt: impl Hash, selected_text: impl Into<WidgetText>) -> Combo
 /// form share their disclosure affordance.
 fn select_chevron(ui: &Ui, rect: egui::Rect, visuals: &egui::style::WidgetVisuals, _open: bool) {
     let rect = egui::Rect::from_center_size(rect.center(), egui::Vec2::splat(13.0));
-    crate::Icon::ChevronDown.paint(ui.painter(), rect, visuals.fg_stroke.color);
+    let color = visuals.fg_stroke.color;
+    crate::Icon::ChevronDown.paint(
+        ui.painter(),
+        rect,
+        if crate::layout::compact_toolbar(ui) {
+            color.gamma_multiply(tokens::BUTTON_ICON_OPACITY)
+        } else {
+            color
+        },
+    );
 }
 
 /// A bounded, searchable choice list. Editing its query never accepts a choice;

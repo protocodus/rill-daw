@@ -1,0 +1,33 @@
+{
+  "binary_sha256": "a912738f0a366669a93acc148c2c9e8b5ada09a76ede3b4bc37ecfedf879a586",
+  "captures": [
+    {
+      "view": "automation",
+      "theme": "Light",
+      "image": "automation-light.png",
+      "exit_code": 0,
+      "sha256": "db70cc58a52ca6f04c1388896e2d07f1b915f70419f6216b427ab646cbe266e8"
+    },
+    {
+      "view": "instrument",
+      "theme": "Dark",
+      "image": "instrument-dark.png",
+      "exit_code": 0,
+      "sha256": "295e3873e20096c862cbf9d7b47e1f9c655e650589b66d0d4221864c4605fb9d"
+    },
+    {
+      "view": "arranger",
+      "theme": "Dark",
+      "image": "arranger-dark.png",
+      "exit_code": 0,
+      "sha256": "125fce89723b4d9e9fc597dfcbbb0bf18235fa7fc7d2187d088a1dc750e893eb"
+    },
+    {
+      "view": "mixer",
+      "theme": "Light",
+      "image": "mixer-light.png",
+      "exit_code": 0,
+      "sha256": "f0c9061fdadb5a2b39ce096322ac0ca1ca1670136f00cc46c6099bed939f3748"
+    }
+  ]
+}

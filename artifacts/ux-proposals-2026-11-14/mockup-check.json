@@ -1,0 +1,103 @@
+{
+  "widthChecks": [
+    {
+      "width": 320,
+      "id": "P1",
+      "passed": true
+    },
+    {
+      "width": 320,
+      "id": "P2",
+      "passed": true
+    },
+    {
+      "width": 320,
+      "id": "P3",
+      "passed": true
+    },
+    {
+      "width": 320,
+      "id": "P4",
+      "passed": true
+    },
+    {
+      "width": 320,
+      "id": "P5",
+      "passed": true
+    },
+    {
+      "width": 320,
+      "id": "P6",
+      "passed": true
+    },
+    {
+      "width": 736,
+      "id": "P1",
+      "passed": true
+    },
+    {
+      "width": 736,
+      "id": "P2",
+      "passed": true
+    },
+    {
+      "width": 736,
+      "id": "P3",
+      "passed": true
+    },
+    {
+      "width": 736,
+      "id": "P4",
+      "passed": true
+    },
+    {
+      "width": 736,
+      "id": "P5",
+      "passed": true
+    },
+    {
+      "width": 736,
+      "id": "P6",
+      "passed": true
+    },
+    {
+      "width": 1024,
+      "id": "P1",
+      "passed": true
+    },
+    {
+      "width": 1024,
+      "id": "P2",
+      "passed": true
+    },
+    {
+      "width": 1024,
+      "id": "P3",
+      "passed": true
+    },
+    {
+      "width": 1024,
+      "id": "P4",
+      "passed": true
+    },
+    {
+      "width": 1024,
+      "id": "P5",
+      "passed": true
+    },
+    {
+      "width": 1024,
+      "id": "P6",
+      "passed": true
+    }
+  ],
+  "jsErrors": [],
+  "interactionChecks": [
+    "proposal selection",
+    "drum note toggle",
+    "scale guide feedback",
+    "export format conditional fields",
+    "focused clip editor navigation"
+  ],
+  "rendering": "Headless Chromium with minimal host-style fallback; actual host UI styles may differ."
+}

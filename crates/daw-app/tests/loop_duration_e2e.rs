@@ -79,7 +79,7 @@ fn time_target_repeats_audio_and_midi_to_an_exact_thirty_second_export() {
             56.0
         );
     }
-    let options = menu(&mut app, "File", "Export WAV…");
+    let options = menu(&mut app, "File", "Export audio…");
     if options["export_include_effect_tails"] == true {
         app.click("Include effect tails");
     }

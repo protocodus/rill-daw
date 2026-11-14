@@ -107,6 +107,14 @@ struct ProgramChangeMapping {
     program_count: i32,
 }
 
+/// Decode the discrete program parameter without accepting malformed controller values.
+fn current_program_index(normalized: f64, program_count: i32) -> Option<i32> {
+    if program_count <= 0 || !normalized.is_finite() || !(0.0..=1.0).contains(&normalized) {
+        return None;
+    }
+    Some((normalized * f64::from(program_count - 1)).round() as i32)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ProcessingSampleSize {
     F32,
@@ -4028,6 +4036,109 @@ impl PluginInternal for PluginImpl {
         }
     }
 
+    fn note_names(&self) -> Result<Vec<crate::plugin::NoteName>> {
+        if thread::current().id() != self.control_thread {
+            return Err(Error::Other(
+                "note names must be queried on the plugin control thread".to_string(),
+            ));
+        }
+        let Some(controller) = self.controller.as_ref() else {
+            return Ok(Vec::new());
+        };
+        let Some(unit_info) = controller.cast::<IUnitInfo>() else {
+            return Ok(Vec::new());
+        };
+        self.drain_deferred_controller_sync();
+        unsafe {
+            if self.component.getBusCount(kEvent as i32, kInput as i32) <= 0 {
+                return Ok(Vec::new());
+            }
+            // Query live list metadata: loading a preset can change both its list and names.
+            // Do not allocate or iterate an unbounded count reported by a native plugin.
+            let unit_count = unit_info.getUnitCount();
+            let list_count = unit_info.getProgramListCount();
+            if !(0..=4096).contains(&unit_count) || !(0..=4096).contains(&list_count) {
+                return Ok(Vec::new());
+            }
+            let mut unit_lists = std::collections::HashMap::new();
+            for index in 0..unit_count {
+                let mut unit: UnitInfo = std::mem::zeroed();
+                if unit_info.getUnitInfo(index, &mut unit) == kResultOk && unit.programListId >= 0 {
+                    unit_lists.insert(unit.id, unit.programListId);
+                }
+            }
+            let mut program_counts = std::collections::HashMap::new();
+            for index in 0..list_count {
+                let mut list: ProgramListInfo = std::mem::zeroed();
+                if unit_info.getProgramListInfo(index, &mut list) == kResultOk
+                    && list.programCount > 0
+                {
+                    program_counts.insert(list.id, list.programCount);
+                }
+            }
+
+            let mut names = Vec::new();
+            for channel in 0_i16..16 {
+                let mut unit_id = -1;
+                if unit_info.getUnitByBus(
+                    kEvent as i32,
+                    kInput as i32,
+                    0,
+                    i32::from(channel),
+                    &mut unit_id,
+                ) != kResultOk
+                {
+                    continue;
+                }
+                let Some(&list_id) = unit_lists.get(&unit_id) else {
+                    continue;
+                };
+                let Some(&program_count) = program_counts.get(&list_id) else {
+                    continue;
+                };
+                // A single-program list is unambiguous without a program-change parameter.
+                // Otherwise use the parameter for this exact unit, never the selected unit
+                // in the editor (which need not receive this channel's notes).
+                let program_index = if program_count == 1 {
+                    0
+                } else {
+                    let Some(mapping) = self.cached_program_change(unit_id) else {
+                        continue;
+                    };
+                    if mapping.program_count != program_count {
+                        continue;
+                    }
+                    let Some(index) = current_program_index(
+                        controller.getParamNormalized(mapping.param_id),
+                        program_count,
+                    ) else {
+                        continue;
+                    };
+                    index
+                };
+                for pitch_name in self.program_pitch_names(list_id, program_index)? {
+                    let name: String = pitch_name
+                        .name
+                        .trim()
+                        .chars()
+                        .filter(|ch| !ch.is_control())
+                        .take(256)
+                        .collect();
+                    if !name.is_empty() {
+                        names.push(crate::plugin::NoteName {
+                            port: 0,
+                            channel,
+                            pitch: pitch_name.midi_pitch,
+                            name,
+                        });
+                    }
+                }
+            }
+            // Exactly 16 channels × 128 pitches bounds both the query and the wire payload.
+            Ok(names)
+        }
+    }
+
     fn get_program_data(
         &self,
         program_list_id: i32,
@@ -5527,6 +5638,29 @@ mod output_midi_tests {
                 velocity: 64
             })
         );
+    }
+}
+
+#[cfg(test)]
+mod note_name_tests {
+    use super::current_program_index;
+
+    #[test]
+    fn named_notes_follow_the_current_program_including_single_program_lists() {
+        assert_eq!(current_program_index(0.0, 1), Some(0));
+        assert_eq!(current_program_index(0.0, 5), Some(0));
+        assert_eq!(current_program_index(0.5, 5), Some(2));
+        assert_eq!(current_program_index(1.0, 5), Some(4));
+        assert_eq!(current_program_index(1.0 / 3.0, 4), Some(1));
+    }
+
+    #[test]
+    fn invalid_current_program_values_do_not_select_an_unrelated_note_map() {
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -0.1, 1.1] {
+            assert_eq!(current_program_index(value, 4), None);
+        }
+        assert_eq!(current_program_index(0.0, 0), None);
+        assert_eq!(current_program_index(0.0, -1), None);
     }
 }
 

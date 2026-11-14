@@ -89,10 +89,10 @@ fn piano_rows_preserve_subtle_key_contrast_with_green_harmony_guides_in_both_mod
     app.click("Clip Editor");
     for dark in [true, false, true] {
         if !dark {
-            app.click("Key C · Natural minor");
+            app.click("Scale guide C · Major");
             app.click("C");
             app.click("C♯");
-            app.click("Key C♯ · Natural minor");
+            app.click("Scale guide C♯ · Major");
             app.click("Major triad");
             app.click("Minor triad");
         }

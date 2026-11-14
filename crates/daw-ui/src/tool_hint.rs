@@ -112,9 +112,14 @@ impl ToolHintContext {
 pub fn editor_tool_help(ui: &mut Ui, tool: EditorTool, context: ToolHintContext) -> Response {
     let response = ui
         .scope(|ui| {
-            ui.spacing_mut().button_padding.x = tokens::SPACE_SM;
+            if !crate::layout::compact_toolbar(ui) {
+                ui.spacing_mut().button_padding.x = tokens::SPACE_SM;
+            }
             ui.add_sized(
-                egui::Vec2::splat(tokens::CONTROL_HEIGHT),
+                egui::vec2(
+                    crate::layout::button_icon_size(ui) + 2.0 * ui.spacing().button_padding.x,
+                    crate::layout::control_height(ui),
+                ),
                 crate::IconButton::icon_only(crate::Icon::Help, "Tool help")
                     .presentation()
                     .quiet(),
@@ -122,7 +127,7 @@ pub fn editor_tool_help(ui: &mut Ui, tool: EditorTool, context: ToolHintContext)
         })
         .inner
         .on_hover_text(format!(
-            "{} · {}\n{}",
+            "Open help for {} · {}\n{}",
             context.label(tool),
             tool.key().name(),
             context.hint(tool),
@@ -151,12 +156,12 @@ pub fn editor_tool_caption(
 ) -> Option<Response> {
     let available = ui.available_rect_before_wrap().intersect(ui.clip_rect());
     let width = available.width();
-    if width < tokens::CONTROL_HEIGHT {
+    if width < tokens::CONTROL_HEIGHT || caption_text(ui, width, tool, context).is_none() {
         return None;
     }
     Some(
         ui.allocate_ui_with_layout(
-            egui::vec2(width, tokens::CONTROL_HEIGHT),
+            egui::vec2(width, crate::layout::control_height(ui)),
             egui::Layout::left_to_right(egui::Align::Center),
             |ui| caption_label(ui, tool, context),
         )
@@ -165,13 +170,40 @@ pub fn editor_tool_caption(
 }
 
 fn caption_label(ui: &mut Ui, tool: EditorTool, context: ToolHintContext) -> Response {
+    let width = ui
+        .available_rect_before_wrap()
+        .intersect(ui.clip_rect())
+        .width();
+    let shown = caption_text(ui, width, tool, context).unwrap_or_default();
     ui.add(
-        Label::new(TextRole::Note.rich(ui.ctx(), context.gesture(tool)))
-            .truncate()
+        Label::new(TextRole::Note.rich(ui.ctx(), shown))
+            .extend()
             .selectable(false)
             .sense(Sense::hover()),
     )
     .on_hover_text(context.hint(tool))
+}
+
+fn caption_text(
+    ui: &Ui,
+    width: f32,
+    tool: EditorTool,
+    context: ToolHintContext,
+) -> Option<&'static str> {
+    let mut shown = context.gesture(tool);
+    loop {
+        let measured = ui.painter().layout_no_wrap(
+            shown.to_owned(),
+            TextRole::Note.font(),
+            egui::Color32::PLACEHOLDER,
+        );
+        if measured.size().x <= width {
+            return Some(shown);
+        }
+        // Guidance is optional: keep complete gestures, or leave room for
+        // View and Tool help instead of displaying an unfinished word.
+        shown = shown.rsplit_once(" · ")?.0;
+    }
 }
 
 /// The same caption in a rectangle the caller already owns, such as the strip

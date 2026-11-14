@@ -81,8 +81,6 @@ pub struct Palette {
     pub piano_rows_white: [Color32; 3],
     /// Soft and strong velocity colors, independent of note selection.
     pub piano_notes: [Color32; 2],
-    /// Optional warning hue for pitches outside the selected scale.
-    pub piano_notes_outside_scale: [Color32; 2],
 }
 const fn rgb(r: u8, g: u8, b: u8) -> Color32 {
     Color32::from_rgb(r, g, b)
@@ -125,7 +123,6 @@ pub const DARK: Palette = Palette {
     piano_rows_black: [rgb(31, 34, 39), rgb(31, 40, 35), rgb(31, 43, 36)],
     piano_rows_white: [rgb(41, 44, 49), rgb(40, 51, 45), rgb(40, 54, 46)],
     piano_notes: [rgb(79, 87, 99), rgb(184, 194, 207)],
-    piano_notes_outside_scale: [rgb(151, 75, 79), rgb(241, 125, 129)],
 };
 pub const LIGHT: Palette = Palette {
     bg: rgb(236, 238, 240),
@@ -166,7 +163,6 @@ pub const LIGHT: Palette = Palette {
     piano_rows_black: [rgb(235, 237, 240), rgb(231, 239, 233), rgb(229, 239, 231)],
     piano_rows_white: [rgb(245, 247, 250), rgb(237, 249, 242), rgb(234, 249, 239)],
     piano_notes: [rgb(175, 183, 195), rgb(78, 88, 104)],
-    piano_notes_outside_scale: [rgb(220, 170, 174), rgb(184, 65, 76)],
 };
 
 pub fn palette(ctx: &egui::Context) -> Palette {
@@ -228,14 +224,10 @@ impl Palette {
         }
     }
 
-    /// Neutral notes strengthen with velocity; an optional red hue marks pitches
-    /// outside the scale. Selection deliberately never changes this fill.
-    pub fn piano_note_fill(self, velocity: u8, out_of_scale: bool) -> Color32 {
-        let [soft, strong] = if out_of_scale {
-            self.piano_notes_outside_scale
-        } else {
-            self.piano_notes
-        };
+    /// Neutral notes strengthen with velocity. Optional scale guidance uses
+    /// `paint_outside_scale_marker`; selection deliberately never changes fill.
+    pub fn piano_note_fill(self, velocity: u8, _out_of_scale: bool) -> Color32 {
+        let [soft, strong] = self.piano_notes;
         soft.lerp_to_gamma(strong, f32::from(velocity.min(127)) / 127.0)
     }
 
@@ -455,7 +447,7 @@ mod tests {
     }
 
     #[test]
-    fn piano_velocity_shades_and_warning_hue_keep_neutral_selection_readable() {
+    fn piano_velocity_shades_stay_neutral_with_scale_guidance_and_selection() {
         for colors in [DARK, LIGHT] {
             for out_of_scale in [false, true] {
                 let soft = colors.piano_note_fill(1, out_of_scale);
@@ -471,15 +463,12 @@ mod tests {
                 for velocity in 0..=127 {
                     let fill = colors.piano_note_fill(velocity, out_of_scale);
                     assert_eq!(fill.a(), 255);
-                    if out_of_scale {
-                        assert!(fill.r() > fill.b() + 40);
-                    } else {
-                        let rgb = [fill.r(), fill.g(), fill.b()];
-                        assert!(
-                            rgb.iter().max().unwrap() - rgb.iter().min().unwrap() <= 30,
-                            "default notes remain neutral"
-                        );
-                    }
+                    assert_eq!(fill, colors.piano_note_fill(velocity, false));
+                    let rgb = [fill.r(), fill.g(), fill.b()];
+                    assert!(
+                        rgb.iter().max().unwrap() - rgb.iter().min().unwrap() <= 30,
+                        "notes remain neutral with or without scale guidance"
+                    );
                     let selection = colors.piano_note_stroke(true, fill);
                     assert_eq!(selection.width, 2.0);
                     assert!(matches!(selection.color, Color32::BLACK | Color32::WHITE));

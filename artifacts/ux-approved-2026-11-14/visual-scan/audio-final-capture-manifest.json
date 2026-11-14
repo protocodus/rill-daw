@@ -1,0 +1,16 @@
+{
+  "binary_sha256": "440c591aae82dbdafa24a72816be177b76f02f3fb8b0695a3226b987536f756d",
+  "captures": [
+    {
+      "view": "audio",
+      "theme": "Dark",
+      "image": "audio-dark.png",
+      "exit_code": 0,
+      "dimensions": [
+        1480,
+        960
+      ],
+      "sha256": "e9c922b39c7b80def041ce10d228ff8fda84c59f4941a9801c392e5e76bfa936"
+    }
+  ]
+}

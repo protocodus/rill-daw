@@ -20,6 +20,7 @@ use clack_extensions::{
     gui::{GuiConfiguration, GuiSize, HostGui, HostGuiImpl, PluginGui, Window},
     latency::{HostLatency, HostLatencyImpl, PluginLatency},
     log::{HostLog, HostLogImpl, LogSeverity},
+    note_name::{HostNoteName, HostNoteNameImpl, NoteNameBuffer, PluginNoteName},
     note_ports::{
         HostNotePorts, HostNotePortsImpl, NoteDialect, NoteDialects, NotePortInfoBuffer,
         NotePortRescanFlags, PluginNotePorts,
@@ -50,7 +51,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::ThreadId;
 use std::time::{Duration, Instant};
 use vst3_host::{
-    AudioBusConfig, AudioBusLayout, BusAudioBuffers, MidiEvent,
+    AudioBusConfig, AudioBusLayout, BusAudioBuffers, MidiEvent, NoteName,
     audio::{AudioBusDetails, AudioBusDetailsLayout, BusDirection, MediaType},
     midi::{NoteExpressionInfo, PluginEvent, PluginEventData},
     parameters::Parameter,
@@ -99,6 +100,7 @@ impl HostHandlers for ClapHost {
             .register::<HostTail>()
             .register::<HostAudioPorts>()
             .register::<HostNotePorts>()
+            .register::<HostNoteName>()
             .register::<HostTimer>()
             .register::<HostGui>();
         #[cfg(unix)]
@@ -190,6 +192,14 @@ impl HostNotePortsImpl for MainThread {
     fn rescan(&self, _flags: NotePortRescanFlags) {
         self.restart_bits
             .set(self.restart_bits.get() | RESTART_IO_CHANGED);
+    }
+}
+
+impl HostNoteNameImpl for MainThread {
+    fn changed(&self) {
+        // Native editors capture changed state when returning to the project.
+        // The inspector restores that snapshot before querying note names.
+        self.dirty.set(true);
     }
 }
 
@@ -1254,6 +1264,29 @@ impl NativeProcessor for ClapProcessor {
                     flags.contains(ParamInfoFlags::IS_READONLY),
                     flags.contains(ParamInfoFlags::IS_BYPASS),
                 )
+            })
+            .collect())
+    }
+
+    fn note_names(&mut self) -> Result<Vec<NoteName>> {
+        let handle = self.instance.plugin_handle();
+        let Some(extension) = handle.get_extension::<PluginNoteName>() else {
+            return Ok(Vec::new());
+        };
+        let mut buffer = NoteNameBuffer::new();
+        let address = |value: Match<u16>| match value {
+            Match::All => -1,
+            Match::Specific(value) => i16::try_from(value).unwrap_or(i16::MAX),
+        };
+        Ok((0..extension.count(&handle).min(4096))
+            .filter_map(|index| {
+                let note = extension.get(&handle, index as u32, &mut buffer)?;
+                Some(NoteName {
+                    port: address(note.port),
+                    channel: address(note.channel),
+                    pitch: address(note.key),
+                    name: text(note.name).chars().take(256).collect(),
+                })
             })
             .collect())
     }

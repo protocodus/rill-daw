@@ -127,7 +127,7 @@ fn setup_recording_export_warning_history_and_about_keep_their_actions_in_view()
                 );
                 app.key("Escape");
 
-                let export = menu(&mut app, "File", "Export WAV…");
+                let export = menu(&mut app, "File", "Export audio…");
                 popup_fits(&export, "Export audio", width, height);
                 visible(&export, &["Export…", "Cancel"], width, height);
                 // The bounded summary scrolls when format choices and a long

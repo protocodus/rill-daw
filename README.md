@@ -181,7 +181,7 @@ Run them with `cargo test -p daw-devices --test preset_compatibility`.
 1. Launch Rill and click **Play** to hear the included drum loop, or choose **File → New** for an empty song.
 2. Drop WAV, MP3, FLAC or OGG files onto an audio track or empty arranger space, or choose **File → Import audio…** to create a track at the cursor. For MIDI, choose **Track → Add MIDI track**: it plays R1 Mini at once, or pick a VST3, CLAP, LV2 or AU instrument instead.
 3. Double-click a clip to edit its audio or notes. Open **Window → Mixer** to balance the tracks.
-4. Save a portable `.rill` project, then use **File → Export WAV…** to share a mix.
+4. Save a portable `.rill` project, then use **File → Export audio…** to share a mix.
 
 Use the menus and on-screen tools, or speed up familiar actions with keyboard shortcuts. See the [user guide](docs/USER_GUIDE.md) for recording, loop takes, generation, effects, routing, automation, and recovery.
 

@@ -278,7 +278,7 @@ fn editor_tool_family(
                 .size()
                 .x;
             let icon_width = if crate::Icon::for_label(text).is_some() {
-                18.0 + ui.spacing().icon_spacing
+                crate::layout::button_icon_size(ui) + ui.spacing().icon_spacing
             } else {
                 0.0
             };
@@ -349,12 +349,24 @@ pub fn nudge_menu(ui: &mut Ui, enabled: bool) -> i32 {
     let mut direction = 0;
     crate::quiet_action_menu(ui, "Nudge", |ui| {
         crate::text::label(ui, "Increment");
-        for (value, label) in [
-            (NudgeUnit::Grid, "Grid"),
-            (NudgeUnit::Millisecond, "1 ms"),
-            (NudgeUnit::Sample, "1 sample"),
+        for (value, label, hint) in [
+            (
+                NudgeUnit::Grid,
+                "Grid",
+                "Move by the current snap step; with Snap off, use a sixteenth note",
+            ),
+            (
+                NudgeUnit::Millisecond,
+                "1 ms",
+                "Move by one millisecond, independent of tempo and zoom",
+            ),
+            (
+                NudgeUnit::Sample,
+                "1 sample",
+                "Move by one audio sample at the project sample rate",
+            ),
         ] {
-            crate::selectable_value(ui, &mut unit, value, label);
+            crate::selectable_value(ui, &mut unit, value, label).on_hover_text(hint);
         }
         ui.separator();
         for (value, label, hint) in [
@@ -372,13 +384,16 @@ pub fn nudge_menu(ui: &mut Ui, enabled: bool) -> i32 {
             if ui
                 .add_enabled(enabled, crate::button_widget(label))
                 .on_hover_text(hint)
+                .on_disabled_hover_text("Select a clip to nudge it left or right")
                 .clicked()
             {
                 direction = value;
                 ui.close();
             }
         }
-    });
+    })
+    .response
+    .on_hover_text("Move selected clips left or right by a grid step, millisecond or sample");
     ui.ctx()
         .data_mut(|data| data.insert_temp(egui::Id::new("timeline_nudge_unit"), unit));
     direction
@@ -406,7 +421,7 @@ pub fn meter_choice(ui: &mut Ui, id_salt: &str, beats_per_bar: &mut u8) -> Respo
             }
         })
         .response
-        .on_hover_text("Time signature · quarter-note beats per bar");
+        .on_hover_text("Set quarter-note beats per bar; updates bar lines and musical positions");
     if *beats_per_bar != before {
         response.mark_changed();
     }
@@ -514,7 +529,7 @@ pub fn paint_timeline_ruler(
             if top {
                 rect.top() + 2.0
             } else {
-                rect.bottom() - 2.0
+                rect.bottom() - crate::tokens::TIMELINE_RULER_CLOCK_INSET
             },
         );
         let alignment = if top {

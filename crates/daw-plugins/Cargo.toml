@@ -14,7 +14,7 @@ png = "=0.18.1"
 sha2 = "=0.10.9"
 vst3-host = { version = "=0.10.0", default-features = false, features = ["process-isolation"] }
 clack-host = "=0.2.0"
-clack-extensions = { version = "=0.2.0", features = ["clack-host", "audio-ports", "note-ports", "params", "state", "latency", "tail", "gui", "timer", "thread-check", "log", "render"] }
+clack-extensions = { version = "=0.2.0", features = ["clack-host", "audio-ports", "note-ports", "note-name", "params", "state", "latency", "tail", "gui", "timer", "thread-check", "log", "render"] }
 
 [[bin]]
 name = "daw-plugin-host"

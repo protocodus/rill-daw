@@ -1,0 +1,14 @@
+   Compiling daw-ui v0.1.0 (/workspace/rill-daw/crates/daw-ui)
+    Finished `test` profile [unoptimized] target(s) in 1.08s
+     Running tests/tool_hint.rs (target/debug/build/daw-ui/9407edf3bdd18334/out/tool_hint-9407edf3bdd18334)
+
+running 7 tests
+test help_stays_reachable_when_a_previous_control_widens_the_parent ... ok
+test narrow_tool_captions_hide_instead_of_cutting_off_words ... ok
+test tool_help_is_keyboard_accessible_without_stealing_focus_or_consuming_tool_keys ... ok
+test disclosure_is_context_specific_and_retains_help_when_the_tool_changes ... ok
+test toolbar_help_has_a_full_target_and_native_keyboard_open_and_dismiss ... ok
+test toolbar_caption_uses_only_remaining_space_without_moving_controls_or_canvas ... ok
+test compact_hints_keep_one_row_and_full_help_wraps_in_both_themes_and_densities ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s

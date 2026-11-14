@@ -277,7 +277,9 @@ pub fn track_density_choices(ui: &mut Ui, row_height: &mut f32) -> Option<TrackD
                 ui.close();
             }
         }
-    });
+    })
+    .response
+    .on_hover_text("Choose how much vertical space each track occupies; clip timing and collapsed tracks stay unchanged");
     chosen
 }
 
@@ -297,7 +299,8 @@ pub fn track_dimensions(ui: &mut Ui, header: &mut f32, row_height: &mut f32, max
                     .fixed_decimals(0)
                     .suffix(" px"),
             )
-            .labelled_by(label.id);
+            .labelled_by(label.id)
+            .on_hover_text("Set the width of track names and controls beside the arrangement");
             ui.end_row();
             let label = ui.label("Row height");
             ui.add(
@@ -308,7 +311,10 @@ pub fn track_dimensions(ui: &mut Ui, header: &mut f32, row_height: &mut f32, max
                     .fixed_decimals(0)
                     .suffix(" px"),
             )
-            .labelled_by(label.id);
+            .labelled_by(label.id)
+            .on_hover_text(
+                "Set the height of expanded track rows to show more detail or more tracks",
+            );
             ui.end_row();
         });
 }

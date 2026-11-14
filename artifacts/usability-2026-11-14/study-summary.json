@@ -1,0 +1,51 @@
+{
+  "revision": "ab6a941332d60980f1f5c08229ae128e33e8206a",
+  "participants": [
+    {
+      "participant": 1,
+      "native_input_operations": 96,
+      "screenshots": 66,
+      "chronological_notes": 9,
+      "interaction_minutes": 15.94,
+      "report": "session-1/report.json"
+    },
+    {
+      "participant": 2,
+      "native_input_operations": 100,
+      "screenshots": 62,
+      "chronological_notes": 15,
+      "interaction_minutes": 16.06,
+      "report": "session-2/report.json"
+    },
+    {
+      "participant": 3,
+      "native_input_operations": 111,
+      "screenshots": 65,
+      "chronological_notes": 15,
+      "interaction_minutes": 15.73,
+      "report": "session-3/report.json"
+    },
+    {
+      "participant": 4,
+      "native_input_operations": 138,
+      "screenshots": 68,
+      "chronological_notes": 14,
+      "interaction_minutes": 17.1,
+      "report": "session-4/report.json"
+    },
+    {
+      "participant": 5,
+      "native_input_operations": 98,
+      "screenshots": 60,
+      "chronological_notes": 14,
+      "interaction_minutes": 15.16,
+      "report": "session-5/report.json"
+    }
+  ],
+  "total_input_operations": 543,
+  "total_screenshots": 321,
+  "total_chronological_notes": 67,
+  "candidate_issue_entries": 27,
+  "main_source_changed": false,
+  "evaluation_status": "Evidence collection complete. Candidate findings are participant observations; final prioritization and fixes not performed."
+}

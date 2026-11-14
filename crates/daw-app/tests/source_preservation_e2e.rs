@@ -58,7 +58,7 @@ fn fixture(app: &Harness) -> (Project, std::path::PathBuf, Vec<std::path::PathBu
 
 fn export_options(app: &mut Harness, path: &Path) {
     app.click("File");
-    app.click("Export WAV…");
+    app.click("Export audio…");
     app.command(json!({"command":"file_dialog", "kind":"export", "path":path}));
 }
 

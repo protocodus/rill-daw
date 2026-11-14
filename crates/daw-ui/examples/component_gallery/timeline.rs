@@ -193,7 +193,70 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                     bounds.bottom() - 16.0,
                 ),
             );
-            ui::velocity_marker(columns[1].painter(), column, level, index == 3);
+            ui::piano_velocity_marker(
+                columns[1].painter(),
+                column,
+                (level * 127.0) as u8,
+                index == 3,
+                false,
+            );
+        }
+    });
+    ui.add_space(tokens::SPACE_LG);
+    ui.columns(2, |columns| {
+        text::subtitle(&mut columns[0], "Named instrument rows");
+        text::note(
+            &mut columns[0],
+            "Instrument names · audition · bounded labels",
+        );
+        columns[0].add_space(tokens::SPACE_SM);
+        for (index, name) in [
+            "Soft mallet",
+            "Bowed glass",
+            "Long resonant metallic shimmer",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let (row, response) = columns[0]
+                .allocate_exact_size(vec2(tokens::NAMED_NOTE_KEYS_WIDTH, 24.0), Sense::hover());
+            ui::named_note_key(columns[0].painter(), row, name, index == 1);
+            response.on_hover_text(name);
+        }
+        text::subtitle(&mut columns[1], "Optional scale guidance");
+        text::note(
+            &mut columns[1],
+            "Neutral velocity · blue guide · selection outline",
+        );
+        columns[1].add_space(tokens::SPACE_SM);
+        for (outside, selected, caption) in [
+            (false, false, "Ordinary note"),
+            (true, false, "Outside scale"),
+            (true, true, "Outside scale, selected"),
+        ] {
+            let width = columns[1].available_width();
+            let (row, _) = columns[1].allocate_exact_size(vec2(width, 24.0), Sense::hover());
+            let note = Rect::from_min_size(row.min + vec2(0.0, 3.0), vec2(80.0, 18.0));
+            let fill = colors.piano_note_fill(96, outside);
+            columns[1]
+                .painter()
+                .rect_filled(note, tokens::NOTE_RADIUS, fill);
+            if outside {
+                ui::paint_outside_scale_marker(columns[1].painter(), note);
+            }
+            columns[1].painter().rect_stroke(
+                note,
+                tokens::NOTE_RADIUS,
+                colors.piano_note_stroke_in_rect(selected, fill, note),
+                egui::StrokeKind::Inside,
+            );
+            columns[1].painter().text(
+                pos2(note.right() + tokens::SPACE_MD, row.center().y),
+                Align2::LEFT_CENTER,
+                caption,
+                FontId::proportional(tokens::FONT_SMALL),
+                colors.muted,
+            );
         }
     });
     ui.add_space(tokens::SPACE_MD);

@@ -133,7 +133,7 @@ fn export_diagnostics_name_the_saved_file_and_keep_the_musical_title_secondary()
     let bad_output = app.directory.path().join("Not a WAV file.wav");
     std::fs::create_dir(&bad_output).unwrap();
     app.command(json!({"command":"file_dialog","kind":"export","path":bad_output}));
-    menu(&mut app, "File", "Export WAV…");
+    menu(&mut app, "File", "Export audio…");
     app.click("Export…");
     let failed = app.raw_command(json!({"command":"wait_export"}));
     assert_eq!(failed["ok"], false);

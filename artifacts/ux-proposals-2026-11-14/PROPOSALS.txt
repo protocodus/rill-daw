@@ -1,0 +1,236 @@
+RILL UX PROPOSALS — APPROVAL DRAFT
+14 November 2026 · source ab6a941332d60980f1f5c08229ae128e33e8206a
+Status: proposed; no application changes implemented.
+
+Recommendation: approve P1–P6, with P1–P3 first. P2 is the largest scope because
+playable sounds require assets and sample-aware loading, not just new labels.
+Each ID can be approved, declined or revised independently. P2 and P3 together
+are needed to resolve the observed beginner drum-making failure.
+
+Basis: five simulated novice sessions, 543 native input operations, 321
+screenshots, 67 chronological observations. Counts below describe these five
+paths, not population prevalence. Existing successful presets, drawing hints,
+duplication, chord generation, save and export remain the basis of the design.
+
+P1 — OPEN THE MUSIC EDITOR DIRECTLY
+Priority: first · scope: medium · evidence: all five sessions
+
+BEFORE
+Double-click anywhere on an existing clip opens Rename. The naming form's
+Keyboard control opens a typing keyboard, with a musical-instrument icon.
+All five participants detoured here before finding right-click > Edit notes.
+
+AFTER
+In Select mode, double-click the label or body of a MIDI clip opens Clip Editor;
+audio clips open the audio editor, automation clips their existing editor.
+A visible contextual hint says “Double-click to edit notes” for a MIDI clip.
+Rename remains in the clip context menu and Edit menu / its existing shortcut.
+The naming form says “Typing keyboard” and uses a text-entry icon.
+
+Scope boundaries
+Keep single-click selection, movement, trim/fade handles, modifier selection,
+and other tools unchanged. No new editor, onboarding tour or persistent panel.
+
+Acceptance
+- A fresh blank pattern reaches note entry through a double-click on title/body.
+- Audio and automation clips open the correct existing editor.
+- Opening/closing an editor creates no Undo entry; selection is retained.
+- Rename remains fully mouse accessible, including typing-keyboard entry.
+- Dragging/trim/fade and destructive tools retain their current behavior.
+
+Evidence: S1-01, P2-03, P3-01, P4-01, S5-02.
+Source: crates/daw-app/src/arrangement.rs:1644;
+crates/daw-ui/src/clip_editing.rs:665; crates/daw-ui/src/icons.rs:137.
+
+P2 — MAKE INCLUDED SAMPLED INSTRUMENTS PLAYABLE
+Priority: first · scope: medium–large · evidence: sessions 2, 4 and 5
+
+BEFORE
+Electro / GM Kit leave all drum pads Empty. Plucked Keys / Soft Pad leave the
+sampler at No sample. These presets change parameters but include no samples.
+The only apparent next step is an external file picker.
+
+AFTER
+Adding a new R1 Drums starts with a small original “Rill Starter Kit” containing
+named kick, snare, clap, hats and percussion sounds. Adding R1 Sampler starts
+with an original “Starter Keys” sample, playable immediately.
+The preset menu distinguishes:
+  Sounds — includes samples
+  Settings — keeps your samples
+Existing parameter-only choices are honestly labeled, e.g. “Kit settings ·
+Electro”. They keep the current samples. Empty states offer “Load starter kit”
+or “Use starter sound”, alongside “Load sample…”.
+
+Scope boundaries and tradeoffs
+Create a small original, documented starter pack; no external downloads,
+commercial samples or new sample-library service. Use original synthesis,
+building on the project's existing original demo synthesis where appropriate.
+Do not claim an acoustic GM collection is included.
+New explicit instrument creation gets the defaults. Existing songs and
+intentionally empty devices retain their state. Loading a Sound replaces
+samples + parameters in one undoable operation; loading Settings preserves
+samples. Existing preset files keep their compatibility behavior.
+This is the largest proposal: it includes asset provenance, loading, portable
+storage, rollback and audio checks. Merely changing the empty-state text would
+clarify the problem but would not fulfill the beginner drum task.
+
+Acceptance
+- Fresh install, mouse-only: add Drums/Sampler, click a pad/key, obtain signal.
+- A newly drawn note can be heard and exported without importing a file.
+- Settings presets preserve user-loaded samples and sample positions.
+- Sound loading is one Undo; failed loads preserve the entire previous sound.
+- Saved projects reopen and render identically after source asset paths vanish.
+- Old preset compatibility tests pass; existing songs are not seeded or altered.
+
+Evidence: P2-01, P4-02, S5-01.
+Source: crates/daw-devices-ui/src/lib.rs:1802;
+crates/daw-devices/src/preset.rs:85;
+crates/daw-core/src/demo.rs:44; crates/daw-core/src/archive.rs:250.
+
+P3 — SHOW DRUM NAMES IN THE EXISTING CLIP EDITOR
+Priority: first · scope: medium · evidence: session 2, plus saved-project proof
+
+BEFORE
+R1 Drums opens a pitched piano grid. The participant drew 40 notes at MIDI
+60, 62 and 65. R1 Drums only maps 36–51, and its pads were empty. Those notes
+cannot trigger drums, independently of the study's audio backend errors.
+
+AFTER
+R1 Drums defaults to “Drum rows” in the current Clip Editor. Show its sixteen
+mapped rows with actual sample/pad names: Kick · Pad 1, Snare · Pad 3, etc.
+Click a row label to audition; drawing writes that pad's exact MIDI note.
+Empty rows say “Pad N · Empty”. Keep velocity, note length, snap and editing
+tools. Offer “Piano roll” as an explicit alternative. Pitched scale/chord
+controls are absent from Drum rows, available in the pitched view.
+
+Scope boundaries and tradeoffs
+Reuse the existing timeline/grid, not a new step sequencer. Apply automatic
+mapping to R1 Drums only; third-party drum maps are separate future work.
+Keep out-of-map notes intact and disclosed through an “Other MIDI notes (N)”
+control that opens the pitched view. Never silently transpose/delete them.
+Names follow actual loaded samples, so custom kits remain understandable.
+
+Acceptance
+- Intentionally create kick/snare/hat parts without knowing MIDI numbers.
+- Row names, audition and recorded pitches match all sixteen pads.
+- Replacing samples updates labels; empty pads stay clearly identified.
+- View switching, instrument switching and save/reopen preserve every note,
+  including existing notes outside the drum map and their selection.
+
+Evidence: P2-02; final session-2 neon-steps.rill (40 notes, pitches 60/62/65,
+no instrument samples). Source: crates/daw-devices/src/devices/drums.rs:105
+and :646; crates/daw-app/src/midi_editor.rs:1269 and :2031.
+
+P4 — MAKE SOUND CHOICES AND DEVICE IDENTITY CLEAR
+Priority: next · scope: small for labels, medium for preset selection
+Evidence: musical-role difficulty in session 3, identity in session 5;
+device-count mismatch observed in sessions 1, 2, 3 and 4.
+
+BEFORE
+Cards mostly say R1 Mini / R1 Sampler / R1 Drums. Finding a bass preset means
+opening a dense synth panel. The header says 0 plug-ins beside three built-ins.
+Replacing a sampler with Mini can leave “Instrument of R1 Sampler” as the title.
+
+AFTER
+Add short role subtitles: “Synth · bass, leads, pads”, “Sample-based drum kit”,
+“Play a recording across keys”. In the selected built-in device's existing
+detail area, choose a factory sound/preset before “Add instrument track”.
+Example: R1 Mini > Bass · Rubber Bass > Add instrument track.
+Show the total for the active tab/filter, e.g. “3 instruments”. Collections
+use “All devices” and “Built-in (R1)”; scan status still reports actual scanning.
+Device panels lead with “R1 Mini”, with “Track: Atmosphere” as context. Preserve
+track names when replacing instruments, while making actual device identity clear.
+
+Scope boundaries
+No second sound browser or duplicated full instrument controls. Pre-assignment
+preset choice is for built-ins first. Preserve existing plug-in scan behavior
+and deliberate track names. Preset + track creation should be one Undo.
+
+Acceptance
+- Choose a Bass preset and create its track without navigating oscillator UI.
+- Counts match the visible active category/filter, including built-ins.
+- Replace an instrument on a named track: actual device is obvious; name/notes
+  remain intact and Undo restores the original device.
+- Use shared daw-ui cards/controls and keep narrow layouts usable.
+
+Evidence: S1-02, P2-04, P3-02, P4-04, S5-03.
+Source: crates/daw-app/src/library.rs:557, :894, :1339;
+crates/daw-app/src/plugin_ui.rs:1179.
+
+P5 — MAKE SCALE GUIDANCE COHERENT
+Priority: next · scope: small–medium · evidence: session 4
+
+BEFORE
+A fresh editor highlights C natural minor, while its default generated chord
+is C major. E, A and B in the participant's major progression appear red.
+
+AFTER
+Start fresh UI defaults consistently in C major. Label the visual control
+“Scale guide · C major” to distinguish guidance from a constraint.
+Mark out-of-scale notes with a non-error accent/outline and the explanation
+“Outside the selected scale guide”. Keep explicit chord and scale choices
+independent, so borrowed/chromatic notes remain valid musical choices.
+
+Scope boundaries
+Do not retune notes, rewrite project data or force generated chords into a key.
+Retain user-selected guide/chord choices when returning to the editor; change
+only untouched initial defaults. Keep the existing generation workflow.
+
+Acceptance
+- A fresh C-major triad has no contradictory error-like styling.
+- Choosing minor changes visual guidance only; actual notes stay unchanged.
+- Intentional chromatic notes remain fully editable and playable.
+- Generated chords remain explicitly selectable, including outside-scale chords.
+
+Evidence: P4-03.
+Source: crates/daw-app/src/app.rs:433;
+crates/daw-app/src/midi_editor.rs:177, :1251, :1823.
+
+P6 — NAME ACTIONS BY THEIR RESULT
+Priority: next · scope: small · evidence: sessions 1 and 3
+
+BEFORE
+“Loop this clip” changes playback bounds but was mistaken for phrase repetition.
+Another playback-loop entry is elsewhere in the menu; actual repeat-to-loop-end
+is in Edit. “Export WAV…” opens a dialog that also exports FLAC, Ogg and MP3.
+
+AFTER
+Use one relevant “Loop playback over clip/selection” action. Group the existing
+copy operations nearby: “Duplicate after” and “Repeat to loop end”. Preserve
+the familiar Duplicate toolbar tool and its successful explanatory hint.
+The Repeat action explains when unavailable: “Extend the loop beyond the phrase”.
+File > “Export audio…” opens the existing dialog, labeled “File type” for
+WAV/FLAC/Ogg/MP3 and “Bit depth” where applicable. Preserve explicit filenames
+and successful-export receipts for re-export.
+
+Scope boundaries
+Expose existing behavior; do not add a new repetition engine or export service.
+Keep one Undo for a repeat operation and preserve rests/partial final copies.
+
+Acceptance
+- Playback-loop changes never change clip count.
+- Duplicate adds an adjacent independent copy; Repeat reaches loop end using
+  the existing phrase/rest semantics and one Undo.
+- Every existing audio format remains mouse reachable with correct extension.
+- Bit depth is shown only for formats where the choice applies.
+
+Evidence: P3-03, S1-03; existing Repeat was not discovered during the sessions.
+Source: crates/daw-app/src/arrangement.rs:1756;
+crates/daw-app/src/finishing_actions.rs:334;
+crates/daw-app/src/app.rs:2674; crates/daw-app/src/export_ui.rs:554.
+
+HELD FOR VERIFICATION, OUTSIDE THESE SIX APPROVALS
+Audio dropouts: reproduce with a normal native audio setup before attributing
+them to RILL. Existing recovery buttons were useful; no UI redesign justified yet.
+Popup movement / loop-edge dragging: reproduce with normal window focus and
+timed native capture before changing geometry/gesture behavior.
+GM Kit becomes Custom: confirm preset identity/matching behavior across reopening
+before promising persistence changes.
+Post-picker typing/shortcut failures: confirmed test-environment focus problem,
+already repaired in the study driver; not an application UX defect.
+
+IMPLEMENTATION GATE
+Waiting for explicit user approval of IDs. Approval covers only the selected
+proposal scopes above. If approved, implement shared components in daw-ui first,
+reuse them in application views, and add/run relevant native/running-app E2E
+checks. Source implementation, commits and PRs have not been started.

@@ -927,13 +927,13 @@ fn escape_dismisses_the_scale_dropdown_before_the_clip_editor() {
     let selected = harness.app.selected_notes.clone();
     assert_eq!(selected.len(), 1);
     let output = harness.settle_full();
-    harness.full_click(text_position(&output, "Key C · Natural minor", 0.0) + Vec2::new(8.0, 6.0));
+    harness.full_click(text_position(&output, "Scale guide C · Major", 0.0) + Vec2::new(8.0, 6.0));
     let output = harness.settle_full();
-    harness.full_click(text_position(&output, "Natural minor", 0.0) + Vec2::new(8.0, 6.0));
+    harness.full_click(text_position(&output, "Major", 0.0) + Vec2::new(8.0, 6.0));
     let output = harness.settle_full();
     harness.full_frame(RawInput {
         events: vec![Event::PointerMoved(
-            text_position(&output, "Natural minor", 0.0) + Vec2::new(8.0, 6.0),
+            text_position(&output, "Major", 0.0) + Vec2::new(8.0, 6.0),
         )],
         ..Default::default()
     });

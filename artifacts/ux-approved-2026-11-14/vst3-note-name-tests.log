@@ -1,0 +1,10 @@
+   Compiling vst3-host v0.10.0 (/workspace/rill-daw/vendor/vst3-host)
+    Finished `test` profile [unoptimized] target(s) in 14.44s
+     Running unittests src/lib.rs (target/debug/build/vst3-host/42b8b072670ae109/out/vst3_host-42b8b072670ae109)
+
+running 3 tests
+test internal::plugin_impl::note_name_tests::invalid_current_program_values_do_not_select_an_unrelated_note_map ... ok
+test internal::plugin_impl::note_name_tests::named_notes_follow_the_current_program_including_single_program_lists ... ok
+test process_isolation::wire_tests::note_names_preserve_native_routing_across_the_wire ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 248 filtered out; finished in 0.00s

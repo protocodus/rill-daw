@@ -112,9 +112,12 @@ impl DawApp {
                 (Interpolation::Smooth, "Smooth"),
                 (Interpolation::Spline, "Spline"),
             ];
-            daw_ui::choice(ui, "automation_interpolation", &mut interpolation, &modes);
+            daw_ui::choice(ui, "automation_interpolation", &mut interpolation, &modes)
+                .on_hover_text("Choose how values change between automation points: held steps, straight lines, smooth transitions or adjustable splines");
             ui.separator();
-            daw_ui::checkbox(ui, &mut enabled, "Enabled");
+            daw_ui::checkbox(ui, &mut enabled, "Enabled").on_hover_text(
+                "Enable or bypass this automation lane during playback; its points are preserved",
+            );
             daw_ui::automation_badge(ui, automation_state);
             ui.separator();
             // View and lane actions trail; the gesture caption fills the
@@ -239,7 +242,7 @@ impl DawApp {
                         .range(0.0..=daw_core::MAX_BEAT)
                         .speed(self.snap_step(state.viewport.pixels_per_beat).max(0.01)),
                 )
-                .on_hover_text("Bar.beat.sixteenth · drag or double-click to type, e.g. 12.1");
+                .on_hover_text("Move the selected automation point to a musical position · Bar.beat.sixteenth · drag or double-click to type, e.g. 12.1");
             point_beat_rect = Some(beat_response.rect);
             displayed_beat = Some(beat + 1.0);
             let range = lane.target.parameter.range();
@@ -256,8 +259,14 @@ impl DawApp {
                 ),
                 parameter => {
                     let (prefix, tooltip) = match parameter {
-                        AutomationParameter::TrackPan => ("Pan ", "−1 left · 0 center · 1 right"),
-                        _ => ("Value ", "Normalized plug-in parameter value from 0 to 1"),
+                        AutomationParameter::TrackPan => (
+                            "Pan ",
+                            "Set the selected point’s pan position · −1 left · 0 center · 1 right",
+                        ),
+                        _ => (
+                            "Value ",
+                            "Set the selected point’s plug-in parameter value, normalized from 0 to 1",
+                        ),
                     };
                     ui.add(
                         daw_ui::number(&mut value)
@@ -304,6 +313,7 @@ impl DawApp {
                     "Delete point"
                 },
             )
+            .on_hover_text("Remove the selected automation point or points; remaining points keep their positions and values")
             .clicked()
             {
                 edit = Some(CurveEdit::Delete { id: point.id });

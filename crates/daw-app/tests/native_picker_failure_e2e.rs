@@ -18,7 +18,7 @@ fn menu(app: &mut Harness, group: &str, item: &str) -> Value {
 
 fn document_action(app: &mut Harness, action: &str) -> Value {
     let state = menu(app, "File", action);
-    if action == "Export WAV…" {
+    if action == "Export audio…" {
         app.click("Export…")
     } else {
         state
@@ -93,7 +93,7 @@ fn missing_native_helper_is_visible_for_every_document_picker_and_preserves_work
         "Save as…",
         "Open…",
         "Import…",
-        "Export WAV…",
+        "Export audio…",
         "Export MIDI…",
     ] {
         let failed = document_action(&mut app, action);
@@ -132,7 +132,7 @@ fn native_cancel_stays_silent_and_failed_helper_can_be_restored_without_restarti
         "Save as…",
         "Open…",
         "Import…",
-        "Export WAV…",
+        "Export audio…",
         "Export MIDI…",
     ] {
         let cancelled = document_action(&mut app, action);
@@ -170,7 +170,7 @@ fn native_cancel_stays_silent_and_failed_helper_can_be_restored_without_restarti
 
     let wav = app.directory.path().join("Recovered.wav");
     select(&app, &wav);
-    document_action(&mut app, "Export WAV…");
+    document_action(&mut app, "Export audio…");
     let state = app.command(json!({"command":"wait_export"}));
     assert_eq!(state["exported_file"], json!(wav));
     assert!(AudioData::load_wav(&wav).unwrap().frames() > 0);

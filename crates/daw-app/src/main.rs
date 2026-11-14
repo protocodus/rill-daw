@@ -27,6 +27,7 @@ mod export_ui;
 mod finishing_actions;
 mod freeze_ui;
 mod history_ui;
+mod instrument_note_names;
 mod instrument_tools;
 mod join_tools;
 mod join_ui;

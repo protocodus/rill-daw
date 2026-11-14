@@ -340,15 +340,35 @@ impl DawApp {
                 .map(|clip| (clip.start, clip.end()))
                 .reduce(|(start, end), (a, b)| (start.min(a), end.max(b)))
         });
-        let can_repeat =
-            !selection.is_empty() && span.is_some_and(|(_, end)| self.project.loop_end > end);
-        if ui.add_enabled(can_repeat, daw_ui::button_widget("Repeat to loop end"))
-            .on_hover_text("Create independent copies of the selected phrase, including rests, up to the loop end. The last copy is trimmed to fit.")
-            .clicked()
-        {
+        let span = span.filter(|_| !selection.is_empty());
+        if Self::repeat_to_loop_end_button(ui, span, self.project.loop_end) {
             self.repeat_selection_to_loop_end();
             ui.close();
         }
+    }
+
+    pub(crate) fn repeat_to_loop_end_button(
+        ui: &mut egui::Ui,
+        span: Option<(f64, f64)>,
+        loop_end: f64,
+    ) -> bool {
+        let disabled_reason = match span {
+            None => Some("Select a clip or phrase"),
+            Some((_, end)) if loop_end > end => None,
+            Some(_) => Some("Extend the loop beyond the phrase"),
+        };
+        let clicked = ui
+            .add_enabled(
+                disabled_reason.is_none(),
+                daw_ui::button_widget("Repeat to loop end"),
+            )
+            .on_hover_text("Create independent copies of the selected phrase, including rests, up to the loop end. The last copy is trimmed to fit.")
+            .on_disabled_hover_text(disabled_reason.unwrap_or_default())
+            .clicked();
+        if let Some(reason) = disabled_reason {
+            daw_ui::text::note(ui, reason);
+        }
+        clicked
     }
 
     /// Track ▸ Route selected channels, shown while two or more channels are selected.
@@ -520,7 +540,11 @@ impl DawApp {
             daw_ui::action_menu(ui, "Route selected channels", |ui| {
                 let (outputs, sends) = self.batch_route_destinations(&channels);
                 choice = daw_ui::batch_route_choices(ui, &outputs, &sends);
-            });
+            })
+            .response
+            .on_hover_text(
+                "Change the main output or add a send for all selected channels in one edit",
+            );
         });
         if let Some(choice) = choice {
             self.route_selected_channels(&channels, choice);

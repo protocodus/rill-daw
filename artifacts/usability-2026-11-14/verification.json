@@ -1,0 +1,434 @@
+{
+  "method": "All saved .rill ZIP archives CRC checked and their track/clip/note summaries inspected. Every exported audio file probed and signal levels measured. All five MP4 recordings fully decoded with ffmpeg and a midpoint video frame visually inspected. Subjective audio quality was not assessed.",
+  "sessions": [
+    {
+      "participant": 1,
+      "verified_utc": "2026-11-14T16:51:05.022343+00:00",
+      "recording": {
+        "path": "session-1/session-recording.mp4",
+        "duration_seconds": 1093.021,
+        "bytes": 11722274,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "h264"
+          },
+          {
+            "type": "audio",
+            "codec": "aac"
+          }
+        ],
+        "full_decode_exit_code": 0,
+        "decode_errors": "",
+        "sample_frame": "session-1/recording-check.png"
+      },
+      "exports": [
+        {
+          "path": "session-1/exports/Neon steps.mp3",
+          "bytes": 217152,
+          "sha256": "eeaacc24dac38d633ccb85658de087d41c582fdc58f458399a81c8e0785715fc",
+          "probe_exit_code": 0,
+          "duration_seconds": 9.024,
+          "audio_streams": [
+            {
+              "codec": "mp3",
+              "sample_rate": "48000",
+              "channels": 2
+            }
+          ],
+          "audio_levels": [
+            "mean_volume: -19.9 dB",
+            "max_volume: -5.1 dB"
+          ]
+        },
+        {
+          "path": "session-1/exports/Neon steps.rill",
+          "bytes": 3293028,
+          "sha256": "b98555fd5c949df8bb887b9cb3c0c8fd3dea212d660609179ec47cf8822c826b",
+          "archive_valid": true,
+          "archive_entries": [
+            "manifest.json",
+            "assets/00000000.wav"
+          ],
+          "project_summary": {
+            "name": "Midnight circuit",
+            "tempo": 112.0,
+            "tracks": [
+              {
+                "name": "Circuit drums",
+                "kind": "Audio",
+                "instrument": "None",
+                "clip_count": 1,
+                "midi_note_count": 0,
+                "insert_count": 0
+              },
+              {
+                "name": "R1 Mini",
+                "kind": "Midi",
+                "instrument": {
+                  "Builtin": {
+                    "device": "r1-mini"
+                  }
+                },
+                "clip_count": 4,
+                "midi_note_count": 32,
+                "insert_count": 0
+              }
+            ]
+          }
+        },
+        {
+          "path": "session-1/exports/Neon steps.wav",
+          "bytes": 3448932,
+          "sha256": "ecd68142655c8a9d27b54755936a5f9407d595145b830f2d7ef2032a17407c3a",
+          "probe_exit_code": 0,
+          "duration_seconds": 8.981417,
+          "audio_streams": [
+            {
+              "codec": "pcm_f32le",
+              "sample_rate": "48000",
+              "channels": 2
+            }
+          ],
+          "audio_levels": [
+            "mean_volume: -19.9 dB",
+            "max_volume: -5.3 dB"
+          ]
+        }
+      ]
+    },
+    {
+      "participant": 2,
+      "verified_utc": "2026-11-14T16:52:29.362489+00:00",
+      "recording": {
+        "path": "session-2/session-recording.mp4",
+        "duration_seconds": 1175.021,
+        "bytes": 12249973,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "h264"
+          },
+          {
+            "type": "audio",
+            "codec": "aac"
+          }
+        ],
+        "full_decode_exit_code": 0,
+        "decode_errors": "",
+        "sample_frame": "session-2/recording-check.png"
+      },
+      "exports": [
+        {
+          "path": "session-2/exports/neon-steps.rill",
+          "bytes": 2346,
+          "sha256": "0cd5d662b0fd2289deba8b823face1865a0515e7c77a784c42df50da8ad43b41",
+          "archive_valid": true,
+          "archive_entries": [
+            "manifest.json"
+          ],
+          "project_summary": {
+            "name": "Untitled session",
+            "tempo": 120.0,
+            "tracks": [
+              {
+                "name": "R1 Drums",
+                "kind": "Midi",
+                "instrument": {
+                  "Builtin": {
+                    "device": "r1-drums"
+                  }
+                },
+                "clip_count": 4,
+                "midi_note_count": 40,
+                "insert_count": 0
+              },
+              {
+                "name": "R1 Mini",
+                "kind": "Midi",
+                "instrument": {
+                  "Builtin": {
+                    "device": "r1-mini"
+                  }
+                },
+                "clip_count": 4,
+                "midi_note_count": 16,
+                "insert_count": 0
+              }
+            ]
+          }
+        },
+        {
+          "path": "session-2/exports/neon-steps.wav",
+          "bytes": 3148868,
+          "sha256": "eb86b7f810f4a7b661a06ac4d2228c8a1b956caa39da94c9a45331ba2fb0ebfc",
+          "probe_exit_code": 0,
+          "duration_seconds": 8.2,
+          "audio_streams": [
+            {
+              "codec": "pcm_f32le",
+              "sample_rate": "48000",
+              "channels": 2
+            }
+          ],
+          "audio_levels": [
+            "mean_volume: -27.0 dB",
+            "max_volume: -15.1 dB"
+          ]
+        }
+      ]
+    },
+    {
+      "participant": 3,
+      "verified_utc": "2026-11-14T16:51:55.007091+00:00",
+      "recording": {
+        "path": "session-3/session-recording.mp4",
+        "duration_seconds": 1140.354,
+        "bytes": 12083999,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "h264"
+          },
+          {
+            "type": "audio",
+            "codec": "aac"
+          }
+        ],
+        "full_decode_exit_code": 0,
+        "decode_errors": "",
+        "sample_frame": "session-3/recording-check.png"
+      },
+      "exports": [
+        {
+          "path": "session-3/exports/C-minor-guitarist-idea.rill",
+          "bytes": 3293317,
+          "sha256": "a8dd81d759b4e855830061e8448f58327522af9475689a34c8239d729a876cba",
+          "archive_valid": true,
+          "archive_entries": [
+            "manifest.json",
+            "assets/00000000.wav"
+          ],
+          "project_summary": {
+            "name": "Midnight circuit",
+            "tempo": 112.0,
+            "tracks": [
+              {
+                "name": "Circuit drums",
+                "kind": "Audio",
+                "instrument": "None",
+                "clip_count": 1,
+                "midi_note_count": 0,
+                "insert_count": 0
+              },
+              {
+                "name": "Rubber bass",
+                "kind": "Midi",
+                "instrument": {
+                  "Builtin": {
+                    "device": "r1-mini"
+                  }
+                },
+                "clip_count": 4,
+                "midi_note_count": 16,
+                "insert_count": 0
+              },
+              {
+                "name": "High lead",
+                "kind": "Midi",
+                "instrument": {
+                  "Builtin": {
+                    "device": "r1-mini"
+                  }
+                },
+                "clip_count": 2,
+                "midi_note_count": 16,
+                "insert_count": 0
+              }
+            ]
+          }
+        },
+        {
+          "path": "session-3/exports/C-minor-guitarist-idea.wav",
+          "bytes": 3448932,
+          "sha256": "c2e285170f594714f87be12ded0e4d1a2785cbf4fbad2427310a1b20cdfa1963",
+          "probe_exit_code": 0,
+          "duration_seconds": 8.981417,
+          "audio_streams": [
+            {
+              "codec": "pcm_f32le",
+              "sample_rate": "48000",
+              "channels": 2
+            }
+          ],
+          "audio_levels": [
+            "mean_volume: -21.3 dB",
+            "max_volume: -6.2 dB"
+          ]
+        }
+      ]
+    },
+    {
+      "participant": 4,
+      "verified_utc": "2026-11-14T16:53:45.958364+00:00",
+      "recording": {
+        "path": "session-4/session-recording.mp4",
+        "duration_seconds": 1247.021,
+        "bytes": 13517416,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "h264"
+          },
+          {
+            "type": "audio",
+            "codec": "aac"
+          }
+        ],
+        "full_decode_exit_code": 0,
+        "decode_errors": "",
+        "sample_frame": "session-4/recording-check.png"
+      },
+      "exports": [
+        {
+          "path": "session-4/exports/Soft-Song.rill",
+          "bytes": 1657,
+          "sha256": "a67a6f741490f403f305f06e691feee9bab8aa401a440459411661aae2accf6c",
+          "archive_valid": true,
+          "archive_entries": [
+            "manifest.json"
+          ],
+          "project_summary": {
+            "name": "Untitled session",
+            "tempo": 80.0,
+            "tracks": [
+              {
+                "name": "R1 Mini",
+                "kind": "Midi",
+                "instrument": {
+                  "Builtin": {
+                    "device": "r1-mini"
+                  }
+                },
+                "clip_count": 1,
+                "midi_note_count": 12,
+                "insert_count": 0
+              },
+              {
+                "name": "melody",
+                "kind": "Midi",
+                "instrument": {
+                  "Builtin": {
+                    "device": "r1-mini"
+                  }
+                },
+                "clip_count": 1,
+                "midi_note_count": 15,
+                "insert_count": 1
+              }
+            ]
+          }
+        },
+        {
+          "path": "session-4/exports/Soft-Song.wav",
+          "bytes": 16128068,
+          "sha256": "9d5d8d2d32b19ae4ca901fd491dd15a2d5bc059884fab8106669b2dc47e30131",
+          "probe_exit_code": 0,
+          "duration_seconds": 42.0,
+          "audio_streams": [
+            {
+              "codec": "pcm_f32le",
+              "sample_rate": "48000",
+              "channels": 2
+            }
+          ],
+          "audio_levels": [
+            "mean_volume: -23.0 dB",
+            "max_volume: -6.5 dB"
+          ]
+        }
+      ]
+    },
+    {
+      "participant": 5,
+      "verified_utc": "2026-11-14T16:51:41.230669+00:00",
+      "recording": {
+        "path": "session-5/session-recording.mp4",
+        "duration_seconds": 1120.687,
+        "bytes": 10696288,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "h264"
+          },
+          {
+            "type": "audio",
+            "codec": "aac"
+          }
+        ],
+        "full_decode_exit_code": 0,
+        "decode_errors": "",
+        "sample_frame": "session-5/recording-check.png"
+      },
+      "exports": [
+        {
+          "path": "session-5/exports/Mist-study.rill",
+          "bytes": 1541,
+          "sha256": "64ce0db73a29e01ab646c7ca8650777f9dfa80f807cec3175a5f0999eabf87e7",
+          "archive_valid": true,
+          "archive_entries": [
+            "manifest.json"
+          ],
+          "project_summary": {
+            "name": "Untitled session",
+            "tempo": 80.0,
+            "tracks": [
+              {
+                "name": "Mist Pad",
+                "kind": "Midi",
+                "instrument": {
+                  "Builtin": {
+                    "device": "r1-mini"
+                  }
+                },
+                "clip_count": 1,
+                "midi_note_count": 6,
+                "insert_count": 1
+              },
+              {
+                "name": "R1 Mini",
+                "kind": "Midi",
+                "instrument": {
+                  "Builtin": {
+                    "device": "r1-mini"
+                  }
+                },
+                "clip_count": 1,
+                "midi_note_count": 4,
+                "insert_count": 0
+              }
+            ]
+          }
+        },
+        {
+          "path": "session-5/exports/Mist-study.wav",
+          "bytes": 2304068,
+          "sha256": "d5050fba6cd05cb254fc1ad7384c650e7115ff9f4448aeb03ae3037ba4248ba2",
+          "probe_exit_code": 0,
+          "duration_seconds": 6.0,
+          "audio_streams": [
+            {
+              "codec": "pcm_f32le",
+              "sample_rate": "48000",
+              "channels": 2
+            }
+          ],
+          "audio_levels": [
+            "mean_volume: -18.7 dB",
+            "max_volume: -6.7 dB"
+          ]
+        }
+      ]
+    }
+  ]
+}

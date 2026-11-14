@@ -115,8 +115,9 @@ pub(crate) fn number_stepper_controls(
         {
             ui.spacing_mut().interact_size.x = original_width.max(width);
         }
-        let mut response = field(ui, value)
-            .on_hover_text("Drag for fine adjustment; use −/+ to step or 123 to enter a value");
+        let mut response = field(ui, value).on_hover_text(format!(
+            "Drag to adjust {name}; use −/+ to step or 123 to enter a value"
+        ));
         ui.spacing_mut().interact_size.x = original_width;
         if !response.has_focus() || previous.is_none() {
             ui.data_mut(|data| data.insert_temp(width_id, (response.id, response.rect.width())));
@@ -129,7 +130,7 @@ pub(crate) fn number_stepper_controls(
                 && next.is_finite()
                 && next != *value
                 && range.contains(&next);
-            let button = ui
+            let mut button = ui
                 .add_enabled(
                     allowed,
                     // Steps sit beside an input, so they stay frameless until hover.
@@ -137,10 +138,18 @@ pub(crate) fn number_stepper_controls(
                         .small()
                         .min_size(egui::vec2(
                             crate::tokens::COMPACT_HEIGHT,
-                            crate::tokens::CONTROL_HEIGHT,
+                            crate::layout::control_height(ui),
                         )),
                 )
                 .on_hover_text(format!("{verb} {name} by {step}"));
+            if !allowed {
+                button = button.on_disabled_hover_text(format!(
+                    "Cannot {} {name} by {step}; allowed range is {}–{}",
+                    verb.to_lowercase(),
+                    range.start(),
+                    range.end(),
+                ));
+            }
             button.widget_info(|| {
                 egui::WidgetInfo::labeled(
                     egui::WidgetType::Button,
@@ -160,10 +169,12 @@ pub(crate) fn number_stepper_controls(
                     .small()
                     .min_size(egui::vec2(
                         crate::tokens::CONTROL_HEIGHT,
-                        crate::tokens::CONTROL_HEIGHT,
+                        crate::layout::control_height(ui),
                     )),
             )
-            .on_hover_text(format!("Enter {name} using mouse"));
+            .on_hover_text(format!(
+                "Open a numeric keypad to enter {name} with the mouse"
+            ));
         keypad.widget_info(|| {
             egui::WidgetInfo::labeled(
                 egui::WidgetType::Button,

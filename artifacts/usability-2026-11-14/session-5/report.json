@@ -1,0 +1,252 @@
+{
+  "participant": 5,
+  "study_type": "Simulated novice participant, not a recruited human",
+  "persona": {
+    "description": "Visual artist curious about sound design",
+    "experience": "No DAW experience or prior RILL knowledge"
+  },
+  "goal": "Create a short atmospheric loop with included sounds, layer a second sound, add space, and save/export without external samples or plugins.",
+  "session": {
+    "first_interaction": "2026-11-14T16:33:47Z",
+    "last_interaction": "2026-11-14T16:48:57Z",
+    "duration_minutes": 15.17,
+    "native_ui_actions": 98,
+    "screenshots": 60,
+    "method": "Isolated native desktop mouse/keyboard driver; choices based on visible screenshots only. No source, app internal state, documentation beyond required AGENTS.md, or other participant findings used."
+  },
+  "outcome": {
+    "status": "Creation, layering, effects, project save and WAV export completed visually; actual listening blocked/unverified",
+    "project": "Mist-study",
+    "tempo_bpm": 80,
+    "loop_seconds": 6,
+    "loop_bars": 2,
+    "layers": [
+      {
+        "track": "Mist Pad",
+        "instrument": "R1 Mini",
+        "preset": "String Pad",
+        "content": "Six sustained notes in two three-note chords",
+        "effects": "R1 Spacer, Tape Echo preset with Hall Reverb enabled and Decay increased"
+      },
+      {
+        "track": "R1 Mini",
+        "preset": "Rubber Bass",
+        "content": "Four short pulse notes"
+      }
+    ],
+    "save_ui_confirmed": true,
+    "export_ui_confirmed": true,
+    "export_file_present": true,
+    "heard_audio": false
+  },
+  "chronological_discoveries": [
+    {
+      "time": "16:33:57",
+      "finding": "File > New presents a clear Choose instrument starting action.",
+      "evidence": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/002-new-project.png"
+    },
+    {
+      "time": "16:34:41",
+      "finding": "R1 Sampler Soft Pad preset changes processing parameters but still displays No sample.",
+      "evidence": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/006-soft-pad-no-sample.png"
+    },
+    {
+      "time": "16:36:09",
+      "finding": "R1 Mini includes a String Pad preset and an on-screen piano below the first screenful.",
+      "evidence": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/012-string-pad-keyboard.png"
+    },
+    {
+      "time": "16:37:27",
+      "finding": "Right-click Edit notes is the working entry to the piano grid; double-click opens rename.",
+      "evidence": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/018-clip-context.png"
+    },
+    {
+      "time": "16:38:27",
+      "finding": "Pencil drag creates long notes and automatically extends the clip into another bar.",
+      "evidence": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/021-chord-and-extension.png"
+    },
+    {
+      "time": "16:39:07",
+      "finding": "Loop playback over selection sets the loop boundaries around the clip.",
+      "evidence": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/027-playback.png"
+    },
+    {
+      "time": "16:43:01",
+      "finding": "R1 Spacer exposes both Echo and Reverb, with independently enabled sections.",
+      "evidence": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/041-echo-and-reverb.png"
+    },
+    {
+      "time": "16:45:32",
+      "finding": "A second instrument track creates its own empty pattern and can be edited by the learned context-menu path.",
+      "evidence": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/050-bass-pulses.png"
+    },
+    {
+      "time": "16:48:13",
+      "finding": "Export WAV offers Loop range with an exact-length explanation and confirms success by filename.",
+      "evidence": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/058-export-result.png"
+    }
+  ],
+  "issues": [
+    {
+      "id": "S5-01",
+      "title": "Sampler preset names suggest usable sounds but the sampler stays empty",
+      "severity": "moderate",
+      "steps": [
+        "Start a new song",
+        "Choose R1 Sampler and add track",
+        "Choose Pad \u00b7 Soft Pad",
+        "Try the on-screen piano and inspect the sample area"
+      ],
+      "expected": "A Soft Pad preset should supply an atmospheric sound, or clearly explain that an audio file is still needed.",
+      "observed": "Soft Pad selected, but No sample and Load sample remain. The participant abandoned the sampler for R1 Mini.",
+      "evidence_image_paths": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/004-sampler-added.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/006-soft-pad-no-sample.png"
+      ],
+      "recovery": "Change instrument > R1 Mini > String Pad.",
+      "confidence": "high for visible state; no claim about audible silence because audio environment also failed"
+    },
+    {
+      "id": "S5-02",
+      "title": "Double-clicking a pattern opens rename; Keyboard is a typing keyboard",
+      "severity": "moderate",
+      "steps": [
+        "Double-click the empty pattern",
+        "Click Keyboard in the resulting popover",
+        "Cancel and double-click lower in the pattern",
+        "Right-click and choose Edit notes"
+      ],
+      "expected": "Open a place to compose notes; Keyboard appears to mean a musical keyboard in this context.",
+      "observed": "Double-click opened rename, including a typing keyboard. Repeating lower in the clip still opened rename. Only right-click Edit notes revealed the piano grid.",
+      "evidence_image_paths": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/015-pattern-editor.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/016-keyboard-editor.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/018-clip-context.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/019-edit-notes.png"
+      ],
+      "recovery": "Found Edit notes in context menu after several exploratory actions; successfully reused it for the second layer.",
+      "confidence": "high"
+    },
+    {
+      "id": "S5-03",
+      "title": "Instrument replacement leaves the old instrument name on the track and dialog title",
+      "severity": "low",
+      "steps": [
+        "Create R1 Sampler track",
+        "Change instrument to R1 Mini",
+        "Return to arranger"
+      ],
+      "expected": "Easy confirmation that the sound source is now R1 Mini.",
+      "observed": "Panel body says R1 Mini while title says Instrument of R1 Sampler; arranger track still says R1 Sampler.",
+      "evidence_image_paths": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/010-mini-assigned.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/014-track-ready.png"
+      ],
+      "recovery": "Manually renamed track Mist Pad; Mixer later displays MIDI \u00b7 R1 Mini.",
+      "confidence": "high for labels; may be intentional track-name persistence"
+    },
+    {
+      "id": "S5-04",
+      "title": "Effects dialog changed vertical position between first screenshot and interaction",
+      "severity": "low",
+      "steps": [
+        "Open Window > Effects",
+        "Click the Insert position from the visible screenshot",
+        "Use Back after Assistant opens"
+      ],
+      "expected": "Open the effects browser.",
+      "observed": "Assistant opened. On returning, the Effects dialog was lower and its AI button occupied approximately the previous Insert location.",
+      "evidence_image_paths": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/032-effects.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/033-effects-browser.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/034-back-from-assistant.png"
+      ],
+      "recovery": "Return and click Insert at its new position; later captures taken after a separate tool roundtrip.",
+      "confidence": "low-to-medium; screenshot timing and layout settling may exaggerate this in simulated coordinate interaction; review recording before treating as product defect"
+    }
+  ],
+  "environment_observations": [
+    {
+      "title": "Audio output failed or disconnected",
+      "impact": "Could not audition or judge atmosphere, levels, effect quality or loop transition by listening.",
+      "steps": [
+        "Observed failure banner after sampler exploration",
+        "Tried Retry playback",
+        "Opened Audio setup, selected Rill lab paced output, Apply, Start, Play"
+      ],
+      "observed": "Transport advanced briefly to 0:00.44 before failure returned. Later note drawing also showed reconnect-before-audition warning.",
+      "evidence_image_paths": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/009-change-instrument.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/026-output-options.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/028-mute-hover.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/050-bass-pulses.png"
+      ],
+      "attribution": "Environment-confounded; coordinator notified. Do not classify as established RILL defect."
+    },
+    {
+      "title": "Initial Load sample action produced no native chooser",
+      "observed": "Two screenshots showed no dialog after Load sample. Coordinator reported missing native GTK schemas and repaired environment. Later project-save and export pickers worked.",
+      "evidence_image_paths": [
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/007-load-sample-dialog.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/008-load-sample-result.png",
+        "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/052-save-dialog.png"
+      ],
+      "attribution": "Known environment confound. Initial sampler Load sample action was not retried."
+    },
+    {
+      "title": "Native picker focus environment repair",
+      "observed": "Coordinator later reported restoring clicked-window/root focus behavior. No clearly identified ignored typing was needed for this participant to recover.",
+      "attribution": "Disclosed shared environment limitation, not an independent RILL issue."
+    }
+  ],
+  "successes": [
+    "Empty-song screen makes instrument selection discoverable.",
+    "Included String Pad and Rubber Bass presets allowed two distinct instrument layers without downloads.",
+    "Pencil drag and automatic clip extension made drawing long sound shapes straightforward.",
+    "Context-menu loop playback selection set a visible, understandable loop range.",
+    "R1 Spacer has recognizable Echo, Reverb, Hall and Mix labels and a helpful visual decay shape.",
+    "File menu save/export entries and native file pickers supported completion within the session folder.",
+    "Export Loop range explicitly says exact length; completion banner names the output file."
+  ],
+  "unresolved_questions": [
+    "Are any playable audio samples bundled with R1 Sampler, and where would a novice find them?",
+    "How does the exported music actually sound, including the effect tail at the loop boundary?",
+    "Is the first Effects popup vertical movement reproducible in ordinary human use, beyond screenshot timing?",
+    "Would an explicit initial Edit notes action make the empty pattern easier to understand?"
+  ],
+  "saved_artifacts": [
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/exports/Mist-study.rill",
+      "kind": "Project saved through native UI",
+      "bytes": 1541
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/exports/Mist-study.wav",
+      "kind": "WAV exported through native UI",
+      "bytes": 2304068
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/session-notes.jsonl",
+      "kind": "Chronological observations"
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/mouse-actions.jsonl",
+      "kind": "Automatically captured native input log"
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/session-recording.mkv",
+      "kind": "Continuous desktop/audio recording managed by coordinator"
+    },
+    {
+      "path": "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots",
+      "kind": "60 screenshots including initial state"
+    }
+  ],
+  "limitations": [
+    "Simulated participant; findings are hypotheses about novice usability, not population statistics.",
+    "Audio could not be verified by listening during the session. No quality or audible-silence claim is made from meters or screenshots.",
+    "Native chooser and audio environment problems interrupted normal workflow.",
+    "Snapshot-based interaction can magnify transient dialog positioning; the recording should arbitrate S5-04.",
+    "No external plugins or sample downloads; no source changes or fixes."
+  ]
+}

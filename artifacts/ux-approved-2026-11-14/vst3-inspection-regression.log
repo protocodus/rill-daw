@@ -1,0 +1,8 @@
+   Compiling daw-plugins v0.1.0 (/workspace/rill-daw/crates/daw-plugins)
+    Finished `test` profile [unoptimized] target(s) in 1.30s
+     Running tests/multi_bus.rs (target/debug/build/daw-plugins/c1d7090735174d94/out/multi_bus-c1d7090735174d94)
+
+running 1 test
+test native_metadata_preserves_names_inactive_buses_and_captured_state ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.45s

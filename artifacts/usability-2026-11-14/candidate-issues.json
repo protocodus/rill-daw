@@ -1,0 +1,573 @@
+[
+  {
+    "participant": 1,
+    "id": "S1-01",
+    "title": "Double-clicking a new pattern leads to naming, not note creation",
+    "severity": "moderate",
+    "category": "discoverability",
+    "steps": [
+      "Add instrument track with R1 Mini",
+      "Close instrument popup",
+      "Double-click New pattern in Arranger",
+      "Try Keyboard in rename form",
+      "Cancel and double-click lower pattern body",
+      "Right-click pattern and choose Edit notes"
+    ],
+    "expected": "Double-clicking the blank musical pattern would open a place to create notes; Keyboard might open piano keys.",
+    "observed": "Both double-click attempts opened Rename. Keyboard expanded a typing keyboard. Edit notes was only found by right-clicking. This delayed the first note by about 47 seconds.",
+    "evidence_images": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/014-pattern-editor.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/015-keyboard-editor.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/016-note-editor.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/017-pattern-menu.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/018-edit-notes.png"
+    ],
+    "recovery": "Right-click > Edit notes",
+    "confidence": "high for observed behavior; medium for broader novice prevalence"
+  },
+  {
+    "participant": 1,
+    "id": "S1-02",
+    "title": "Device browser says 0 plug-ins while showing three built-in instruments",
+    "severity": "minor",
+    "category": "terminology/status",
+    "steps": [
+      "Add track > Add instrument track",
+      "Inspect Device browser header and Built-in collection"
+    ],
+    "expected": "The instrument count would match the instruments available to choose.",
+    "observed": "Top-right says 0 plug-ins while three cards and All plug-ins 3/Built-in 3 are visible. This briefly raised doubt whether instruments were installed.",
+    "evidence_images": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/008-instrument-browser.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/009-mini-selected.png"
+    ],
+    "recovery": "Selected R1 Mini and successfully added it.",
+    "confidence": "high for visible mismatch; medium for novice impact"
+  },
+  {
+    "participant": 1,
+    "id": "S1-03",
+    "title": "Export WAV label hides that MP3 is also available",
+    "severity": "minor",
+    "category": "discoverability",
+    "steps": [
+      "Open File menu",
+      "Choose Export WAV",
+      "Inspect Type dropdown"
+    ],
+    "expected": "A command labeled Export WAV appears to offer WAV output only.",
+    "observed": "The dialog offers WAV, FLAC, Ogg Vorbis, and MP3. MP3 was discovered only after entering the WAV command and inspecting Type.",
+    "evidence_images": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/028-file-menu.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/039-export-types.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/054-mp3-settings.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/058-mp3-result.png"
+    ],
+    "recovery": "Selected MP3 and exported successfully.",
+    "confidence": "high for label/available-types mismatch; medium for impact"
+  },
+  {
+    "participant": 1,
+    "id": "S1-04",
+    "title": "Loop-range edge drag did not reach intended bar",
+    "severity": "minor",
+    "category": "interaction; environment-confounded",
+    "steps": [
+      "Create four consecutive one-bar melody clips",
+      "Drag green loop-range right edge from x488 to x1066 at y217"
+    ],
+    "expected": "Loop range would expand from one bar to all four bars.",
+    "observed": "After drag the loop ended at 2.1.3 (2.411 seconds), close to the old endpoint instead of bar 5. One attempt only; driver/event timing is a possible explanation.",
+    "evidence_images": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/036-four-phrases.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/037-export-find.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/044-range-menu.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/045-loop-and-save-menu.png"
+    ],
+    "recovery": "Range > Loop playback over arrangement set correct 1.1\u20135.1 range.",
+    "confidence": "low as product defect; high as observed failed attempt"
+  },
+  {
+    "participant": 1,
+    "id": "S1-E1",
+    "title": "Playback output repeatedly disconnected in isolated audio environment",
+    "severity": "major for audition task; not attributed to product",
+    "category": "environment-confounded",
+    "steps": [
+      "Press Play at initial project",
+      "Open Details",
+      "Audio setup > Output > Rill lab paced output > Apply",
+      "Retry playback",
+      "Later play edited melody and loop it"
+    ],
+    "expected": "Playback would remain active long enough to hear and assess repeated music.",
+    "observed": "Initial Play displayed Audio output stream failed or disconnected. Details showed ALSA snd_pcm_avail_delay I/O error (5). Alternate output briefly showed moving transport/meters, but error returned in later attempts. Coordinator verified nonzero recorded signal near one playback attempt, so some output occurred.",
+    "evidence_images": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/001-play.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/003-audio-details-settled.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/005-output-choices.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/006-retry-output.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/026-loop-arranger.png"
+    ],
+    "recovery": "Temporary recovery through named alternate output and Retry; offline exports succeeded.",
+    "confidence": "high for error and recurrence; low for RILL responsibility"
+  },
+  {
+    "participant": 1,
+    "id": "S1-E2",
+    "title": "Ctrl+S failed after native picker because desktop focus was missing",
+    "severity": "minor in study",
+    "category": "confirmed environment issue",
+    "steps": [
+      "Save as through native picker",
+      "Edit arrangement",
+      "Press Ctrl+S"
+    ],
+    "expected": "Shortcut would save project and clear unsaved dot.",
+    "observed": "Dirty dot remained after shortcut. File > Save later cleared it; coordinator confirmed Xvfb focus on root after native picker with no window manager and corrected driver focus behavior.",
+    "evidence_images": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/037-export-find.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-1/screenshots/045-loop-and-save-menu.png"
+    ],
+    "recovery": "Used File > Save; reopened project confirmed final contents.",
+    "confidence": "high for environment attribution from coordinator"
+  },
+  {
+    "participant": 2,
+    "id": "P2-01",
+    "title": "Included drum kit choices do not lead a beginner to ready drum sounds",
+    "severity": "high",
+    "steps": [
+      "File > New",
+      "Choose instrument > R1 Drums > Add instrument track",
+      "Open preset dropdown",
+      "Choose Kits > Electro",
+      "Try pad 1",
+      "Choose Kits > GM Kit"
+    ],
+    "expected": "A named built-in drum kit supplies identifiable playable kick, snare and hat sounds.",
+    "observed": "All sixteen pads remain Empty; selected pad says No sample and offers Load sample. Electro changes some knobs but does not visibly load sounds. GM Kit also remains Empty. Final captured drum meter was unlit while Mini meter was green, but this does not independently prove the drum engine was silent.",
+    "impact": "Participant could draw a rhythm but could not establish a usable included drum kit, the main task goal.",
+    "evidence_image_paths": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/005-drums-added.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/006-drum-presets.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/007-electro-kit.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/008-gm-kit-empty.png"
+    ],
+    "recovery": "Tried a second preset and Load sample. No included sample source found through visible UI. Added Mini to establish another sound source.",
+    "confidence": "High for visible empty-pad behavior; medium for task-blocking effect because audio environment was confounded and no implementation inspected."
+  },
+  {
+    "participant": 2,
+    "id": "P2-02",
+    "title": "Drum pattern editor provides pitch names without a visible pad mapping",
+    "severity": "high",
+    "steps": [
+      "Create an R1 Drums pattern",
+      "Right-click > Edit notes",
+      "Inspect Notes, View and Generate menus",
+      "Try drawing a rhythm"
+    ],
+    "expected": "Drum rows identify kick, snare or numbered pads so the beginner can place a beat intentionally.",
+    "observed": "Piano grid labels C3/C4/C5; no visible drum or pad labels discovered. Generate offers Chord, Arpeggio and Melody. Participant placed C4, D4 and F4 notes without knowing which drum they addressed.",
+    "impact": "Even if samples were available, note-to-drum mapping remained unresolved for the beginner.",
+    "evidence_image_paths": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/014-edit-notes.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/020-notes-menu.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/021-view-menu.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/022-generate.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/024-drawn-rhythm.png"
+    ],
+    "recovery": "Drew a visually rhythmic pattern but did not resolve mapping.",
+    "confidence": "High for discoverability problem within this path; not a claim that no alternate drum view exists anywhere."
+  },
+  {
+    "participant": 2,
+    "id": "P2-03",
+    "title": "Double-clicking a blank pattern label opens rename instead of note editing",
+    "severity": "medium",
+    "steps": [
+      "Close newly added instrument",
+      "Double-click New pattern label",
+      "Apply a new name",
+      "Double-click the label again"
+    ],
+    "expected": "Open the pattern to add beats.",
+    "observed": "Inline rename form appears repeatedly. Its Keyboard button also does not clearly suggest note editing. Context menu eventually reveals Edit notes.",
+    "impact": "Several extra actions before the first note can be created.",
+    "evidence_image_paths": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/011-pattern-editor.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/012-edit-pattern-options.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/013-pattern-context.png"
+    ],
+    "recovery": "Right-click > Edit notes; reused successfully for second instrument.",
+    "confidence": "High; confined to the clip-label target actually clicked."
+  },
+  {
+    "participant": 2,
+    "id": "P2-04",
+    "title": "Device browser count appears inconsistent with visible built-ins",
+    "severity": "low",
+    "steps": [
+      "Open Choose instrument"
+    ],
+    "expected": "The visible total agrees with available instrument cards.",
+    "observed": "Top says 0 plug-ins while All plug-ins and Built-in collections say 3 and three cards are visible.",
+    "impact": "Brief uncertainty about whether available instruments are installed or usable.",
+    "evidence_image_paths": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/004-choose-instrument.png"
+    ],
+    "recovery": "Ignored count and used visible Add instrument track button.",
+    "confidence": "High for wording inconsistency; may reflect external versus built-in counting semantics."
+  },
+  {
+    "participant": 2,
+    "id": "P2-05",
+    "title": "Reopened drum instrument loses recognizable selected preset label",
+    "severity": "low",
+    "steps": [
+      "Select GM Kit",
+      "Close instrument",
+      "Create notes and save project",
+      "Track > Channel > Instrument"
+    ],
+    "expected": "Previously chosen kit name remains visible or its change is explained.",
+    "observed": "Preset reads Custom on reopening despite no intentional drum-parameter edit after GM Kit selection.",
+    "impact": "Adds uncertainty about whether the selected kit was applied or preserved.",
+    "evidence_image_paths": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/008-gm-kit-empty.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-2/screenshots/047-drums-reopened.png"
+    ],
+    "recovery": "No recovery attempted; did not change final project to chase label.",
+    "confidence": "Medium; visible observation reliable, underlying preset semantics uninspected."
+  },
+  {
+    "participant": 3,
+    "id": "P3-01",
+    "title": "Opening a new pattern led to renaming before note entry",
+    "steps": [
+      "Add R1 Mini instrument track.",
+      "Close instrument panel.",
+      "Double-click New pattern rectangle.",
+      "Click Keyboard in resulting rename form.",
+      "Cancel and right-click pattern."
+    ],
+    "expected": "Open the pattern to enter musical notes; Keyboard might show musical keys.",
+    "observed": "Double-click opened a rename form. Keyboard showed a typing keyboard. Edit notes was discovered in context menu after roughly one minute.",
+    "severity": "moderate discoverability friction",
+    "evidence_image_paths": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/007-note-editor.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/009-keyboard.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/010-clip-context.png"
+    ],
+    "recovery": "Right-click > Edit notes. Subsequent melody editing used that route directly.",
+    "confidence": "high for observed behavior and participant detour; simulated novice expectation"
+  },
+  {
+    "participant": 3,
+    "id": "P3-02",
+    "title": "Bass/lead choice requires opening a technically dense instrument panel",
+    "steps": [
+      "Open Add instrument track.",
+      "Inspect built-in R1 Drums, R1 Mini, R1 Sampler.",
+      "Choose R1 Mini and Add instrument track."
+    ],
+    "expected": "Find a plainly named bass sound among included instruments.",
+    "observed": "Browser names alone did not communicate bass suitability. New panel initially showed Custom with many oscillator/filter/envelope controls. Bass and Lead names became clear in preset dropdown. Browser also said 0 plug-ins while All plug-ins showed 3.",
+    "severity": "minor learning friction",
+    "evidence_image_paths": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/002-instruments.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/004-mini-track.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/005-presets.png"
+    ],
+    "recovery": "Preset dropdown provided Bass Rubber Bass and Lead Sync Lead.",
+    "confidence": "high for visible content; medium for impact beyond this persona"
+  },
+  {
+    "participant": 3,
+    "id": "P3-03",
+    "title": "Loop this clip meaning differed from expected phrase repetition",
+    "steps": [
+      "Right-click one-bar Bass riff.",
+      "Choose Loop this clip while wanting a repeating bass phrase."
+    ],
+    "expected": "Create or expose repeated phrase blocks across arrangement.",
+    "observed": "Green playback range shortened to one bar; the arrangement still contained one bass clip.",
+    "severity": "minor terminology friction",
+    "evidence_image_paths": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/016-loop-riff-menu.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/017-loop-enabled.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/018-duplicate.png"
+    ],
+    "recovery": "Used Duplicate tool and its visible instruction to create three additional bars.",
+    "confidence": "high for observed result; medium for terminology interpretation"
+  },
+  {
+    "participant": 3,
+    "id": "P3-E1",
+    "title": "Audio output failures blocked reliable audition",
+    "classification": "environment-confounded; do not treat as established RILL defect",
+    "steps": [
+      "Click Play after drawing bass.",
+      "Observe unchanged time across screenshots.",
+      "Later respond to Audio output stream failed banner.",
+      "Choose Retry playback, Details, Audio setup.",
+      "Switch System default to visible Rill lab paced output and Apply."
+    ],
+    "expected": "Hear composition and see advancing playhead.",
+    "observed": "Initial Pause state stayed at 0:00.00. Later banner reported ALSA I/O error (5). Alternate output advanced to 0:00.83 then failed again.",
+    "severity": "high session limitation",
+    "evidence_image_paths": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/014-bass-play.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/015-bass-play-later.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/029-second-melody-bar.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/031-audio-details.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/036-reconnected-later.png"
+    ],
+    "recovery": "Continued composition visually; saved and exported successfully. Reliable audition remained unresolved.",
+    "confidence": "high for UI failure and limited transport; cause unassigned"
+  },
+  {
+    "participant": 3,
+    "id": "P3-E2",
+    "title": "Track name typing after native file picker was ignored",
+    "classification": "environment-confounded; coordinator identified Xvfb focus issue",
+    "steps": [
+      "After native save/export dialogs, double-click mixer bass header.",
+      "Open Track tab and click Name.",
+      "Type Rubber bass using physical keys."
+    ],
+    "expected": "Name field changes to entered text.",
+    "observed": "Name remained R1 Mini. Keyboard button opened a rename form where typing and Apply name succeeded. Coordinator reported keyboard focus on Xvfb root after native pickers and corrected driver.",
+    "severity": "minor session delay",
+    "evidence_image_paths": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/058-track-reopen.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/059-track-name-typed.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/060-track-keyboard.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-3/screenshots/061-name-applied.png"
+    ],
+    "recovery": "Keyboard rename form; later direct context-menu Rename worked.",
+    "confidence": "high that typing was ignored; low as application finding due known focus confound"
+  },
+  {
+    "participant": 4,
+    "id": "P4-01",
+    "title": "Empty-pattern double-click opened Rename instead of note editing",
+    "severity": "moderate",
+    "steps": [
+      "Create a new project and add R1 Mini.",
+      "Close instrument panel.",
+      "Double-click center and lower body of the empty New pattern clip."
+    ],
+    "expected": "Open a place to enter notes.",
+    "observed": "Rename controls appeared twice. Editing was discoverable only after right-clicking and finding Edit notes.",
+    "evidence_images": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/007-pattern-editor.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/008-pattern-body.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/009-pattern-context.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/010-note-editor.png"
+    ],
+    "recovery": "Cancel rename, right-click clip > Edit notes.",
+    "confidence": "high for observation; beginner expectation, not a claim that double-click behavior is unintended"
+  },
+  {
+    "participant": 4,
+    "id": "P4-02",
+    "title": "Sampler sound preset did not include a sound",
+    "severity": "moderate",
+    "steps": [
+      "Add R1 Sampler for a keyboard melody.",
+      "Choose Keys \u00b7 Plucked Keys preset.",
+      "Click Load sample."
+    ],
+    "expected": "A built-in preset named Plucked Keys supplies a playable keyboard sound.",
+    "observed": "No sample remained after preset selection. Load sample opened empty Recent files, with no included sample library discovered.",
+    "evidence_images": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/021-sampler-presets.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/022-plucked-keys-no-sample.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/024-load-sample-after-wait.png"
+    ],
+    "recovery": "Cancel file picker, Change instrument to R1 Mini, choose Sync Lead instead.",
+    "confidence": "high for visible no-sample state and discovery failure; no claim that the unloaded sampler was audibly tested"
+  },
+  {
+    "participant": 4,
+    "id": "P4-03",
+    "title": "Default scale colored newly generated major chord notes red",
+    "severity": "minor",
+    "steps": [
+      "Open a new clip editor.",
+      "Generate default Major triad C, then F and G."
+    ],
+    "expected": "Valid major chords should look normal in a C-major song.",
+    "observed": "Editor default was Key C \u00b7 Natural minor, while generator default was Major triad. E, A and B appeared red with no immediately visible explanation.",
+    "evidence_images": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/011-generate.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/014-four-chords.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/015-tempo-key.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/017-play-chords.png"
+    ],
+    "recovery": "Found Key > Scale > Major; notes then displayed without red.",
+    "confidence": "high for contradictory defaults; interpretation of red as error is simulated novice reaction"
+  },
+  {
+    "participant": 4,
+    "id": "P4-04",
+    "title": "Device browser count contradicted visible built-in instruments and effects",
+    "severity": "minor",
+    "steps": [
+      "Open Choose instrument, later Effects > Insert."
+    ],
+    "expected": "Number of available devices matches cards and collection counts.",
+    "observed": "Top-right 0 plug-ins appeared alongside three built-in instrument cards and All plug-ins 3; later six effect cards and All plug-ins 6.",
+    "evidence_images": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/003-instrument-browser.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/040-effect-browser-settled.png"
+    ],
+    "recovery": "Ignored zero and selected visible built-in cards.",
+    "confidence": "high"
+  },
+  {
+    "participant": 4,
+    "id": "P4-05",
+    "title": "Dialog repositioning caused clicks to miss their intended controls",
+    "severity": "minor",
+    "steps": [
+      "Open Instrument > Effects.",
+      "Use displayed Insert or Open editor position after initial screenshot."
+    ],
+    "expected": "Button stays where initially shown.",
+    "observed": "Dialog changed vertical position after initial rendering; first attempt at Insert opened Assistant, and first Open editor click needed repeating. This is susceptible to screenshot timing and animation in the study driver.",
+    "evidence_images": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/035-effects.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/036-insert-menu.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/038-effects-settled.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/041-spacer-added.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/042-spacer-editor.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/043-spacer-open.png"
+    ],
+    "recovery": "Back from Assistant, capture settled state, retry at new coordinates.",
+    "confidence": "medium; report as interaction observation, not confirmed product defect"
+  },
+  {
+    "participant": 4,
+    "id": "P4-ENV-01",
+    "title": "Keyboard focus lost after native sample file picker",
+    "severity": "moderate",
+    "classification": "confirmed study environment issue, excluded from product defects",
+    "steps": [
+      "Open and cancel native Load sample picker.",
+      "Attempt track rename using text; try Ctrl+S."
+    ],
+    "expected": "Typed characters and shortcuts reach the app.",
+    "observed": "Text and shortcuts ignored. Coordinator confirmed Xvfb focus was on root window due to absent window manager; fixed driver restoration.",
+    "evidence_images": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/055-name-typed.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/056-onscreen-keyboard.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/057-keyboard-rename-success.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/060-save-after-focus-recovery.png"
+    ],
+    "recovery": "On-screen keyboard renamed melody before fix; Ctrl+S worked immediately after coordinator driver correction.",
+    "confidence": "high, coordinator-confirmed"
+  },
+  {
+    "participant": 4,
+    "id": "P4-ENV-02",
+    "title": "Audio output stream disconnected during study",
+    "severity": "major for listening task",
+    "classification": "environment-confounded; not attributed to RILL",
+    "steps": [
+      "Play created notes.",
+      "Later replay saved/exported arrangement."
+    ],
+    "expected": "Reliable auditioning of composition and effect.",
+    "observed": "Persistent stream failed/disconnected banner; final Play failed and offered Retry playback. Coordinator confirmed isolated sink still running and recurring ALSA EIO across sessions, cause unresolved. Earlier captured output had nonzero signal.",
+    "evidence_images": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/036-insert-menu.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-4/screenshots/067-final-playback.png"
+    ],
+    "recovery": "Completed visual composition and exported WAV; did not attempt low-level repair.",
+    "confidence": "high for visible failure; low for product attribution"
+  },
+  {
+    "participant": 5,
+    "id": "S5-01",
+    "title": "Sampler preset names suggest usable sounds but the sampler stays empty",
+    "severity": "moderate",
+    "steps": [
+      "Start a new song",
+      "Choose R1 Sampler and add track",
+      "Choose Pad \u00b7 Soft Pad",
+      "Try the on-screen piano and inspect the sample area"
+    ],
+    "expected": "A Soft Pad preset should supply an atmospheric sound, or clearly explain that an audio file is still needed.",
+    "observed": "Soft Pad selected, but No sample and Load sample remain. The participant abandoned the sampler for R1 Mini.",
+    "evidence_image_paths": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/004-sampler-added.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/006-soft-pad-no-sample.png"
+    ],
+    "recovery": "Change instrument > R1 Mini > String Pad.",
+    "confidence": "high for visible state; no claim about audible silence because audio environment also failed"
+  },
+  {
+    "participant": 5,
+    "id": "S5-02",
+    "title": "Double-clicking a pattern opens rename; Keyboard is a typing keyboard",
+    "severity": "moderate",
+    "steps": [
+      "Double-click the empty pattern",
+      "Click Keyboard in the resulting popover",
+      "Cancel and double-click lower in the pattern",
+      "Right-click and choose Edit notes"
+    ],
+    "expected": "Open a place to compose notes; Keyboard appears to mean a musical keyboard in this context.",
+    "observed": "Double-click opened rename, including a typing keyboard. Repeating lower in the clip still opened rename. Only right-click Edit notes revealed the piano grid.",
+    "evidence_image_paths": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/015-pattern-editor.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/016-keyboard-editor.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/018-clip-context.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/019-edit-notes.png"
+    ],
+    "recovery": "Found Edit notes in context menu after several exploratory actions; successfully reused it for the second layer.",
+    "confidence": "high"
+  },
+  {
+    "participant": 5,
+    "id": "S5-03",
+    "title": "Instrument replacement leaves the old instrument name on the track and dialog title",
+    "severity": "low",
+    "steps": [
+      "Create R1 Sampler track",
+      "Change instrument to R1 Mini",
+      "Return to arranger"
+    ],
+    "expected": "Easy confirmation that the sound source is now R1 Mini.",
+    "observed": "Panel body says R1 Mini while title says Instrument of R1 Sampler; arranger track still says R1 Sampler.",
+    "evidence_image_paths": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/010-mini-assigned.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/014-track-ready.png"
+    ],
+    "recovery": "Manually renamed track Mist Pad; Mixer later displays MIDI \u00b7 R1 Mini.",
+    "confidence": "high for labels; may be intentional track-name persistence"
+  },
+  {
+    "participant": 5,
+    "id": "S5-04",
+    "title": "Effects dialog changed vertical position between first screenshot and interaction",
+    "severity": "low",
+    "steps": [
+      "Open Window > Effects",
+      "Click the Insert position from the visible screenshot",
+      "Use Back after Assistant opens"
+    ],
+    "expected": "Open the effects browser.",
+    "observed": "Assistant opened. On returning, the Effects dialog was lower and its AI button occupied approximately the previous Insert location.",
+    "evidence_image_paths": [
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/032-effects.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/033-effects-browser.png",
+      "/workspace/rill-daw/artifacts/usability-2026-11-14/session-5/screenshots/034-back-from-assistant.png"
+    ],
+    "recovery": "Return and click Insert at its new position; later captures taken after a separate tool roundtrip.",
+    "confidence": "low-to-medium; screenshot timing and layout settling may exaggerate this in simulated coordinate interaction; review recording before treating as product defect"
+  }
+]

@@ -12,7 +12,7 @@ use clap_sys::{
     audio_buffer::clap_audio_buffer,
     entry::clap_plugin_entry,
     events::*,
-    ext::{audio_ports::*, gui::*, latency::*, note_ports::*, params::*, state::*, timer_support::*},
+    ext::{audio_ports::*, gui::*, latency::*, note_name::*, note_ports::*, params::*, state::*, timer_support::*},
     factory::plugin_factory::*,
     host::clap_host,
     id::clap_id,
@@ -345,6 +345,29 @@ static NOTE_PORTS: clap_plugin_note_ports = clap_plugin_note_ports {
     get: Some(note_ports_get),
 };
 
+unsafe extern "C" fn note_names_count(plugin: *const clap_plugin) -> u32 {
+    if unsafe { probe(plugin) }.mode >= 2.0 { 0 } else { 4 }
+}
+unsafe extern "C" fn note_names_get(plugin: *const clap_plugin, index: u32, note: *mut clap_note_name) -> bool {
+    if index >= unsafe { note_names_count(plugin) } { return false; }
+    let alternate = unsafe { probe(plugin) }.mode >= 1.0;
+    let (key, name) = if alternate {
+        [(60, "Slice A"), (64, "Slice B"), (67, "Slice C"), (38, "Other channel")][index as usize]
+    } else {
+        [(36, "Kick"), (40, "Snare"), (42, "Closed Hat"), (38, "Other channel")][index as usize]
+    };
+    let note = unsafe { &mut *note };
+    write_name(&mut note.name, name);
+    note.key = key;
+    note.port = if index == 2 { 0 } else { -1 };
+    note.channel = if index == 3 { 1 } else { -1 };
+    true
+}
+static NOTE_NAMES: clap_plugin_note_name = clap_plugin_note_name {
+    count: Some(note_names_count),
+    get: Some(note_names_get),
+};
+
 unsafe extern "C" fn params_count(_plugin: *const clap_plugin) -> u32 {
     2
 }
@@ -545,6 +568,8 @@ unsafe extern "C" fn get_extension(plugin: *const clap_plugin, id: *const c_char
         &AUDIO_PORTS as *const _ as *const c_void
     } else if id == CLAP_EXT_NOTE_PORTS && !effect {
         &NOTE_PORTS as *const _ as *const c_void
+    } else if id == CLAP_EXT_NOTE_NAME && !effect {
+        &NOTE_NAMES as *const _ as *const c_void
     } else if id == CLAP_EXT_PARAMS {
         &PARAMS as *const _ as *const c_void
     } else if id == CLAP_EXT_STATE {

@@ -1,0 +1,33 @@
+{
+  "classification": "post-study saved-project and source verification",
+  "project": "../usability-2026-11-14/session-2/exports/neon-steps.rill",
+  "archive_entries": [
+    "manifest.json"
+  ],
+  "drum_tracks": [
+    {
+      "name": "R1 Drums",
+      "instrument": {
+        "Builtin": {
+          "device": "r1-drums"
+        }
+      },
+      "note_count": 40,
+      "pitches": [
+        60,
+        62,
+        65
+      ],
+      "sample_fields": {
+        "instrument_state": [],
+        "latency_samples": 0
+      }
+    }
+  ],
+  "source_range": {
+    "first_note": 36,
+    "last_note": 51,
+    "source": "crates/daw-devices/src/devices/drums.rs:105"
+  },
+  "conclusion": "The saved drum pitches cannot reach any R1 Drums pad. The archive contains no sample assets; preset load source applies parameters only. These facts are independent of the live ALSA error."
+}

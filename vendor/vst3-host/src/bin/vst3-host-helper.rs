@@ -406,6 +406,10 @@ fn handle(command: HostCommand, plugin: &SharedPlugin, sample_rate: &mut f64) ->
                 Err(e) => err("ProgramPitchNames", e),
             }
         }),
+        HostCommand::NoteNames => with(plugin, |p| match p.note_names() {
+            Ok(names) => HostResponse::NoteNames { names },
+            Err(e) => err("NoteNames", e),
+        }),
         HostCommand::GetProgramData {
             program_list_id,
             program_index,

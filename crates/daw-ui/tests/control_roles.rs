@@ -420,7 +420,7 @@ fn role_styles_do_not_leak_and_active_tools_keep_a_palette_indicator_at_both_den
                     );
                     for (index, response) in row.inner.iter().enumerate() {
                         assert!(ui.max_rect().contains_rect(response.rect));
-                        assert!(response.rect.height() >= controls::tokens::CONTROL_HEIGHT);
+                        assert!(response.rect.height() >= controls::tokens::TOOLBAR_CONTROL_HEIGHT);
                         for previous in &row.inner[..index] {
                             assert!(
                                 !response.rect.intersects(previous.rect),

@@ -1,0 +1,7 @@
+    Finished `test` profile [unoptimized] target(s) in 0.21s
+     Running tests/clap.rs (target/debug/build/daw-plugins/46e08c4773e6ff41/out/clap-46e08c4773e6ff41)
+
+running 1 test
+test inspection_reports_ports_and_parameters_from_the_helper ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.41s
