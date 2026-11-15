@@ -85,6 +85,10 @@ pub enum Icon {
     Clip,
     Filter,
     Power,
+    Drum,
+    Percussion,
+    Microphone,
+    Footsteps,
 }
 
 impl Icon {
@@ -276,6 +280,71 @@ impl Icon {
             painter.circle_stroke(point(x, y), r * size / 24.0, stroke);
         };
         match self {
+            Self::Drum => {
+                line(&[
+                    (3., 7.),
+                    (8., 4.),
+                    (16., 4.),
+                    (21., 7.),
+                    (16., 10.),
+                    (8., 10.),
+                    (3., 7.),
+                ]);
+                line(&[
+                    (3., 7.),
+                    (3., 17.),
+                    (8., 20.),
+                    (16., 20.),
+                    (21., 17.),
+                    (21., 7.),
+                ]);
+                line(&[(8., 10.), (8., 20.)]);
+                line(&[(16., 10.), (16., 20.)]);
+            }
+            Self::Percussion => {
+                line(&[(12., 3.), (3., 19.), (21., 19.), (12., 3.)]);
+                line(&[(10., 9.), (21., 13.)]);
+            }
+            Self::Microphone => {
+                painter.rect_stroke(
+                    Rect::from_min_max(point(9., 3.), point(15., 14.)),
+                    3.0 * size / 24.0,
+                    stroke,
+                    egui::StrokeKind::Inside,
+                );
+                line(&[
+                    (5., 11.),
+                    (5., 14.),
+                    (8., 18.),
+                    (16., 18.),
+                    (19., 14.),
+                    (19., 11.),
+                ]);
+                line(&[(12., 18.), (12., 22.)]);
+                line(&[(8., 22.), (16., 22.)]);
+            }
+            Self::Footsteps => {
+                line(&[
+                    (4., 4.),
+                    (7., 2.),
+                    (10., 5.),
+                    (10., 10.),
+                    (7., 13.),
+                    (4., 11.),
+                    (4., 4.),
+                ]);
+                line(&[
+                    (14., 10.),
+                    (17., 8.),
+                    (20., 11.),
+                    (20., 16.),
+                    (17., 19.),
+                    (14., 17.),
+                    (14., 10.),
+                ]);
+                line(&[(4., 16.), (8., 17.)]);
+                line(&[(14., 22.), (18., 23.)]);
+            }
             Self::View => {
                 line(&[
                     (2., 12.),
@@ -813,6 +882,7 @@ pub struct IconButton {
     small: bool,
     min_size: Option<Vec2>,
     truncate: bool,
+    left_aligned: bool,
     wrap_mode: Option<egui::TextWrapMode>,
 }
 
@@ -990,6 +1060,7 @@ impl IconButton {
             small: false,
             min_size: None,
             truncate: false,
+            left_aligned: false,
             wrap_mode: None,
         }
     }
@@ -1035,6 +1106,12 @@ impl IconButton {
         self.truncate = true;
         self
     }
+    /// Align a full-width row's icon and text to the start while keeping
+    /// the native button's input, focus, clipping and accessibility behavior.
+    pub fn left_aligned(mut self) -> Self {
+        self.left_aligned = true;
+        self
+    }
     pub fn wrap_mode(mut self, wrap_mode: egui::TextWrapMode) -> Self {
         self.wrap_mode = Some(wrap_mode);
         self
@@ -1077,6 +1154,9 @@ impl Widget for IconButton {
             } else {
                 atoms.push_left(atom);
             }
+        }
+        if self.left_aligned {
+            atoms.push_right(Atom::grow());
         }
         if self.disclosure {
             atoms.push_right(Atom::custom(disclosure_id, Vec2::splat(12.0)));

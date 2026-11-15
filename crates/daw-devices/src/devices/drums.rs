@@ -1,5 +1,6 @@
-//! R1 Drums: sixteen pads on MIDI notes 36–51, one recording each in sample
-//! slots 0–15. A hit reads its pad's recording through `daw_dsp`'s
+//! R1 Drums: sixteen pads on MIDI notes 36–51. Each pad plays a composable
+//! sample-selection tree; older kits retain their recording in slots 0–15.
+//! A hit reads its selected recordings through `daw_dsp`'s
 //! band-limited mip-map at the pitch its tune and pitch envelope ask for,
 //! walks the pad's start and end markers with the shared playhead and
 //! shapes it with an attack, hold and decay. Each pad then sums its voices
@@ -17,7 +18,13 @@ use crate::{
     Device, DeviceDescriptor, DeviceKind, Event, EventKind, ParamRange, ParamSpec, ProcessContext,
     SampleData, StereoIo, Telemetry,
 };
+use daw_dsp::sample_player::{
+    MAX_SAMPLE_SLOTS, MAX_TRIGGER_LAYERS, PlayerNode, PlayerProgram, SampleTrigger,
+};
 use std::sync::Arc;
+
+const LAYERS: usize = MAX_TRIGGER_LAYERS;
+const SAMPLE_SLOTS: usize = MAX_SAMPLE_SLOTS as usize;
 
 /// Pads, sample slots and notes.
 pub const PADS: usize = 16;
@@ -214,6 +221,7 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
     category: "Drums",
     parameters: &PARAMETERS,
     sample_slots: PADS as u32,
+    sample_capacity: MAX_SAMPLE_SLOTS,
     sidechain_input: false,
     factory_presets: &[
         include_str!("../../presets/r1-drums/default.rillpreset"),
@@ -407,7 +415,18 @@ impl Ramp {
     }
 }
 
-/// One hit.
+/// An independently pitched recording within one hit.
+#[derive(Clone, Debug, Default)]
+struct LayerVoice {
+    active: bool,
+    region: Region,
+    playhead: Playhead,
+    step: Ramp,
+    reader: Option<Step>,
+    sample: SampleTrigger,
+}
+
+/// One hit owns all selected layers, so layering does not consume polyphony.
 #[derive(Clone, Debug, Default)]
 struct Voice {
     active: bool,
@@ -415,14 +434,11 @@ struct Voice {
     age: u64,
     /// Velocity gain.
     gain: f32,
-    region: Region,
-    playhead: Playhead,
+    layers: [LayerVoice; LAYERS],
+    layer_count: usize,
     amp: Adsr,
     /// Pitch envelope, 1 at the hit and falling.
     sweep: f32,
-    /// Samples of the recording per output sample.
-    step: Ramp,
-    reader: Option<Step>,
     /// Falls to 0 over [`CHOKE_FADE_MS`] once `fading`.
     fade: f32,
     fading: bool,
@@ -485,9 +501,10 @@ pub struct Drums {
     /// Pads whose settings changed, one bit each; bit 16 the kit.
     dirty: u32,
     sample_rate: f32,
-    samples: [Option<Arc<SampleData>>; PADS],
+    samples: [Option<Arc<SampleData>>; SAMPLE_SLOTS],
+    players: [Option<PlayerProgram>; PADS],
     bank: &'static SincBank,
-    voices: [Voice; PADS * SLOTS_PER_PAD],
+    voices: Box<[Voice]>,
     chains: [Chain; PADS],
     volume: Smoothed,
     countdown: usize,
@@ -512,9 +529,12 @@ impl Drums {
             settings: Settings::from_normalized(|id| values[index(id).unwrap()]),
             dirty: ALL,
             sample_rate: 48_000.0,
-            samples: Default::default(),
+            samples: std::array::from_fn(|_| None),
+            players: std::array::from_fn(|_| None),
             bank: SincBank::shared(),
-            voices: std::array::from_fn(|_| Voice::default()),
+            voices: (0..PADS * SLOTS_PER_PAD)
+                .map(|_| Voice::default())
+                .collect(),
             chains: Default::default(),
             volume: Smoothed::new(0.0),
             countdown: 0,
@@ -604,11 +624,6 @@ impl Drums {
             }
             chain.driving = driving;
 
-            let Some(sample) = &self.samples[pad] else {
-                continue;
-            };
-            let (frames, source_rate) = (sample.frames(), sample.sample_rate());
-            let region = Region::new(frames, &p.markers());
             let sweep = (-4.6 * CONTROL as f32 / (p.env_decay_ms * 0.001 * rate)).exp();
             let mut activity = 0.0_f32;
             let mut hits = 0;
@@ -624,12 +639,16 @@ impl Drums {
                     continue;
                 }
                 hits += 1;
-                voice.region = region;
-                voice_control(voice, &p, source_rate, rate, sweep, false);
+                voice_control(voice, &p, &self.samples, rate, sweep, false);
                 activity = activity.max(voice.level());
                 if newest.is_none_or(|(age, _)| voice.age > age) {
-                    let at = voice.playhead.position(&voice.region) / frames.max(1) as f64;
-                    newest = Some((voice.age, at as f32));
+                    if let Some(playing) = voice.layers.iter().find(|layer| layer.active) {
+                        let frames = self.samples[playing.sample.slot as usize]
+                            .as_ref()
+                            .map_or(1, |s| s.frames());
+                        let at = playing.playhead.position(&playing.region) / frames.max(1) as f64;
+                        newest = Some((voice.age, at as f32));
+                    }
                 }
             }
             sounding += hits;
@@ -648,10 +667,23 @@ impl Drums {
             return;
         };
         let p = self.settings.pads[pad];
-        let Some(sample) = self.samples[pad].clone() else {
-            return;
-        };
         if p.mute {
+            return;
+        }
+        let mut selected = [SampleTrigger::default(); LAYERS];
+        let count = match &mut self.players[pad] {
+            Some(player) => player.trigger(
+                velocity,
+                |slot| self.samples[slot as usize].is_some(),
+                &mut selected,
+            ),
+            None if self.samples[pad].is_some() => {
+                selected[0].slot = pad as u32;
+                1
+            }
+            None => 0,
+        };
+        if count == 0 {
             return;
         }
         // The other pads of its choke group stop; so do its own earlier
@@ -703,12 +735,23 @@ impl Drums {
         voice.fade = 1.0;
         voice.fading = false;
         voice.sweep = 1.0;
-        voice.region = Region::new(sample.frames(), &p.markers());
-        voice.playhead = Playhead::new(&voice.region);
+        voice.layer_count = count;
+        for (layer, playing) in voice.layers.iter_mut().enumerate() {
+            *playing = LayerVoice::default();
+            playing.active = layer < count;
+            playing.sample = selected[layer];
+            if let Some(sample) = self.samples[playing.sample.slot as usize]
+                .as_ref()
+                .filter(|_| layer < count)
+            {
+                playing.region = Region::new(sample.frames(), &playing.sample.markers(p.markers()));
+                playing.playhead = Playhead::new(&playing.region);
+            }
+        }
         voice.amp.reset();
         set_envelope(&mut voice.amp, &p, rate);
         voice.amp.gate_on();
-        voice_control(voice, &p, sample.sample_rate(), rate, 1.0, true);
+        voice_control(voice, &p, &self.samples, rate, 1.0, true);
         let tail = (TAIL_MS * 0.001 * rate) as usize;
         self.chains[pad].tail = tail;
     }
@@ -761,12 +804,16 @@ impl Drums {
             let mut pad_left = [0.0_f32; CONTROL];
             let mut pad_right = [0.0_f32; CONTROL];
             let (pad_left, pad_right) = (&mut pad_left[..frames], &mut pad_right[..frames]);
-            if let Some(sample) = &self.samples[pad] {
-                let voices = &mut self.voices[pad * SLOTS_PER_PAD..(pad + 1) * SLOTS_PER_PAD];
-                render_voices(
-                    voices, sample, bank, pad_left, pad_right, fade_step, end_fade,
-                );
-            }
+            let voices = &mut self.voices[pad * SLOTS_PER_PAD..(pad + 1) * SLOTS_PER_PAD];
+            render_voices(
+                voices,
+                &self.samples,
+                bank,
+                pad_left,
+                pad_right,
+                fade_step,
+                end_fade,
+            );
             let chain = &mut self.chains[pad];
             let mut peak = 0.0_f32;
             for ((out_left, out_right), (l, r)) in left
@@ -821,53 +868,82 @@ fn set_envelope(amp: &mut Adsr, pad: &Pad, rate: f32) {
 fn voice_control(
     voice: &mut Voice,
     pad: &Pad,
-    source_rate: f32,
+    samples: &[Option<Arc<SampleData>>; SAMPLE_SLOTS],
     rate: f32,
     sweep: f32,
     start: bool,
 ) {
     let semitones = pad.pitch + pad.pitch_env * voice.sweep;
     voice.sweep *= sweep;
-    let step = ((semitones / 12.0).exp2() * source_rate / rate).min(crate::dsp::resample::MAX_STEP);
-    let from = voice.step.target();
-    voice.step.to(step, start);
-    // For the fastest step of the period, so the cutoff is never too high.
-    voice.reader = Some(Step::new(if start { step } else { step.max(from) }));
+    let ratio = (semitones / 12.0).exp2() / rate;
+    for playing in &mut voice.layers[..voice.layer_count] {
+        if !playing.active {
+            continue;
+        }
+        let Some(sample) = &samples[playing.sample.slot as usize] else {
+            playing.active = false;
+            continue;
+        };
+        playing.region = Region::new(sample.frames(), &playing.sample.markers(pad.markers()));
+        let step = (ratio * sample.sample_rate()).min(crate::dsp::resample::MAX_STEP);
+        let from = playing.step.target();
+        playing.step.to(step, start);
+        // For the fastest step of the period, so the cutoff is never too high.
+        playing.reader = Some(Step::new(if start { step } else { step.max(from) }));
+    }
 }
 
-/// Adds one pad's hits to its buffers.
+/// Adds layered hits before the pad's shared filter, drive, pan and volume.
 fn render_voices(
     voices: &mut [Voice],
-    sample: &SampleData,
+    samples: &[Option<Arc<SampleData>>; SAMPLE_SLOTS],
     bank: &SincBank,
     left: &mut [f32],
     right: &mut [f32],
     fade_step: f32,
     end_fade: f64,
 ) {
-    let (first, second) = (sample.channel(0), sample.channel(1));
-    let stereo = sample.channel_count() > 1;
     for voice in voices {
         if !voice.active {
             continue;
         }
-        let Some(reader) = voice.reader else {
-            continue;
-        };
         for (out_left, out_right) in left.iter_mut().zip(right.iter_mut()) {
-            let step = f64::from(voice.step.next());
-            let (position, level) = voice.playhead.reads(&voice.region).first;
-            let tap = first.tap(bank, &reader, position);
-            let l = first.read(&tap);
-            let r = if stereo { second.read(&tap) } else { l };
-            voice.playhead.advance(&voice.region, step, end_fade);
+            let (mut sum_left, mut sum_right) = (0.0, 0.0);
+            let mut sounding = false;
+            for playing in &mut voice.layers[..voice.layer_count] {
+                if !playing.active {
+                    continue;
+                }
+                let Some(sample) = &samples[playing.sample.slot as usize] else {
+                    continue;
+                };
+                let Some(reader) = playing.reader else {
+                    continue;
+                };
+                let step = f64::from(playing.step.next());
+                let (position, level) = playing.playhead.reads(&playing.region).first;
+                let first = sample.channel(0);
+                let tap = first.tap(bank, &reader, position);
+                let l = first.read(&tap);
+                let r = if sample.channel_count() > 1 {
+                    sample.channel(1).read(&tap)
+                } else {
+                    l
+                };
+                let gain = level * playing.sample.gain;
+                sum_left += l * gain;
+                sum_right += r * gain;
+                playing.playhead.advance(&playing.region, step, end_fade);
+                playing.active = !playing.playhead.is_done();
+                sounding |= playing.active;
+            }
             if voice.fading {
                 voice.fade = (voice.fade - fade_step).max(0.0);
             }
-            let gain = level * voice.amp.next_value() * voice.fade * voice.gain;
-            *out_left += l * gain;
-            *out_right += r * gain;
-            if voice.playhead.is_done() || voice.fade == 0.0 {
+            let gain = voice.amp.next_value() * voice.fade * voice.gain;
+            *out_left += sum_left * gain;
+            *out_right += sum_right * gain;
+            if !sounding || voice.fade == 0.0 {
                 voice.active = false;
                 voice.amp.reset();
                 break;
@@ -917,13 +993,37 @@ impl Device for Drums {
     }
 
     fn set_sample(&mut self, slot: u32, sample: Option<Arc<SampleData>>) {
-        let pad = slot as usize;
-        if pad < PADS {
-            self.samples[pad] = sample.filter(|sample| sample.frames() > 0);
-            for voice in self.pad_voices_mut(pad) {
-                voice.active = false;
-                voice.amp.reset();
+        let slot = slot as usize;
+        if slot < SAMPLE_SLOTS {
+            self.samples[slot] = sample.filter(|sample| sample.frames() > 0);
+            for voice in &mut self.voices {
+                if voice
+                    .layers
+                    .iter()
+                    .any(|layer| layer.active && layer.sample.slot as usize == slot)
+                {
+                    voice.active = false;
+                    voice.amp.reset();
+                }
             }
+        }
+    }
+
+    fn set_sample_player(&mut self, group: u32, root: Option<&PlayerNode>) {
+        let Some(player) = self.players.get_mut(group as usize) else {
+            return;
+        };
+        match root {
+            Some(root) => {
+                let Ok(compiled) = PlayerProgram::compile(root, MAX_SAMPLE_SLOTS) else {
+                    return;
+                };
+                *player = Some(compiled);
+            }
+            None => *player = None,
+        }
+        for voice in self.pad_voices_mut(group as usize) {
+            *voice = Voice::default();
         }
     }
 
@@ -1005,6 +1105,9 @@ impl Device for Drums {
         self.volume.snap();
         self.countdown = 0;
         self.age = 0;
+        for player in self.players.iter_mut().flatten() {
+            player.reset();
+        }
         for pad in 0..PADS {
             self.telemetry.set_value(TELEMETRY_ACTIVITY + pad, 0.0);
             self.telemetry.set_value(TELEMETRY_PLAYHEADS + pad, -1.0);
@@ -1019,20 +1122,34 @@ impl Device for Drums {
     fn tail_samples(&self) -> u32 {
         // The longest hit: its recording at its lowest pitch, or its hold
         // and decay, whichever ends first, and a gate's release.
-        let longest = (0..PADS)
-            .filter_map(|pad| {
-                let sample = self.samples[pad].as_ref()?;
-                let p = &self.settings.pads[pad];
+        let mut longest = 0.0_f32;
+        for pad in 0..PADS {
+            let p = &self.settings.pads[pad];
+            let mut include = |leaf: SampleTrigger| {
+                let Some(sample) = &self.samples[leaf.slot as usize] else {
+                    return;
+                };
                 let lowest = p.pitch.min(p.pitch + p.pitch_env);
-                let played = (p.end - p.start).abs() * sample.frames() as f32
-                    / sample.sample_rate()
-                    / (lowest / 12.0).exp2();
+                let played =
+                    (p.end - p.start).abs() * (leaf.end - leaf.start) * sample.frames() as f32
+                        / sample.sample_rate()
+                        / (lowest / 12.0).exp2();
                 let shaped = p
                     .hold_ms
                     .map(|hold| (p.attack_ms + hold + 2.0 * p.decay_ms) * 0.001);
-                Some(shaped.map_or(played, |shaped| shaped.min(played)))
-            })
-            .fold(0.0_f32, f32::max);
+                longest = longest.max(shaped.map_or(played, |shaped| shaped.min(played)));
+            };
+            if let Some(player) = &self.players[pad] {
+                for leaf in player.samples() {
+                    include(leaf);
+                }
+            } else {
+                include(SampleTrigger {
+                    slot: pad as u32,
+                    ..SampleTrigger::default()
+                });
+            }
+        }
         let ring = if self.settings.pads.iter().any(|p| p.filter != 0.0) {
             RING_MS
         } else {

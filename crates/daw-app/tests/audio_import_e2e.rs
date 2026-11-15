@@ -435,6 +435,105 @@ fn asynchronous_drop_keeps_its_track_and_beat_and_rejects_a_deleted_destination(
     app.quit();
 }
 
+#[test]
+fn delayed_sample_replacement_rejects_changed_leaf_device_and_binding() {
+    use daw_core::{DeviceSample, Instrument, PlayerKind, PlayerNode};
+    let worker = ControlledWorker::new();
+    for change in ["leaf", "device", "binding"] {
+        let mut app = Harness::with_audio_import_helper(&worker.binary, 10_000);
+        let original = source_copy(&app, "wav", &format!("original-{change}.wav"));
+        let alternate = source_copy(&app, "wav", &format!("alternate-{change}.wav"));
+        let source = source_copy(&app, "wav", &format!("gate-{change}.wav"));
+        let mut project = Project::new();
+        let replacement = project
+            .add_project_sample("Replacement", alternate.to_string_lossy())
+            .unwrap();
+        let target = project.add_instrument_track("Sampler");
+        project
+            .set_instrument(target, Instrument::builtin("r1-sampler"))
+            .unwrap();
+        project
+            .load_device_sample(
+                target,
+                DeviceSample {
+                    slot: 42,
+                    path: original.to_string_lossy().into_owned(),
+                    name: "Original".into(),
+                },
+            )
+            .unwrap();
+        project
+            .set_sample_player(
+                target,
+                0,
+                Some(PlayerNode {
+                    id: 1,
+                    name: String::new(),
+                    kind: PlayerKind::All {
+                        children: vec![PlayerNode::sample(2, 42)],
+                    },
+                }),
+            )
+            .unwrap();
+        let path = app.directory.path().join("guard.rill");
+        project.save(&path).unwrap();
+        app.command(json!({"command":"open","path":path}));
+        app.command(json!({"command":"viewport","width":1500,"height":1050}));
+        app.click("Sampler");
+        app.click("Window");
+        app.click("Instrument");
+        common::wait_visible(&mut app, "Edit player…");
+        app.click("Edit player…");
+        let ready = common::wait_until(&mut app, |state| {
+            state["sample_player"]["rows"]
+                .as_array()
+                .is_some_and(|rows| rows.len() == 2)
+        });
+        let row = &ready["sample_player"]["rows"][1];
+        let x = (row["min"][0].as_f64().unwrap() + row["max"][0].as_f64().unwrap()) * 0.5;
+        let y = (row["min"][1].as_f64().unwrap() + row["max"][1].as_f64().unwrap()) * 0.5;
+        let started =
+            app.command(json!({"command":"drop_at","paths":[source],"x":x,"y":y,"wait":false}));
+        assert_eq!(started["audio_import"]["busy"], true);
+        worker.started(&source);
+        let state = app.inspect();
+        let mut arguments = json!({"session_id":state["song_session"]["id"],"expected_revision":state["song_session"]["revision"],"track_id":target});
+        let tool = match change {
+            "leaf" => {
+                arguments["slot"] = json!(0);
+                arguments["player"] = json!({"id":1,"kind":{"All":{"children":[]}}});
+                "set_sample_player"
+            }
+            "device" => {
+                arguments["plugin_id"] = json!("rill:r1-drums");
+                "assign_plugin"
+            }
+            _ => {
+                arguments["slot"] = json!(0);
+                arguments["node_id"] = json!(2);
+                arguments["sample_id"] = json!(replacement);
+                "set_device_sample"
+            }
+        };
+        let changed = app.command(json!({"command":"song_tool","name":tool,"arguments":arguments}));
+        assert_eq!(
+            changed["tool_result"]["ok"], true,
+            "{change}: {}",
+            changed["tool_result"]
+        );
+        worker.release(&source);
+        let rejected = wait_import(&mut app);
+        unchanged(&rejected, &changed);
+        assert_eq!(rejected["error"], true);
+        assert!(
+            rejected["status"].as_str().unwrap().contains("changed"),
+            "{change}: {}",
+            rejected["status"]
+        );
+        app.quit();
+    }
+}
+
 fn cursor_at(app: &mut Harness, beat: f64) -> Value {
     let state = app.inspect();
     let timeline = &state["timeline"];

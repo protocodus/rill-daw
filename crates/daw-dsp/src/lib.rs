@@ -26,6 +26,7 @@ mod random;
 mod real;
 pub mod resample;
 pub mod reverb;
+pub mod sample_player;
 mod shaper;
 mod smooth;
 mod svf;

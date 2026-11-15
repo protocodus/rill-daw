@@ -97,7 +97,12 @@ pub(crate) fn clip_summary(clip: &Clip) -> Value {
 pub(crate) fn handles(name: &str) -> bool {
     matches!(
         name,
-        "get_song_context" | "list_tracks" | "get_track" | "get_clip" | "get_note_expressions"
+        "get_song_context"
+            | "list_tracks"
+            | "list_project_samples"
+            | "get_track"
+            | "get_clip"
+            | "get_note_expressions"
     )
 }
 
@@ -116,6 +121,17 @@ pub(crate) fn dispatch<H: SongToolHost + ?Sized>(
             let session = host.song_session();
             Ok(
                 json!({"session_id":session.id,"revision":session.revision,"name":bounded_text(&p.name),"name_truncated":p.name.len()>1024,"tempo":p.tempo,"beats_per_bar":p.beats_per_bar,"meter_changes":meter_changes(p),"markers":p.markers.iter().take(MAX_QUERY_ITEMS).map(marker_summary).collect::<Vec<_>>(),"marker_count":p.markers.len(),"end_beat":p.end_beat(),"track_count":p.tracks.len(),"master":track_summary(&p.master),"loop":{"enabled":p.loop_enabled,"start":p.loop_start,"end":p.loop_end},"metronome":{"enabled":p.metronome_enabled,"gain":p.metronome_gain,"precount_bars":p.precount_bars},"timeline_units":"Quarter-note beats. Arrangement starts at 0; bars use beats_per_bar from bar 1, then each meter change from its bar; MIDI note positions use clip source beats.","limits":{"edits_per_batch":MAX_BATCH_EDITS,"notes_per_batch":MAX_BATCH_NOTES,"growth_bytes_per_batch":MAX_BATCH_GROWTH_BYTES,"query_items":MAX_QUERY_ITEMS}}),
+            )
+        }
+        "list_project_samples" => {
+            let q: Page = parse_arguments(arguments)?;
+            q.validate()?;
+            let p = host.project();
+            let s = host.song_session();
+            Ok(
+                json!({"session_id":s.id,"revision":s.revision,"total":p.samples.len(),"offset":q.offset,
+                "samples":p.samples.iter().skip(q.offset).take(q.limit)
+                    .map(|sample| json!({"id":sample.id,"name":bounded_text(&sample.name)})).collect::<Vec<_>>()}),
             )
         }
         "list_tracks" => {

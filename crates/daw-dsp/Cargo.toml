@@ -7,3 +7,4 @@ rust-version.workspace = true
 description = "Rill's shared DSP: filter kernels, oversampling, modulators and smoothing, for devices and the app alike"
 
 [dependencies]
+serde.workspace = true

@@ -187,7 +187,9 @@ pub fn export_stems(
 
     // One extent for every file: the longest tail anything in the export has.
     let spb = sample_rate as f64 * 60.0 / project.tempo;
-    let (start, end) = if let Some(range) = options.range {
+    let (start, end) = if let Some(range) = options.range
+        && !(options.extend_range_tails && options.include_effect_tails)
+    {
         export_range_samples(project, sample_rate, range)?
     } else if options.include_effect_tails {
         let mut reference = project.clone();
@@ -217,7 +219,16 @@ pub fn export_stems(
                 .end_sample,
             );
         }
-        (0, end)
+        if let Some(range) = options.range {
+            let (start, boundary) = export_range_samples(project, sample_rate, range)?;
+            let project_end = (project.end_beat() * spb).round() as u64;
+            (
+                start,
+                boundary.saturating_add(end.saturating_sub(project_end)),
+            )
+        } else {
+            (0, end)
+        }
     } else {
         (0, (project.end_beat() * spb).round() as u64)
     };

@@ -1388,9 +1388,19 @@ pub fn envelope_level(shape: &EnvelopeShape, at: f32) -> f32 {
     }
 }
 
-/// A sample name dragged from the library, dropped on a pad or sample view.
+/// A recording dragged from a sample collection. Identity is independent of
+/// its managed asset filename, so two aliases may share the same audio path.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SampleDrop(pub String);
+pub struct SampleDrop {
+    pub path: std::path::PathBuf,
+    pub name: Option<String>,
+}
+
+impl From<std::path::PathBuf> for SampleDrop {
+    fn from(path: std::path::PathBuf) -> Self {
+        Self { path, name: None }
+    }
+}
 
 /// One pad's display state.
 #[derive(Clone, Copy, Debug, Default)]
@@ -1409,7 +1419,7 @@ pub struct PadGridOutput {
     pub pressed: Option<(usize, f32)>,
     pub released: Option<usize>,
     pub selected: Option<usize>,
-    pub dropped: Option<(usize, String)>,
+    pub dropped: Option<(usize, SampleDrop)>,
     /// A file dropped on a pad from the system. The grid takes it, so
     /// nothing behind it imports it as well.
     pub files: Option<(usize, std::path::PathBuf)>,
@@ -1463,7 +1473,7 @@ pub fn pad_grid(
             now_held = Some(index);
         }
         if let Some(payload) = response.dnd_release_payload::<SampleDrop>() {
-            output.dropped = Some((index, payload.0.clone()));
+            output.dropped = Some((index, (*payload).clone()));
             output.selected = Some(index);
         }
         let over = pointer.is_some_and(|pointer| rect.contains(pointer));
@@ -1532,7 +1542,11 @@ pub fn pad_grid(
                     colors.warning,
                 );
             }
-            let label = if pad.loaded { pad.name } else { "Empty" };
+            let label = if !pad.name.is_empty() {
+                pad.name
+            } else {
+                "Empty"
+            };
             // Below the number where a line fits there, else beside it.
             let below = Rect::from_min_max(
                 egui::pos2(rect.left() + tokens::SPACE_XS, number.bottom()),
@@ -1565,13 +1579,17 @@ pub fn pad_grid(
                 format!(
                     "Pad {}: {}{}",
                     index + 1,
-                    if pad.loaded { pad.name } else { "empty" },
+                    if !pad.name.is_empty() {
+                        pad.name
+                    } else {
+                        "empty"
+                    },
                     if pad.muted { ", muted" } else { "" }
                 ),
             )
         });
         // The whole name, which a narrow pad may cut.
-        if pad.loaded && response.hovered() {
+        if !pad.name.is_empty() && response.hovered() {
             response.on_hover_text(pad.name);
         }
     }

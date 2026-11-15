@@ -1,5 +1,33 @@
 # Application E2E tests
 
+The sampling workflow has container-compatible running-app coverage:
+`sample_player_e2e` builds nested players with mouse controls, renders
+Velocity → Round robin → Random in both instruments, checks deterministic
+portable recall, trims/reverses without source changes, exports a leaf crop,
+renames pads, drops into composite pads atomically, rejects malformed audio,
+and drags Project samples from the embedded browser into leaf rows.
+`sample_player_tools_e2e` covers the same persisted model through public tools,
+explicit node targeting, source identities, Undo and released source bindings.
+`sample_browser_e2e` verifies manual indexing, scoped folder/search navigation, cached startup,
+explicit rescan, library/system-file loading, selected-file metadata, global favorites
+with persistent tags/colors/icons, retained project favorites across project changes,
+and Auto-play switching/stopping in both the full browser and Player palette.
+`sample_browser_async_e2e` covers captured loading, cancellation, failure and successful
+return, ordinary browsing that stays open after loading, focus-scoped preview keys,
+double-click audition and selected-source metadata Retry without rescanning.
+`project_sample_import_e2e` covers the Add to Project Samples button and collection
+drop target, managed copies and source reuse, one Undo/Redo, portable reopening
+after deleting sources, and failed imports leaving the pool unchanged.
+`sample_preview_e2e` measures WAV, AIFF/AIFF-C, FLAC, MP3, Vorbis, AAC, M4A and CAF
+audition through virtual audio, including metadata, replacement, Stop, nonzero
+cursor preservation and unchanged project/history.
+`device_randomize_e2e` verifies each Randomize click creates one independent Undo
+step restoring every changed parameter, with Redo retaining the same result.
+
+```sh
+cargo test --locked -p daw-app --test sample_player_e2e --test sample_player_tools_e2e --test sample_browser_e2e --test sample_browser_async_e2e --test project_sample_import_e2e --test sample_preview_e2e --test sample_bounce_e2e --test device_randomize_e2e -- --test-threads=1
+```
+
 `save_optimize_e2e` uses **File → Save and optimize** to remove deleted-clip
 assets from the song file, merge byte-identical sources and losslessly compress
 retained audio. It checks Undo/export after optimization, portable restart after
@@ -901,6 +929,19 @@ default release tail. Popup and destination-picker cancellation preserve the
 project and caller. Its opt-in native test uses `RILL_TEST_VST_INSTRUMENT`
 (Surge XT) to verify both choices against an actual isolated plugin tail;
 ordinary container runs require no installed plugins.
+
+`sample_bounce_e2e` exercises the shared Bounce dialog through the running app:
+multiple selected clips become a named 24-bit/44.1 kHz project sample with an
+independent waveform oracle excluding unselected sources; Undo/Redo and portable
+recall retain the recording. A multi-note R1 Mini gesture and an exact loop
+render to files. A loaded Sampler recording exports at source level. Cancellation
+and edits during a delayed bounce leave no project entry or managed file. Retrying
+a stale bounce reviews current sources before publishing successfully. The
+privileged `document_action` tool exercises the same selected-clip source and
+project-sample transaction, including invalid-destination rejection.
+`daw-engine`'s `export_options` target verifies an explicit range with releases
+against the corresponding full-render samples while ordinary loop ranges retain
+exact length.
 
 `novice_documents_e2e` saves and reopens through the actual menus, checks saved
 filename/dirty identity and picker defaults, and exercises extensionless,

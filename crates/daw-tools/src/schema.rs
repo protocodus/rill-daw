@@ -70,6 +70,28 @@ fn edit(op: &str, fields: Value, required: &[&str]) -> Value {
     object(properties, &required)
 }
 
+fn with_sample_player_definition(mut schema: Value) -> Value {
+    let node = json!({"$ref":"#/$defs/samplePlayer"});
+    let children = object(json!({"children":array(node.clone(),256)}), &["children"]);
+    let velocity = object(
+        json!({"min":{"type":"integer","minimum":1,"maximum":127},"max":{"type":"integer","minimum":1,"maximum":127},"child":node}),
+        &["min", "max", "child"],
+    );
+    let sample = object(
+        json!({"slot":{"type":"integer","minimum":0,"maximum":127},"start":{"type":"number","minimum":0,"maximum":1},"end":{"type":"number","minimum":0,"maximum":1},"reverse":boolean(),"gain_db":{"type":"number","minimum":-60,"maximum":12}}),
+        &["slot", "start", "end", "reverse", "gain_db"],
+    );
+    let kind = json!({"oneOf":[
+        object(json!({"Sample":sample}), &["Sample"]),
+        object(json!({"All":children.clone()}), &["All"]),
+        object(json!({"RoundRobin":children.clone()}), &["RoundRobin"]),
+        object(json!({"Random":children}), &["Random"]),
+        object(json!({"Velocity":object(json!({"children":array(velocity,256)}), &["children"])}), &["Velocity"])
+    ]});
+    schema["$defs"] = json!({"samplePlayer":object(json!({"id":integer(),"name":{"type":"string","maxLength":256},"kind":kind}), &["id","kind"])});
+    schema
+}
+
 pub fn song_edit_schema() -> Value {
     let mut v = Vec::new();
     macro_rules! add {($op:literal,$fields:expr,[$($required:literal),*])=>{v.push(edit($op,$fields,&[$($required),*]));};}
@@ -447,8 +469,28 @@ pub fn song_edit_schema() -> Value {
     );
     add!(
         "set_device_sample",
-        json!({"track":channel_reference(),"slot":{"type":"integer","minimum":0,"maximum":15,"description":"Sample slot of the built-in instrument; R1 Sampler has slot 0."},"clip":nullable(reference())}),
+        json!({"track":channel_reference(),"slot":{"type":"integer","minimum":0,"maximum":127,"description":"Recording pool index; use set_device_sample with a logical slot and node_id to resolve a Sample leaf."},"clip":nullable(reference())}),
         ["track"]
+    );
+    add!(
+        "set_sample_player",
+        json!({"track":channel_reference(),"slot":{"type":"integer","minimum":0,"maximum":15},"player":nullable(json!({"$ref":"#/$defs/samplePlayer"}))}),
+        ["track", "slot", "player"]
+    );
+    add!(
+        "rename_device_sample_slot",
+        json!({"track":channel_reference(),"slot":{"type":"integer","minimum":0,"maximum":15},"name":{"type":"string","maxLength":64}}),
+        ["track", "slot", "name"]
+    );
+    add!(
+        "rename_project_sample",
+        json!({"sample":reference(),"name":{"type":"string","minLength":1,"maxLength":256}}),
+        ["sample", "name"]
+    );
+    add!(
+        "remove_project_sample",
+        json!({"sample":reference()}),
+        ["sample"]
     );
     add!(
         "remove_insert",
@@ -535,7 +577,7 @@ pub fn song_edit_schema() -> Value {
         json!({"track":channel_reference(),"group":reference()}),
         ["track", "group"]
     );
-    json!({"oneOf":v})
+    with_sample_player_definition(json!({"oneOf":v}))
 }
 
 pub fn song_tool_specs() -> Vec<ToolSpec> {
@@ -595,6 +637,11 @@ pub fn song_tool_specs() -> Vec<ToolSpec> {
             "get_song_context",
             "Read current song identity, revision, tempo, meter and tool limits. Read before editing; IDs/revisions are required by mutations.",
             object(json!({}), &[]),
+        ),
+        (
+            "list_project_samples",
+            "Read paginated IDs and names of reusable Project Samples, including unused recordings. Paths are not disclosed; load a returned sample_id with set_device_sample.",
+            object(page.clone(), &[]),
         ),
         (
             "list_tracks",
@@ -677,7 +724,11 @@ pub fn song_tool_specs() -> Vec<ToolSpec> {
         .map(|(name, description, input_schema)| ToolSpec {
             name: name.into(),
             description: description.into(),
-            input_schema,
+            input_schema: if matches!(name, "apply_edits" | "set_sample_player") {
+                with_sample_player_definition(input_schema)
+            } else {
+                input_schema
+            },
         })
         .collect();
     let midi_part = specs
@@ -796,10 +847,46 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "set_device_sample",
-            "Load the source recording of an audio clip of the current song into a sample slot of the Rill built-in instrument on a MIDI track (R1 Sampler has slot 0), or empty the slot with clear: true. Recordings over 32 MiB decoded are refused. No path is accepted; to load a file, import it with document_action and this track_id. One Undo step.",
+            "Load the source recording of an audio clip (clip_id) or Project Sample (sample_id) into a Sample leaf of the Rill built-in instrument on a MIDI track, or empty its recording with clear: true. Slot identifies the player (R1 Sampler 0; R1 Drums 0-15, default 0); node_id selects a Sample leaf inside a composite tree. Omit node_id for a single-sample player. Read get_sample_player for the tree and node IDs. Recordings over 32 MiB decoded are refused. No path is accepted; to load a file, import it with document_action and this track_id. One Undo step.",
             object(
-                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"slot":{"type":"integer","minimum":0,"maximum":15},"clip_id":id(),"clear":boolean()}),
+                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"slot":{"type":"integer","minimum":0,"maximum":15},"node_id":integer(),"clip_id":id(),"sample_id":id(),"clear":boolean()}),
                 &["session_id", "expected_revision", "track_id"],
+            ),
+        ),
+        (
+            "get_sample_player",
+            "Read a built-in instrument's composable sample-player tree, sample node IDs and recording pool names. Slot is the logical player: R1 Sampler 0; R1 Drums 0-15. Source paths are not disclosed.",
+            object(
+                json!({"track_id":integer(),"slot":{"type":"integer","minimum":0,"maximum":15}}),
+                &["track_id"],
+            ),
+        ),
+        (
+            "set_sample_player",
+            "Replace one sample-player tree as one Undo step. Sample leaves read recording pool slots; All, RoundRobin, Random and Velocity nodes compose arbitrarily. Velocity branches use inclusive MIDI 1-127 ranges; overlaps layer and gaps are silent. Max 256 nodes, depth 8 and 32 simultaneous leaves. Node IDs must be unique within a tree; names at most 256 UTF-8 bytes. Null restores the original single-sample player. Recordings released by the edit are removed from the instrument pool when no other player uses them; Undo restores them. Project Samples are unaffected.",
+            object(
+                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"slot":{"type":"integer","minimum":0,"maximum":15},"player":nullable(json!({"$ref":"#/$defs/samplePlayer"}))}),
+                &[
+                    "session_id",
+                    "expected_revision",
+                    "track_id",
+                    "slot",
+                    "player",
+                ],
+            ),
+        ),
+        (
+            "rename_device_sample_slot",
+            "Name a logical sample slot (a drum pad), independently of source filenames and layers. Names have at most 64 printable characters; an empty name restores the source-derived label. One Undo step.",
+            object(
+                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"slot":{"type":"integer","minimum":0,"maximum":15},"name":{"type":"string","maxLength":64}}),
+                &[
+                    "session_id",
+                    "expected_revision",
+                    "track_id",
+                    "slot",
+                    "name",
+                ],
             ),
         ),
         (
@@ -848,7 +935,11 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
         .map(|(name, description, input_schema)| ToolSpec {
             name: name.into(),
             description: description.into(),
-            input_schema,
+            input_schema: if matches!(name, "apply_edits" | "set_sample_player") {
+                with_sample_player_definition(input_schema)
+            } else {
+                input_schema
+            },
         })
         .collect()
 }
@@ -907,7 +998,11 @@ pub fn recording_tool_specs() -> Vec<ToolSpec> {
         .map(|(name, description, input_schema)| ToolSpec {
             name: name.into(),
             description: description.into(),
-            input_schema,
+            input_schema: if matches!(name, "apply_edits" | "set_sample_player") {
+                with_sample_player_definition(input_schema)
+            } else {
+                input_schema
+            },
         })
         .collect()
 }
@@ -930,9 +1025,10 @@ pub fn application_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "document_action",
-            "Use the application's guarded New/Open/Save/Save As/Import/Export/Recover pipeline. Paths are accepted only by this explicitly privileged application tool. Unsaved edits are preserved unless discard_unsaved is true. Import beat uses zero-based quarter-note beats; importing audio with the track_id of a MIDI track whose Rill built-in instrument plays samples loads the file into its sample slot (slot, default 0) as one Undo step instead. Export writes the mix to path as format wav (default, 32-bit float), flac (24-bit default), ogg (quality 0-10, default 5) or mp3 (bitrate_kbps 128/192/256/320, default 192, sample rates up to 48000); sample_rate overrides the audio setup rate. With stems=true, path is an existing folder that receives one file per channel named '<song> - NN <channel>.<ext>' (channels: track ids, default every audio/instrument track; buses and folders may be named), each the song with only that channel audible, all the same length; include_mix adds the full mix, through_master keeps Master processing on each stem, and existing files fail the call unless replace_existing is true. Export runs in the background: the result lists the files it will write, and document_status is pending until they are complete.",
+            "Use the application's guarded New/Open/Save/Save As/Import/Export/Recover pipeline. Paths are accepted only by this explicitly privileged application tool. Unsaved edits are preserved unless discard_unsaved is true. Import beat uses zero-based quarter-note beats; importing audio with the track_id of a MIDI track whose Rill built-in instrument plays samples loads the file into its sample player (slot, default 0; node_id selects a Sample leaf in a composite player) as one Undo step instead. Export source is arrangement (default), loop (exact markers) or selected_clips (current selection, including complete MIDI gestures). Destination is file (default, requires path) or project_samples (requires name, no path/stems; adds one portable WAV asset as an undoable edit after successful rendering). Project sample bounces reject publication if the song changes while rendering. File export writes the mix to path as format wav (default, 32-bit float), flac (24-bit default), ogg (quality 0-10, default 5) or mp3 (bitrate_kbps 128/192/256/320, default 192, sample rates up to 48000); sample_rate overrides the audio setup rate. With stems=true, path is an existing folder that receives one file per channel named '<song> - NN <channel>.<ext>' (channels: track ids, default every audio/instrument track; buses and folders may be named), each the song with only that channel audible, all the same length; include_mix adds the full mix, through_master keeps Master processing on each stem, and existing files fail the call unless replace_existing is true. Export runs in the background: the result lists the files it will write, and document_status is pending until they are complete.",
             object(
-                json!({"action":choices(&["new","open","save","save_as","import","export","recover"]),"path":string(),"discard_unsaved":boolean(),"beat":number(),"track_id":id(),"slot":{"type":"integer","minimum":0,"maximum":15},"include_tails":boolean(),
+                json!({"action":choices(&["new","open","save","save_as","import","export","recover"]),"path":string(),"discard_unsaved":boolean(),"beat":number(),"track_id":id(),"slot":{"type":"integer","minimum":0,"maximum":15},"node_id":integer(),"include_tails":boolean(),
+                    "source":choices(&["arrangement","loop","selected_clips"]),"destination":choices(&["file","project_samples"]),"name":string(),
                     "format":choices(&["wav","flac","ogg","mp3"]),"bit_depth":choices_int(&[16,24,32]),"quality":{"type":"integer","minimum":0,"maximum":10},
                     "bitrate_kbps":choices_int(&[128,192,256,320]),"sample_rate":{"type":"integer","minimum":8000,"maximum":192000},
                     "stems":boolean(),"channels":array(id(),512),"include_mix":boolean(),"through_master":boolean(),"replace_existing":boolean()}),
@@ -958,7 +1054,11 @@ pub fn application_tool_specs() -> Vec<ToolSpec> {
         .map(|(name, description, input_schema)| ToolSpec {
             name: name.into(),
             description: description.into(),
-            input_schema,
+            input_schema: if matches!(name, "apply_edits" | "set_sample_player") {
+                with_sample_player_definition(input_schema)
+            } else {
+                input_schema
+            },
         })
         .collect()
 }

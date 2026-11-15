@@ -1871,9 +1871,12 @@ impl Renderer {
                     local_tail += (plugin.tail_samples() as u64).min(sample_rate as u64 * 30);
                     (Processor::Vst(Box::new(plugin)), latency)
                 }
-                Instrument::Builtin { device, samples }
-                    if enabled && track.kind == TrackKind::Midi =>
-                {
+                Instrument::Builtin {
+                    device,
+                    samples,
+                    sample_players,
+                    ..
+                } if enabled && track.kind == TrackKind::Midi => {
                     // An ID this version does not know stays silent.
                     match crate::builtin::BuiltinDevice::create(
                         device,
@@ -1895,6 +1898,9 @@ impl Renderer {
                                     },
                                 )?;
                                 device.set_sample(sample.slot, Some(data));
+                            }
+                            for (slot, player) in sample_players {
+                                device.set_sample_player(*slot, Some(player));
                             }
                             local_tail +=
                                 (device.tail_samples() as u64).min(sample_rate as u64 * 30);
@@ -3529,6 +3535,9 @@ pub struct ExportOptions {
     /// (PCM WAV and FLAC). Float and lossy exports never apply dither.
     pub dither: bool,
     pub range: Option<ExportRange>,
+    /// Append the prepared graph's release/tail duration to an explicit range.
+    /// Opt-in keeps loop/delivery ranges exact by default.
+    pub extend_range_tails: bool,
 }
 
 impl ExportOptions {
@@ -3550,6 +3559,7 @@ impl Default for ExportOptions {
             format: ExportFormat::Wav,
             dither: true,
             range: None,
+            extend_range_tails: false,
         }
     }
 }
@@ -3658,8 +3668,13 @@ fn prepare_export(
         )?,
         None => Renderer::new_offline_with_options(project, sample_rate, options.render)?,
     };
-    let (start, end) =
+    let (start, mut end) =
         range.unwrap_or_else(|| export_extent(project, sample_rate, options, &renderer));
+    if range.is_some() && options.include_effect_tails && options.extend_range_tails {
+        let arrangement_end =
+            (project.end_beat() * sample_rate as f64 * 60.0 / project.tempo).round() as u64;
+        end = end.saturating_add(renderer.end_sample.saturating_sub(arrangement_end));
+    }
     Ok((start, end, renderer))
 }
 

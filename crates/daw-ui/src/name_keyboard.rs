@@ -55,6 +55,49 @@ pub fn set_name_keyboard_open(ctx: &Context, field: Id, open: bool) {
     });
 }
 
+/// Pointer entry for a text field in a narrow pane. The keyboard opens in an
+/// anchored popup, preserving the field's cursor without widening its parent.
+pub fn name_keyboard_button(ui: &mut Ui, field: Id, value: &mut String) -> bool {
+    let button = crate::quiet_button(ui, "Keyboard").on_hover_text("Enter text with the mouse");
+    keyboard_popup(ui, button, field, value)
+}
+
+/// The same pointer keyboard as a fixed-size, labelled icon affordance for
+/// search bars and other narrow control rows.
+pub fn name_keyboard_icon_button(ui: &mut Ui, field: Id, value: &mut String) -> bool {
+    let button = ui
+        .scope(|ui| {
+            ui.spacing_mut().button_padding.x = tokens::SPACE_SM;
+            ui.add_sized(
+                egui::Vec2::splat(tokens::CONTROL_HEIGHT),
+                crate::IconButton::icon_only(crate::Icon::Instrument, "Keyboard")
+                    .quiet()
+                    .small(),
+            )
+        })
+        .inner
+        .on_hover_text("Keyboard · Enter text with the mouse");
+    keyboard_popup(ui, button, field, value)
+}
+
+fn keyboard_popup(ui: &mut Ui, button: egui::Response, field: Id, value: &mut String) -> bool {
+    let mut changed = false;
+    let popup = egui::Popup::menu(&button)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| {
+            ui.set_min_width(name_keyboard_width(ui.ctx()));
+            set_name_keyboard_open(ui.ctx(), field, true);
+            changed = name_keyboard(ui, field, value);
+            if crate::quiet_button(ui, "Done").clicked() {
+                ui.close();
+            }
+        });
+    if popup.is_none() {
+        set_name_keyboard_open(ui.ctx(), field, false);
+    }
+    changed
+}
+
 /// Draw only on request, below the ordinary name field. Native keyboard entry
 /// and pointer keys share the field's Unicode character cursor/selection.
 pub fn name_keyboard(ui: &mut Ui, field: Id, value: &mut String) -> bool {

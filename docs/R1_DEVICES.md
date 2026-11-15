@@ -94,9 +94,9 @@ flowchart LR
     App --> Engine
 ```
 
-`daw-core` gains no dependency. It stores a device as a short identifier
-string and validates only its form, the way it already repeats the Audio Unit
-locator constant instead of depending on `daw-plugins`.
+`daw-core` uses the headless `daw-dsp` sample-player types for tree persistence
+and validation. It does not depend on `daw-devices`, `daw-plugins` or `egui`;
+device identifiers remain short strings validated independently of the registry.
 
 Why not put panels in `daw-devices` behind a feature: the DSP crate then
 compiles with or without egui depending on who asks, and the "no UI in DSP"
@@ -113,7 +113,8 @@ pub struct DeviceDescriptor {
     pub name: &'static str,          // "R1 Mini"
     pub kind: DeviceKind,            // Instrument | Effect
     pub parameters: &'static [ParamSpec],
-    pub sample_slots: u32,           // 0, 1 (Sampler) or 16 (Drums)
+    pub sample_slots: u32,           // logical player roots: 0, 1 or 16
+    pub sample_capacity: u32,        // source pool: 128 for sampling instruments
     pub sidechain_input: bool,       // Compressor only
     // Latency in samples for parameter values, without an instance; must
     // equal `latency_samples()` for the same values (conformance checks it).
@@ -137,6 +138,7 @@ pub trait Device: Send {
     fn prepare(&mut self, sample_rate: f32, max_block: usize);
     fn set_parameter(&mut self, id: u32, normalized: f32);
     fn set_sample(&mut self, slot: u32, sample: Option<Arc<SampleData>>);
+    fn set_sample_player(&mut self, group: u32, root: Option<&PlayerNode>);
     fn process(&mut self, context: &ProcessContext, events: &[Event], io: StereoIo<'_>);
     fn reset(&mut self);
     fn latency_samples(&self) -> u32;
@@ -264,7 +266,8 @@ devices.
 pub enum Instrument {
     None,
     Vst3 { path, class_id },
-    Builtin { device: String, samples: Vec<DeviceSample> },   // new
+    Builtin { device: String, samples: Vec<DeviceSample>,
+        sample_names: BTreeMap<u32, String>, sample_players: BTreeMap<u32, PlayerNode> },
 }
 pub enum Effect {
     Vst3 { path, class_id },
@@ -275,8 +278,8 @@ pub struct DeviceSample { pub slot: u32, pub path: String, pub name: String }
 
 As built, `DeviceSample` also has a `name` (the clip's or file's name, at
 most 256 characters): bundling renames the file, so the panel could not show
-it otherwise. A built-in instrument holds at most 16 samples, one per slot
-(0 – 15); both fields default when absent, so earlier projects load
+it otherwise. A built-in instrument holds at most 128 source recordings, one per slot
+(0 – 127); sample collections, names and player trees default when absent, so earlier projects load
 unchanged. `Project::load_device_sample` and `clear_device_sample` change the
 samples without touching parameters, and the typed `SongEdit::SetDeviceSample`
 loads an audio clip's source by clip reference: no edit takes a path.
@@ -289,7 +292,7 @@ loads an audio clip's source by clip reference: no edit takes a path.
   can bound them, `.rill` saves can bundle them with the other media, and
   missing-media handling applies to them. Trim points, pitch and the rest are
   ordinary parameters.
-- Validation: `device` is 1–32 characters of `[a-z0-9-]`; at most 16 samples
+- Validation: `device` is 1–32 characters of `[a-z0-9-]`; at most 128 source recordings
   with unique slots. An unknown `device` loads, stays in the project unchanged
   and shows a visible "Unknown device" advisory, like a missing plug-in. An
   unknown instrument is silent; an unknown insert passes audio through, so a
@@ -1707,6 +1710,32 @@ context menu lists its modulations with amounts. The Matrix page shows the
 same 32 slots as rows. The Effects page is a reorderable list of the eight
 slots, each drawn by the effect's own compact section.
 
+### Shared sample players
+
+`daw-dsp::sample_player` owns the serializable `PlayerNode` tree and the prepared
+`PlayerProgram` used by both sampling instruments. Sample leaves reference a
+source slot and hold normalized region bounds, reverse and gain. All, Random,
+RoundRobin and Velocity branches compose recursively. Inclusive velocity ranges
+may overlap (layering) or leave gaps (silence). Each selector has independent
+state; reset restores round-robin counters and seeded random streams. Empty or
+unavailable branches are skipped.
+
+Validation bounds each root to 256 nodes, eight levels and 32 simultaneous
+leaves, with 128 source slots per instrument. Compilation allocates outside the
+audio callback; triggering uses bounded traversal and caller-owned output.
+Selected leaves stay attached to one hit through its lifetime, including steals.
+Their playheads sum before the instrument's existing envelope/filter chain.
+Instrument markers operate within leaf regions, and reverse directions combine
+by XOR. Missing explicit roots use the legacy source slot and existing parameter
+IDs, keeping older projects and presets compatible.
+
+The document stores `sample_players` and independent `sample_names` on built-in
+instruments. Sample paths continue to use portable project assets. Labels do not
+change audio equivalence or restart sounding devices. `get_sample_player` and
+`set_sample_player` expose the same structure to tools; `set_device_sample`
+accepts a logical root slot and optional Sample `node_id`, from an audio clip or
+Project Sample ID. Composite roots require an explicit target leaf for replacement.
+
 ### R1 Sampler
 
 One sample played across the keyboard.
@@ -1795,11 +1824,12 @@ to pitch and cutoff 199 µs (3.7 %); 32 voices with the filter 362 µs (6.8 %).
 
 ### R1 Drums
 
-Sixteen pads, one sample per pad, a short shaping chain per pad tuned for
-one-shots.
+Sixteen pads, one composable sample player per pad, with a short shaping chain
+per pad tuned for one-shots. Existing projects retain their one-sample behavior.
 
 - Pads map to MIDI notes 36 – 51 (C1 – D#2), bottom-left to top-right.
-- Sample slots 0 – 15.
+- Legacy source slots 0 – 15 correspond to pads; explicit trees can reference
+  the shared 128-slot source pool.
 
 | Per pad (×16) | Range / choices | Default |
 | --- | --- | --- |

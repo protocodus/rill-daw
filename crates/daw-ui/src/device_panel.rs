@@ -350,7 +350,7 @@ pub fn preset_group(
                     ui.add_space(tokens::SPACE_XS);
                     ui.separator();
                     ui.add_space(tokens::SPACE_XS);
-                    let title = group_title(ui, "Random");
+                    let title = group_title(ui, "Randomize");
                     let (rect, _) = ui.allocate_exact_size(
                         title.size() + vec2(tokens::SPACE_XS, 0.0),
                         egui::Sense::hover(),

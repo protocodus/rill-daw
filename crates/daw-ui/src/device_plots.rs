@@ -1596,6 +1596,8 @@ pub enum SampleMarker {
 }
 
 pub struct SampleViewData<'a> {
+    /// Detected audible bounds, independent of the current playback markers.
+    pub audible_region: Option<(f32, f32)>,
     /// Min and max of each peak column, −1 to 1.
     pub peaks: &'a [(f32, f32)],
     pub start: f32,
@@ -1611,7 +1613,7 @@ pub struct SampleViewData<'a> {
 pub struct SampleViewOutput {
     pub response: Response,
     pub drags: Vec<(SampleMarker, f32)>,
-    pub dropped: Option<String>,
+    pub dropped: Option<SampleDrop>,
     /// Files dropped on the view from the system. The view takes them, so
     /// nothing behind it imports them as well.
     pub files: Vec<std::path::PathBuf>,
@@ -1683,7 +1685,7 @@ pub fn sample_view(ui: &mut Ui, data: &SampleViewData<'_>, size: Vec2) -> Sample
     }
     let dropped = union
         .dnd_release_payload::<SampleDrop>()
-        .map(|payload| payload.0.clone());
+        .map(|payload| (*payload).clone());
     let over = ui
         .input(|input| input.pointer.hover_pos())
         .is_some_and(|pointer| rect.contains(pointer));
@@ -1703,6 +1705,23 @@ pub fn sample_view(ui: &mut Ui, data: &SampleViewData<'_>, size: Vec2) -> Sample
             [inner.left_center(), inner.right_center()],
             Stroke::new(1.0_f32, colors.grid_bar),
         );
+        if let Some((start, end)) = data
+            .audible_region
+            .filter(|(a, b)| a.is_finite() && b.is_finite() && a < b)
+        {
+            let color = colors.accent.gamma_multiply(0.35);
+            let y = inner.bottom() - 2.0;
+            painter.line_segment(
+                [pos2(x_of(start), y), pos2(x_of(end), y)],
+                Stroke::new(2.0, color),
+            );
+            for at in [start, end] {
+                painter.line_segment(
+                    [pos2(x_of(at), y - 5.0), pos2(x_of(at), y)],
+                    Stroke::new(1.0, color),
+                );
+            }
+        }
         let columns = data.peaks.len();
         for (index, (low, high)) in data.peaks.iter().enumerate() {
             let at = (index as f32 + 0.5) / columns as f32;

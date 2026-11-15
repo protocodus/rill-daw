@@ -828,6 +828,69 @@ pub(crate) fn space(ui: &mut Ui, host: &mut dyn DeviceHost, state: &mut PanelSta
     }
 }
 
+fn sample_bounds(player: Option<&daw_dsp::sample_player::PlayerNode>) -> (f32, f32, bool) {
+    if let Some(daw_dsp::sample_player::PlayerNode {
+        kind:
+            daw_dsp::sample_player::PlayerKind::Sample {
+                start,
+                end,
+                reverse,
+                ..
+            },
+        ..
+    }) = player
+    {
+        (*start, *end, *reverse)
+    } else {
+        (0.0, 1.0, false)
+    }
+}
+
+fn sample_gain(player: Option<&daw_dsp::sample_player::PlayerNode>) -> f32 {
+    if let Some(daw_dsp::sample_player::PlayerNode {
+        kind: daw_dsp::sample_player::PlayerKind::Sample { gain_db, .. },
+        ..
+    }) = player
+    {
+        *gain_db
+    } else {
+        0.0
+    }
+}
+
+fn source_position(bounds: (f32, f32, bool), position: f32) -> f32 {
+    bounds.0 + (bounds.1 - bounds.0) * position
+}
+
+fn region_position(bounds: (f32, f32, bool), position: f32) -> f32 {
+    ((position - bounds.0) / (bounds.1 - bounds.0).max(f32::EPSILON)).clamp(0.0, 1.0)
+}
+
+fn player_slots(player: &daw_dsp::sample_player::PlayerNode) -> Vec<u32> {
+    use daw_dsp::sample_player::PlayerKind;
+    match &player.kind {
+        PlayerKind::Sample { slot, .. } => vec![*slot],
+        PlayerKind::All { children }
+        | PlayerKind::Random { children }
+        | PlayerKind::RoundRobin { children } => children.iter().flat_map(player_slots).collect(),
+        PlayerKind::Velocity { children } => children
+            .iter()
+            .flat_map(|entry| player_slots(&entry.child))
+            .collect(),
+    }
+}
+
+fn player_kind(player: &daw_dsp::sample_player::PlayerNode) -> Option<&'static str> {
+    use daw_dsp::sample_player::PlayerKind;
+    match player.kind {
+        PlayerKind::Sample { .. } => None,
+        PlayerKind::All { .. } => Some("All at once"),
+        PlayerKind::RoundRobin { .. } => Some("Round robin"),
+        PlayerKind::Random { .. } => Some("Random"),
+        PlayerKind::Velocity { .. } => Some("Velocity"),
+    }
+}
+
 /// R1 Sampler: the recording with its start, end and loop markers, which
 /// drag like their knobs, and a playhead for every voice. Above it the
 /// recording's name and the buttons that load or clear it; empty, it offers
@@ -840,31 +903,106 @@ pub(crate) fn sample(
     state: &mut PanelState,
 ) {
     use sampler::*;
+    let player = host.sample_player(0).cloned();
+    if let Some(player) = player
+        .as_ref()
+        .filter(|player| player_kind(player).is_some())
+    {
+        let name = host
+            .sample_name(0)
+            .unwrap_or(if player.name.is_empty() {
+                "Sampler player"
+            } else {
+                &player.name
+            })
+            .to_owned();
+        daw_ui::control_row(ui, |ui| {
+            daw_ui::text::label(ui, &name);
+            if let Some(name) = daw_ui::sample_name_editor(ui, &name, "Sample name") {
+                host.request_sample(0, SampleRequest::Rename(name));
+            }
+        });
+        let slots = player_slots(player);
+        let loaded = slots
+            .iter()
+            .filter(|slot| host.sample(**slot).is_some())
+            .count();
+        let output = daw_ui::sample_group_overview(
+            ui,
+            player_kind(player).unwrap(),
+            slots.len(),
+            loaded,
+            egui::vec2(ui.available_width(), height),
+        );
+        if output.edit {
+            host.request_sample(0, SampleRequest::EditPlayer);
+        }
+        if let Some(path) = output.file {
+            host.request_sample(0, SampleRequest::FileToPlayer(path));
+        }
+        if let Some(source) = output.source {
+            host.request_sample(0, SampleRequest::SourceToPlayer(source));
+        }
+        return;
+    }
+    let slot = player
+        .as_ref()
+        .and_then(|player| player_slots(player).into_iter().next())
+        .unwrap_or(0);
+    let bounds = sample_bounds(player.as_ref());
     let share = |id: u32, host: &dyn DeviceHost| {
         descriptor
             .parameter(id)
             .map_or(0.0, |spec| spec.to_plain(host.value(id) as f32) / 100.0)
     };
-    let summary = host.sample(0).cloned();
+    let summary = host.sample(slot).cloned();
     let mut request = None;
-    daw_ui::parameter_row(ui, |ui| {
-        match &summary {
-            Some(summary) => {
-                daw_ui::text::label(ui, &summary.name);
-                daw_ui::text::note(ui, format!("{:.2} s", summary.seconds));
-            }
-            None => {
-                daw_ui::text::note(ui, "No sample");
+    let name = host
+        .sample_name(0)
+        .map(str::to_owned)
+        .or_else(|| summary.as_ref().map(|sample| sample.name.clone()))
+        .unwrap_or_else(|| "No sample".into());
+    daw_ui::sample_identity(
+        ui,
+        &name,
+        &summary
+            .as_ref()
+            .map_or(String::new(), |s| format!("{:.2} s", s.seconds)),
+    );
+    daw_ui::control_row(ui, |ui| {
+        if let Some(name) = daw_ui::sample_name_editor(ui, &name, "Sample name") {
+            request = Some(SampleRequest::Rename(name));
+        }
+        if daw_ui::button(ui, "Edit player…").clicked() {
+            request = Some(SampleRequest::EditPlayer);
+        }
+        if let Some(action) = daw_ui::sample_actions(
+            ui,
+            summary.is_some(),
+            summary.as_ref().is_some_and(|s| s.audible_region.is_some()),
+        ) {
+            if !edit_audible_region(
+                descriptor,
+                host,
+                &summary,
+                [START, END, REVERSE],
+                bounds,
+                action,
+            ) {
+                request = if action == daw_ui::SampleAction::Export {
+                    let start = source_position(bounds, share(START, host));
+                    let end = source_position(bounds, share(END, host));
+                    Some(SampleRequest::ExportRegion {
+                        start: start.min(end),
+                        end: start.max(end),
+                        reverse: bounds.2 ^ (host.value(REVERSE) >= 0.5),
+                        gain_db: sample_gain(player.as_ref()),
+                    })
+                } else {
+                    sample_request(action)
+                };
             }
         }
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if summary.is_some() && daw_ui::button(ui, "Clear").clicked() {
-                request = Some(SampleRequest::Clear);
-            }
-            if daw_ui::button(ui, "Load sample…").clicked() {
-                request = Some(SampleRequest::Pick);
-            }
-        });
     });
     ui.add_space(daw_ui::tokens::SPACE_XS);
     let settings = panels::sampler_settings(&|id| host.value(id));
@@ -878,13 +1016,16 @@ pub(crate) fn sample(
         .unwrap_or_default();
     let empty = Vec::new();
     let data = daw_ui::SampleViewData {
+        audible_region: summary.as_ref().and_then(|summary| summary.audible_region),
         peaks: summary.as_ref().map_or(&empty, |summary| &summary.peaks),
-        start: share(START, host),
-        end: share(END, host),
-        loop_range: settings
-            .loop_mode
-            .loops()
-            .then(|| (share(LOOP_START, host), share(LOOP_END, host))),
+        start: source_position(bounds, share(START, host)),
+        end: source_position(bounds, share(END, host)),
+        loop_range: settings.loop_mode.loops().then(|| {
+            (
+                source_position(bounds, share(LOOP_START, host)),
+                source_position(bounds, share(LOOP_END, host)),
+            )
+        }),
         playheads: &playheads,
         envelope: &[],
     };
@@ -926,15 +1067,93 @@ pub(crate) fn sample(
             daw_ui::SampleMarker::LoopEnd => LOOP_END,
         };
         if let Some(spec) = descriptor.parameter(id) {
-            host.set_value(id, f64::from(spec.to_normalized(at * 100.0)));
+            host.set_value(
+                id,
+                f64::from(spec.to_normalized(region_position(bounds, at) * 100.0)),
+            );
         }
     }
     if let Some(path) = output.files.into_iter().next() {
         request = Some(SampleRequest::File(path));
     }
-    if let Some(request) = request {
-        host.request_sample(0, request);
+    if let Some(source) = output.dropped {
+        request = Some(SampleRequest::Source(source));
     }
+    if let Some(request) = request {
+        let target = if matches!(
+            request,
+            SampleRequest::Rename(_) | SampleRequest::EditPlayer
+        ) {
+            0
+        } else {
+            slot
+        };
+        host.request_sample(target, request);
+    }
+}
+
+/// Audible bounds are nondestructive playback settings, committed as one edit.
+fn edit_audible_region(
+    descriptor: &DeviceDescriptor,
+    host: &mut dyn DeviceHost,
+    summary: &Option<crate::SampleSummary>,
+    ids: [u32; 3],
+    bounds: (f32, f32, bool),
+    action: daw_ui::SampleAction,
+) -> bool {
+    use daw_ui::SampleAction::{ReverseAudibleRegion, TrimSilence};
+    if !matches!(action, TrimSilence | ReverseAudibleRegion) {
+        return false;
+    }
+    let Some((audible_start, audible_end)) =
+        summary.as_ref().and_then(|sample| sample.audible_region)
+    else {
+        return true;
+    };
+    let current = |id| {
+        descriptor
+            .parameter(id)
+            .map_or(0.0, |spec| spec.to_plain(host.value(id) as f32) / 100.0)
+    };
+    let a = current(ids[0]);
+    let b = current(ids[1]);
+    let start = a.min(b).max(region_position(bounds, audible_start));
+    let end = a.max(b).min(region_position(bounds, audible_end));
+    if start >= end {
+        return true;
+    }
+    let mut values = Vec::new();
+    for (id, plain) in [(ids[0], start * 100.0), (ids[1], end * 100.0)] {
+        if let Some(spec) = descriptor.parameter(id) {
+            values.push((id, f64::from(spec.to_normalized(plain))));
+        }
+    }
+    if matches!(action, ReverseAudibleRegion) {
+        values.push((ids[2], if host.value(ids[2]) >= 0.5 { 0.0 } else { 1.0 }));
+    }
+    host.commit_values(
+        &values,
+        if matches!(action, ReverseAudibleRegion) {
+            "Reverse audible region"
+        } else {
+            "Trim silence"
+        },
+    );
+    true
+}
+
+/// Local boundary edits do not leave the panel; the host receives operations
+/// requiring a sample pool, file picker or navigation.
+pub(crate) fn sample_request(action: daw_ui::SampleAction) -> Option<SampleRequest> {
+    Some(match action {
+        daw_ui::SampleAction::Browse => SampleRequest::Browse,
+        daw_ui::SampleAction::LoadFile => SampleRequest::Pick,
+        daw_ui::SampleAction::Clear => SampleRequest::Clear,
+        daw_ui::SampleAction::Export => return None,
+        daw_ui::SampleAction::TrimSilence | daw_ui::SampleAction::ReverseAudibleRegion => {
+            return None;
+        }
+    })
 }
 
 /// Width of the kit's Volume fader cell beside the pads.
@@ -960,16 +1179,49 @@ pub(crate) fn drums(
     let pad = state.pad.min(PADS - 1);
     let telemetry = live(ui, host.telemetry().as_ref(), state);
     let settings = panels::drums_settings(&|id| host.value(id));
-    let summaries: Vec<Option<crate::SampleSummary>> = (0..PADS)
-        .map(|slot| host.sample(slot as u32).cloned())
+    let players: Vec<_> = (0..PADS)
+        .map(|group| host.sample_player(group as u32).cloned())
+        .collect();
+    let slots: Vec<Vec<u32>> = players
+        .iter()
+        .enumerate()
+        .map(|(group, player)| {
+            player
+                .as_ref()
+                .map_or_else(|| vec![group as u32], player_slots)
+        })
+        .collect();
+    let summaries: Vec<Option<crate::SampleSummary>> = slots
+        .iter()
+        .map(|slots| slots.iter().find_map(|slot| host.sample(*slot).cloned()))
+        .collect();
+    let names: Vec<String> = (0..PADS)
+        .map(|pad| {
+            host.sample_name(pad as u32)
+                .map(str::to_owned)
+                .or_else(|| {
+                    players[pad]
+                        .as_ref()
+                        .filter(|player| !player.name.is_empty())
+                        .map(|player| player.name.clone())
+                })
+                .or_else(|| {
+                    players[pad]
+                        .as_ref()
+                        .and_then(player_kind)
+                        .map(str::to_owned)
+                })
+                .or_else(|| summaries[pad].as_ref().map(|sample| sample.name.clone()))
+                .unwrap_or_default()
+        })
         .collect();
     let cells = [
         daw_ui::GridCell {
-            span: 5,
+            span: 6,
             framed: true,
         },
         daw_ui::GridCell {
-            span: 7,
+            span: 6,
             framed: true,
         },
     ];
@@ -977,16 +1229,16 @@ pub(crate) fn drums(
     let mut edits: Vec<(u32, f64)> = Vec::new();
     daw_ui::grid_row_cells(ui, &cells, |ui, index| {
         if index == 0 {
-            daw_ui::device_section_title(ui, "Kit");
+            daw_ui::control_row(ui, |ui| {
+                daw_ui::device_section_title(ui, "Kit");
+            });
             ui.add_space(daw_ui::tokens::SPACE_XS);
             // The card's width, which a row's own would not tell yet.
             let width = ui.available_width();
             ui.horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 let views: [daw_ui::PadView; PADS] = std::array::from_fn(|index| daw_ui::PadView {
-                    name: summaries[index]
-                        .as_ref()
-                        .map_or("", |summary| summary.name.as_str()),
+                    name: &names[index],
                     loaded: summaries[index].is_some(),
                     activity: telemetry
                         .as_ref()
@@ -1008,7 +1260,24 @@ pub(crate) fn drums(
                     state.pad = index;
                 }
                 if let Some((index, path)) = output.files {
-                    request = Some((index, SampleRequest::File(path)));
+                    request = Some(if players[index].as_ref().and_then(player_kind).is_some() {
+                        (index, SampleRequest::FileToPlayer(path))
+                    } else {
+                        (
+                            slots[index].first().copied().unwrap_or(index as u32) as usize,
+                            SampleRequest::File(path),
+                        )
+                    });
+                }
+                if let Some((index, source)) = output.dropped {
+                    request = Some(if players[index].as_ref().and_then(player_kind).is_some() {
+                        (index, SampleRequest::SourceToPlayer(source))
+                    } else {
+                        (
+                            slots[index].first().copied().unwrap_or(index as u32) as usize,
+                            SampleRequest::Source(source),
+                        )
+                    });
                 }
                 ui.add_space(daw_ui::tokens::SPACE_SM);
                 if let Some(spec) = descriptor.parameter(VOLUME) {
@@ -1028,36 +1297,88 @@ pub(crate) fn drums(
             return;
         }
         let summary = summaries[pad].as_ref();
+        let sample_slot = slots[pad].first().copied().unwrap_or(pad as u32) as usize;
+        let composite = players[pad].as_ref().and_then(player_kind);
+        let bounds = sample_bounds(players[pad].as_ref());
         let ids = |offset: u32| id(pad, offset);
-        let title = format!("Pad {}", pad + 1);
-        daw_ui::device_section_title(ui, &title);
+        ui.push_id(("sample_name", pad), |ui| {
+            let (renamed, edit) = daw_ui::sample_slot_header(
+                ui,
+                &format!("PAD {}", pad + 1),
+                &names[pad],
+                composite.is_none(),
+            );
+            if let Some(name) = renamed {
+                request = Some((pad, SampleRequest::Rename(name)));
+            }
+            if edit {
+                request = Some((pad, SampleRequest::EditPlayer));
+            }
+        });
         ui.add_space(daw_ui::tokens::SPACE_XS);
         let top = ui.cursor().min.y;
-        // One control line, level with the pads' top row.
-        let line = egui::vec2(ui.available_width(), daw_ui::tokens::CONTROL_HEIGHT);
-        ui.allocate_ui_with_layout(
-            line,
-            egui::Layout::left_to_right(egui::Align::Center),
-            |ui| {
-                match summary {
-                    Some(summary) => {
-                        daw_ui::text::label(ui, &summary.name);
-                        daw_ui::text::note(ui, format!("{:.2} s", summary.seconds));
-                    }
-                    None => {
-                        daw_ui::text::note(ui, "No sample");
-                    }
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if summary.is_some() && daw_ui::button(ui, "Clear").clicked() {
-                        request = Some((pad, SampleRequest::Clear));
-                    }
-                    if daw_ui::button(ui, "Load sample…").clicked() {
-                        request = Some((pad, SampleRequest::Pick));
-                    }
-                });
+        if let Some(kind) = composite {
+            let loaded = slots[pad]
+                .iter()
+                .filter(|slot| host.sample(**slot).is_some())
+                .count();
+            let output = daw_ui::sample_group_overview(
+                ui,
+                kind,
+                slots[pad].len(),
+                loaded,
+                egui::vec2(ui.available_width(), height),
+            );
+            if output.edit {
+                request = Some((pad, SampleRequest::EditPlayer));
+            }
+            if let Some(path) = output.file {
+                request = Some((pad, SampleRequest::FileToPlayer(path)));
+            }
+            if let Some(source) = output.source {
+                request = Some((pad, SampleRequest::SourceToPlayer(source)));
+            }
+            return;
+        }
+        daw_ui::sample_identity(
+            ui,
+            if names[pad].is_empty() {
+                "No sample"
+            } else {
+                &names[pad]
             },
+            &summary.map_or(String::new(), |s| format!("{:.2} s", s.seconds)),
         );
+        daw_ui::control_row(ui, |ui| {
+            if let Some(action) = daw_ui::sample_actions(
+                ui,
+                summary.is_some(),
+                summary.is_some_and(|s| s.audible_region.is_some()),
+            ) {
+                if !edit_audible_region(
+                    descriptor,
+                    host,
+                    &summaries[pad],
+                    [ids(START), ids(END), ids(REVERSE)],
+                    bounds,
+                    action,
+                ) {
+                    let next = if action == daw_ui::SampleAction::Export {
+                        let start = source_position(bounds, settings.pads[pad].start);
+                        let end = source_position(bounds, settings.pads[pad].end);
+                        Some(SampleRequest::ExportRegion {
+                            start: start.min(end),
+                            end: start.max(end),
+                            reverse: bounds.2 ^ settings.pads[pad].reverse,
+                            gain_db: sample_gain(players[pad].as_ref()),
+                        })
+                    } else {
+                        sample_request(action)
+                    };
+                    request = next.map(|request| (sample_slot, request));
+                }
+            }
+        });
         ui.add_space(daw_ui::tokens::SPACE_XS);
         let pad_settings = &settings.pads[pad];
         let playheads: Vec<f32> = telemetry
@@ -1070,7 +1391,9 @@ pub(crate) fn drums(
         // the pad's pitch.
         let envelope: Vec<f32> = summary
             .map(|summary| {
-                let seconds = summary.seconds * (pad_settings.end - pad_settings.start).abs()
+                let seconds = summary.seconds
+                    * (bounds.1 - bounds.0)
+                    * (pad_settings.end - pad_settings.start).abs()
                     / 2f32.powf(pad_settings.pitch / 12.0);
                 let mut levels: Vec<f32> = (0..ENVELOPE_POINTS)
                     .map(|point| {
@@ -1078,7 +1401,7 @@ pub(crate) fn drums(
                         pad_settings.envelope(at)
                     })
                     .collect();
-                if pad_settings.reverse {
+                if pad_settings.reverse ^ bounds.2 {
                     levels.reverse();
                 }
                 levels
@@ -1086,9 +1409,10 @@ pub(crate) fn drums(
             .unwrap_or_default();
         let empty = Vec::new();
         let data = daw_ui::SampleViewData {
+            audible_region: summary.and_then(|summary| summary.audible_region),
             peaks: summary.map_or(&empty, |summary| &summary.peaks),
-            start: pad_settings.start,
-            end: pad_settings.end,
+            start: source_position(bounds, pad_settings.start),
+            end: source_position(bounds, pad_settings.end),
             loop_range: None,
             playheads: &playheads,
             envelope: &envelope,
@@ -1112,7 +1436,7 @@ pub(crate) fn drums(
                 .put(button, daw_ui::button_widget("Load sample…"))
                 .clicked()
             {
-                request = Some((pad, SampleRequest::Pick));
+                request = Some((sample_slot, SampleRequest::Pick));
             }
             ui.put(
                 egui::Rect::from_center_size(
@@ -1132,11 +1456,17 @@ pub(crate) fn drums(
                 _ => continue,
             };
             if let Some(spec) = descriptor.parameter(id) {
-                edits.push((id, f64::from(spec.to_normalized(at * 100.0))));
+                edits.push((
+                    id,
+                    f64::from(spec.to_normalized(region_position(bounds, at) * 100.0)),
+                ));
             }
         }
         if let Some(path) = output.files.into_iter().next() {
-            request = Some((pad, SampleRequest::File(path)));
+            request = Some((sample_slot, SampleRequest::File(path)));
+        }
+        if let Some(source) = output.dropped {
+            request = Some((sample_slot, SampleRequest::Source(source)));
         }
     });
     for (id, value) in edits {

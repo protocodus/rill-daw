@@ -64,6 +64,33 @@ impl Harness {
         )
     }
 
+    /// Audition uses the same isolated decoder; keep its completion controllable
+    /// while exercising the production renderer through the device-free sink.
+    pub fn with_audio_import_helper_and_virtual_audio(
+        helper: &std::path::Path,
+        timeout_ms: u64,
+    ) -> Self {
+        let directory = tempfile::tempdir().expect("create isolated audition E2E directory");
+        Self::launch_configured_with_environment(
+            None,
+            directory,
+            None,
+            None,
+            false,
+            true,
+            &[
+                (
+                    "RILL_E2E_AUDIO_IMPORT_HELPER",
+                    helper.as_os_str().to_owned(),
+                ),
+                (
+                    "RILL_E2E_AUDIO_IMPORT_TIMEOUT_MS",
+                    timeout_ms.to_string().into(),
+                ),
+            ],
+        )
+    }
+
     /// Hold only this app child's Freeze worker for deterministic cancellation
     /// and stale-publication checks; normal launches never read this variable.
     pub fn with_freeze_delay(delay_ms: u64) -> Self {

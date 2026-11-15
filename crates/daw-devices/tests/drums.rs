@@ -435,3 +435,154 @@ fn a_ringing_filter_drains_instead_of_cutting_off() {
         .position(|pair| pair[0].abs() > 1e-4 && pair[1] == 0.0);
     assert_eq!(cut, None, "the ring goes silent, never stops dead");
 }
+
+fn sample_tree(kind: daw_dsp::sample_player::PlayerKind) -> daw_dsp::sample_player::PlayerNode {
+    daw_dsp::sample_player::PlayerNode {
+        id: 0,
+        name: String::new(),
+        kind,
+    }
+}
+
+#[test]
+fn all_layers_share_one_hit_and_the_pad_processing_chain() {
+    use daw_dsp::sample_player::{PlayerKind, PlayerNode};
+    let source = sine(RATE, 1.0, 400.0, 0.01);
+    let tree = sample_tree(PlayerKind::All {
+        children: (1..=32).map(|id| PlayerNode::sample(id, 127)).collect(),
+    });
+    let settings = [(id(0, FILTER), -35.0), (id(0, DRIVE), 12.0)];
+    let mut layered = kit(&[(127, source)], &settings);
+    layered.set_sample_player(0, Some(&tree));
+    let mut reference = kit(&[(0, sine(RATE, 1.0, 400.0, 0.32))], &settings);
+    let hits: Vec<_> = (0..6).map(|n| (n as f32 * 0.02, hit(0))).collect();
+    let actual = render(&mut *layered, 0.5, &hits).0;
+    let expected = render(&mut *reference, 0.5, &hits).0;
+    let error = actual
+        .iter()
+        .zip(&expected)
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0_f32, f32::max);
+    assert!(
+        error < 1e-5,
+        "all leaves sum before filtering/driving, with four overlapping hits: {error}"
+    );
+    assert_eq!(layered.telemetry().value(TELEMETRY_VOICES), 4.0);
+}
+
+#[test]
+fn independent_leaf_regions_reverse_and_gain_leave_other_layers_unchanged() {
+    use daw_dsp::sample_player::{PlayerKind, PlayerNode};
+    let tree = sample_tree(PlayerKind::All {
+        children: vec![
+            PlayerNode {
+                id: 1,
+                name: "Short".into(),
+                kind: PlayerKind::Sample {
+                    slot: 127,
+                    start: 0.2,
+                    end: 0.4,
+                    reverse: false,
+                    gain_db: 0.0,
+                },
+            },
+            PlayerNode {
+                id: 2,
+                name: "Reverse".into(),
+                kind: PlayerKind::Sample {
+                    slot: 127,
+                    start: 0.6,
+                    end: 0.9,
+                    reverse: true,
+                    gain_db: -6.0,
+                },
+            },
+        ],
+    });
+    let mut device = kit(&[(127, ramp(1.0))], &[]);
+    device.set_sample_player(0, Some(&tree));
+    let actual = render(&mut *device, 0.4, &[(0.0, hit(0))]).0;
+    let gain = 10_f32.powf(-6.0 / 20.0);
+    assert!((actual[at(0.05)] - (0.25 + 0.85 * gain)).abs() < 0.001);
+    assert!(
+        (actual[at(0.25)] - 0.65 * gain).abs() < 0.001,
+        "the longer layer continues after the short layer ends"
+    );
+    assert!(rms(span(&actual, 0.31, 0.4)) < 1e-6);
+}
+
+#[test]
+fn nested_velocity_and_round_robin_select_sources_and_reset_deterministically() {
+    use daw_dsp::sample_player::{PlayerKind, PlayerNode, VelocityChild};
+    let tree = sample_tree(PlayerKind::Velocity {
+        children: vec![
+            VelocityChild {
+                min: 1,
+                max: 63,
+                child: PlayerNode::sample(1, 17),
+            },
+            VelocityChild {
+                min: 64,
+                max: 127,
+                child: PlayerNode {
+                    id: 2,
+                    name: String::new(),
+                    kind: PlayerKind::RoundRobin {
+                        children: vec![PlayerNode::sample(3, 0), PlayerNode::sample(4, 127)],
+                    },
+                },
+            },
+        ],
+    });
+    let constant = |level| Arc::new(SampleData::new(RATE, &[&vec![level; at(0.05)]]));
+    let mut device = kit(
+        &[
+            (0, constant(0.1)),
+            (17, constant(0.2)),
+            (127, constant(0.3)),
+        ],
+        &[],
+    );
+    device.set_sample_player(0, Some(&tree));
+    let events = [
+        (0.0, hit_with(0, 0.25)),
+        (0.1, hit(0)),
+        (0.2, hit_with(0, 0.25)),
+        (0.3, hit(0)),
+        (0.4, hit(0)),
+    ];
+    let first = render(&mut *device, 0.5, &events).0;
+    for (time, expected) in [
+        (0.02, 0.2),
+        (0.12, 0.1),
+        (0.22, 0.2),
+        (0.32, 0.3),
+        (0.42, 0.1),
+    ] {
+        assert!(
+            (first[at(time)] - expected).abs() < 0.001,
+            "{time}: {}",
+            first[at(time)]
+        );
+    }
+    device.reset();
+    assert_eq!(first, render(&mut *device, 0.5, &events).0);
+}
+
+#[test]
+fn a_choke_cuts_every_leaf_of_a_layered_hit() {
+    use daw_dsp::sample_player::{PlayerKind, PlayerNode};
+    let tree = sample_tree(PlayerKind::All {
+        children: vec![PlayerNode::sample(1, 16), PlayerNode::sample(2, 127)],
+    });
+    let samples = [
+        (16, sine(RATE, 1.0, 300.0, 0.2)),
+        (127, sine(RATE, 1.0, 900.0, 0.2)),
+        (1, sine(RATE, 0.03, 600.0, 0.2)),
+    ];
+    let mut device = kit(&samples, &[(id(0, CHOKE), 1.0), (id(1, CHOKE), 1.0)]);
+    device.set_sample_player(0, Some(&tree));
+    let played = render(&mut *device, 0.5, &[(0.0, hit(0)), (0.1, hit(1))]).0;
+    assert!(rms(span(&played, 0.02, 0.09)) > 0.15);
+    assert!(rms(span(&played, 0.14, 0.5)) < 1e-6);
+}

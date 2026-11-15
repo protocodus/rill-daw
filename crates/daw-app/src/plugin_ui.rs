@@ -133,13 +133,18 @@ pub(crate) struct InstrumentUi {
 
 /// Lets a built-in device panel read the project and collects what it asks
 /// for; the editor applies those requests after drawing.
+struct ParameterStep {
+    values: Vec<(u32, f64)>,
+    name: String,
+}
+
 struct PanelHost<'a> {
     app: &'a DawApp,
     target: EditorTarget,
     descriptor: &'static daw_devices::DeviceDescriptor,
     user_presets: &'a [daw_devices::Preset],
     updates: Vec<(u32, f64)>,
-    batch: Option<Vec<(u32, f64)>>,
+    batch: Option<ParameterStep>,
     navigation: Option<daw_ui::AutomationNavigation>,
     saved: Option<daw_devices::Preset>,
     /// `Some(None)` releases the panel keyboard's note.
@@ -171,7 +176,7 @@ impl daw_devices_ui::DeviceHost for PanelHost<'_> {
         if let Some(value) = self
             .batch
             .as_ref()
-            .and_then(|batch| batch.iter().find(|(update, _)| *update == id))
+            .and_then(|batch| batch.values.iter().find(|(update, _)| *update == id))
         {
             return value.1;
         }
@@ -198,8 +203,17 @@ impl daw_devices_ui::DeviceHost for PanelHost<'_> {
             // it on the same ones, like consecutive `set_value`s.
             self.updates.extend_from_slice(values);
         } else {
-            self.batch = Some(values.to_vec());
+            self.batch = Some(ParameterStep {
+                values: values.to_vec(),
+                name: "Device preset".into(),
+            });
         }
+    }
+    fn commit_values(&mut self, values: &[(u32, f64)], name: &'static str) {
+        self.batch = Some(ParameterStep {
+            values: values.to_vec(),
+            name: name.to_owned(),
+        });
     }
     fn automation(&self, id: u32) -> Option<(u64, daw_ui::AutomationState)> {
         self.app
@@ -263,6 +277,32 @@ impl daw_devices_ui::DeviceHost for PanelHost<'_> {
             .get(slot as usize)?
             .as_ref()
             .map(|(_, summary)| summary)
+    }
+    fn sample_name(&self, slot: u32) -> Option<&str> {
+        self.app
+            .project
+            .track(self.target.track)?
+            .instrument
+            .sample_name(slot)
+    }
+    fn sample_player(&self, slot: u32) -> Option<&daw_core::PlayerNode> {
+        self.app
+            .project
+            .track(self.target.track)?
+            .instrument
+            .sample_player(slot)
+    }
+    fn sample_slot_available(&self, slot: u32) -> bool {
+        let Some(track) = self.app.project.track(self.target.track) else {
+            return false;
+        };
+        track.instrument.sample_slot_available(
+            slot,
+            self.descriptor.sample_slots,
+            self.descriptor.sample_capacity,
+        ) && !self
+            .app
+            .sample_import_reserves_slot(self.target.track, slot)
     }
     fn request_sample(&mut self, slot: u32, request: daw_devices_ui::SampleRequest) {
         self.sample_request = Some((slot, request));
@@ -1442,7 +1482,7 @@ impl DawApp {
                             if descriptor.sample_slots > 0 && target.effect.is_none() {
                                 self.refresh_sample_summaries(
                                     target.track,
-                                    descriptor.sample_slots,
+                                    descriptor.sample_capacity,
                                 );
                             }
                             let summaries = std::mem::take(&mut self.instrument_ui.samples);
@@ -1717,6 +1757,58 @@ impl DawApp {
         }
     }
 
+    /// The dedicated editor uses the same host, gestures and request dispatch
+    /// as the compact device panel.
+    pub(crate) fn draw_sample_player_panel(&mut self, ui: &mut egui::Ui, track: u64, group: u32) {
+        let Some(descriptor) = self
+            .project
+            .track(track)
+            .and_then(|track| track.instrument.builtin_device())
+            .and_then(daw_devices::descriptor)
+            .filter(|descriptor| group < descriptor.sample_slots)
+        else {
+            return;
+        };
+        self.refresh_sample_summaries(track, descriptor.sample_capacity);
+        let mut panel = std::mem::take(&mut self.instrument_ui.device_panel);
+        let summaries = std::mem::take(&mut self.instrument_ui.samples);
+        let target = EditorTarget::from(track);
+        let mut host = PanelHost {
+            app: &*self,
+            target,
+            descriptor,
+            user_presets: &[],
+            updates: Vec::new(),
+            batch: None,
+            navigation: None,
+            saved: None,
+            audition: None,
+            wheels: None,
+            route: false,
+            samples: &summaries,
+            sample_request: None,
+        };
+        daw_devices_ui::show_sample_player(ui, descriptor, group, &mut host, &mut panel);
+        let request = host.sample_request.take();
+        let audition = host.audition;
+        let requests = (host.updates, host.batch, host.navigation, host.saved);
+        self.apply_device_panel(target, requests.0, requests.1, requests.2, requests.3);
+        self.instrument_ui.device_panel = panel;
+        self.instrument_ui.samples = summaries;
+        if let Some((slot, request)) = request {
+            self.apply_sample_request(track, slot, request);
+        }
+        if let Some(note) = audition {
+            self.panel_audition = note.map(|(pitch, velocity)| {
+                (
+                    track,
+                    pitch,
+                    (velocity * 127.0).round().clamp(1.0, 127.0) as u8,
+                )
+            });
+        }
+    }
+
     /// Loads or clears a sample slot of the instrument on `track` as its
     /// panel asked: a file goes through the import pipeline first.
     pub(crate) fn apply_sample_request(
@@ -1726,6 +1818,43 @@ impl DawApp {
         request: daw_devices_ui::SampleRequest,
     ) {
         match request {
+            daw_devices_ui::SampleRequest::EditPlayer => {
+                self.open_sample_player(track, slot);
+            }
+            daw_devices_ui::SampleRequest::SetPlayer(player) => {
+                if let Err(error) = self.set_sample_player(track, slot, player) {
+                    self.message(Err(anyhow::anyhow!(error.message)), "");
+                }
+            }
+            daw_devices_ui::SampleRequest::ExportRegion {
+                start,
+                end,
+                reverse,
+                gain_db,
+            } => {
+                if let Some(sample) = self
+                    .project
+                    .track(track)
+                    .and_then(|track| track.instrument.sample(slot))
+                {
+                    self.open_recording_bounce(crate::export_ui::RecordingSource {
+                        name: sample.name.clone(),
+                        path: sample.path.clone(),
+                        start,
+                        end,
+                        reverse,
+                        gain_db,
+                    });
+                }
+            }
+            daw_devices_ui::SampleRequest::Browse => {
+                self.open_sample_browser(Some((track, slot)));
+            }
+            daw_devices_ui::SampleRequest::Rename(name) => {
+                if let Err(error) = self.rename_device_sample_slot(track, slot, &name) {
+                    self.message(Err(anyhow::anyhow!(error.message)), "");
+                }
+            }
             daw_devices_ui::SampleRequest::Pick => {
                 if self.import_picker_ready()
                     && let Some(path) =
@@ -1737,6 +1866,21 @@ impl DawApp {
             daw_devices_ui::SampleRequest::File(path) => {
                 if self.import_picker_ready() {
                     self.queue_sample_import(path, track, slot);
+                }
+            }
+            daw_devices_ui::SampleRequest::FileToPlayer(path) => {
+                if self.import_picker_ready() {
+                    self.queue_player_sample_import(path, track, slot);
+                }
+            }
+            daw_devices_ui::SampleRequest::Source(source) => {
+                if self.import_picker_ready() {
+                    self.queue_sample_source_import(source, track, slot);
+                }
+            }
+            daw_devices_ui::SampleRequest::SourceToPlayer(source) => {
+                if self.import_picker_ready() {
+                    self.queue_player_sample_source_import(source, track, slot);
                 }
             }
             daw_devices_ui::SampleRequest::Clear => {
@@ -1767,15 +1911,6 @@ impl DawApp {
             self.instrument_ui.samples[index] = None;
             return;
         };
-        let audio = self.waveforms.get(&sample.path);
-        let current = self.instrument_ui.samples[index]
-            .as_ref()
-            .is_some_and(|(path, summary)| {
-                *path == sample.path && (audio.is_none() || !summary.peaks.is_empty())
-            });
-        if current {
-            return;
-        }
         let name = if sample.name.is_empty() {
             std::path::Path::new(&sample.path)
                 .file_stem()
@@ -1784,6 +1919,17 @@ impl DawApp {
         } else {
             sample.name.clone()
         };
+        let audio = self.waveforms.get(&sample.path);
+        let current = self.instrument_ui.samples[index]
+            .as_ref()
+            .is_some_and(|(path, summary)| {
+                *path == sample.path
+                    && summary.name == name
+                    && (audio.is_none() || !summary.peaks.is_empty())
+            });
+        if current {
+            return;
+        }
         let seconds = self
             .audio_files
             .get(&sample.path)
@@ -1799,6 +1945,7 @@ impl DawApp {
         let summary = daw_devices_ui::SampleSummary {
             name,
             seconds,
+            audible_region: audio.and_then(crate::sample_operations::audible_region),
             peaks: audio
                 .map(|audio| sample_peaks(audio, SAMPLE_PEAKS))
                 .unwrap_or_default(),
@@ -2227,14 +2374,14 @@ impl DawApp {
         &mut self,
         target: EditorTarget,
         updates: Vec<(u32, f64)>,
-        batch: Option<Vec<(u32, f64)>>,
+        batch: Option<ParameterStep>,
         navigation: Option<daw_ui::AutomationNavigation>,
         saved: Option<daw_devices::Preset>,
     ) {
         if self.parameter_editing_enabled() {
             self.apply_instrument_parameters(&updates);
             if let Some(batch) = batch {
-                self.apply_instrument_parameter_step(&batch, Some("Device preset"));
+                self.apply_instrument_parameter_step(&batch.values, Some(&batch.name));
             }
         }
         match navigation {

@@ -99,6 +99,10 @@ impl BuiltinDevice {
         self.device.set_sample(slot, sample);
     }
 
+    pub(crate) fn set_sample_player(&mut self, slot: u32, player: Option<&daw_core::PlayerNode>) {
+        self.device.set_sample_player(slot, player);
+    }
+
     pub(crate) fn name(&self) -> &'static str {
         self.device.descriptor().name
     }

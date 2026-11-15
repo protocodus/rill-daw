@@ -9,6 +9,7 @@ rust-version.workspace = true
 glow-backdrop = ["dep:egui_glow"]
 
 [dependencies]
+daw-dsp.workspace = true
 egui = "=0.33.3"
 egui_glow = { version = "=0.33.3", optional = true, default-features = false }
 serde.workspace = true

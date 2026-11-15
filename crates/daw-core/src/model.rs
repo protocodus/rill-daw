@@ -3,9 +3,10 @@ use crate::{
     MeterChange, MeterMap,
 };
 use anyhow::{Context, Result, bail, ensure};
+pub use daw_dsp::sample_player::{PlayerKind, PlayerNode, VelocityChild};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fs::{self, OpenOptions},
     io::{BufReader, BufWriter, Write},
     path::Path,
@@ -108,10 +109,42 @@ pub struct Project {
     /// Named song positions, kept in beat order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub markers: Vec<Marker>,
+    /// Reusable recordings owned by this project, whether or not a track
+    /// currently plays them. Their media travels in the project bundle.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub samples: Vec<ProjectSample>,
 }
 
 pub const MAX_MARKERS: usize = 1024;
 pub const MAX_MARKER_NAME_CHARS: usize = 256;
+pub const MAX_PROJECT_SAMPLES: usize = 4096;
+pub const MAX_PROJECT_SAMPLE_NAME_CHARS: usize = 256;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectSample {
+    pub id: u64,
+    pub name: String,
+    pub path: String,
+}
+
+/// Validate a sample collection label before importing or rendering its media.
+pub fn validate_project_sample_name(name: &str) -> Result<()> {
+    ensure!(
+        !name.trim().is_empty()
+            && name.chars().count() <= MAX_PROJECT_SAMPLE_NAME_CHARS
+            && !name.chars().any(char::is_control),
+        "Sample names need 1–256 printable characters"
+    );
+    Ok(())
+}
+
+fn validate_sample_path(path: &str) -> Result<()> {
+    ensure!(
+        !path.is_empty() && path.len() <= MAX_SAMPLE_PATH_BYTES && !path.contains('\0'),
+        "Invalid sample path"
+    );
+    Ok(())
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Marker {
@@ -283,7 +316,7 @@ pub struct Send {
     pub pre_fader: bool,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub enum Instrument {
     #[default]
     None,
@@ -299,6 +332,14 @@ pub enum Instrument {
         device: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         samples: Vec<DeviceSample>,
+        /// User labels for logical sample slots (pads), independent of their
+        /// recordings and layers. An absent label uses the source's name.
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        sample_names: BTreeMap<u32, String>,
+        /// Playback trees per logical slot. Omitted roots retain the legacy
+        /// single-sample behavior, reading the recording at the same slot.
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        sample_players: BTreeMap<u32, daw_dsp::sample_player::PlayerNode>,
     },
 }
 
@@ -313,9 +354,20 @@ pub struct DeviceSample {
     pub name: String,
 }
 
-/// R1 Drums has the most sample slots of any built-in instrument.
-pub const MAX_DEVICE_SAMPLES: usize = 16;
+/// Bound recordings in an instrument, including all layers of each slot.
+pub const MAX_DEVICE_SAMPLES: usize = 128;
+pub const MAX_DEVICE_SAMPLE_NAME_CHARS: usize = 64;
 const MAX_SAMPLE_PATH_BYTES: usize = 4096;
+
+pub(crate) fn validate_device_sample_name(name: &str) -> Result<()> {
+    ensure!(
+        !name.trim().is_empty()
+            && name.chars().count() <= MAX_DEVICE_SAMPLE_NAME_CHARS
+            && !name.chars().any(char::is_control),
+        "Sample slot names must have 1-{MAX_DEVICE_SAMPLE_NAME_CHARS} printable characters"
+    );
+    Ok(())
+}
 
 /// The built-in instrument a new MIDI track starts with, so a part is
 /// audible without installing a plug-in. Loaded projects keep what they have.
@@ -332,6 +384,8 @@ impl Instrument {
         Self::Builtin {
             device: device.into(),
             samples: Vec::new(),
+            sample_names: BTreeMap::new(),
+            sample_players: BTreeMap::new(),
         }
     }
 
@@ -360,6 +414,111 @@ impl Instrument {
     /// The recording in `slot`, if one is loaded.
     pub fn sample(&self, slot: u32) -> Option<&DeviceSample> {
         self.samples().iter().find(|sample| sample.slot == slot)
+    }
+
+    /// A user label for a logical sample slot; source names are separate.
+    pub fn sample_name(&self, slot: u32) -> Option<&str> {
+        match self {
+            Self::Builtin { sample_names, .. } => sample_names.get(&slot).map(String::as_str),
+            _ => None,
+        }
+    }
+
+    pub fn sample_player(&self, slot: u32) -> Option<&daw_dsp::sample_player::PlayerNode> {
+        match self {
+            Self::Builtin { sample_players, .. } => sample_players.get(&slot),
+            _ => None,
+        }
+    }
+
+    /// Original logical slots remain reserved for implicit legacy players;
+    /// loaded or referenced auxiliary slots cannot be overwritten by allocation.
+    pub fn sample_slot_available(&self, slot: u32, logical_slots: u32, capacity: u32) -> bool {
+        match self {
+            Self::Builtin {
+                sample_players,
+                samples,
+                ..
+            } => {
+                slot >= logical_slots
+                    && slot < capacity
+                    && samples.iter().all(|sample| sample.slot != slot)
+                    && sample_players.values().all(|root| !root.uses_sample(slot))
+            }
+            _ => false,
+        }
+    }
+
+    /// Reconcile an edit's removed leaves without touching staged recordings,
+    /// shared leaves, or implicit legacy slots. The host supplies layout from
+    /// the device descriptor; the persistent model needs no device-ID cases.
+    pub fn release_removed_sample_bindings(&mut self, previous: &Self, logical_slots: u32) {
+        let (
+            Self::Builtin {
+                device,
+                samples,
+                sample_players,
+                ..
+            },
+            Self::Builtin {
+                device: old_device,
+                samples: old_samples,
+                sample_players: old_players,
+                ..
+            },
+        ) = (self, previous)
+        else {
+            return;
+        };
+        if device != old_device || sample_players == old_players {
+            return;
+        }
+        samples.retain(|sample| {
+            sample.slot < logical_slots
+                || old_samples
+                    .iter()
+                    .all(|old| old.slot != sample.slot || old.path != sample.path)
+                || old_players
+                    .values()
+                    .all(|root| !root.uses_sample(sample.slot))
+                || sample_players
+                    .values()
+                    .any(|root| root.uses_sample(sample.slot))
+        });
+    }
+
+    /// Names are presentation metadata and must not restart sounding voices.
+    pub fn audio_equivalent(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Builtin {
+                    device: a,
+                    samples: a_samples,
+                    sample_players: a_players,
+                    ..
+                },
+                Self::Builtin {
+                    device: b,
+                    samples: b_samples,
+                    sample_players: b_players,
+                    ..
+                },
+            ) => {
+                a == b
+                    && a_samples.len() == b_samples.len()
+                    && a_samples
+                        .iter()
+                        .zip(b_samples)
+                        .all(|(a, b)| a.slot == b.slot && a.path == b.path)
+                    && a_players.len() == b_players.len()
+                    && a_players.iter().all(|(slot, player)| {
+                        b_players
+                            .get(slot)
+                            .is_some_and(|other| player.playback_eq(other))
+                    })
+            }
+            _ => self == other,
+        }
     }
 
     /// A hosted plug-in or a built-in device: something with parameters.
@@ -697,6 +856,7 @@ impl Project {
             precount_bars: 0,
             meter_changes: Vec::new(),
             markers: Vec::new(),
+            samples: Vec::new(),
         }
     }
 
@@ -707,6 +867,53 @@ impl Project {
 
     pub fn marker(&self, id: u64) -> Option<&Marker> {
         self.markers.iter().find(|marker| marker.id == id)
+    }
+
+    pub fn project_sample(&self, id: u64) -> Option<&ProjectSample> {
+        self.samples.iter().find(|sample| sample.id == id)
+    }
+
+    /// Register already managed audio without copying it. Loading this
+    /// recording into an instrument can share the same source path.
+    pub fn add_project_sample(
+        &mut self,
+        name: impl Into<String>,
+        path: impl Into<String>,
+    ) -> Result<u64> {
+        let name = name.into().trim().to_owned();
+        let path = path.into();
+        validate_project_sample_name(&name)?;
+        validate_sample_path(&path)?;
+        ensure!(
+            self.samples.len() < MAX_PROJECT_SAMPLES,
+            "Too many project samples (at most {MAX_PROJECT_SAMPLES})"
+        );
+        let id = new_id();
+        self.samples.push(ProjectSample { id, name, path });
+        Ok(id)
+    }
+
+    pub fn rename_project_sample(&mut self, id: u64, name: &str) -> Result<()> {
+        let name = name.trim();
+        validate_project_sample_name(name)?;
+        self.samples
+            .iter_mut()
+            .find(|sample| sample.id == id)
+            .context("Project sample not found")?
+            .name = name.to_owned();
+        Ok(())
+    }
+
+    /// Remove the browser entry. Instrument and clip references keep playing
+    /// their source; deleting the entry never deletes an audio file.
+    pub fn remove_project_sample(&mut self, id: u64) -> Result<()> {
+        let index = self
+            .samples
+            .iter()
+            .position(|sample| sample.id == id)
+            .context("Project sample not found")?;
+        self.samples.remove(index);
+        Ok(())
     }
 
     pub fn add_audio_track(&mut self, name: impl Into<String>) -> u64 {
@@ -749,6 +956,37 @@ impl Project {
         self.tracks
             .iter_mut()
             .chain(std::iter::once(&mut self.master))
+    }
+
+    /// Every referenced recording, including reusable project samples that
+    /// are not yet assigned to a track. Repeated paths identify shared media.
+    pub fn audio_paths(&self) -> impl Iterator<Item = &str> {
+        self.channels()
+            .flat_map(Track::audio_paths)
+            .chain(self.samples.iter().map(|sample| sample.path.as_str()))
+    }
+
+    pub(crate) fn audio_paths_mut(&mut self) -> impl Iterator<Item = &mut String> {
+        self.tracks
+            .iter_mut()
+            .chain(std::iter::once(&mut self.master))
+            .flat_map(|track| {
+                track
+                    .clips
+                    .iter_mut()
+                    .filter_map(|clip| match &mut clip.content {
+                        ClipContent::Audio { path, .. } => Some(path),
+                        ClipContent::Midi { .. } => None,
+                    })
+                    .chain(
+                        track
+                            .instrument
+                            .samples_mut()
+                            .iter_mut()
+                            .map(|sample| &mut sample.path),
+                    )
+            })
+            .chain(self.samples.iter_mut().map(|sample| &mut sample.path))
     }
 
     /// The source recording of the audio clip `clip_id`, on any track, as a
@@ -1310,6 +1548,15 @@ impl Project {
         for marker in &self.markers {
             check_id(marker.id)?;
         }
+        ensure!(
+            self.samples.len() <= MAX_PROJECT_SAMPLES,
+            "Too many project samples (at most {MAX_PROJECT_SAMPLES})"
+        );
+        for sample in &self.samples {
+            check_id(sample.id)?;
+            validate_project_sample_name(&sample.name)?;
+            validate_sample_path(&sample.path)?;
+        }
         for (is_master, track) in self
             .tracks
             .iter()
@@ -1385,7 +1632,12 @@ impl Project {
                     ensure!(!path.is_empty(), "Missing plug-in path");
                     validate_plugin_class_id(path, class_id.as_deref())?;
                 }
-                Instrument::Builtin { device, samples } => {
+                Instrument::Builtin {
+                    device,
+                    samples,
+                    sample_names,
+                    sample_players,
+                } => {
                     validate_device_id(device)?;
                     ensure!(
                         track.instrument_state.is_empty(),
@@ -1395,6 +1647,22 @@ impl Project {
                         samples.len() <= MAX_DEVICE_SAMPLES,
                         "A built-in instrument holds at most {MAX_DEVICE_SAMPLES} samples"
                     );
+                    for (slot, name) in sample_names {
+                        ensure!(
+                            (*slot as usize) < MAX_DEVICE_SAMPLES,
+                            "Sample slot {slot} is out of range"
+                        );
+                        validate_device_sample_name(name)?;
+                    }
+                    for (slot, player) in sample_players {
+                        ensure!(
+                            (*slot as usize) < MAX_DEVICE_SAMPLES,
+                            "Sample slot {slot} is out of range"
+                        );
+                        player
+                            .validate(MAX_DEVICE_SAMPLES as u32)
+                            .map_err(anyhow::Error::msg)?;
+                    }
                     for (index, sample) in samples.iter().enumerate() {
                         ensure!(
                             (sample.slot as usize) < MAX_DEVICE_SAMPLES,
@@ -1788,6 +2056,10 @@ impl Project {
             .map(|marker| marker.id)
             .max()
             .unwrap_or(0);
+        for sample in &mut self.samples {
+            max_id = max_id.max(sample.id);
+            absolutize(&mut sample.path, base);
+        }
         for track in self.channels_mut() {
             max_id = max_id.max(track.id);
             if let Some(lane) = &track.automation {

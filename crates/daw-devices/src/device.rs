@@ -1,5 +1,6 @@
 use crate::{ParamSpec, Telemetry};
 use daw_dsp::MipMap;
+use daw_dsp::sample_player::PlayerNode;
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -17,8 +18,10 @@ pub struct DeviceDescriptor {
     /// Library category, such as "Filter" or "Synth".
     pub category: &'static str,
     pub parameters: &'static [ParamSpec],
-    /// 0, 1 (Sampler) or 16 (Drums).
+    /// Logical sample groups: 0, 1 (Sampler) or 16 (Drums).
     pub sample_slots: u32,
+    /// Recording pool capacity. Player trees reference these stable source IDs.
+    pub sample_capacity: u32,
     pub sidechain_input: bool,
     /// Factory `.rillpreset` documents, compiled in.
     pub factory_presets: &'static [&'static str],
@@ -176,11 +179,15 @@ impl StereoIo<'_> {
 /// conformance tests check every registered device for this.
 pub trait Device: Send {
     fn descriptor(&self) -> &'static DeviceDescriptor;
-    /// The only place that may allocate. `max_block` bounds later blocks.
+    /// Prepares processing storage away from the audio thread. `max_block`
+    /// bounds later blocks; sample-player compilation is also setup work.
     fn prepare(&mut self, sample_rate: f32, max_block: usize);
     /// Unknown IDs are ignored; values are clamped to 0–1.
     fn set_parameter(&mut self, id: u32, normalized: f32);
     fn set_sample(&mut self, _slot: u32, _sample: Option<Arc<SampleData>>) {}
+    /// Compiles a sample-selection tree during graph preparation, never from
+    /// `process`. `None` restores the instrument's legacy single recording.
+    fn set_sample_player(&mut self, _group: u32, _root: Option<&PlayerNode>) {}
     fn process(&mut self, context: &ProcessContext, events: &[Event], io: StereoIo<'_>);
     /// Clears audio state (delay lines, filter memories, voices) but keeps
     /// parameters. Also restarts the seeded random generators.

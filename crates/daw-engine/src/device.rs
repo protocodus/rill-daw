@@ -7,6 +7,8 @@ mod input;
 mod live_updates;
 #[path = "midi.rs"]
 mod midi;
+#[path = "sample_audition.rs"]
+mod sample_audition;
 #[path = "timing.rs"]
 mod timing;
 use input::{InputController, InputShared};
@@ -207,6 +209,7 @@ fn merge_buffer_range(
 static NEXT_ENGINE_ID: AtomicU64 = AtomicU64::new(1);
 
 struct Controls {
+    sample_audition: sample_audition::Shared,
     timing: TimingShared,
     midi: Arc<MidiShared>,
     render_preview: AtomicBool,
@@ -234,8 +237,14 @@ struct Controls {
     render_performance: Mutex<crate::RenderPerformanceSnapshot>,
 }
 impl Controls {
+    #[cfg(test)]
     fn new() -> Self {
+        Self::with_queue_capacity(BLOCK * 2)
+    }
+
+    fn with_queue_capacity(capacity: usize) -> Self {
         Self {
+            sample_audition: sample_audition::Shared::new(capacity),
             timing: TimingShared::new(),
             midi: Arc::new(MidiShared::new()),
             render_preview: AtomicBool::new(false),
@@ -402,6 +411,40 @@ impl AudioQueue {
             }
             self.read.store(read.wrapping_add(1), Ordering::Release);
         }
+    }
+
+    /// A control request can advance the producer while the consumer still
+    /// holds an earlier generation. Preserve those future frames. Generations
+    /// are compared in wrapping order; fewer than 2^63 requests may be in flight.
+    fn discard_before(&self, generation: u64) {
+        for _ in 0..self.slots.len() {
+            let read = self.read.load(Ordering::Relaxed);
+            if read == self.write.load(Ordering::Acquire) {
+                break;
+            }
+            let queued = self.slots[read % self.slots.len()]
+                .generation
+                .load(Ordering::Relaxed);
+            if generation.wrapping_sub(queued) as i64 <= 0 {
+                break;
+            }
+            self.read.store(read.wrapping_add(1), Ordering::Release);
+        }
+    }
+
+    /// Only the consumer changes the head, so checking its generation before
+    /// popping cannot race the producer into removing a replacement's onset.
+    fn pop_generation(&self, generation: u64) -> Option<([f32; 2], f64, u64)> {
+        let read = self.read.load(Ordering::Relaxed);
+        if read == self.write.load(Ordering::Acquire)
+            || self.slots[read % self.slots.len()]
+                .generation
+                .load(Ordering::Relaxed)
+                != generation
+        {
+            return None;
+        }
+        self.pop()
     }
 }
 
@@ -607,7 +650,9 @@ impl AudioEngine {
             };
             Some((device, config, format))
         };
-        let controls = Arc::new(Controls::new());
+        let controls = Arc::new(Controls::with_queue_capacity(
+            settings.render_queue_frames(),
+        ));
         controls
             .input_sample_rate
             .store(settings.sample_rate, Ordering::Relaxed);
@@ -699,10 +744,12 @@ impl AudioEngine {
                 let mut pending_parameters: Vec<ParameterChange> = Vec::with_capacity(128);
                 let mut render_failure = RenderFailureLatch::default();
                 let mut preview = false;
+                let mut sample_preview = sample_audition::Worker::new(sample_rate);
                 let mut midi_monitor = MidiMonitor::new();
                 // Whether the graph changed since its devices were last listed.
                 let mut devices_changed = true;
                 while !worker_controls.shutdown.load(Ordering::Acquire) {
+                    sample_preview.fill(&worker_controls.sample_audition);
                     if worker_edits.apply_pending(&mut renderer) {
                         worker_controls
                             .finished_generation
@@ -1023,6 +1070,7 @@ impl AudioEngine {
                 if !switching_to_timeline
                     && !waiting_for_timeline
                     && !switching_to_preview
+                    && self.controls.sample_audition.ready_for(count)
                     && (!active
                         || queue.slots.len() - queue.free() >= count
                         || (self.controls.finished_generation.load(Ordering::Acquire)
@@ -1043,6 +1091,41 @@ impl AudioEngine {
             output.extend_from_slice(samples[..count * 2].as_chunks::<2>().0);
         }
         Ok(output)
+    }
+
+    /// Audition a prepared recording through the current output stream. This
+    /// source has its own clock, does not edit the song or move the transport,
+    /// and remains independent of note audition and live MIDI monitoring.
+    /// Decode and build `SampleData` off the audio thread before calling.
+    pub fn audition_sample(&self, sample: Option<Arc<daw_devices::SampleData>>) -> Result<()> {
+        if let Some(sample) = &sample {
+            ensure!(
+                !self.controls.shutdown.load(Ordering::Acquire),
+                "Audio engine has stopped"
+            );
+            self.ensure_output_ready()?;
+            ensure!(sample.frames() > 0, "The sample is empty");
+            ensure!(
+                sample.sample_rate().is_finite() && sample.sample_rate() >= 1000.0,
+                "Invalid sample rate"
+            );
+            ensure!(
+                sample
+                    .frames()
+                    .saturating_mul(sample.channel_count())
+                    .saturating_mul(4)
+                    <= daw_devices::SampleData::MAX_BYTES,
+                "The audition sample is too large"
+            );
+        }
+        self.controls.sample_audition.request(sample);
+        Ok(())
+    }
+
+    pub fn sample_audition_active(&self) -> bool {
+        !self.controls.output_failed.load(Ordering::Acquire)
+            && !self.controls.shutdown.load(Ordering::Acquire)
+            && self.controls.sample_audition.active()
     }
 
     /// Replace the held preview note. This bounded shared command is read only by
@@ -1369,6 +1452,7 @@ impl AudioEngine {
         self.controls.playing.store(false, Ordering::Release);
         self.controls.auditioning.store(false, Ordering::Release);
         self.controls.shutdown.store(true, Ordering::Release);
+        self.controls.sample_audition.abort();
         self.stream.take();
         self.controls.output_meter.clear();
         if let Some(worker) = self.worker.take() {
@@ -1444,6 +1528,7 @@ fn output_stream_failed(controls: &Controls, error: &cpal::Error) {
     // during ordinary playback. Counting it as a render failure would overwrite
     // that backend cause with a misleading plugin error in the same UI frame.
     controls.midi.output_failed();
+    controls.sample_audition.abort();
     controls.playing.store(false, Ordering::Release);
     controls.output_meter.clear();
 }
@@ -1463,6 +1548,7 @@ fn fill_output_timed<T: cpal::Sample + cpal::FromSample<f32>>(
         controls.playing.store(false, Ordering::Release);
         controls.auditioning.store(false, Ordering::Release);
         controls.output_meter.clear();
+        controls.sample_audition.abort();
         return;
     }
     let output_time = controls.input.output_time(info);
@@ -1546,8 +1632,9 @@ fn fill_output_timed<T: cpal::Sample + cpal::FromSample<f32>>(
             gate.capture_allowed,
         );
         let click = controls.timing.click(gate, capture_position);
-        stereo[0] += monitor[0] + click;
-        stereo[1] += monitor[1] + click;
+        let sample_preview = controls.sample_audition.consume(sample_rate);
+        stereo[0] += monitor[0] + click + sample_preview[0];
+        stereo[1] += monitor[1] + click + sample_preview[1];
         for channel in 0..2 {
             stereo[channel] = if stereo[channel].is_finite() {
                 stereo[channel].clamp(-1.0, 1.0)

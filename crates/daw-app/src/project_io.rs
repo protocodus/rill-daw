@@ -24,12 +24,7 @@ pub(crate) struct LoadedProject {
 
 impl From<Project> for LoadedProject {
     fn from(project: Project) -> Self {
-        let paths: HashSet<_> = project
-            .tracks
-            .iter()
-            .flat_map(daw_core::Track::audio_paths)
-            .map(str::to_owned)
-            .collect();
+        let paths: HashSet<_> = project.audio_paths().map(str::to_owned).collect();
         let mut waveforms = HashMap::new();
         let mut audio_files = HashMap::new();
         let mut skipped = 0;

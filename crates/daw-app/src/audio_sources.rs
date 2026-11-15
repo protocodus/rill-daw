@@ -67,12 +67,7 @@ impl DawApp {
             return;
         }
         self.audio_source_revision = self.revision;
-        let wanted: HashSet<_> = self
-            .project
-            .tracks
-            .iter()
-            .flat_map(daw_core::Track::audio_paths)
-            .collect();
+        let wanted: HashSet<_> = self.project.audio_paths().collect();
         self.audio_files
             .retain(|path, _| wanted.contains(path.as_str()));
         self.audio_admission_failed
@@ -92,9 +87,7 @@ impl DawApp {
         }
         let paths: HashSet<_> = self
             .project
-            .tracks
-            .iter()
-            .flat_map(daw_core::Track::audio_paths)
+            .audio_paths()
             .filter(|path| {
                 !self.audio_files.contains_key(*path)
                     && !self.audio_admission_failed.contains(*path)
@@ -147,12 +140,7 @@ impl DawApp {
             Some(Ok(admission)) => {
                 self.audio_admission = None;
                 if admission.session == self.song_session.id {
-                    let wanted: HashSet<_> = self
-                        .project
-                        .tracks
-                        .iter()
-                        .flat_map(daw_core::Track::audio_paths)
-                        .collect();
+                    let wanted: HashSet<_> = self.project.audio_paths().collect();
                     let mut remaining = crate::project_io::WAVEFORM_CACHE_BYTES.saturating_sub(
                         self.waveforms
                             .values()

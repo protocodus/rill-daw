@@ -78,6 +78,7 @@ pub enum PopupKind {
     ExportMidi,
     Analysis,
     MidiExpression,
+    SamplePlayer,
 }
 
 impl PopupKind {
@@ -86,7 +87,12 @@ impl PopupKind {
     fn full_screen(self) -> bool {
         matches!(
             self,
-            Self::Assistant | Self::Library | Self::AudioTakes | Self::Analysis | Self::Automation
+            Self::Assistant
+                | Self::Library
+                | Self::AudioTakes
+                | Self::Analysis
+                | Self::Automation
+                | Self::SamplePlayer
         )
     }
 }
@@ -179,6 +185,7 @@ pub struct DawApp {
     retiring: Option<std::sync::mpsc::Receiver<()>>,
     pub(crate) project_io: crate::project_io::ProjectIo,
     pub(crate) audio_import: crate::audio_import::AudioImportState,
+    pub(crate) sample_preview: crate::sample_preview::SamplePreview,
     pub(crate) freeze: crate::freeze_ui::FreezeState,
     pub(crate) document_guard: Option<crate::document_ui::DocumentGuard>,
     pub(crate) next_document_dialog: Option<crate::document_ui::DocumentDialogSelection>,
@@ -187,6 +194,10 @@ pub struct DawApp {
     pub(crate) export_run: Option<crate::export_ui::ExportRun>,
     pub(crate) export_cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     pub(crate) export_stem_selection: std::collections::HashSet<u64>,
+    pub(crate) export_project_sample: bool,
+    pub(crate) export_name: String,
+    pub(crate) export_bounce: bool,
+    pub(crate) export_recording: Option<crate::export_ui::RecordingSource>,
     /// Stem files in the last completed export; zero for a single file.
     pub(crate) exported_stems: usize,
     pub(crate) exported_files: Vec<PathBuf>,
@@ -217,6 +228,7 @@ pub struct DawApp {
     screenshot_requested: bool,
     reset_views: bool,
     pub instrument_ui: crate::plugin_ui::InstrumentUi,
+    pub(crate) sample_player_editor: crate::sample_player_ui::SamplePlayerEditor,
     pub effects_open: bool,
     pub routing_open: bool,
     pub automation_open: bool,
@@ -282,6 +294,7 @@ pub struct DawApp {
     pub(crate) plugin_catalog_revision: u64,
     pub(crate) plugin_scan_reported: bool,
     pub(crate) plugin_library: crate::settings::PluginLibrary,
+    pub(crate) sample_browser: crate::sample_browser::SampleBrowser,
     pub plugin_filter: String,
     pub plugin_search_focus: bool,
     pub plugin_assign_target: Option<u64>,
@@ -350,6 +363,7 @@ impl DawApp {
             retiring: None,
             project_io: Default::default(),
             audio_import: Default::default(),
+            sample_preview: Default::default(),
             freeze: Default::default(),
             document_guard: None,
             next_document_dialog: None,
@@ -357,6 +371,10 @@ impl DawApp {
             export_run: None,
             export_cancel: None,
             export_stem_selection: Default::default(),
+            export_project_sample: false,
+            export_name: String::new(),
+            export_bounce: false,
+            export_recording: None,
             exported_stems: 0,
             exported_files: Vec::new(),
             finishing: Default::default(),
@@ -386,6 +404,7 @@ impl DawApp {
             screenshot_requested: false,
             reset_views: false,
             instrument_ui: Default::default(),
+            sample_player_editor: Default::default(),
             effects_open: false,
             routing_open: false,
             automation_open: false,
@@ -455,6 +474,7 @@ impl DawApp {
             plugin_catalog_revision: 0,
             plugin_scan_reported: true,
             plugin_library: crate::settings::PluginLibrary::load(),
+            sample_browser: Default::default(),
             plugin_filter: String::new(),
             plugin_search_focus: false,
             plugin_assign_target: None,
@@ -525,6 +545,7 @@ impl DawApp {
             (self.midi_export_open, PopupKind::ExportMidi),
             (self.analysis.open, PopupKind::Analysis),
             (self.midi_expression_open, PopupKind::MidiExpression),
+            (self.sample_player_editor.open, PopupKind::SamplePlayer),
         ] {
             if open {
                 return FocusedView::Popup(kind);
@@ -534,6 +555,7 @@ impl DawApp {
     }
 
     fn hide_focused_view(&mut self) {
+        self.sample_player_editor.open = false;
         self.midi_expression_open = false;
         self.midi_expression = None;
         self.stop_signal_analysis();
@@ -675,10 +697,14 @@ impl DawApp {
             PopupKind::ExportMidi => self.midi_export_open = true,
             PopupKind::Analysis => self.analysis.open = true,
             PopupKind::MidiExpression => self.midi_expression_open = true,
+            PopupKind::SamplePlayer => self.sample_player_editor.open = true,
         }
     }
 
     pub fn open_popup(&mut self, kind: PopupKind) {
+        if kind == PopupKind::Library && !self.sample_browser.requested {
+            self.reset_sample_browser_context();
+        }
         let current = self.focused_view();
         if current != FocusedView::Workspace(WorkspaceView::Arrangement)
             && current != FocusedView::Popup(kind)
@@ -738,6 +764,7 @@ impl DawApp {
                     PopupKind::Export => "Export audio",
                     PopupKind::ExportMidi => "Export MIDI 1.0 copy",
                     PopupKind::MidiExpression => "Note expression",
+                    PopupKind::SamplePlayer => "Sample player",
                 };
                 self.selected_track
                     .and_then(|id| self.project.track(id))
@@ -910,7 +937,21 @@ impl DawApp {
             | PopupKind::ExportMidi
             | PopupKind::Analysis
             | PopupKind::MidiExpression
+            | PopupKind::SamplePlayer
             | PopupKind::About => {}
+        }
+    }
+
+    /// A successful captured-target browser load returns to its requesting editor.
+    pub(crate) fn finish_sample_browser_load(&mut self, track: u64) {
+        if self.navigation.last().is_some_and(|previous| {
+            previous.view == FocusedView::Popup(PopupKind::SamplePlayer)
+                && previous.selected_track == Some(track)
+        }) {
+            self.close_popup();
+        } else {
+            self.selected_track = Some(track);
+            self.replace_popup(PopupKind::Instrument);
         }
     }
 
@@ -1180,6 +1221,7 @@ impl DawApp {
         }
     }
     pub fn retire_engine(&mut self) {
+        self.stop_sample_preview();
         self.retain_mixer_peak_holds(&self.render_context);
         let previous = self.engine.take();
         if let Some(engine) = &previous {
@@ -1677,13 +1719,20 @@ impl DawApp {
         match self.export_job.as_ref().map(|rx| rx.try_recv()) {
             Some(Ok(result)) => {
                 self.export_job = None;
+                let result = result.and_then(|completion| {
+                    self.complete_project_sample(&completion)?;
+                    Ok(completion)
+                });
+                if result.is_err() {
+                    self.discard_project_sample();
+                }
                 match result {
                     Ok(completion) => {
-                        let path = completion.path;
+                        let path = completion.path.clone();
                         self.export_run = None;
                         self.export_cancel = None;
                         self.exported_stems = completion.stems;
-                        self.exported_files = completion.files;
+                        self.exported_files = completion.files.clone();
                         self.finishing.export_finished(&path, completion.report);
                         // A finished render must not erase an unrelated error.
                         if !self.error
@@ -1691,9 +1740,9 @@ impl DawApp {
                             && !self.state_sync_pending()
                             && !self.project_io_pending()
                         {
-                            self.status = format!("Exported {}", path.display());
+                            self.status = completion.status();
                         }
-                        self.exported_file = Some(path);
+                        self.exported_file = completion.managed.is_none().then_some(path);
                     }
                     Err(_)
                         if self.export_cancel.take().is_some_and(|cancel| {
@@ -1717,6 +1766,7 @@ impl DawApp {
                 self.export_job = None;
                 self.export_cancel = None;
                 self.finishing.export_failed();
+                self.discard_project_sample();
                 self.export_failed_notice(anyhow::anyhow!("Export worker stopped unexpectedly"));
             }
             _ => {}
@@ -1889,7 +1939,7 @@ impl DawApp {
                             !busy,
                             daw_ui::button_widget("Retry export"),
                         )
-                        .on_hover_text("Retry the same mix, filename and export options, including the original notes and instruments.")
+                        .on_hover_text(self.export_retry_hint())
                         .clicked();
                     }
                     if has_audio_recovery && !show_export_failure {
@@ -2173,6 +2223,9 @@ impl DawApp {
         }
     }
     fn keyboard(&mut self, ctx: &egui::Context) {
+        if self.sample_browser_keyboard(ctx) {
+            return;
+        }
         self.sync_workspace_tool();
         if self.midi_expression_open {
             if !egui::Popup::is_any_open(ctx)
@@ -2254,6 +2307,7 @@ impl DawApp {
         if !ctx.wants_keyboard_input()
             || curve_focused
             || daw_ui::parameter_owns_document_history(ctx)
+            || daw_ui::sample_results_owns_keys(ctx)
         {
             // A chord may be pressed and released between repaints. Match the
             // modifiers captured by each key event, not the final held state.
@@ -2288,6 +2342,7 @@ impl DawApp {
         if self.library_open
             && !egui::Popup::is_any_open(ctx)
             && crate::library::library_owns_keys(ctx)
+            && !daw_ui::sample_results_owns_keys(ctx)
             && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter))
         {
             ctx.data_mut(|data| data.insert_temp(egui::Id::new("instrument_chooser_enter"), true));
@@ -2309,6 +2364,7 @@ impl DawApp {
             || self.midi_export_open
             || self.analysis.open
             || self.midi_expression_open
+            || self.sample_player_editor.open
             || self.about_open
             || self.midi_editor.generate_active()
         {
@@ -2707,6 +2763,10 @@ Current loop: beats {:.2}–{:.2}", self.project.loop_start + 1.0, self.project.
                         }
                         if ui.add_enabled(!self.recording_busy(), daw_ui::button_widget("Import…")).clicked() {
                             self.import_dialog();
+                            ui.close();
+                        }
+                        if daw_ui::button(ui, "Bounce audio…").clicked() {
+                            self.open_bounce(false);
                             ui.close();
                         }
                         if daw_ui::button(ui, "Export audio…").clicked() {
@@ -3619,6 +3679,8 @@ impl DawApp {
         self.poll_recording(ctx);
         self.poll_project_io(ctx);
         self.poll_audio_import(ctx);
+        self.poll_sample_browser(ctx);
+        self.poll_sample_preview(ctx);
         self.poll_freeze(ctx);
         self.poll_export();
         self.poll_join(ctx);
@@ -3903,6 +3965,7 @@ impl DawApp {
         self.setup(ctx);
         self.inspector(ctx);
         self.instrument_editor(ctx);
+        self.sample_player_page(ctx);
         self.channel_rack(ctx);
         self.routing_popup(ctx);
         self.automation_editor(ctx);
@@ -4053,6 +4116,28 @@ impl DawApp {
                 }
             }
             "library" => self.open_popup(PopupKind::Library),
+            "samples" => {
+                self.open_sample_browser(None);
+                self.prepare_sample_browser_screenshot(&self.render_context.clone());
+            }
+            "sample-player" => {
+                if let Some(track) = self
+                    .project
+                    .tracks
+                    .iter()
+                    .find(|track| {
+                        track
+                            .instrument
+                            .builtin_device()
+                            .and_then(daw_devices::descriptor)
+                            .is_some_and(|descriptor| descriptor.sample_slots > 0)
+                    })
+                    .map(|track| track.id)
+                {
+                    self.selected_track = Some(track);
+                    self.open_sample_player(track, 0);
+                }
+            }
             "about" => self.open_popup(PopupKind::About),
             "history" => self.open_popup(PopupKind::History),
             "recording" => self.open_popup(PopupKind::Recording),
@@ -4109,6 +4194,7 @@ impl DawApp {
                 && self.audio_admission.is_none()
                 && !self.screenshot_requested
                 && (!crate::spectrogram::has_pending_analysis(ctx) || self.frame_count >= 180)
+                && (!self.sample_browser_metadata_pending() || self.frame_count >= 180)
             {
                 self.screenshot_requested = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
@@ -4182,7 +4268,7 @@ pub(crate) fn audio_equivalent(a: &Project, b: &Project) -> bool {
                     && a.pan == b.pan
                     && a.mute == b.mute
                     && a.solo == b.solo
-                    && a.instrument == b.instrument
+                    && a.instrument.audio_equivalent(&b.instrument)
                     && a.instrument_state == b.instrument_state
                     && a.instrument_parameters == b.instrument_parameters
                     && a.instrument_inputs == b.instrument_inputs
@@ -4284,6 +4370,7 @@ mod export_feedback_tests {
             },
             stems: 0,
             files: Vec::new(),
+            managed: None,
         }))
         .unwrap();
         app.poll_export();

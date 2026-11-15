@@ -22,15 +22,33 @@ pub struct SampleSummary {
     /// Min and max of each column of the waveform, −1 to 1; empty while the
     /// host has not read the recording.
     pub peaks: Vec<(f32, f32)>,
+    /// Audible bounds in the full recording, normalized 0–1.
+    pub audible_region: Option<(f32, f32)>,
 }
 
 /// What a panel asks of its host for a sample slot.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SampleRequest {
     /// Choose a file with the host's file dialog.
     Pick,
+    /// Choose a recording from the project or configured sample roots.
+    Browse,
+    /// Set the logical sample slot label independently of its recordings.
+    Rename(String),
+    EditPlayer,
+    SetPlayer(Option<daw_dsp::sample_player::PlayerNode>),
+    ExportRegion {
+        start: f32,
+        end: f32,
+        reverse: bool,
+        gain_db: f32,
+    },
     /// A file dropped on the panel.
     File(std::path::PathBuf),
+    Source(daw_ui::SampleDrop),
+    /// Append a sample leaf to a logical player group as one import transaction.
+    FileToPlayer(std::path::PathBuf),
+    SourceToPlayer(daw_ui::SampleDrop),
     Clear,
 }
 
@@ -46,6 +64,11 @@ pub trait DeviceHost {
     /// consecutive calls with the same IDs form one Undo step: a node dragged
     /// across the response moves its frequency and gain together.
     fn set_values(&mut self, values: &[(u32, f64)]);
+    /// One explicit command, always a separate named Undo step, regardless of
+    /// how many parameters it changes. Continuous gestures use `set_values`.
+    fn commit_values(&mut self, values: &[(u32, f64)], _label: &'static str) {
+        self.set_values(values);
+    }
     /// The automation lane and its state, when the parameter is automated.
     fn automation(&self, id: u32) -> Option<(u64, AutomationState)>;
     /// Where the parameter's lane is at the song position, normalized 0–1,
@@ -87,6 +110,16 @@ pub trait DeviceHost {
     fn sample(&self, _slot: u32) -> Option<&SampleSummary> {
         None
     }
+    /// Explicit logical slot label, independent of recording filenames.
+    fn sample_name(&self, _slot: u32) -> Option<&str> {
+        None
+    }
+    fn sample_player(&self, _group: u32) -> Option<&daw_dsp::sample_player::PlayerNode> {
+        None
+    }
+    fn sample_slot_available(&self, _slot: u32) -> bool {
+        true
+    }
     /// Loads or clears a sample slot, as one Undo step.
     fn request_sample(&mut self, _slot: u32, _request: SampleRequest) {}
 }
@@ -108,6 +141,9 @@ pub struct PanelState {
     pub selected: Option<usize>,
     /// The pad whose controls a drum panel shows, 0–15.
     pub pad: usize,
+    /// Selection and folds of the shared player editor.
+    pub player: daw_ui::SamplePlayerEditorState,
+    player_context: Option<(String, u32)>,
     /// The response's gain axis while a node is dragged, so the axis does
     /// not rescale under the pointer.
     held_range: Option<f32>,
@@ -1882,7 +1918,7 @@ fn preset_bar(
             // The time of the click picks the roll.
             let seed = ui.input(|input| input.time).to_bits();
             let values = random_roll(descriptor, host, amount, seed);
-            host.set_values(&values);
+            host.commit_values(&values, "Randomize device");
             state.preset = None;
         }
         Some(daw_ui::PresetAction::ToggleFavorite(_)) | None => {}
@@ -1914,3 +1950,75 @@ fn random_roll(
 
 #[cfg(test)]
 mod tests;
+
+/// The same composable player editor for a sampler or any drum pad. The host
+/// embeds this in a full workspace page and owns its Back navigation.
+pub fn show_sample_player(
+    ui: &mut egui::Ui,
+    descriptor: &DeviceDescriptor,
+    group: u32,
+    host: &mut dyn DeviceHost,
+    state: &mut PanelState,
+) {
+    let context = (descriptor.id.to_owned(), group);
+    if state.player_context.as_ref() != Some(&context) {
+        state.player = daw_ui::SamplePlayerEditorState::default();
+        state.player_context = Some(context);
+    }
+    let mut player = host
+        .sample_player(group)
+        .cloned()
+        .unwrap_or_else(|| daw_dsp::sample_player::PlayerNode::sample(1, group));
+    let summaries: Vec<_> = (0..descriptor.sample_capacity)
+        .filter_map(|slot| host.sample(slot).cloned().map(|sample| (slot, sample)))
+        .collect();
+    let views: Vec<_> = summaries
+        .iter()
+        .map(|(slot, sample)| daw_ui::PlayerSampleView {
+            slot: *slot,
+            name: &sample.name,
+            seconds: sample.seconds,
+            peaks: &sample.peaks,
+            audible_region: sample.audible_region,
+        })
+        .collect();
+    let free = (0..descriptor.sample_capacity)
+        .find(|slot| host.sample_slot_available(*slot) && !player.uses_sample(*slot));
+    let output = daw_ui::sample_player_editor(ui, &mut player, &mut state.player, &views, free);
+    if output.changed {
+        host.request_sample(group, SampleRequest::SetPlayer(Some(player)));
+    } else if let Some((slot, path)) = output.file {
+        host.request_sample(slot, SampleRequest::File(path));
+    } else if let Some((slot, source)) = output.source {
+        host.request_sample(slot, SampleRequest::Source(source));
+    } else if let Some((slot, action)) = output.sample_action {
+        let request = if action == daw_ui::SampleAction::Export {
+            player
+                .find(state.player.selected.unwrap_or(player.id))
+                .and_then(|node| {
+                    if let daw_dsp::sample_player::PlayerKind::Sample {
+                        start,
+                        end,
+                        reverse,
+                        gain_db,
+                        ..
+                    } = node.kind
+                    {
+                        Some(SampleRequest::ExportRegion {
+                            start,
+                            end,
+                            reverse,
+                            gain_db,
+                        })
+                    } else {
+                        None
+                    }
+                })
+        } else {
+            pictures::sample_request(action)
+        };
+        if let Some(request) = request {
+            host.request_sample(slot, request);
+        }
+    }
+}

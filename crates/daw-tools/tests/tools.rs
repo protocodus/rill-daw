@@ -615,7 +615,13 @@ fn application_capabilities_are_separate_from_canonical_availability() {
     assert_eq!(tool_specs_for(ToolProfile::Application).len(), all.len());
 }
 
-fn schema_example(schema: &Value) -> Value {
+fn schema_example(schema: &Value, root: &Value) -> Value {
+    if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
+        let target = root
+            .pointer(reference.strip_prefix('#').expect("local schema reference"))
+            .expect("published schema reference resolves");
+        return schema_example(target, root);
+    }
     if let Some(value) = schema.get("const") {
         return value.clone();
     }
@@ -624,7 +630,7 @@ fn schema_example(schema: &Value) -> Value {
     }
     for variants in ["oneOf", "anyOf"] {
         if let Some(values) = schema.get(variants) {
-            return schema_example(&values[0]);
+            return schema_example(&values[0], root);
         }
     }
     match schema["type"].as_str().unwrap() {
@@ -633,12 +639,12 @@ fn schema_example(schema: &Value) -> Value {
                 .as_object()
                 .unwrap()
                 .iter()
-                .map(|(name, schema)| (name.clone(), schema_example(schema)))
+                .map(|(name, schema)| (name.clone(), schema_example(schema, root)))
                 .collect(),
         ),
         "array" => Value::Array(
             (0..schema["minItems"].as_u64().unwrap_or(1))
-                .map(|_| schema_example(&schema["items"]))
+                .map(|_| schema_example(&schema["items"], root))
                 .collect(),
         ),
         "integer" => json!(schema["minimum"].as_u64().unwrap_or(1)),
@@ -654,9 +660,9 @@ fn schema_example(schema: &Value) -> Value {
 fn every_published_edit_shape_deserializes_to_the_real_command_contract() {
     let schema = song_edit_schema();
     let variants = schema["oneOf"].as_array().unwrap();
-    assert_eq!(variants.len(), 91);
+    assert_eq!(variants.len(), 95);
     for variant in variants {
-        let example = schema_example(variant);
+        let example = schema_example(variant, &schema);
         serde_json::from_value::<SongEdit>(example.clone()).unwrap_or_else(|error| {
             panic!("Published command schema disagrees with serde: {example}: {error}")
         });

@@ -208,14 +208,14 @@ project-version change was needed.
 
 Rill's built-in devices are a separate variant, `"Builtin": {"device": "r1-filter"}`,
 for both instruments and inserts. `device` is 1–32 characters of `a-z`, `0-9`
-and `-`; their state is only the normalized `parameters` overrides keyed by the
-device's stable parameter IDs, so `state` must be empty. A device ID this
+and `-`; their parameter state is the normalized `parameters` overrides keyed by the
+device's stable parameter IDs, so opaque `state` must be empty. A device ID this
 version does not know stays in the project unchanged: an unknown insert passes
 audio through and an unknown instrument is silent. Older Rill versions reject
 the variant. A built-in instrument that plays recordings (`r1-sampler`) adds
 `samples`: `"Builtin": {"device": "r1-sampler", "samples": [{"slot": 0,
-"path": "assets/00000003.wav", "name": "Felt piano"}]}`. At most 16 samples,
-one per slot from 0 to 15; `name` is optional (at most 256 characters) and is
+"path": "assets/00000003.wav", "name": "Felt piano"}]}`. At most 128 source recordings,
+one per slot from 0 to 127; `name` is optional (at most 256 characters) and is
 what the panel shows. Without samples the field is omitted, so older projects
 load unchanged and Rill writes them as before. Sample files are audio sources
 like audio clips': a `.rill` bundle stores them in `assets/` (one copy for a
@@ -227,6 +227,24 @@ device has a sidechain input (`r1-compressor`) may carry `inputs` routes like
 a plug-in insert: its sidechain is `bus` 1, `first_channel` 0. Routes to
 another address, or on a device without a sidechain, are kept in the file but
 the song does not play until they are removed; the error names the insert.
+
+Sampling instruments may also store `sample_names` and `sample_players`, maps
+keyed by logical player slot: Sampler has slot 0, and Drums has pads 0–15.
+Names are independent of source filenames. A player node has a stable `id`, an
+optional `name`, and a `kind`: `Sample` holds a source-pool `slot`, normalized
+`start`/`end`, `reverse` and `gain_db`; `All`, `Random` and `RoundRobin` hold
+`children`; `Velocity` holds `{min,max,child}` entries with inclusive MIDI
+velocity ranges. Trees are bounded to 256 nodes, eight levels and 32 simultaneous
+leaves. Missing maps default empty; a missing root plays its legacy source slot,
+preserving old projects. Shared recordings remain one bundled asset even when
+multiple leaves use different crops or gains.
+
+The top-level Project `samples` collection contains reusable
+`{id,name,path}` sources independent of tracks and clips. Bouncing into Project
+samples adds one entry atomically; loading it into an instrument does not remove
+it from the collection. Pool-only recordings are bundled, deduplicated and
+checked with other project media. Sample-root folder settings and their manual
+scan cache live in application configuration, outside the portable project.
 
 Plug-in binaries and external sample libraries managed by a plug-in are not
 included. Plug-in paths are made absolute when saving a bundle and retained when

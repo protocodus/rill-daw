@@ -12,6 +12,7 @@ struct TableHost {
     values: HashMap<u32, f64>,
     defaults: HashMap<u32, f64>,
     batches: usize,
+    commits: Vec<(&'static str, Vec<u32>)>,
     /// The IDs of every `set_values` call and of every `set_value`, in order.
     batch_ids: Vec<Vec<u32>>,
     singles: Vec<u32>,
@@ -28,6 +29,7 @@ struct TableHost {
     /// What the other slots hold.
     samples: HashMap<u32, SampleSummary>,
     sample_requests: Vec<(u32, SampleRequest)>,
+    players: HashMap<u32, daw_dsp::sample_player::PlayerNode>,
 }
 
 impl TableHost {
@@ -62,6 +64,11 @@ impl DeviceHost for TableHost {
         self.batch_ids
             .push(values.iter().map(|(id, _)| *id).collect());
         self.values.extend(values.iter().copied());
+    }
+    fn commit_values(&mut self, values: &[(u32, f64)], label: &'static str) {
+        self.commits
+            .push((label, values.iter().map(|(id, _)| *id).collect()));
+        self.set_values(values);
     }
     fn telemetry(&self) -> Option<Arc<Telemetry>> {
         self.telemetry.clone()
@@ -98,6 +105,9 @@ impl DeviceHost for TableHost {
             0 => self.sample.as_ref(),
             _ => self.samples.get(&slot),
         }
+    }
+    fn sample_player(&self, group: u32) -> Option<&daw_dsp::sample_player::PlayerNode> {
+        self.players.get(&group)
     }
     fn request_sample(&mut self, slot: u32, request: SampleRequest) {
         self.sample_requests.push((slot, request));
@@ -306,6 +316,33 @@ impl Panel {
             &mut self.host,
             &mut self.state,
         )
+    }
+
+    fn click_label(&mut self, label: &str) {
+        let ctx = self.ctx.clone();
+        let output = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 1000.0))),
+                time: Some(ctx.cumulative_frame_nr() as f64 * 0.1),
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.scope(|ui| show(ui, self.descriptor, &mut self.host, &mut self.state));
+                });
+            },
+        );
+        let at = output
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.text() == label => {
+                    Some(text.pos + text.galley.size() * 0.5)
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("Missing {label}"));
+        self.click(at, 1);
     }
 
     /// Hover, then press and release in separate frames, as a real pointer does.
@@ -1735,6 +1772,41 @@ fn spacer_picture_places_a_synced_echo_at_the_song_tempo_while_nothing_plays() {
 }
 
 #[test]
+fn randomize_clicks_commit_one_named_complete_step_each() {
+    let mut panel = Panel::new(&spacer::DESCRIPTOR);
+    let ctx = panel.ctx.clone();
+    let output = ctx.run(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 1000.0))),
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.scope(|ui| show(ui, panel.descriptor, &mut panel.host, &mut panel.state));
+            });
+        },
+    );
+    let at = output
+        .shapes
+        .iter()
+        .find_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) if text.galley.text() == "100%" => {
+                Some(text.pos + text.galley.size() * 0.5)
+            }
+            _ => None,
+        })
+        .expect("Randomize amount button");
+    panel.click(at, 2);
+    assert_eq!(panel.host.commits.len(), 2);
+    assert_eq!(panel.host.batches, 2);
+    assert!(panel.host.singles.is_empty());
+    for (label, ids) in &panel.host.commits {
+        assert_eq!(*label, "Randomize device");
+        assert_eq!(ids.len(), spacer::DESCRIPTOR.parameters.len());
+    }
+}
+
+#[test]
 fn a_random_roll_sets_the_whole_device_as_one_step() {
     let host = TableHost::new(&spacer::DESCRIPTOR);
     let values = random_roll(&spacer::DESCRIPTOR, &host, 0.1, 3);
@@ -1839,6 +1911,7 @@ fn sampler_markers_drag_like_their_knobs() {
         name: "Piano C4".into(),
         seconds: 2.0,
         peaks: vec![(-0.5, 0.5); 256],
+        audible_region: None,
     });
     panel.set(sampler::LOOP_MODE, 1.0);
     let view = panel.state.picture_rects.last().copied().unwrap();
@@ -1974,7 +2047,7 @@ fn drums_controls_stay_inside_their_cards() {
         }
         // The kit's Volume inside the kit card, beside the pads.
         let volume = panel.cell(drums::VOLUME);
-        let kit_right = origin + 5.0 * column + 4.0 * gap;
+        let kit_right = origin + 6.0 * column + 5.0 * gap;
         assert!(volume.left() >= panel.state.picture_rects[0].right());
         assert!(volume.right() <= kit_right + 0.5, "{volume:?}");
     }
@@ -1990,6 +2063,15 @@ fn drum_pad(panel: &Panel, pad: usize) -> Pos2 {
     );
     let (column, row) = ((pad % 4) as f32, (3 - pad / 4) as f32);
     grid.min + vec2(column * (cell.x + gap), row * (cell.y + gap)) + cell * 0.5
+}
+
+#[test]
+fn drums_pads_reserve_larger_labels_and_audition_targets() {
+    let panel = Panel::new(&drums::DESCRIPTOR);
+    let grid = panel.state.picture_rects[0];
+    let gap = daw_ui::tokens::SPACE_SM;
+    assert!((grid.width() - 3.0 * gap) / 4.0 >= 85.0);
+    assert!((grid.height() - 3.0 * gap) / 4.0 >= 70.0);
 }
 
 #[test]
@@ -2055,6 +2137,7 @@ fn drums_markers_drag_the_selected_pads_start_and_end() {
             name: "Clap".into(),
             seconds: 0.5,
             peaks: vec![(-0.5, 0.5); 128],
+            audible_region: None,
         },
     );
     panel.state.pad = 3;
@@ -2063,6 +2146,76 @@ fn drums_markers_drag_the_selected_pads_start_and_end() {
     let at = |share: f32| pos2(inner.left() + inner.width() * share, inner.center().y);
     panel.drag(at(0.0), at(0.2));
     assert!((panel.plain(drums::id(3, drums::START)) - 20.0).abs() < 0.5);
+    assert_eq!(panel.plain(drums::id(0, drums::START)), 0.0);
+}
+
+#[test]
+fn crossed_master_markers_export_and_trim_the_same_audible_region() {
+    let mut panel = Panel::new(&sampler::DESCRIPTOR);
+    panel.host.sample = Some(SampleSummary {
+        name: "Crossed crop".into(),
+        seconds: 1.0,
+        peaks: vec![(-0.5, 0.5); 128],
+        audible_region: Some((0.3, 0.7)),
+    });
+    panel.set(sampler::START, 80.0);
+    panel.set(sampler::END, 20.0);
+    panel.click_label("Sample actions");
+    panel.click_label("Export sample…");
+    let Some((
+        0,
+        SampleRequest::ExportRegion {
+            start,
+            end,
+            reverse,
+            ..
+        },
+    )) = panel.host.sample_requests.last()
+    else {
+        panic!("region export requested");
+    };
+    assert!((*start - 0.2).abs() < 0.0001 && (*end - 0.8).abs() < 0.0001);
+    assert!(!reverse, "crossing markers does not reverse playback");
+    panel.click_label("Sample actions");
+    panel.click_label("Trim silence");
+    assert!((panel.plain(sampler::START) - 30.0).abs() < 0.001);
+    assert!((panel.plain(sampler::END) - 70.0).abs() < 0.001);
+    assert_eq!(panel.host.commits.last().unwrap().0, "Trim silence");
+}
+
+#[test]
+fn drum_leaf_preview_maps_master_markers_into_its_own_source_region() {
+    use daw_dsp::sample_player::{PlayerKind, PlayerNode};
+    let mut panel = Panel::new(&drums::DESCRIPTOR);
+    panel.host.samples.insert(
+        47,
+        SampleSummary {
+            name: "Layer source".into(),
+            seconds: 1.0,
+            peaks: vec![(-0.5, 0.5); 128],
+            audible_region: Some((0.2, 0.8)),
+        },
+    );
+    panel.host.players.insert(
+        3,
+        PlayerNode {
+            id: 1,
+            name: String::new(),
+            kind: PlayerKind::Sample {
+                slot: 47,
+                start: 0.1,
+                end: 0.9,
+                reverse: false,
+                gain_db: 0.0,
+            },
+        },
+    );
+    panel.state.pad = 3;
+    panel.frame(vec![]);
+    let view = panel.state.picture_rects[1].shrink(1.0);
+    let at = |share: f32| pos2(view.left() + view.width() * share, view.center().y);
+    panel.drag(at(0.1), at(0.3));
+    assert!((panel.plain(drums::id(3, drums::START)) - 25.0).abs() < 0.5);
     assert_eq!(panel.plain(drums::id(0, drums::START)), 0.0);
 }
 

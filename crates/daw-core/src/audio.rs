@@ -8,19 +8,17 @@ impl crate::Project {
     pub fn validate_audio_destination(&self, destination: &Path) -> Result<()> {
         let canonical_destination = std::fs::canonicalize(destination).ok();
         let destination_file = same_file::Handle::from_path(destination).ok();
-        for track in &self.tracks {
-            for path in track.audio_paths() {
-                let canonical_match = canonical_destination.as_ref().is_some_and(|destination| {
-                    std::fs::canonicalize(path).is_ok_and(|source| source == *destination)
-                });
-                let identity_match = destination_file.as_ref().is_some_and(|destination| {
-                    same_file::Handle::from_path(path).is_ok_and(|source| source == *destination)
-                });
-                ensure!(
-                    !canonical_match && !identity_match,
-                    "Choose a different output file; this destination is an audio source: {path}"
-                );
-            }
+        for path in self.audio_paths() {
+            let canonical_match = canonical_destination.as_ref().is_some_and(|destination| {
+                std::fs::canonicalize(path).is_ok_and(|source| source == *destination)
+            });
+            let identity_match = destination_file.as_ref().is_some_and(|destination| {
+                same_file::Handle::from_path(path).is_ok_and(|source| source == *destination)
+            });
+            ensure!(
+                !canonical_match && !identity_match,
+                "Choose a different output file; this destination is an audio source: {path}"
+            );
         }
         Ok(())
     }

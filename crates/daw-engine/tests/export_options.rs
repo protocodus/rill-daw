@@ -120,3 +120,64 @@ fn exact_project_export_failure_preserves_the_existing_destination() {
     assert_eq!(std::fs::read(output).unwrap(), previous);
     assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 2);
 }
+
+#[test]
+fn bounded_bounce_can_keep_releases_without_changing_exact_loop_exports() {
+    use daw_core::{Instrument, Note};
+    use daw_engine::{ExportRange, export_project_wav_with_report};
+    let directory = tempfile::tempdir().unwrap();
+    let mut project = Project::new();
+    let track = project.add_midi_track("Percussion source");
+    let track = project.track_mut(track).unwrap();
+    track.instrument = Instrument::builtin("r1-mini");
+    track.clips.push(Clip::midi(
+        "Gesture",
+        2.0,
+        1.0,
+        vec![Note::new(48, 0.0, 0.3, 100), Note::new(55, 0.4, 0.6, 90)],
+    ));
+    let full_path = directory.path().join("Full.wav");
+    let range_path = directory.path().join("Region with release.wav");
+    let exact_path = directory.path().join("Exact loop.wav");
+    let full =
+        export_project_wav_with_report(&project, &full_path, 8_000, ExportOptions::default())
+            .unwrap();
+    let range = ExportRange {
+        start_beat: 2.0,
+        end_beat: 3.0,
+    };
+    let bounded = export_project_wav_with_report(
+        &project,
+        &range_path,
+        8_000,
+        ExportOptions {
+            range: Some(range),
+            extend_range_tails: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let exact = export_project_wav_with_report(
+        &project,
+        &exact_path,
+        8_000,
+        ExportOptions {
+            range: Some(range),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(bounded.frames, full.frames - 8_000);
+    assert_eq!(exact.frames, 4_000);
+    assert!(bounded.frames > exact.frames);
+    let full = AudioData::load_wav(full_path).unwrap();
+    let bounded = AudioData::load_wav(range_path).unwrap();
+    let exact = AudioData::load_wav(exact_path).unwrap();
+    assert_eq!(bounded.samples, full.samples[16_000..]);
+    assert_eq!(exact.samples, bounded.samples[..8_000]);
+    assert!(
+        bounded.samples[8_000..]
+            .iter()
+            .any(|sample| sample.abs() > 0.0001)
+    );
+}

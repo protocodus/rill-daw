@@ -670,6 +670,19 @@ impl Harness {
                 && Rect::from_min_size(Pos2::ZERO, self.size).contains(to),
             "Pointer coordinates must be finite and within the viewport"
         );
+        if matches!(
+            phase,
+            PointerPhase::DoubleClick | PointerPhase::DoubleClickBatched
+        ) {
+            // An explicit double-click starts its own gesture. egui counts a
+            // third click from global timestamps, even on another control, so
+            // separate this pair from earlier automation actions without a
+            // wall-clock sleep. The pair itself retains normal frame timing.
+            self.time += self
+                .ctx
+                .options(|options| options.input_options.max_double_click_delay)
+                * 2.0;
+        }
         let send = |this: &mut Self, pos: Pos2, pressed: Option<bool>| {
             let mut events = vec![Event::PointerMoved(pos)];
             if let Some(pressed) = pressed {
@@ -1687,6 +1700,7 @@ impl Harness {
             "popups": {
                 "library": self.app.library_open, "setup": self.app.setup_open,
                 "properties": self.app.inspector_open, "instrument": self.app.instrument_open,
+                "sample_player": self.app.sample_player_editor.open,
                 "effects": self.app.effects_open, "routing": self.app.routing_open,
                 "automation": self.app.automation_open, "history": self.app.history_open,
                 "crossfade": self.app.crossfade_open, "join": self.app.join_open,
@@ -1757,6 +1771,7 @@ impl Harness {
             let s = engine.snapshot();
             json!({
                 "engine_id": s.engine_id, "playing": s.playing,
+                "sample_audition_active": engine.sample_audition_active(),
                 "position_beats": s.position_beats,
                 "peak_left": s.peak_left, "peak_right": s.peak_right,
                 "underruns": s.underruns, "render_errors": s.render_errors,
@@ -1873,6 +1888,18 @@ impl Harness {
             self.ctx
                 .data(|data| data.get_temp::<Value>(egui::Id::new("library_diagnostics")))
                 .unwrap_or(Value::Null)
+        } else {
+            Value::Null
+        };
+        state["sample_player"] = if self.app.sample_player_editor.open {
+            let player = &self.app.instrument_ui.device_panel.player;
+            json!({
+                "selected":player.selected,
+                "rows":player.rows.iter().map(|(id, rect)| json!({"id":id,"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]})).collect::<Vec<_>>(),
+                "waveform":player.waveform.map(|rect| json!({"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]})),
+                "controls":player.controls.iter().map(|(name,rect)| json!({"name":name,"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]})).collect::<Vec<_>>(),
+                "palette":self.ctx.data(|data| data.get_temp::<Value>(egui::Id::new("sample_palette_diagnostics"))),
+            })
         } else {
             Value::Null
         };

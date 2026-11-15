@@ -633,6 +633,61 @@ impl Project {
         self.set_device_sample(track, slot, None)
     }
 
+    /// Set a logical sample slot's label without changing its recordings.
+    /// A blank name restores the source-derived display name.
+    pub fn rename_device_sample_slot(&mut self, track: u64, slot: u32, name: &str) -> Result<()> {
+        ensure!(
+            (slot as usize) < MAX_DEVICE_SAMPLES,
+            "Sample slot {slot} is out of range"
+        );
+        let name = name.trim();
+        if !name.is_empty() {
+            crate::model::validate_device_sample_name(name)?;
+        }
+        let channel = self.track_mut(track).context("Track not found")?;
+        let Instrument::Builtin { sample_names, .. } = &mut channel.instrument else {
+            bail!("Only a built-in instrument has sample slots");
+        };
+        if name.is_empty() {
+            sample_names.remove(&slot);
+        } else {
+            sample_names.insert(slot, name.to_owned());
+        }
+        Ok(())
+    }
+
+    /// Replace one logical slot's playback tree atomically. None restores its
+    /// original single recording; the sample pool itself remains unchanged.
+    pub fn set_sample_player(
+        &mut self,
+        track: u64,
+        slot: u32,
+        player: Option<daw_dsp::sample_player::PlayerNode>,
+    ) -> Result<()> {
+        ensure!(
+            (slot as usize) < MAX_DEVICE_SAMPLES,
+            "Sample slot {slot} is out of range"
+        );
+        if let Some(player) = &player {
+            player
+                .validate(MAX_DEVICE_SAMPLES as u32)
+                .map_err(anyhow::Error::msg)?;
+        }
+        let channel = self.track_mut(track).context("Track not found")?;
+        let Instrument::Builtin { sample_players, .. } = &mut channel.instrument else {
+            bail!("Only a built-in instrument has sample players");
+        };
+        match player {
+            Some(player) => {
+                sample_players.insert(slot, player);
+            }
+            None => {
+                sample_players.remove(&slot);
+            }
+        }
+        Ok(())
+    }
+
     fn set_device_sample(
         &mut self,
         track: u64,

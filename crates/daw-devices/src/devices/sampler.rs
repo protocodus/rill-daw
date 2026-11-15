@@ -15,6 +15,9 @@ use crate::{
     Device, DeviceDescriptor, DeviceKind, Event, EventKind, ParamRange, ParamSpec, ProcessContext,
     SampleData, StereoIo, Telemetry,
 };
+use daw_dsp::sample_player::{
+    MAX_SAMPLE_SLOTS, MAX_TRIGGER_LAYERS, PlayerNode, PlayerProgram, SampleTrigger,
+};
 use std::sync::Arc;
 
 pub const ROOT: u32 = 1;
@@ -477,6 +480,7 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
     category: "Sampler",
     parameters: &PARAMETERS,
     sample_slots: 1,
+    sample_capacity: 128,
     sidechain_input: false,
     factory_presets: &[
         include_str!("../../presets/r1-sampler/default.rillpreset"),
@@ -723,6 +727,23 @@ struct Pending {
     /// Cleared when the key is released during the fade.
     held: bool,
     glide_from: f32,
+    selection: Selection,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct Selection {
+    layers: [SampleTrigger; MAX_TRIGGER_LAYERS],
+    count: usize,
+}
+
+#[derive(Clone, Debug, Default)]
+struct Layer {
+    source: SampleTrigger,
+    region: Region,
+    playhead: Playhead,
+    step: Ramp,
+    reader: Option<Step>,
+    fresh: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -736,15 +757,12 @@ struct Voice {
     pending: Option<Pending>,
     fade: f32,
     reverse: bool,
-    region: Region,
-    playhead: Playhead,
+    layers: [Layer; MAX_TRIGGER_LAYERS],
+    layer_count: usize,
     amp: Adsr,
     filter_envelope: Adsr,
     /// Two stages for each channel.
     filters: [Svf; 4],
-    /// Samples of the recording per output sample.
-    step: Ramp,
-    reader: Option<Step>,
     g: Ramp,
     /// Left and right gain: velocity, LFO level and pan.
     gains: [Ramp; 2],
@@ -781,9 +799,10 @@ pub struct Sampler {
     settings: Settings,
     dirty: bool,
     sample_rate: f32,
-    sample: Option<Arc<SampleData>>,
+    samples: [Option<Arc<SampleData>>; MAX_SAMPLE_SLOTS as usize],
+    player: Option<PlayerProgram>,
     bank: &'static SincBank,
-    voices: [Voice; MAX_VOICES],
+    voices: Box<[Voice]>,
     held: [Note; HELD_NOTES],
     held_count: usize,
     sustain: bool,
@@ -825,9 +844,10 @@ impl Sampler {
             }),
             dirty: true,
             sample_rate: 48_000.0,
-            sample: None,
+            samples: std::array::from_fn(|_| None),
+            player: None,
             bank: SincBank::shared(),
-            voices: std::array::from_fn(|_| Voice::default()),
+            voices: (0..MAX_VOICES).map(|_| Voice::default()).collect(),
             held: [Note::default(); HELD_NOTES],
             held_count: 0,
             sustain: false,
@@ -971,16 +991,22 @@ impl Sampler {
                 1.0 - (-4.6 / glide_periods.max(1.0)).exp()
             },
         };
-        let Some(sample) = &self.sample else {
-            return;
-        };
-        let (sample, modulation) = (Arc::clone(sample), self.modulation);
+        let modulation = self.modulation;
         let mut active = 0;
         for (index, voice) in self.voices.iter_mut().enumerate() {
             let playhead = if voice.active() {
                 active += 1;
-                voice_control(voice, &s, &modulation, &sample, rate, false);
-                (voice.playhead.position(&voice.region) / sample.frames().max(1) as f64) as f32
+                voice_control(voice, &s, &modulation, &self.samples, rate, false);
+                voice.layers[..voice.layer_count]
+                    .iter()
+                    .find_map(|layer| {
+                        let sample = self.samples[layer.source.slot as usize].as_ref()?;
+                        (!layer.playhead.is_done()).then(|| {
+                            (layer.playhead.position(&layer.region) / sample.frames().max(1) as f64)
+                                as f32
+                        })
+                    })
+                    .unwrap_or(-1.0)
             } else {
                 -1.0
             };
@@ -1000,10 +1026,25 @@ impl Sampler {
         }
     }
 
-    fn start(&mut self, index: usize, note: Note, glide_from: f32) {
-        let Some(sample) = self.sample.clone() else {
+    fn select(&mut self, velocity: f32) -> Selection {
+        let mut selection = Selection::default();
+        if let Some(player) = &mut self.player {
+            let samples = &self.samples;
+            selection.count = player.trigger(
+                velocity,
+                |slot| samples[slot as usize].is_some(),
+                &mut selection.layers,
+            );
+        } else if self.samples[0].is_some() {
+            selection.count = 1;
+        }
+        selection
+    }
+
+    fn start(&mut self, index: usize, note: Note, glide_from: f32, selection: Selection) {
+        if selection.count == 0 {
             return;
-        };
+        }
         let s = self.settings;
         let modulation = self.modulation;
         let rate = self.sample_rate;
@@ -1025,20 +1066,32 @@ impl Sampler {
         // A retriggered voice starts its recording afresh; the envelope
         // continues from its level, so it does not click.
         voice.reverse = s.reverse;
-        voice.region = Region::new(
-            sample.frames(),
-            &s.markers(sample.sample_rate(), voice.reverse),
-        );
-        voice.playhead = Playhead::new(&voice.region);
+        let previous_layers = voice.layer_count;
+        voice.layer_count = selection.count;
+        for (index, (layer, source)) in voice
+            .layers
+            .iter_mut()
+            .zip(selection.layers)
+            .take(selection.count)
+            .enumerate()
+        {
+            let sample = self.samples[source.slot as usize]
+                .as_ref()
+                .expect("selected source");
+            layer.fresh = index >= previous_layers || layer.source != source;
+            layer.source = source;
+            layer.region = Region::new(
+                sample.frames(),
+                &source.markers(s.markers(sample.sample_rate(), voice.reverse)),
+            );
+            layer.playhead = Playhead::new(&layer.region);
+        }
         voice.amp.gate_on();
         voice.filter_envelope.gate_on();
-        voice_control(voice, &s, &modulation, &sample, rate, !was_active);
+        voice_control(voice, &s, &modulation, &self.samples, rate, !was_active);
     }
 
     fn note_on(&mut self, id: u32, pitch: f32, velocity: f32) {
-        if self.sample.is_none() {
-            return;
-        }
         let note = Note {
             id,
             pitch,
@@ -1050,18 +1103,22 @@ impl Sampler {
             self.mono_note_on(note, glide_from);
             return;
         }
+        let selection = self.select(note.velocity);
+        if selection.count == 0 {
+            return;
+        }
         let count = self.settings.voices;
         if let Some(index) = self.voices[..count].iter().position(|voice| {
             voice.amp.is_active() && voice.note.id == id && voice.pending.is_none()
         }) {
-            self.start(index, note, glide_from);
+            self.start(index, note, glide_from, selection);
             return;
         }
         if let Some(index) = self.voices[..count]
             .iter()
             .position(|voice| !voice.active())
         {
-            self.start(index, note, glide_from);
+            self.start(index, note, glide_from, selection);
             return;
         }
         // Steal the quietest releasing voice, else the oldest, after a short fade.
@@ -1083,6 +1140,7 @@ impl Sampler {
             note: Some(note),
             held: true,
             glide_from,
+            selection,
         });
         voice.held = false;
         voice.sustained = false;
@@ -1099,18 +1157,35 @@ impl Sampler {
         self.held[self.held_count] = note;
         self.held_count += 1;
         let legato = self.settings.mode == VoiceMode::Legato;
+        let retrigger = self.voices[0].pending.is_some()
+            || !self.voices[0].amp.is_active()
+            || !(legato && overlapping);
+        let selection = if retrigger {
+            self.select(note.velocity)
+        } else {
+            Selection::default()
+        };
+        if retrigger && selection.count == 0 {
+            return;
+        }
         let voice = &mut self.voices[0];
         if let Some(pending) = &mut voice.pending {
             *pending = Pending {
                 note: Some(note),
                 held: true,
                 glide_from: if legato { note.pitch } else { glide_from },
+                selection,
             };
             return;
         }
         if !voice.amp.is_active() || !(legato && overlapping) {
             // Mono retriggers the recording; Legato does only for a new phrase.
-            self.start(0, note, if legato { note.pitch } else { glide_from });
+            self.start(
+                0,
+                note,
+                if legato { note.pitch } else { glide_from },
+                selection,
+            );
             return;
         }
         // Legato between overlapping notes: the same voice glides on.
@@ -1202,43 +1277,54 @@ impl Sampler {
     }
 
     /// Adds `left.len()` samples of every voice, within one control period.
-    fn render(&mut self, sample: &SampleData, left: &mut [f32], right: &mut [f32]) {
+    fn render(&mut self, left: &mut [f32], right: &mut [f32]) {
         let s = self.settings;
         let shape = CleanShape::new(s.filter_type, s.steep, self.modulation.resonance);
         let fade_step = 1.0 / (STEAL_FADE_MS * 0.001 * self.sample_rate);
         let end_fade = f64::from(END_FADE_MS * 0.001 * self.sample_rate);
-        let (first, second) = (sample.channel(0), sample.channel(1));
-        let stereo = sample.channel_count() > 1;
         let bank = self.bank;
         for index in 0..MAX_VOICES {
             let voice = &mut self.voices[index];
             if !voice.active() {
                 continue;
             }
-            let Some(reader) = voice.reader else {
-                continue;
-            };
             for (out_left, out_right) in left.iter_mut().zip(right.iter_mut()) {
-                let step = f64::from(voice.step.next());
-                let reads = voice.playhead.reads(&voice.region);
-                let tap = first.tap(bank, &reader, reads.first.0);
-                let (mut l, mut r) = (first.read(&tap), 0.0);
-                if stereo {
-                    r = second.read(&tap);
-                }
-                l *= reads.first.1;
-                r *= reads.first.1;
-                if reads.second.1 > 0.0 {
-                    let tap = first.tap(bank, &reader, reads.second.0);
-                    l += reads.second.1 * first.read(&tap);
-                    if stereo {
-                        r += reads.second.1 * second.read(&tap);
+                let (mut l, mut r) = (0.0, 0.0);
+                for layer in &mut voice.layers[..voice.layer_count] {
+                    if layer.playhead.is_done() {
+                        continue;
                     }
+                    let Some(reader) = layer.reader else {
+                        continue;
+                    };
+                    let Some(sample) = &self.samples[layer.source.slot as usize] else {
+                        continue;
+                    };
+                    let (first, second) = (sample.channel(0), sample.channel(1));
+                    let stereo = sample.channel_count() > 1;
+                    let step = f64::from(layer.step.next());
+                    let reads = layer.playhead.reads(&layer.region);
+                    let tap = first.tap(bank, &reader, reads.first.0);
+                    let mut leaf_left = first.read(&tap) * reads.first.1;
+                    let mut leaf_right = if stereo {
+                        second.read(&tap) * reads.first.1
+                    } else {
+                        0.0
+                    };
+                    if reads.second.1 > 0.0 {
+                        let tap = first.tap(bank, &reader, reads.second.0);
+                        leaf_left += reads.second.1 * first.read(&tap);
+                        if stereo {
+                            leaf_right += reads.second.1 * second.read(&tap);
+                        }
+                    }
+                    if !stereo {
+                        leaf_right = leaf_left;
+                    }
+                    l += leaf_left * layer.source.gain;
+                    r += leaf_right * layer.source.gain;
+                    layer.playhead.advance(&layer.region, step, end_fade);
                 }
-                if !stereo {
-                    r = l;
-                }
-                voice.playhead.advance(&voice.region, step, end_fade);
                 let g = voice.g.next();
                 if s.filter_on {
                     let [a, b, c, d] = &mut voice.filters;
@@ -1252,7 +1338,10 @@ impl Sampler {
                 }
                 *out_left += l * amp * voice.gains[0].next();
                 *out_right += r * amp * voice.gains[1].next();
-                if voice.playhead.is_done() {
+                if voice.layers[..voice.layer_count]
+                    .iter()
+                    .all(|layer| layer.playhead.is_done())
+                {
                     voice.amp.reset();
                     voice.filter_envelope.reset();
                     if voice.pending.is_some() {
@@ -1270,7 +1359,7 @@ impl Sampler {
                 let Some(note) = pending.note.filter(|_| index < self.settings.voices) else {
                     continue;
                 };
-                self.start(index, note, pending.glide_from);
+                self.start(index, note, pending.glide_from, pending.selection);
                 if !pending.held {
                     let mode = self.settings.loop_mode;
                     let voice = &mut self.voices[index];
@@ -1292,23 +1381,31 @@ fn voice_control(
     voice: &mut Voice,
     s: &Settings,
     m: &Modulation,
-    sample: &SampleData,
+    samples: &[Option<Arc<SampleData>>; MAX_SAMPLE_SLOTS as usize],
     rate: f32,
     start: bool,
 ) {
     voice.pitch += (voice.note.pitch - voice.pitch) * m.glide;
-    // The markers follow their knobs while a voice plays.
-    voice.region = Region::new(
-        sample.frames(),
-        &s.markers(sample.sample_rate(), voice.reverse),
-    );
     let semitones = s.transposition(voice.pitch) + m.bend + m.lfo * m.lfo_pitch;
-    let step = ((semitones / 12.0).exp2() * sample.sample_rate() / rate)
-        .min(crate::dsp::resample::MAX_STEP);
-    let from = voice.step.target();
-    voice.step.to(step, start);
-    // For the fastest step of the period, so the cutoff is never too high.
-    voice.reader = Some(Step::new(if start { step } else { step.max(from) }));
+    for layer in &mut voice.layers[..voice.layer_count] {
+        let Some(sample) = &samples[layer.source.slot as usize] else {
+            continue;
+        };
+        // Global markers address each chosen leaf's own nondestructive region.
+        layer.region = Region::new(
+            sample.frames(),
+            &layer
+                .source
+                .markers(s.markers(sample.sample_rate(), voice.reverse)),
+        );
+        let step = ((semitones / 12.0).exp2() * sample.sample_rate() / rate)
+            .min(crate::dsp::resample::MAX_STEP);
+        let from = layer.step.target();
+        let jump = start || layer.fresh;
+        layer.step.to(step, jump);
+        layer.reader = Some(Step::new(if jump { step } else { step.max(from) }));
+        layer.fresh = false;
+    }
     let fenv = voice.filter_envelope.next_value();
     let octaves = m.cutoff_octaves
         + m.filter_env * fenv
@@ -1357,14 +1454,29 @@ impl Device for Sampler {
     }
 
     fn set_sample(&mut self, slot: u32, sample: Option<Arc<SampleData>>) {
-        if slot == 0 {
-            self.sample = sample.filter(|sample| sample.frames() > 0);
+        if let Some(destination) = self.samples.get_mut(slot as usize) {
+            *destination = sample.filter(|sample| sample.frames() > 0);
             for voice in &mut self.voices {
                 voice.reset();
             }
             // The reset voices take their envelope times again.
             self.dirty = true;
         }
+    }
+
+    fn set_sample_player(&mut self, group: u32, root: Option<&PlayerNode>) {
+        if group != 0 {
+            return;
+        }
+        let player = match root
+            .map(|root| PlayerProgram::compile(root, MAX_SAMPLE_SLOTS))
+            .transpose()
+        {
+            Ok(player) => player,
+            Err(_) => return,
+        };
+        self.player = player;
+        self.reset();
     }
 
     fn process(&mut self, context: &ProcessContext, events: &[Event], io: StereoIo<'_>) {
@@ -1376,7 +1488,6 @@ impl Device for Sampler {
         let (left, right) = (&mut left[..frames], &mut right[..frames]);
         left.fill(0.0);
         right.fill(0.0);
-        let sample = self.sample.clone();
         let mut event = 0;
         let mut frame = 0;
         while frame < frames {
@@ -1397,13 +1508,10 @@ impl Device for Sampler {
                 .countdown
                 .min(frames - frame)
                 .min(next_event.saturating_sub(frame).max(1));
-            if let Some(sample) = &sample {
-                self.render(
-                    sample,
-                    &mut left[frame..frame + span],
-                    &mut right[frame..frame + span],
-                );
-            }
+            self.render(
+                &mut left[frame..frame + span],
+                &mut right[frame..frame + span],
+            );
             self.countdown -= span;
             frame += span;
         }
@@ -1416,6 +1524,9 @@ impl Device for Sampler {
     }
 
     fn reset(&mut self) {
+        if let Some(player) = &mut self.player {
+            player.reset();
+        }
         if self.dirty {
             self.update_settings();
         }
@@ -1445,9 +1556,22 @@ impl Device for Sampler {
         // The release reaches −80 dB in about twice its set time; a one-shot
         // plays its recording out first.
         let release = self.settings.amp_envelope[4] * 0.001 * 2.0;
-        let recording = match (&self.sample, self.settings.loop_mode) {
-            (Some(sample), LoopMode::OneShot) => sample.frames() as f32 / sample.sample_rate(),
-            _ => 0.0,
+        let recording = if self.settings.loop_mode == LoopMode::OneShot {
+            let duration = |source: SampleTrigger| {
+                self.samples[source.slot as usize]
+                    .as_ref()
+                    .map_or(0.0, |sample| {
+                        sample.frames() as f32 / sample.sample_rate()
+                            * (source.end - source.start)
+                            * (self.settings.end - self.settings.start).abs()
+                    })
+            };
+            self.player.as_ref().map_or_else(
+                || duration(SampleTrigger::default()),
+                |player| player.samples().map(duration).fold(0.0_f32, f32::max),
+            )
+        } else {
+            0.0
         };
         ((release + recording + 0.05) * self.sample_rate) as u32
     }

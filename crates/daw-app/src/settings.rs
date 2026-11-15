@@ -27,6 +27,10 @@ pub struct Settings {
     pub history_limit: usize,
     pub scratch_dir: PathBuf,
     pub vst_dirs: Vec<PathBuf>,
+    /// Sample folders are indexed only when Scan folders is requested.
+    pub sample_roots: Vec<PathBuf>,
+    /// Audition a newly selected browser sample only when explicitly enabled.
+    pub sample_auto_play: bool,
     /// Successful project saves seed the next new project's picker too.
     pub last_project_directory: Option<PathBuf>,
 }
@@ -39,6 +43,7 @@ pub enum ExportRangeMode {
     #[default]
     Arrangement,
     Loop,
+    SelectedClips,
 }
 
 /// One mix file, or one file per selected channel.
@@ -143,6 +148,8 @@ impl Default for Settings {
             history_limit: daw_core::HISTORY_STEPS,
             scratch_dir: config_dir().join("Scratch"),
             vst_dirs: Vec::new(),
+            sample_roots: Vec::new(),
+            sample_auto_play: false,
             last_project_directory: None,
         }
     }
@@ -176,6 +183,14 @@ impl Settings {
                 .sample_rate
                 .is_none_or(|rate| (8_000..=192_000).contains(&rate)),
             "Invalid export sample rate"
+        );
+        anyhow::ensure!(
+            self.sample_roots.len() <= 64
+                && self
+                    .sample_roots
+                    .iter()
+                    .all(|root| !root.as_os_str().is_empty()),
+            "Choose at most 64 nonempty sample folders"
         );
         self.export
             .format
@@ -293,7 +308,7 @@ impl PluginLibrary {
     }
 }
 
-fn write_atomically(directory: &Path, name: &str, bytes: &[u8]) -> anyhow::Result<()> {
+pub(crate) fn write_atomically(directory: &Path, name: &str, bytes: &[u8]) -> anyhow::Result<()> {
     fs::create_dir_all(directory)?;
     let temp = temporary_path(directory, name);
     let mut file = OpenOptions::new()

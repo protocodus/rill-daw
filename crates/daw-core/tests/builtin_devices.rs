@@ -109,6 +109,148 @@ fn projects_without_device_samples_still_load() {
 }
 
 #[test]
+fn sample_slot_names_are_independent_bounded_and_undoable() {
+    let mut project = Project::new();
+    let track = project.add_instrument_track("Kit");
+    project
+        .set_instrument(track, Instrument::builtin("r1-drums"))
+        .unwrap();
+    let mut history = daw_core::History::new();
+    history.commit_named(&project, "Name pad");
+    EditBatch {
+        label: "Name pad".into(),
+        edits: vec![SongEdit::RenameDeviceSampleSlot {
+            track: track.into(),
+            slot: 3,
+            name: "  Soft clap  ".into(),
+        }],
+    }
+    .apply(&mut project)
+    .unwrap();
+    assert_eq!(
+        project.track(track).unwrap().instrument.sample_name(3),
+        Some("Soft clap")
+    );
+    assert!(history.undo(&mut project));
+    assert_eq!(
+        project.track(track).unwrap().instrument.sample_name(3),
+        None
+    );
+    assert!(history.redo(&mut project));
+
+    project
+        .load_device_sample(track, sample_at(3, "/old.wav"))
+        .unwrap();
+    project
+        .load_device_sample(track, sample_at(3, "/new.wav"))
+        .unwrap();
+    project
+        .load_device_sample(track, sample_at(19, "/layer.wav"))
+        .unwrap();
+    project.clear_device_sample(track, 3).unwrap();
+    assert_eq!(
+        project.track(track).unwrap().instrument.sample_name(3),
+        Some("Soft clap")
+    );
+    let before = project.clone();
+    for name in ["x".repeat(65), "line\nbreak".into()] {
+        assert!(project.rename_device_sample_slot(track, 3, &name).is_err());
+        assert_eq!(project, before);
+    }
+    let encoded = serde_json::to_string(&project).unwrap();
+    let restored: Project = serde_json::from_str(&encoded).unwrap();
+    assert_eq!(restored, project);
+    project.rename_device_sample_slot(track, 3, "   ").unwrap();
+    assert_eq!(
+        project.track(track).unwrap().instrument.sample_name(3),
+        None
+    );
+}
+
+#[test]
+fn player_trees_validate_atomically_and_names_are_audio_neutral() {
+    use daw_core::{PlayerKind, PlayerNode};
+    let mut project = Project::new();
+    let track = project.add_instrument_track("Sampler");
+    project
+        .set_instrument(track, Instrument::builtin("r1-sampler"))
+        .unwrap();
+    let mut root = PlayerNode {
+        id: 1,
+        name: "Body".into(),
+        kind: PlayerKind::All {
+            children: vec![PlayerNode::sample(2, 0), PlayerNode::sample(3, 127)],
+        },
+    };
+    project
+        .set_sample_player(track, 0, Some(root.clone()))
+        .unwrap();
+    let original = project.track(track).unwrap().instrument.clone();
+    root.name = "Renamed body".into();
+    root.find_mut(3).unwrap().name = "Transient".into();
+    project
+        .set_sample_player(track, 0, Some(root.clone()))
+        .unwrap();
+    project.rename_device_sample_slot(track, 0, "Main").unwrap();
+    assert!(original.audio_equivalent(&project.track(track).unwrap().instrument));
+    assert_ne!(original, project.track(track).unwrap().instrument);
+    let before = project.clone();
+    root.find_mut(3).unwrap().id = 2;
+    assert!(project.set_sample_player(track, 0, Some(root)).is_err());
+    assert_eq!(project, before);
+    let restored: Project =
+        serde_json::from_value(serde_json::to_value(&project).unwrap()).unwrap();
+    restored.validate().unwrap();
+    assert_eq!(restored, project);
+    project.set_sample_player(track, 0, None).unwrap();
+    assert!(
+        project
+            .track(track)
+            .unwrap()
+            .instrument
+            .sample_player(0)
+            .is_none()
+    );
+}
+
+#[test]
+fn removed_leaf_cleanup_preserves_shared_legacy_and_staged_recordings() {
+    use daw_core::PlayerNode;
+    let mut project = Project::new();
+    let track = project.add_instrument_track("Drums");
+    project
+        .set_instrument(track, Instrument::builtin("r1-drums"))
+        .unwrap();
+    for slot in [0, 16, 17, 18] {
+        project
+            .load_device_sample(track, sample_at(slot, &format!("/{slot}.wav")))
+            .unwrap();
+    }
+    for (group, slot) in [(0, 16), (1, 16), (2, 17)] {
+        project
+            .set_sample_player(track, group, Some(PlayerNode::sample(1, slot)))
+            .unwrap();
+    }
+    let before = project.track(track).unwrap().instrument.clone();
+    project.set_sample_player(track, 0, None).unwrap();
+    project.set_sample_player(track, 2, None).unwrap();
+    let after = &mut project.track_mut(track).unwrap().instrument;
+    after.release_removed_sample_bindings(&before, 16);
+    assert!(after.sample(0).is_some(), "implicit legacy recording");
+    assert!(
+        after.sample(16).is_some(),
+        "another player still references it"
+    );
+    assert!(after.sample(17).is_none(), "last reference was removed");
+    assert!(
+        after.sample(18).is_some(),
+        "staged recording was never referenced"
+    );
+    assert!(after.sample_slot_available(17, 16, 128));
+    assert!(!after.sample_slot_available(18, 16, 128));
+}
+
+#[test]
 fn device_samples_are_bounded_unique_and_only_on_builtin_instruments() {
     let mut project = Project::new();
     let track = project.add_instrument_track("Sampler");
@@ -126,7 +268,7 @@ fn device_samples_are_bounded_unique_and_only_on_builtin_instruments() {
     assert_eq!(instrument.sample(0).unwrap().path, "/b.wav");
     assert!(
         project
-            .load_device_sample(track, sample_at(16, "/c.wav"))
+            .load_device_sample(track, sample_at(128, "/c.wav"))
             .is_err()
     );
     assert!(project.load_device_sample(track, sample_at(1, "")).is_err());
@@ -146,6 +288,8 @@ fn device_samples_are_bounded_unique_and_only_on_builtin_instruments() {
         project.track_mut(track).unwrap().instrument = Instrument::Builtin {
             device: "r1-drums".into(),
             samples,
+            sample_names: Default::default(),
+            sample_players: Default::default(),
         };
         project.validate()
     };
@@ -235,6 +379,8 @@ fn a_bundle_naming_an_unbundled_sample_is_refused() {
     project.track_mut(track).unwrap().instrument = Instrument::Builtin {
         device: "r1-sampler".into(),
         samples: vec![sample_at(0, "../outside.wav")],
+        sample_names: Default::default(),
+        sample_players: Default::default(),
     };
     let bytes = {
         use std::io::Write;

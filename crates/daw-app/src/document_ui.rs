@@ -94,7 +94,22 @@ impl DawApp {
             | DocumentDialog::ImportAudio
             | DocumentDialog::ExportStems => unreachable!(),
         };
-        Some(format!("{}.{extension}", self.document_file_stem()))
+        let name = if kind == DocumentDialog::Export && !self.export_name.trim().is_empty() {
+            self.export_name
+                .trim()
+                .chars()
+                .map(|ch| {
+                    if matches!(ch, '/' | '\\' | '\0') {
+                        '_'
+                    } else {
+                        ch
+                    }
+                })
+                .collect()
+        } else {
+            self.document_file_stem()
+        };
+        Some(format!("{name}.{extension}"))
     }
 
     /// The saved filename stem, or the musical name of an unsaved project.
@@ -164,12 +179,13 @@ impl DawApp {
         } else {
             let dialog = match kind {
                 DocumentDialog::ImportAudio => {
-                    rfd::FileDialog::new().add_filter("Audio", &["wav", "mp3", "flac", "ogg"])
+                    rfd::FileDialog::new().add_filter("Audio", daw_core::SUPPORTED_AUDIO_EXTENSIONS)
                 }
-                DocumentDialog::Import => rfd::FileDialog::new().add_filter(
-                    "Audio / MIDI",
-                    &["wav", "mp3", "flac", "ogg", "mid", "midi"],
-                ),
+                DocumentDialog::Import => {
+                    let mut extensions = daw_core::SUPPORTED_AUDIO_EXTENSIONS.to_vec();
+                    extensions.extend_from_slice(&["mid", "midi"]);
+                    rfd::FileDialog::new().add_filter("Audio / MIDI", &extensions)
+                }
                 DocumentDialog::Export => {
                     let format = self.settings.export.format;
                     rfd::FileDialog::new().add_filter(format.label(), &[format.extension()])

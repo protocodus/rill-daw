@@ -534,6 +534,86 @@ fn process_does_not_allocate() {
     }
 }
 
+#[test]
+fn composed_sample_players_trigger_and_reset_without_allocating() {
+    use daw_dsp::sample_player::{PlayerKind, PlayerNode, VelocityChild};
+    let node = |id, kind| PlayerNode {
+        id,
+        name: String::new(),
+        kind,
+    };
+    let tree = node(
+        0,
+        PlayerKind::RoundRobin {
+            children: vec![
+                node(
+                    1,
+                    PlayerKind::All {
+                        children: (2..34).map(|id| PlayerNode::sample(id, 127)).collect(),
+                    },
+                ),
+                node(
+                    34,
+                    PlayerKind::Velocity {
+                        children: vec![VelocityChild {
+                            min: 1,
+                            max: 127,
+                            child: node(
+                                35,
+                                PlayerKind::Random {
+                                    children: (36..39)
+                                        .map(|id| PlayerNode::sample(id, 127))
+                                        .collect(),
+                                },
+                            ),
+                        }],
+                    },
+                ),
+            ],
+        },
+    );
+    for device_id in ["r1-drums", "r1-sampler"] {
+        let descriptor = daw_devices::descriptor(device_id).unwrap();
+        let mut device = prepared(descriptor);
+        device.set_sample(127, Some(recording()));
+        device.set_sample_player(0, Some(&tree));
+        let pitch = if device_id == "r1-drums" { 36.0 } else { 60.0 };
+        let events = [Event {
+            offset: 0,
+            kind: EventKind::NoteOn {
+                note: 1,
+                pitch,
+                velocity: 0.8,
+            },
+        }];
+        let mut left = [0.0; BLOCK];
+        let mut right = [0.0; BLOCK];
+        let mut audible = false;
+        let allocations = count_allocations(|| {
+            for block in 0..32 {
+                if block % 16 == 0 {
+                    device.reset();
+                }
+                device.process(
+                    &ProcessContext::default(),
+                    &events,
+                    StereoIo {
+                        left: &mut left,
+                        right: &mut right,
+                        sidechain: None,
+                    },
+                );
+                audible |= left.iter().any(|sample| sample.abs() > 1e-4);
+            }
+        });
+        assert_eq!(
+            allocations, 0,
+            "{device_id} allocates while playing sample trees"
+        );
+        assert!(audible, "{device_id} did not play the source pool");
+    }
+}
+
 /// A full-range jump of any continuous parameter must ramp, not click.
 #[test]
 fn parameter_jumps_are_click_free() {

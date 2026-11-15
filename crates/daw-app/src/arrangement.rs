@@ -38,6 +38,7 @@ enum Edit {
     Erase(u64, u64),
     LoopRange(f64, f64),
     Freeze(u64, Option<Vec<u64>>),
+    Bounce(u64, u64),
     Unfreeze(u64),
     MidiTransform(u64, u64, daw_ui::MidiClipAction),
     ClipMuted(u64, u64, bool),
@@ -167,15 +168,7 @@ impl DawApp {
                         .iter()
                         .filter_map(|file| file.path.as_ref()),
                 )
-                .any(|path| {
-                    path.extension()
-                        .and_then(|extension| extension.to_str())
-                        .is_some_and(|extension| {
-                            ["wav", "mp3", "flac", "ogg"]
-                                .iter()
-                                .any(|supported| extension.eq_ignore_ascii_case(supported))
-                        })
-                })
+                .any(|path| daw_core::is_supported_audio_path(path))
         });
         self.sync_arranger_selection();
         if let Some(length) = self.selected().map(|clip| clip.length).or_else(|| {
@@ -1769,6 +1762,13 @@ impl DawApp {
                                 popup = Some(PopupKind::Inspector);
                                 ui.close();
                             }
+                            if daw_ui::button(ui, "Bounce selection…")
+                                .on_hover_text("Render selected clips to a file or Project samples")
+                                .clicked()
+                            {
+                                edits.push(Edit::Bounce(track.id, clip.id));
+                                ui.close();
+                            }
                             if ui.add_enabled(freeze_channels.contains(&track.id) && !clip.muted, daw_ui::button_widget("Freeze clip"))
                                 .on_hover_text("Print this clip with its channel's insert processing to new audio below; retain and mute the original")
                                 .clicked()
@@ -2048,7 +2048,7 @@ impl DawApp {
                     let response = ui.scope_builder(egui::UiBuilder::new().max_rect(area), |ui| {
                         daw_ui::empty_workspace(ui, "Start a song", "Choose a sound, import a recording, or compose with AI.", &[
                             daw_ui::EmptyWorkspaceAction { id: "instrument", label: "Choose instrument…", description: "Browse installed instruments. Choosing a sound creates its MIDI track.", primary: true },
-                            daw_ui::EmptyWorkspaceAction { id: "import", label: "Import audio or MIDI…", description: "Import WAV, MP3, FLAC, Ogg or MIDI files. Drop audio files onto a track or the arranger.", primary: false },
+                            daw_ui::EmptyWorkspaceAction { id: "import", label: "Import audio or MIDI…", description: "Import audio or MIDI files. Drop audio files onto a track or the arranger.", primary: false },
                             daw_ui::EmptyWorkspaceAction { id: "ai", label: "Compose with AI", description: "Explore editable starting points in the song assistant. Nothing runs until you choose Send.", primary: false },
                         ])
                     }).inner;
@@ -2434,6 +2434,7 @@ impl DawApp {
                     | Edit::GroupMove(..)
                     | Edit::TransferGroup(..)
                     | Edit::LoopRange(..)
+                    | Edit::Bounce(..)
                     | Edit::Freeze(..)
                     | Edit::Unfreeze(..)
                     | Edit::MidiTransform(..)
@@ -2527,6 +2528,16 @@ impl DawApp {
                 }
                 Edit::LoopRange(start, end) => {
                     self.loop_range(start, end);
+                    continue;
+                }
+                Edit::Bounce(track, clip) => {
+                    if !self.arranger_selection.ids.contains(&clip) {
+                        self.arranger_selection.ids.clear();
+                        self.arranger_selection.ids.insert(clip);
+                    }
+                    self.selected_track = Some(track);
+                    self.selected_clip = Some(clip);
+                    self.open_bounce(false);
                     continue;
                 }
                 Edit::Freeze(track, clips) => {

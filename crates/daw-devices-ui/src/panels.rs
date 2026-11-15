@@ -568,7 +568,7 @@ fn drums_layout(mut layout: Layout, pad: usize) -> Layout {
     let at = |offset: u32| id(pad, offset);
     layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
     layout.cells = true;
-    layout.picture = Some(Picture::Drums { height: 200.0 });
+    layout.picture = Some(Picture::Drums { height: 320.0 });
     layout.picture_place = PicturePlace::Above;
     layout.sections = vec![
         cells(

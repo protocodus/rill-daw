@@ -76,13 +76,120 @@ pub fn decode_audio_to_wav(
     } else if &header[..4] == b"OggS" {
         validate_ogg(&mut file)?;
         "OGG"
+    } else if count >= 12 && &header[..4] == b"FORM" && matches!(&header[8..12], b"AIFF" | b"AIFC")
+    {
+        let declared = u64::from(u32::from_be_bytes(header[4..8].try_into().unwrap())) + 8;
+        ensure!(declared <= metadata.len(), "AIFF file is truncated");
+        "AIFF"
+    } else if count >= 8 && &header[4..8] == b"ftyp" {
+        validate_mp4(&mut file)?;
+        "M4A"
+    } else if &header[..4] == b"caff" {
+        validate_caf(&mut file)?;
+        "CAF"
+    } else if count >= 7 && header[0] == 0xff && header[1] & 0xf6 == 0xf0 {
+        validate_adts(&mut file)?;
+        "AAC"
     } else if &header[..3] == b"ID3" || (header[0] == 0xff && header[1] & 0xe0 == 0xe0) {
         validate_mp3(&mut file)?;
         "MP3"
     } else {
-        bail!("Unsupported or malformed audio; choose WAV, MP3, FLAC or OGG Vorbis");
+        bail!(
+            "Unsupported or malformed audio; choose WAV, AIFF, FLAC, MP3, Ogg Vorbis, AAC-LC, M4A or CAF"
+        );
     };
     decode_compressed(file, output, max_decoded_bytes, format)
+}
+
+/// Check packet lengths without buffering payloads. ADTS parsers may otherwise
+/// treat a partial last AAC frame as ordinary EOF.
+fn validate_adts(file: &mut File) -> Result<()> {
+    let length = file.metadata()?.len();
+    let mut position = 0u64;
+    while position < length {
+        file.seek(SeekFrom::Start(position))?;
+        let mut header = [0u8; 7];
+        file.read_exact(&mut header)
+            .context("AAC frame header is truncated")?;
+        ensure!(
+            header[0] == 0xff
+                && header[1] & 0xf6 == 0xf0
+                && header[2] >> 6 == 1
+                && (header[2] >> 2) & 15 < 13,
+            "AAC frame header is corrupt or unsupported; AAC-LC is required"
+        );
+        let size = (u64::from(header[3] & 3) << 11)
+            | (u64::from(header[4]) << 3)
+            | u64::from(header[5] >> 5);
+        let header_size = if header[1] & 1 == 1 { 7 } else { 9 };
+        ensure!(
+            size > header_size && position + size <= length,
+            "AAC frame is truncated"
+        );
+        position += size;
+    }
+    file.seek(SeekFrom::Start(0))?;
+    Ok(())
+}
+
+/// ISO media atoms can put their index after the audio. Validate every top-level
+/// extent before the demuxer seeks through it, retaining only one atom header.
+fn validate_mp4(file: &mut File) -> Result<()> {
+    let length = file.metadata()?.len();
+    let mut position = 0u64;
+    let mut atoms = 0;
+    while position < length {
+        ensure!(atoms < 100_000, "M4A container has too many atoms");
+        file.seek(SeekFrom::Start(position))?;
+        let mut header = [0u8; 8];
+        file.read_exact(&mut header)
+            .context("M4A atom header is truncated")?;
+        let size = u32::from_be_bytes(header[..4].try_into().unwrap());
+        let (size, minimum) = match size {
+            0 => (length - position, 8),
+            1 => {
+                let mut extended = [0u8; 8];
+                file.read_exact(&mut extended)
+                    .context("M4A extended atom is truncated")?;
+                (u64::from_be_bytes(extended), 16)
+            }
+            size => (u64::from(size), 8),
+        };
+        ensure!(
+            size >= minimum && size <= length - position,
+            "M4A atom is truncated or invalid"
+        );
+        position += size;
+        atoms += 1;
+    }
+    file.seek(SeekFrom::Start(0))?;
+    Ok(())
+}
+
+fn validate_caf(file: &mut File) -> Result<()> {
+    let length = file.metadata()?.len();
+    let mut position = 8u64;
+    let mut chunks = 0;
+    while position < length {
+        ensure!(chunks < 100_000, "CAF container has too many chunks");
+        ensure!(length - position >= 12, "CAF chunk header is truncated");
+        file.seek(SeekFrom::Start(position))?;
+        let mut header = [0u8; 12];
+        file.read_exact(&mut header)
+            .context("CAF chunk header is truncated")?;
+        let size = i64::from_be_bytes(header[4..12].try_into().unwrap());
+        if size == -1 && &header[..4] == b"data" {
+            break;
+        }
+        ensure!(
+            size >= 0 && size as u64 <= length - position - 12,
+            "CAF chunk is truncated or invalid"
+        );
+        position += 12 + size as u64;
+        chunks += 1;
+    }
+    file.seek(SeekFrom::Start(0))?;
+    Ok(())
 }
 
 /// MPEG readers can treat a partial last frame as ordinary EOF. Validate the
@@ -337,11 +444,13 @@ fn decode_compressed(
         .context("Audio file has no decodable audio track")?;
     let track_id = track.id;
     let expected = track.num_frames;
+    let time_base = track.time_base;
     let params = track
         .codec_params
         .as_ref()
         .and_then(|params| params.audio())
         .context("Audio codec is not supported")?;
+    let aac = params.codec == symphonia::core::codecs::audio::well_known::CODEC_ID_AAC;
     if let (Some(rate), Some(channels)) = (params.sample_rate, params.channels.as_ref()) {
         validate_spec(rate, channels.count())?;
         if let Some(frames) = expected {
@@ -371,10 +480,11 @@ fn decode_compressed(
         .next_packet()
         .context("Read audio packet; the source may be corrupt or truncated")?
     {
-        ensure!(
-            packet.track_id == track_id,
-            "Multiple or chained audio streams are not supported"
-        );
+        // The default audio track is independent of cover images or other
+        // tracks in an ISO media container. Ogg chains remain rejected above.
+        if packet.track_id != track_id {
+            continue;
+        }
         ensure!(
             packet.data.len() <= MAX_PACKET_BYTES,
             "Encoded audio packet exceeds the import limit"
@@ -394,11 +504,34 @@ fn decode_compressed(
             .frames()
             .checked_mul(channels)
             .context("Decoded audio size overflow")?;
+        // AAC decoders emit full transform blocks. The ISO sample table may
+        // declare a shorter final packet even without explicit trim fields.
+        // Respect that presentation duration instead of importing padding or
+        // weakening the final declared-frame completeness check.
+        let (first, presented) = if aac
+            && time_base.is_some_and(|base| base.numer.get() == 1 && base.denom.get() == rate)
+        {
+            let first =
+                usize::try_from(packet.trim_start.get()).context("AAC trim is too large")?;
+            let available = decoded
+                .frames()
+                .checked_sub(first)
+                .context("AAC trim exceeds decoded packet")?;
+            let presented = if packet.dur.get() > 0 {
+                available
+                    .min(usize::try_from(packet.dur.get()).context("AAC duration is too large")?)
+            } else {
+                available
+            };
+            (first * channels, presented * channels)
+        } else {
+            (0, count)
+        };
         let current = writer
             .as_ref()
             .map_or(0, |writer| writer.info.decoded_bytes);
         ensure!(
-            (count as u64)
+            (presented as u64)
                 .checked_mul(4)
                 .and_then(|bytes| bytes.checked_add(current))
                 .is_some_and(|bytes| bytes <= limit as u64),
@@ -427,7 +560,7 @@ fn decode_compressed(
             samples.len() == count,
             "Audio decoder returned an incomplete packet"
         );
-        for sample in &samples {
+        for sample in &samples[first..first + presented] {
             writer.push(*sample)?;
         }
     }
@@ -446,7 +579,7 @@ fn decode_compressed(
     {
         ensure!(
             frames == expected,
-            "Audio is truncated or its declared duration is inconsistent"
+            "Audio is truncated or its declared duration is inconsistent ({frames} decoded frames, {expected} declared)"
         );
     }
     writer.finish(output)

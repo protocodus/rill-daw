@@ -50,6 +50,8 @@ pub fn tool_effect(name: &str) -> ToolEffect {
     match name {
         "get_song_context"
         | "list_tracks"
+        | "list_project_samples"
+        | "get_sample_player"
         | "get_track"
         | "get_clip"
         | "get_note_expressions"

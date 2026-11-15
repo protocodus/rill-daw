@@ -301,6 +301,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
         let output = ui::sample_view(
             ui,
             &SampleViewData {
+                audible_region: None,
                 peaks: &state.peaks,
                 start: state.sample.0,
                 end: state.sample.1,

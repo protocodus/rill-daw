@@ -44,8 +44,16 @@ struct DocumentArgs {
     /// Import into a built-in instrument: its sample slot.
     #[serde(default)]
     slot: u32,
+    /// Import into a composite sample player: the destination Sample node.
+    node_id: Option<u64>,
     #[serde(default = "include_tails")]
     include_tails: bool,
+    /// Export source: arrangement (default), loop, or selected_clips.
+    source: Option<String>,
+    /// Export destination: file (default) or project_samples.
+    destination: Option<String>,
+    /// Required name for a Project sample; file names are given by path.
+    name: Option<String>,
     /// Export: "wav" (default), "flac", "ogg" or "mp3".
     format: Option<String>,
     /// Export: 16 or 24 for WAV and FLAC, 32 (float) for WAV only.
@@ -252,6 +260,7 @@ impl DawApp {
                 &required_path(args.path.as_deref())?,
                 args.track_id,
                 args.slot,
+                args.node_id,
                 args.beat.unwrap_or(self.cursor),
             )?,
             _ => return Err(invalid("Unknown document action")),
@@ -271,8 +280,35 @@ impl DawApp {
     /// Start a mix or stem export; returns the files it will write.
     fn application_export(&mut self, args: &DocumentArgs) -> Result<Vec<PathBuf>, ToolError> {
         use daw_engine::{ExportFormat, WavEncoding};
-        let path = required_path(args.path.as_deref())?;
         let mut specification = self.legacy_export_specification(args.include_tails);
+        let source = match args.source.as_deref().unwrap_or("arrangement") {
+            "arrangement" => crate::settings::ExportRangeMode::Arrangement,
+            "loop" => crate::settings::ExportRangeMode::Loop,
+            "selected_clips" => crate::settings::ExportRangeMode::SelectedClips,
+            _ => {
+                return Err(invalid(
+                    "source must be arrangement, loop or selected_clips",
+                ));
+            }
+        };
+        self.configure_export_source(&mut specification, source)
+            .map_err(|error| invalid(error.to_string()))?;
+        let project_sample = match args.destination.as_deref().unwrap_or("file") {
+            "file" => false,
+            "project_samples" => true,
+            _ => return Err(invalid("destination must be file or project_samples")),
+        };
+        if project_sample {
+            if args.path.is_some() || args.stems {
+                return Err(invalid(
+                    "Project samples use managed storage and one mix; omit path and stems",
+                ));
+            }
+            let name = args.name.as_deref().unwrap_or("").trim();
+            daw_core::validate_project_sample_name(name)
+                .map_err(|error| invalid(error.to_string()))?;
+            specification.project_sample = Some(name.to_owned());
+        }
         if let Some(rate) = args.sample_rate {
             specification.sample_rate = rate;
         }
@@ -309,6 +345,11 @@ impl DawApp {
             .format
             .validate(options.encoding, specification.sample_rate)
             .map_err(|error| invalid(error.to_string()))?;
+        if project_sample && options.format != ExportFormat::Wav {
+            return Err(invalid(
+                "Project samples use WAV; omit format or choose wav",
+            ));
+        }
         if !args.stems {
             if args.channels.is_some()
                 || args.include_mix
@@ -319,9 +360,16 @@ impl DawApp {
                     "channels, include_mix, through_master and replace_existing need stems=true",
                 ));
             }
+            let path = if project_sample {
+                self.managed_sample_destination(&specification)
+                    .map_err(|error| invalid(error.to_string()))?
+            } else {
+                required_path(args.path.as_deref())?
+            };
             self.export_to_with_specification(path.clone(), specification);
             return Ok(vec![path]);
         }
+        let path = required_path(args.path.as_deref())?;
         let channels: Vec<u64> = match &args.channels {
             Some(channels) => channels.clone(),
             None => crate::export_ui::default_stem_channels(&self.project),
@@ -374,6 +422,7 @@ impl DawApp {
         source: &Path,
         track_id: Option<u64>,
         slot: u32,
+        node_id: Option<u64>,
         beat: f64,
     ) -> Result<(), ToolError> {
         self.tool_ready()?;
@@ -398,19 +447,7 @@ impl DawApp {
             // A MIDI track's built-in instrument takes the file as a sample.
             let sample = match track.flatten() {
                 Some(track) if track.kind == TrackKind::Midi => {
-                    let slots = track
-                        .instrument
-                        .builtin_device()
-                        .and_then(daw_devices::descriptor)
-                        .map_or(0, |descriptor| descriptor.sample_slots);
-                    if slot >= slots {
-                        return Err(invalid(if slots == 0 {
-                            "This track's instrument plays no samples".to_owned()
-                        } else {
-                            format!("Choose a sample slot below {slots}")
-                        }));
-                    }
-                    Some((track.id, slot))
+                    Some((track.id, self.device_sample_slot(track.id, slot, node_id)?))
                 }
                 _ => None,
             };

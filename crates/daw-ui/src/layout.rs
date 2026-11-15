@@ -61,6 +61,20 @@ pub fn parameter_row<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> Inn
     row_with_height(ui, tokens::PARAMETER_ROW_HEIGHT, false, contents)
 }
 
+/// A compact, vertically centered row for actions, labels and plain fields.
+/// Captioned sliders use `parameter_row` to reserve room for their scales.
+pub fn control_row<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> InnerResponse<R> {
+    row_with_height(ui, tokens::CONTROL_HEIGHT, false, contents)
+}
+
+/// Compact control rows that wrap complete controls when the workspace narrows.
+pub fn control_row_wrapped<R>(
+    ui: &mut Ui,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> InnerResponse<R> {
+    row_with_height(ui, tokens::CONTROL_HEIGHT, true, contents)
+}
+
 /// A responsive parameter row that wraps complete controls onto centered rows.
 pub fn parameter_row_wrapped<R>(
     ui: &mut Ui,

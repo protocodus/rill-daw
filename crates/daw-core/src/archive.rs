@@ -1,5 +1,5 @@
 //! Portable, bounded project bundles. Never extracts archive-provided paths directly.
-use crate::{ClipContent, Effect, Instrument, Project, model::ProjectFile};
+use crate::{Effect, Instrument, Project, model::ProjectFile};
 use anyhow::{Context, Result, ensure};
 use std::{
     cell::Cell,
@@ -240,84 +240,73 @@ fn save_with_options(
                 absolute_plugin(path, &base);
             }
         }
-        let clips = track
-            .clips
-            .iter_mut()
-            .filter_map(|clip| match &mut clip.content {
-                ClipContent::Audio { path, .. } => Some(path),
-                ClipContent::Midi { .. } => None,
-            });
-        let samples = track
-            .instrument
-            .samples_mut()
-            .iter_mut()
-            .map(|s| &mut s.path);
-        // Instrument samples are bundled like audio clips.
-        for path in clips.chain(samples) {
-            check_cancelled(cancel)?;
-            let source =
-                fs::canonicalize(&*path).with_context(|| format!("Collect audio asset {path}"))?;
-            if let Some((name, _)) = names.get(&source) {
-                *path = name.clone();
-                continue;
-            }
-            let metadata = source.metadata()?;
-            ensure!(metadata.is_file(), "Audio asset is not a regular file");
-            ensure!(
-                metadata.len() <= MAX_ASSET,
-                "Audio asset exceeds the RIFF WAV size limit"
-            );
-            if let Some(asset) = assets
-                .iter()
-                .find_map(|asset| match same_asset(asset, &source, &metadata) {
-                    Ok(true) => Some(Ok(asset)),
-                    Ok(false) => None,
-                    Err(error) => Some(Err(error)),
-                })
-                .transpose()?
-            {
-                *path = asset.name.clone();
-                names.insert(source, (asset.name.clone(), metadata));
-                continue;
-            }
-            let mut candidate = Asset {
-                path: source.clone(),
-                name: String::new(),
-                metadata,
-                fingerprint: None,
-            };
-            if optimized {
-                candidate.fingerprint = Some(fingerprint(&candidate, &fingerprint_state, cancel)?);
-                let mut duplicate = None;
-                for asset in &assets {
-                    if asset.metadata.len() == candidate.metadata.len()
-                        && asset.fingerprint == candidate.fingerprint
-                        && equal_assets(asset, &candidate, cancel)?
-                    {
-                        duplicate = Some(asset.name.clone());
-                        break;
-                    }
-                }
-                if let Some(name) = duplicate {
-                    names.insert(source, (name.clone(), candidate.metadata));
-                    *path = name;
-                    continue;
-                }
-            }
-            ensure!(
-                assets.len() + 1 < MAX_ENTRIES,
-                "Project has too many bundled audio assets"
-            );
-            total = total
-                .checked_add(candidate.metadata.len())
-                .context("Asset size overflow")?;
-            ensure!(total <= MAX_TOTAL, "Project assets exceed 64 GiB");
-            let name = format!("assets/{:08}.wav", assets.len());
-            names.insert(source, (name.clone(), candidate.metadata.clone()));
-            candidate.name = name.clone();
-            assets.push(candidate);
-            *path = name;
+    }
+    // A single traversal keeps clips, instrument layers and the project
+    // sample collection on the same deduplicating asset pipeline.
+    for path in portable.audio_paths_mut() {
+        check_cancelled(cancel)?;
+        let source =
+            fs::canonicalize(&*path).with_context(|| format!("Collect audio asset {path}"))?;
+        if let Some((name, _)) = names.get(&source) {
+            *path = name.clone();
+            continue;
         }
+        let metadata = source.metadata()?;
+        ensure!(metadata.is_file(), "Audio asset is not a regular file");
+        ensure!(
+            metadata.len() <= MAX_ASSET,
+            "Audio asset exceeds the RIFF WAV size limit"
+        );
+        if let Some(asset) = assets
+            .iter()
+            .find_map(|asset| match same_asset(asset, &source, &metadata) {
+                Ok(true) => Some(Ok(asset)),
+                Ok(false) => None,
+                Err(error) => Some(Err(error)),
+            })
+            .transpose()?
+        {
+            *path = asset.name.clone();
+            names.insert(source, (asset.name.clone(), metadata));
+            continue;
+        }
+        let mut candidate = Asset {
+            path: source.clone(),
+            name: String::new(),
+            metadata,
+            fingerprint: None,
+        };
+        if optimized {
+            candidate.fingerprint = Some(fingerprint(&candidate, &fingerprint_state, cancel)?);
+            let mut duplicate = None;
+            for asset in &assets {
+                if asset.metadata.len() == candidate.metadata.len()
+                    && asset.fingerprint == candidate.fingerprint
+                    && equal_assets(asset, &candidate, cancel)?
+                {
+                    duplicate = Some(asset.name.clone());
+                    break;
+                }
+            }
+            if let Some(name) = duplicate {
+                names.insert(source, (name.clone(), candidate.metadata));
+                *path = name;
+                continue;
+            }
+        }
+        ensure!(
+            assets.len() + 1 < MAX_ENTRIES,
+            "Project has too many bundled audio assets"
+        );
+        total = total
+            .checked_add(candidate.metadata.len())
+            .context("Asset size overflow")?;
+        ensure!(total <= MAX_TOTAL, "Project assets exceed 64 GiB");
+        let name = format!("assets/{:08}.wav", assets.len());
+        names.insert(source, (name.clone(), candidate.metadata.clone()));
+        candidate.name = name.clone();
+        assets.push(candidate);
+        *path = name;
     }
     let parent = path
         .parent()
@@ -494,14 +483,12 @@ pub(crate) fn load(
     let project = envelope.project;
     project.validate()?;
     let mut required = HashSet::new();
-    for track in project.channels() {
-        for path in track.audio_paths() {
-            ensure!(
-                asset_name(path) && names.contains(path),
-                "Missing or unsafe bundled audio reference: {path}"
-            );
-            required.insert(path.to_owned());
-        }
+    for path in project.audio_paths() {
+        ensure!(
+            asset_name(path) && names.contains(path),
+            "Missing or unsafe bundled audio reference: {path}"
+        );
+        required.insert(path.to_owned());
     }
     ensure!(
         required.len() + 1 == names.len(),

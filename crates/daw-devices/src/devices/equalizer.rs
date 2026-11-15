@@ -190,6 +190,7 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
     category: "Equalizer",
     parameters: &PARAMETERS,
     sample_slots: 0,
+    sample_capacity: 0,
     sidechain_input: false,
     factory_presets: &[
         include_str!("../../presets/r1-equalizer/default.rillpreset"),

@@ -589,6 +589,7 @@ fn every_visualization_renders_without_overflow() {
         ui::sample_view(
             ui,
             &ui::SampleViewData {
+                audible_region: None,
                 peaks: &peaks,
                 start: 0.0,
                 end: 1.0,
@@ -2043,6 +2044,7 @@ fn sample_view_takes_files_dropped_on_it_and_leaves_others() {
     let ctx = themed();
     let peaks = vec![(-0.5, 0.5); 64];
     let data = ui::SampleViewData {
+        audible_region: None,
         peaks: &peaks,
         start: 0.0,
         end: 1.0,

@@ -13,7 +13,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 /// Freeze every delivery choice before native editor synchronization or queued
@@ -25,6 +25,29 @@ pub(crate) struct ExportSpecification {
     pub options: daw_engine::ExportOptions,
     /// None exports one mix file; otherwise the path is a folder of stems.
     pub stems: Option<StemSelection>,
+    /// Source identity captured before deferred native state reads.
+    pub source: ExportSource,
+    /// A managed asset is published to the originating project's sample collection.
+    pub project_sample: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) enum ExportSource {
+    #[default]
+    Mix,
+    Clips(Vec<u64>),
+    Recording(RecordingSource),
+}
+
+/// Nondestructive region of a recording, shared with sample-player leaves.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct RecordingSource {
+    pub name: String,
+    pub path: String,
+    pub start: f32,
+    pub end: f32,
+    pub reverse: bool,
+    pub gain_db: f32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -43,6 +66,12 @@ impl ExportSpecification {
         let integer = self.options.format.is_integer(self.options.encoding);
         serde_json::json!({
             "sample_rate":self.sample_rate,
+            "source": match &self.source {
+                ExportSource::Mix => serde_json::json!({"kind":"mix"}),
+                ExportSource::Clips(ids) => serde_json::json!({"kind":"clips","ids":ids}),
+                ExportSource::Recording(source) => serde_json::json!({"kind":"recording","name":source.name}),
+            },
+            "project_sample":self.project_sample,
             "encoding":self.options.encoding,
             "format":self.options.format,
             "dither":self.options.dither && integer,
@@ -92,6 +121,38 @@ pub(crate) struct ExportCompletion {
     /// Number of stem files written; zero for a single file.
     pub stems: usize,
     pub files: Vec<PathBuf>,
+    pub(crate) managed: Option<Arc<ManagedSample>>,
+}
+
+/// A rendered asset has no owner until its one undoable publication succeeds.
+/// Cancellation, stale documents, worker failures and dropped results clean it up.
+pub(crate) struct ManagedSample {
+    path: PathBuf,
+    name: String,
+    retained: AtomicBool,
+}
+
+impl Drop for ManagedSample {
+    fn drop(&mut self) {
+        if !self.retained.load(Ordering::Acquire) {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+}
+
+impl ExportCompletion {
+    pub(crate) fn status(&self) -> String {
+        if let Some(asset) = &self.managed {
+            let clipping = if self.report.clipped_samples > 0 {
+                format!(" · {} clipped samples", self.report.clipped_samples)
+            } else {
+                String::new()
+            };
+            format!("Added to Project samples · {}{clipping}", asset.name)
+        } else {
+            format!("Exported {}", self.path.display())
+        }
+    }
 }
 
 pub(crate) fn encoding_label(encoding: daw_engine::WavEncoding) -> &'static str {
@@ -144,6 +205,8 @@ struct ExportRequest {
     path: PathBuf,
     specification: ExportSpecification,
     identity: String,
+    session: u64,
+    managed: Option<Arc<ManagedSample>>,
 }
 
 /// Retain the exact mix and destination so a retry cannot silently export later edits.
@@ -168,6 +231,8 @@ impl DawApp {
                 ..Default::default()
             },
             stems: None,
+            source: ExportSource::Mix,
+            project_sample: None,
         }
     }
 
@@ -176,11 +241,22 @@ impl DawApp {
             self.message(Err(anyhow::anyhow!("An export is already running")), "");
             return;
         }
+        let managed = if specification.project_sample.is_some() {
+            Some(Arc::new(ManagedSample {
+                path: path.clone(),
+                name: specification.project_sample.clone().unwrap(),
+                retained: AtomicBool::new(false),
+            }))
+        } else {
+            None
+        };
         let request = ExportRequest {
             project: Arc::new(self.project.clone()),
             path,
             specification,
             identity: self.document_identity(),
+            session: self.song_session.id,
+            managed,
         };
         self.begin_export_request(request);
     }
@@ -206,8 +282,10 @@ impl DawApp {
             self.export_failed_notice(error);
             return;
         }
-        self.finishing
-            .export_started(request.path.clone(), request.specification.clone());
+        if request.specification.project_sample.is_none() {
+            self.finishing
+                .export_started(request.path.clone(), request.specification.clone());
+        }
         let (tx, rx) = std::sync::mpsc::channel();
         self.export_job = Some(rx);
         let cancel = Arc::new(AtomicBool::new(false));
@@ -221,6 +299,57 @@ impl DawApp {
         std::thread::spawn(move || {
             let _ = tx.send(run_export(&request, &cancel));
         });
+    }
+
+    pub(crate) fn complete_project_sample(&mut self, completion: &ExportCompletion) -> Result<()> {
+        let Some(asset) = &completion.managed else {
+            return Ok(());
+        };
+        let run = self
+            .export_run
+            .as_ref()
+            .context("Bounce request no longer exists")?;
+        ensure!(
+            run.request.session == self.song_session.id && *run.request.project == self.project,
+            "The song changed while bouncing; retry to render the current edits"
+        );
+        ensure!(
+            !self
+                .export_cancel
+                .as_ref()
+                .is_some_and(|cancel| cancel.load(Ordering::Acquire)),
+            "Bounce canceled"
+        );
+        let name = run
+            .request
+            .specification
+            .project_sample
+            .as_ref()
+            .context("Bounce name is missing")?;
+        let mut candidate = self.project.clone();
+        candidate.add_project_sample(
+            name.clone(),
+            completion
+                .path
+                .to_str()
+                .context("Sample path must be valid Unicode")?,
+        )?;
+        self.commit_song_candidate(candidate, "Bounce to project samples")
+            .map_err(|error| anyhow::anyhow!(error.message))?;
+        asset.retained.store(true, Ordering::Release);
+        Ok(())
+    }
+
+    pub(crate) fn discard_project_sample(&self) {
+        if let Some(asset) = self
+            .export_run
+            .as_ref()
+            .and_then(|run| run.request.managed.as_ref())
+        {
+            if !asset.retained.load(Ordering::Acquire) {
+                let _ = std::fs::remove_file(&asset.path);
+            }
+        }
     }
 
     /// Stop the running export; no file of it is written or replaced.
@@ -290,8 +419,64 @@ impl DawApp {
         if self.export_job.is_some() || self.project_io_pending() || self.state_sync_pending() {
             return;
         }
-        if let Some(run) = self.export_run.as_ref().filter(|_| self.export_failed()) {
-            self.begin_export_request(run.request.clone());
+        let Some(request) = self
+            .export_run
+            .as_ref()
+            .filter(|_| self.export_failed())
+            .map(|run| run.request.clone())
+        else {
+            return;
+        };
+        if let Some(name) = &request.specification.project_sample {
+            // Project publication must describe the current song. Reopen the
+            // shared decision instead of retrying a snapshot that is now stale.
+            let specification = &request.specification;
+            if let ExportSource::Clips(ids) = &specification.source {
+                let clips: Vec<_> = self
+                    .project
+                    .tracks
+                    .iter()
+                    .flat_map(|track| {
+                        track
+                            .clips
+                            .iter()
+                            .filter(|clip| ids.contains(&clip.id))
+                            .map(|clip| (track.id, clip.id))
+                    })
+                    .collect();
+                self.arranger_select_clips(clips, None);
+            }
+            match &specification.source {
+                ExportSource::Recording(source) => self.open_recording_bounce(source.clone()),
+                _ => self.open_bounce(true),
+            }
+            self.export_project_sample = true;
+            self.export_name = name.clone();
+            self.settings.export.sample_rate = Some(specification.sample_rate);
+            self.settings.export.format = specification.options.format;
+            self.settings.export.encoding = specification.options.encoding;
+            self.settings.export.dither = specification.options.dither;
+            self.settings.export.include_effect_tails = specification.options.include_effect_tails;
+            self.settings.export.range_mode = match specification.source {
+                ExportSource::Clips(_) => ExportRangeMode::SelectedClips,
+                _ if specification.options.range.is_some() => ExportRangeMode::Loop,
+                _ => ExportRangeMode::Arrangement,
+            };
+            self.error = false;
+        } else {
+            self.begin_export_request(request);
+        }
+    }
+
+    pub(crate) fn export_retry_hint(&self) -> &'static str {
+        if self
+            .export_run
+            .as_ref()
+            .is_some_and(|run| run.request.specification.project_sample.is_some())
+        {
+            "Review the current source and retained sample name and quality before bouncing again."
+        } else {
+            "Retry the same mix, filename and export options, including the original notes and instruments."
         }
     }
 
@@ -316,12 +501,13 @@ impl DawApp {
 
     /// Source notes outside a trimmed occurrence are retained, but never rendered.
     pub(crate) fn export_missing_instruments(&self) -> Vec<&str> {
-        self.export_missing_instruments_in_range(None)
+        self.export_missing_instruments_in_range(None, None)
     }
 
     fn export_missing_instruments_in_range(
         &self,
         range: Option<daw_engine::ExportRange>,
+        clips: Option<&[u64]>,
     ) -> Vec<&str> {
         let audible = daw_engine::audible_track_ids(&self.project).unwrap_or_default();
         self.project
@@ -335,6 +521,7 @@ impl DawApp {
             .filter(|track| {
                 track.clips.iter().any(|clip| {
                     clip.length > 0.0
+                        && clips.is_none_or(|ids| ids.contains(&clip.id))
                         && matches!(&clip.content, ClipContent::Midi { notes }
                         if notes.iter().any(|note| {
                             let start = note.start.max(clip.offset);
@@ -419,8 +606,120 @@ impl DawApp {
             self.status = "A mixdown is already rendering".into();
             return;
         }
+        self.export_recording = None;
+        self.export_bounce = false;
+        self.export_project_sample = false;
+        self.export_name = self.document_file_stem();
         self.export_stem_selection = default_stem_channels(&self.project).into_iter().collect();
         self.open_popup(PopupKind::Export);
+    }
+
+    pub(crate) fn open_recording_bounce(&mut self, source: RecordingSource) {
+        self.export();
+        self.export_bounce = true;
+        self.settings.export.what = ExportWhat::Mix;
+        self.export_name = source.name.clone();
+        self.export_recording = Some(source);
+    }
+
+    pub(crate) fn open_bounce_to_project_samples(&mut self) {
+        self.open_bounce(true);
+    }
+
+    pub(crate) fn open_bounce(&mut self, project_sample: bool) {
+        self.export();
+        self.export_bounce = true;
+        self.export_project_sample = project_sample;
+        self.settings.export.what = ExportWhat::Mix;
+        let selected = self.bounce_clip_ids();
+        self.settings.export.range_mode = if !selected.is_empty() {
+            ExportRangeMode::SelectedClips
+        } else if self.project.loop_enabled {
+            ExportRangeMode::Loop
+        } else {
+            ExportRangeMode::Arrangement
+        };
+        self.export_name = if selected.len() == 1 {
+            self.project
+                .tracks
+                .iter()
+                .flat_map(|track| &track.clips)
+                .find(|clip| clip.id == selected[0])
+                .map(|clip| clip.name.clone())
+                .unwrap_or_else(|| self.document_file_stem())
+        } else if selected.is_empty() {
+            self.document_file_stem()
+        } else {
+            "Selected clips".into()
+        };
+        if project_sample {
+            self.settings.export.format = daw_engine::ExportFormat::Wav;
+        }
+    }
+
+    fn bounce_clip_ids(&self) -> Vec<u64> {
+        self.arranger_selection_ids()
+            .into_iter()
+            .filter_map(|(track, id)| {
+                self.project
+                    .clip(track, id)
+                    .filter(|clip| {
+                        matches!(
+                            clip.content,
+                            ClipContent::Audio { .. } | ClipContent::Midi { .. }
+                        )
+                    })
+                    .map(|_| id)
+            })
+            .collect()
+    }
+
+    fn bounce_clip_range(&self) -> Option<daw_engine::ExportRange> {
+        let ids = self.bounce_clip_ids();
+        self.project
+            .tracks
+            .iter()
+            .flat_map(|track| &track.clips)
+            .filter(|clip| ids.contains(&clip.id))
+            .map(|clip| (clip.start, clip.end()))
+            .reduce(|(start, end), (a, b)| (start.min(a), end.max(b)))
+            .map(|(start_beat, end_beat)| daw_engine::ExportRange {
+                start_beat,
+                end_beat,
+            })
+    }
+
+    pub(crate) fn managed_sample_destination(
+        &self,
+        specification: &ExportSpecification,
+    ) -> Result<PathBuf> {
+        let folder = self.settings.scratch_dir.join("samples");
+        std::fs::create_dir_all(&folder).context("Creating managed sample folder")?;
+        let mut name: String = specification
+            .project_sample
+            .as_deref()
+            .context("Project sample name is missing")?
+            .chars()
+            .map(|ch| {
+                if ch.is_alphanumeric() || matches!(ch, ' ' | '-' | '_') {
+                    ch
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        while name.len() > 120 {
+            name.pop();
+        }
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+        let path = folder.join(format!(
+            "{}-{nonce}-{}.{}",
+            name,
+            daw_core::new_id(),
+            specification.options.format.extension()
+        ));
+        ensure!(!path.exists(), "Sample destination already exists");
+        Ok(path)
     }
 
     /// Selected stem channels in project order; deleted channels drop out.
@@ -436,23 +735,18 @@ impl DawApp {
 
     fn preferred_export_specification(&self) -> Result<ExportSpecification> {
         let preferences = &self.settings.export;
-        let range = match preferences.range_mode {
-            ExportRangeMode::Arrangement => None,
-            ExportRangeMode::Loop => {
-                ensure!(
-                    self.project.loop_start.is_finite()
-                        && self.project.loop_end.is_finite()
-                        && self.project.loop_start >= 0.0
-                        && self.project.loop_end > self.project.loop_start
-                        && self.project.loop_end <= daw_core::MAX_BEAT,
-                    "Set increasing loop markers before exporting a loop range"
-                );
-                Some(daw_engine::ExportRange {
-                    start_beat: self.project.loop_start,
-                    end_beat: self.project.loop_end,
-                })
-            }
-        };
+        let name = self.export_name.trim();
+        if self.export_project_sample {
+            daw_core::validate_project_sample_name(name)?;
+            ensure!(
+                preferences.format == daw_engine::ExportFormat::Wav,
+                "Project samples use WAV audio"
+            );
+            ensure!(
+                preferences.what == ExportWhat::Mix,
+                "Project samples contain one mix; choose Mix"
+            );
+        }
         let sample_rate = preferences.sample_rate.unwrap_or(self.settings.sample_rate);
         ensure!(
             (8_000..=384_000).contains(&sample_rate),
@@ -477,20 +771,69 @@ impl DawApp {
                 })
             })
             .transpose()?;
-        Ok(ExportSpecification {
+        let mut specification = ExportSpecification {
             sample_rate,
             options: daw_engine::ExportOptions {
                 render: daw_engine::RenderOptions {
                     resample_quality: self.settings.resample_quality,
                 },
-                include_effect_tails: preferences.include_effect_tails && range.is_none(),
+                include_effect_tails: preferences.include_effect_tails
+                    && self.export_recording.is_none(),
                 encoding: preferences.encoding,
                 format: preferences.format,
                 dither: preferences.dither,
-                range,
+                range: None,
+                extend_range_tails: false,
             },
             stems,
-        })
+            source: if let Some(source) = &self.export_recording {
+                ExportSource::Recording(source.clone())
+            } else {
+                ExportSource::Mix
+            },
+            project_sample: self.export_project_sample.then(|| name.to_owned()),
+        };
+        if self.export_recording.is_none() {
+            self.configure_export_source(&mut specification, preferences.range_mode)?;
+        }
+        Ok(specification)
+    }
+
+    /// Resolve UI and application-tool source choices into one immutable request.
+    pub(crate) fn configure_export_source(
+        &self,
+        specification: &mut ExportSpecification,
+        mode: ExportRangeMode,
+    ) -> Result<()> {
+        specification.options.range = match mode {
+            ExportRangeMode::Arrangement => None,
+            ExportRangeMode::SelectedClips => Some(
+                self.bounce_clip_range()
+                    .context("Select audio or MIDI clips to bounce")?,
+            ),
+            ExportRangeMode::Loop => {
+                ensure!(
+                    self.project.loop_start.is_finite()
+                        && self.project.loop_end.is_finite()
+                        && self.project.loop_start >= 0.0
+                        && self.project.loop_end > self.project.loop_start
+                        && self.project.loop_end <= daw_core::MAX_BEAT,
+                    "Set increasing loop markers before exporting a loop range"
+                );
+                Some(daw_engine::ExportRange {
+                    start_beat: self.project.loop_start,
+                    end_beat: self.project.loop_end,
+                })
+            }
+        };
+        specification.source = if mode == ExportRangeMode::SelectedClips {
+            ExportSource::Clips(self.bounce_clip_ids())
+        } else {
+            ExportSource::Mix
+        };
+        specification.options.include_effect_tails &= mode != ExportRangeMode::Loop;
+        specification.options.extend_range_tails = mode == ExportRangeMode::SelectedClips;
+        Ok(())
     }
 
     /// File names a stem export of `specification` writes.
@@ -517,24 +860,39 @@ impl DawApp {
         }
         let previous_preferences = self.settings.export.clone();
         let specification = self.preferred_export_specification();
-        let loop_mode = self.settings.export.range_mode == ExportRangeMode::Loop;
+        let recording_mode = self.export_recording.is_some();
+        let loop_mode = !recording_mode && self.settings.export.range_mode == ExportRangeMode::Loop;
+        let selected_mode =
+            !recording_mode && self.settings.export.range_mode == ExportRangeMode::SelectedClips;
         let stems_mode = self.settings.export.what == ExportWhat::Stems;
         let format = self.settings.export.format;
-        let duration_beats = if loop_mode {
+        let duration_beats = if let Some(source) = &self.export_recording {
+            daw_core::AudioData::wav_duration_seconds(&source.path).unwrap_or(0.0)
+                * f64::from(source.end - source.start)
+                * self.project.tempo
+                / 60.0
+        } else if loop_mode {
             self.project.loop_end - self.project.loop_start
+        } else if selected_mode {
+            self.bounce_clip_range()
+                .map_or(0.0, |range| range.end_beat - range.start_beat)
         } else {
             self.project.end_beat()
         };
         let duration = duration_beats * 60.0 / self.project.tempo;
         let duration = format!(
             "{} · {}{}",
-            if loop_mode {
+            if recording_mode {
+                "Loaded sample"
+            } else if loop_mode {
                 "Loop range"
+            } else if selected_mode {
+                "Selected clips"
             } else {
                 "Arrangement"
             },
             daw_ui::format_clock_time(duration, 3),
-            if self.settings.export.include_effect_tails && !loop_mode {
+            if self.settings.export.include_effect_tails && !loop_mode && !recording_mode {
                 " + tails"
             } else {
                 ""
@@ -543,15 +901,20 @@ impl DawApp {
         let choices = stem_choices(&self.project);
         let mut export = false;
         let mut cancel = false;
-        let missing_instruments = self
-            .export_missing_instruments_in_range(
+        let selected_clips = selected_mode.then(|| self.bounce_clip_ids());
+        let missing_instruments = if recording_mode {
+            String::new()
+        } else {
+            self.export_missing_instruments_in_range(
                 specification
                     .as_ref()
                     .ok()
                     .and_then(|spec| spec.options.range),
+                selected_clips.as_deref(),
             )
-            .join(", ");
-        daw_ui::popup("Export audio", ctx)
+            .join(", ")
+        };
+        daw_ui::popup(if self.export_bounce { "Bounce audio" } else { "Export audio" }, ctx)
             .id(egui::Id::new("export_options"))
             .default_width(daw_ui::tokens::FORM_WIDTH)
             .vscroll(false)
@@ -562,7 +925,7 @@ impl DawApp {
                 let ui = footer.body();
                 daw_ui::popup_scroll_body(ui, "export_summary", 0.0, |ui| {
                 daw_ui::text::body(ui, duration).on_hover_text(
-                    if self.settings.export.include_effect_tails && !loop_mode {
+                    if self.settings.export.include_effect_tails && !loop_mode && !recording_mode {
                         "The file includes releases and effect tails beyond this arrangement duration."
                     } else {
                         "The file ends exactly at this arrangement duration."
@@ -574,10 +937,36 @@ impl DawApp {
                 ui.add_space(daw_ui::tokens::SPACE_SM);
                 let integer = format.is_integer(self.settings.export.encoding);
                 daw_ui::form_grid(ui, "wav_delivery_choices", |ui| {
+                    let label = daw_ui::form_label(ui, "Destination");
+                    ui.horizontal(|ui| {
+                        if daw_ui::tab_choice(ui, !self.export_project_sample, "File").clicked() {
+                            self.export_project_sample = false;
+                        }
+                        if daw_ui::tab_choice(ui, self.export_project_sample, "Project samples").clicked() {
+                            self.export_project_sample = true;
+                            self.settings.export.what = ExportWhat::Mix;
+                            self.settings.export.format = daw_engine::ExportFormat::Wav;
+                        }
+                    }).response.labelled_by(label.id);
+                    ui.end_row();
+                    let label = daw_ui::form_label(ui, "Name");
+                    let field = daw_ui::parameter_row(ui, |ui| {
+                        let field = daw_ui::text_field(ui, &mut self.export_name, "Sample name", 190.0).labelled_by(label.id);
+                        if daw_ui::small_button(ui, "Keyboard").on_hover_text("Enter the sample name with the mouse").clicked() {
+                            daw_ui::set_name_keyboard_open(ui.ctx(), field.id, !daw_ui::name_keyboard_open(ui.ctx(), field.id));
+                        }
+                        field
+                    }).inner;
+                    ui.end_row();
+                    if daw_ui::name_keyboard_open(ui.ctx(), field.id) {
+                        ui.label("");
+                        ui.vertical(|ui| daw_ui::name_keyboard(ui, field.id, &mut self.export_name));
+                        ui.end_row();
+                    }
                     let label = daw_ui::form_label(ui, "What");
                     ui.horizontal(|ui| {
                         for (what, name) in [(ExportWhat::Mix, "Mix"), (ExportWhat::Stems, "Stems")] {
-                            if daw_ui::tab_choice(ui, self.settings.export.what == what, name).clicked() {
+                            if ui.add_enabled_ui(!self.export_project_sample || what == ExportWhat::Mix, |ui| daw_ui::tab_choice(ui, self.settings.export.what == what, name)).inner.clicked() {
                                 self.settings.export.what = what;
                             }
                         }
@@ -592,7 +981,7 @@ impl DawApp {
                             daw_engine::ExportFormat::MP3_DEFAULT,
                         ] {
                             let selected = std::mem::discriminant(&choice) == std::mem::discriminant(&format);
-                            if daw_ui::selectable(ui, selected, choice.label()).clicked() && !selected {
+                            if ui.add_enabled_ui(!self.export_project_sample || choice == daw_engine::ExportFormat::Wav, |ui| daw_ui::selectable(ui, selected, choice.label())).inner.clicked() && !selected {
                                 self.settings.export.format = choice;
                                 // FLAC has no floating-point depth.
                                 if choice == daw_engine::ExportFormat::Flac
@@ -649,16 +1038,16 @@ impl DawApp {
                         }
                     }).response.labelled_by(label.id);
                     ui.end_row();
-                    let label = daw_ui::form_label(ui, "Range");
-                    daw_ui::form_select("wav_range", if loop_mode { "Loop range" } else { "Arrangement" }).show_ui(ui, |ui| {
-                        for (mode, label) in [(ExportRangeMode::Arrangement,"Arrangement"),(ExportRangeMode::Loop,"Loop range")] {
+                    let label = daw_ui::form_label(ui, "Source");
+                    ui.add_enabled_ui(!recording_mode, |ui| daw_ui::form_select("wav_range", if recording_mode { "Loaded sample" } else if loop_mode { "Loop range" } else if selected_mode { "Selected clips" } else { "Arrangement" }).show_ui(ui, |ui| {
+                        for (mode, label) in [(ExportRangeMode::Arrangement,"Arrangement"),(ExportRangeMode::Loop,"Loop range"),(ExportRangeMode::SelectedClips,"Selected clips")] {
                             daw_ui::selectable_value(ui, &mut self.settings.export.range_mode, mode, label);
                         }
-                    }).response.labelled_by(label.id);
+                    })).inner.response.labelled_by(label.id);
                     ui.end_row();
                     // Options sit in the field column, under the choices they qualify.
                     ui.label("");
-                    ui.add_enabled_ui(!loop_mode, |ui| daw_ui::checkbox(ui, &mut self.settings.export.include_effect_tails, "Include effect tails")
+                    ui.add_enabled_ui(!loop_mode && !recording_mode, |ui| daw_ui::checkbox(ui, &mut self.settings.export.include_effect_tails, "Include effect tails")
                         .on_hover_text("Keep instrument releases and effect tails after the arrangement. Turn off to end exactly at the arrangement boundary."));
                     ui.end_row();
                     ui.label("");
@@ -705,7 +1094,7 @@ impl DawApp {
                 }
                 });
                 footer.show(window_ui, |ui| daw_ui::dialog_actions(ui, |ui| {
-                    export = ui.add_enabled_ui(specification.is_ok(), |ui| daw_ui::dialog_primary(ui, "Export…")).inner.clicked();
+                    export = ui.add_enabled_ui(specification.is_ok(), |ui| daw_ui::dialog_primary(ui, if self.export_project_sample { "Bounce" } else if self.export_bounce { "Bounce…" } else { "Export…" })).inner.clicked();
                     cancel = daw_ui::dialog_button(ui, "Cancel").clicked();
                 }, |_| {}));
             });
@@ -738,9 +1127,85 @@ impl DawApp {
                     }
                     self.export_to_with_specification(folder, specification);
                 }
+            } else if specification.project_sample.is_some() {
+                match self.managed_sample_destination(&specification) {
+                    Ok(path) => self.export_to_with_specification(path, specification),
+                    Err(error) => self.message(Err(error), ""),
+                }
             } else if let Some(path) = self.pick_document_path(DocumentDialog::Export) {
                 self.export_to_with_specification(path, specification);
             }
+        }
+    }
+}
+
+fn source_project(
+    project: &daw_core::Project,
+    source: &ExportSource,
+) -> Result<Option<daw_core::Project>> {
+    match source {
+        ExportSource::Mix => Ok(None),
+        ExportSource::Clips(ids) => {
+            ensure!(
+                !ids.is_empty()
+                    && ids.iter().all(|id| project
+                        .tracks
+                        .iter()
+                        .flat_map(|track| &track.clips)
+                        .any(|clip| clip.id == *id)),
+                "A selected clip no longer exists"
+            );
+            let mut project = project.clone();
+            for track in &mut project.tracks {
+                // Keep occurrence identities and take/Freeze provenance valid.
+                // Only selected sources feed the unchanged routing graph.
+                let selected = track.clips.iter().any(|clip| ids.contains(&clip.id));
+                for clip in &mut track.clips {
+                    if !ids.contains(&clip.id) {
+                        clip.muted = true;
+                    }
+                }
+                if !selected
+                    && track.instrument_output.is_none()
+                    && matches!(track.kind, TrackKind::Audio | TrackKind::Midi)
+                {
+                    track.mute = true;
+                }
+            }
+            Ok(Some(project))
+        }
+        ExportSource::Recording(source) => {
+            ensure!(
+                source.start.is_finite()
+                    && source.end.is_finite()
+                    && source.start >= 0.0
+                    && source.end <= 1.0
+                    && source.end > source.start,
+                "Sample region must have increasing bounds within the recording"
+            );
+            ensure!(
+                source.gain_db.is_finite() && (-60.0..=24.0).contains(&source.gain_db),
+                "Sample gain must be between -60 and 24 dB"
+            );
+            let duration = daw_core::AudioData::wav_duration_seconds(&source.path)?;
+            let mut project = daw_core::Project::new();
+            let length = duration * project.tempo / 60.0;
+            let mut clip = daw_core::Clip::audio(
+                &source.name,
+                0.0,
+                length * f64::from(source.end - source.start),
+                &source.path,
+            );
+            clip.offset = length * f64::from(source.start);
+            if let ClipContent::Audio { reverse, gain, .. } = &mut clip.content {
+                *reverse = source.reverse;
+                *gain = 10.0_f32.powf(source.gain_db / 20.0);
+            }
+            let track = project.add_audio_track(&source.name);
+            let track = project.track_mut(track).unwrap();
+            track.gain = 1.0;
+            track.clips.push(clip);
+            Ok(Some(project))
         }
     }
 }
@@ -760,10 +1225,12 @@ fn run_export(request: &ExportRequest, cancel: &AtomicBool) -> Result<ExportComp
         }
     }
     let specification = &request.specification;
+    let render_project = source_project(&request.project, &specification.source)?;
+    let project = render_project.as_ref().unwrap_or(&request.project);
     let label = specification.options.format.label();
     let completion = if let Some(stems) = &specification.stems {
         daw_engine::export_stems(
-            &request.project,
+            project,
             &daw_engine::StemRequest {
                 directory: request.path.clone(),
                 song: stems.song.clone(),
@@ -793,11 +1260,12 @@ fn run_export(request: &ExportRequest, cancel: &AtomicBool) -> Result<ExportComp
                 report,
                 stems: files.len(),
                 files: files.into_iter().map(|file| file.path).collect(),
+                managed: request.managed.clone(),
             }
         })
     } else {
         daw_engine::export_project_cancellable(
-            &request.project,
+            project,
             &request.path,
             specification.sample_rate,
             specification.options,
@@ -808,6 +1276,7 @@ fn run_export(request: &ExportRequest, cancel: &AtomicBool) -> Result<ExportComp
             report,
             stems: 0,
             files: vec![request.path.clone()],
+            managed: request.managed.clone(),
         })
     };
     completion

@@ -164,6 +164,13 @@ pub enum SongEdit {
     RemoveMarker {
         marker: EntityRef,
     },
+    RenameProjectSample {
+        sample: EntityRef,
+        name: String,
+    },
+    RemoveProjectSample {
+        sample: EntityRef,
+    },
     SetLoop {
         enabled: bool,
         start: f64,
@@ -547,6 +554,18 @@ pub enum SongEdit {
         #[serde(default)]
         clip: Option<EntityRef>,
     },
+    /// A label for a logical sample slot, independent of source filenames.
+    RenameDeviceSampleSlot {
+        track: EntityRef,
+        slot: u32,
+        name: String,
+    },
+    SetSamplePlayer {
+        track: EntityRef,
+        slot: u32,
+        #[serde(deserialize_with = "Option::deserialize")]
+        player: Option<daw_dsp::sample_player::PlayerNode>,
+    },
     SetInsertEnabled {
         track: EntityRef,
         effect: u64,
@@ -809,6 +828,10 @@ fn apply_one(
         SongEdit::RenameMarker { marker, name } => p.rename_marker(r(marker)?, name)?,
         SongEdit::MoveMarker { marker, beat } => p.move_marker(r(marker)?, *beat)?,
         SongEdit::RemoveMarker { marker } => p.remove_marker(r(marker)?)?,
+        SongEdit::RenameProjectSample { sample, name } => {
+            p.rename_project_sample(r(sample)?, name)?
+        }
+        SongEdit::RemoveProjectSample { sample } => p.remove_project_sample(r(sample)?)?,
         SongEdit::SetLoop {
             enabled,
             start,
@@ -1489,6 +1512,16 @@ fn apply_one(
             p.remove_insert(r(track)?, *effect)?;
         }
         SongEdit::RemoveInstrument { track } => p.set_instrument(r(track)?, Instrument::None)?,
+        SongEdit::RenameDeviceSampleSlot { track, slot, name } => {
+            p.rename_device_sample_slot(r(track)?, *slot, name)?;
+        }
+        SongEdit::SetSamplePlayer {
+            track,
+            slot,
+            player,
+        } => {
+            p.set_sample_player(r(track)?, *slot, player.clone())?;
+        }
         SongEdit::SetDeviceSample { track, slot, clip } => match clip {
             Some(clip) => {
                 let sample = p

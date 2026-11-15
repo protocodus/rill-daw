@@ -38,11 +38,12 @@ pub(crate) enum LibraryTarget {
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
-enum DeviceKind {
+enum LibrarySection {
     #[default]
     Instrument,
     Effect,
     Unknown,
+    Sample,
 }
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
@@ -110,12 +111,20 @@ impl Sort {
 }
 
 /// Everything that changes which devices are listed, or where.
-type GridFilter = (DeviceKind, String, Collection, String, String, Sort, bool);
+type GridFilter = (
+    LibrarySection,
+    String,
+    Collection,
+    String,
+    String,
+    Sort,
+    bool,
+);
 
 #[derive(Clone, Default)]
 struct LibraryUi {
     activate_when_ready: bool,
-    kind: DeviceKind,
+    kind: LibrarySection,
     target: LibraryTarget,
     collection: Collection,
     developer: String,
@@ -165,11 +174,12 @@ pub(crate) enum LibraryEdit {
     Categories(PluginInfo, String),
 }
 
-impl DeviceKind {
+impl LibrarySection {
     fn accepts(self, entry: &CatalogEntry) -> bool {
         match self {
             Self::Instrument => entry.plugin.is_instrument() == Some(true),
             Self::Effect => entry.plugin.is_effect() == Some(true),
+            Self::Sample => false,
             Self::Unknown => {
                 entry.plugin.is_instrument() != Some(true) && entry.plugin.is_effect() != Some(true)
             }
@@ -199,6 +209,11 @@ const KEY_TARGETS: &str = "library_key_targets";
 
 /// Enter and arrows choose devices only from the search field, the selected
 /// device, or with nothing focused; other fields and buttons keep their keys.
+pub(crate) fn samples_visible(ctx: &egui::Context) -> bool {
+    ctx.data(|data| data.get_temp::<LibraryUi>(egui::Id::new("plugin_library_state")))
+        .is_some_and(|state| state.kind == LibrarySection::Sample)
+}
+
 pub(crate) fn library_owns_keys(ctx: &egui::Context) -> bool {
     let targets = ctx
         .data(|data| data.get_temp::<[Option<egui::Id>; 2]>(egui::Id::new(KEY_TARGETS)))
@@ -464,9 +479,9 @@ impl DawApp {
                 state.target,
                 LibraryTarget::Insert(_) | LibraryTarget::Send(_)
             ) {
-                DeviceKind::Effect
+                LibrarySection::Effect
             } else {
-                DeviceKind::Instrument
+                LibrarySection::Instrument
             };
             state.selected = None;
             state.developer.clear();
@@ -474,6 +489,9 @@ impl DawApp {
             state.category.clear();
             state.category_query.clear();
             state.grid_filter = None;
+        }
+        if std::mem::take(&mut self.sample_browser.requested) {
+            state.kind = LibrarySection::Sample;
         }
         // The chooser owns its assignment destination. A native preview or
         // later selection change must never turn Assign into Add, or send it
@@ -539,10 +557,12 @@ impl DawApp {
                     < daw_ui::tokens::CONTROL_HEIGHT * 13.0;
                 let mut kind = state.kind;
                 daw_ui::popup_tabs_with_hints(ui, &mut kind, &[
-                    (DeviceKind::Instrument, "Instruments", "Browse instruments that turn MIDI notes into sound"),
-                    (DeviceKind::Effect, "Effects", "Browse effects for processing audio on a channel"),
-                    (DeviceKind::Unknown, "Unverified", "Inspect plug-ins whose instrument or effect type has not been verified"),
+                    (LibrarySection::Instrument, "Instruments", "Browse instruments that turn MIDI notes into sound"),
+                    (LibrarySection::Effect, "Effects", "Browse effects for processing audio on a channel"),
+                    (LibrarySection::Sample, "Samples", "Find, preview, and use sounds from your sample library or project"),
+                    (LibrarySection::Unknown, "Unverified", "Inspect plug-ins whose instrument or effect type has not been verified"),
                 ], |ui| {
+                    if state.kind == LibrarySection::Sample { return; }
                     if daw_ui::quiet_button(ui, "Plug-in folders…").on_hover_text("Choose the folders RILL scans for installed plug-ins").clicked() {
                         folders = true;
                     }
@@ -564,6 +584,10 @@ impl DawApp {
                     daw_ui::text::truncated(ui, daw_ui::text::TextRole::Note, text);
                 });
                 if kind != state.kind {
+                    if state.kind == LibrarySection::Sample {
+                        self.reset_sample_browser_context();
+                        self.stop_sample_preview();
+                    }
                     state.kind = kind;
                     state.selected = None;
                     state.developer.clear();
@@ -571,6 +595,10 @@ impl DawApp {
                     state.category.clear();
                     state.category_query.clear();
                     self.plugin_filter.clear();
+                }
+                if state.kind == LibrarySection::Sample {
+                    self.sample_browser_contents(ui);
+                    return;
                 }
                 // Built-in devices come first and need no scan.
                 let kind_items: Vec<_> = crate::builtin_devices::catalog()
@@ -615,9 +643,10 @@ impl DawApp {
                                 ui,
                                 &mut self.plugin_filter,
                                 match state.kind {
-                                    DeviceKind::Instrument => "Search instruments",
-                                    DeviceKind::Effect => "Search effects",
-                                    DeviceKind::Unknown => "Search unverified devices",
+                                    LibrarySection::Instrument => "Search instruments",
+                                    LibrarySection::Effect => "Search effects",
+                                    LibrarySection::Unknown => "Search unverified devices",
+                                    LibrarySection::Sample => "Search samples",
                                 },
                                 (ui.available_width() - 2.0 * daw_ui::tokens::BUTTON_PADDING_X).max(0.0),
                             ).on_hover_text(format!("Search by name, category, producer or format ({}); combine words in any order", daw_plugins::PluginFormat::available().map(|format| format.label()).collect::<Vec<_>>().join(", "))),
@@ -787,16 +816,17 @@ impl DawApp {
                     state.selected = matches.first().map(|item| item.entry.fingerprint.clone());
                 }
                 let primary = match state.kind {
-                    DeviceKind::Instrument if assign => DeviceAction::Assign,
-                    DeviceKind::Instrument => DeviceAction::Instrument,
-                    DeviceKind::Effect if matches!(self.library_target, LibraryTarget::Send(_)) => DeviceAction::Send,
-                    DeviceKind::Effect => DeviceAction::Insert,
-                    DeviceKind::Unknown => DeviceAction::Instrument,
+                    LibrarySection::Instrument if assign => DeviceAction::Assign,
+                    LibrarySection::Instrument => DeviceAction::Instrument,
+                    LibrarySection::Effect if matches!(self.library_target, LibraryTarget::Send(_)) => DeviceAction::Send,
+                    LibrarySection::Effect => DeviceAction::Insert,
+                    LibrarySection::Unknown => DeviceAction::Instrument,
+                    LibrarySection::Sample => unreachable!("Samples uses the shared sample browser"),
                 };
                 let enabled = match state.kind {
-                    DeviceKind::Instrument => !assign || assignment_target.is_some(),
-                    DeviceKind::Effect => source.is_some(),
-                    DeviceKind::Unknown => false,
+                    LibrarySection::Instrument => !assign || assignment_target.is_some(),
+                    LibrarySection::Effect => source.is_some(),
+                    LibrarySection::Unknown | LibrarySection::Sample => false,
                 };
                 let width = ui.available_width();
                 let sidebar = if width >= SIDEBAR_WIDTH + PANE_GAP + CATALOG_MIN_WIDTH { SIDEBAR_WIDTH } else { 0.0 };
@@ -846,7 +876,7 @@ impl DawApp {
                 {
                     action = Some((item.entry.plugin.clone(), primary));
                 }
-                let icon = if state.kind == DeviceKind::Instrument { daw_ui::Icon::Instrument } else { daw_ui::Icon::Effect };
+                let icon = if state.kind == LibrarySection::Instrument { daw_ui::Icon::Instrument } else { daw_ui::Icon::Effect };
                 let mut footer_slot = daw_ui::popup_footer(ui, "library_actions");
                 let window_ui = ui;
                 let ui = footer_slot.body();
@@ -918,7 +948,7 @@ impl DawApp {
                             }
                             if card.response.clicked() {
                                 state.selected = Some(entry.fingerprint.clone());
-                                if state.kind == DeviceKind::Unknown { diagnostic_request = Some(device_diagnostics(entry)); }
+                                if state.kind == LibrarySection::Unknown { diagnostic_request = Some(device_diagnostics(entry)); }
                             }
                             card.response.context_menu(|ui| {
                                 let label = if item.favorite { "Remove from favorites" } else { "Add to favorites" };
@@ -956,19 +986,19 @@ impl DawApp {
                                     egui::Layout::top_down(egui::Align::Center),
                                     |ui| {
                                         if has_kind {
-                                            daw_ui::text::subtitle(ui, if state.kind == DeviceKind::Instrument {
+                                            daw_ui::text::subtitle(ui, if state.kind == LibrarySection::Instrument {
                                                 "No matching instruments"
                                             } else {
                                                 "No matching effects"
                                             });
                                             daw_ui::text::note(ui, "Try another search or clear the filters.");
                                         } else {
-                                            daw_ui::text::subtitle(ui, if state.kind == DeviceKind::Instrument {
+                                            daw_ui::text::subtitle(ui, if state.kind == LibrarySection::Instrument {
                                                 "No VST3 instruments found"
                                             } else {
                                                 "No VST3 effects found"
                                             });
-                                            daw_ui::text::note(ui, if state.kind == DeviceKind::Instrument {
+                                            daw_ui::text::note(ui, if state.kind == LibrarySection::Instrument {
                                                 "Install a VST3 instrument, then Refresh. Use Plug-in folders if it is installed elsewhere."
                                             } else {
                                                 "Install a VST3 effect, then Refresh. Use Plug-in folders if it is installed elsewhere."
@@ -1129,10 +1159,10 @@ impl DawApp {
                     DeviceAction::Send => "Create an effect return track and route a send from the selected channel to it",
                 };
                 let unavailable = if selected.is_none() { "Select a device first" }
-                    else if state.kind == DeviceKind::Instrument { "Select a MIDI track to assign an instrument" }
+                    else if state.kind == LibrarySection::Instrument { "Select a MIDI track to assign an instrument" }
                     else { "Select a channel to add an effect" };
                 daw_ui::dialog_actions(ui, |ui| {
-                    if state.kind != DeviceKind::Unknown {
+                    if state.kind != LibrarySection::Unknown {
                     ui.add_enabled_ui(enabled && selected.is_some(), |ui| {
                         if daw_ui::dialog_primary(ui, primary_label).on_hover_text(action_hint(primary)).on_disabled_hover_text(unavailable).clicked()
                             && let Some(item) = selected
@@ -1152,7 +1182,7 @@ impl DawApp {
                             let Some(item) = selected else { return; };
                             let entry = item.entry;
                             ui.set_max_width(daw_ui::tokens::POPUP_WIDTH_SM);
-                            if state.kind == DeviceKind::Unknown {
+                            if state.kind == LibrarySection::Unknown {
                                 if daw_ui::button(ui, "Try as instrument").on_hover_text("Type is unverified; the isolated host will validate the device").clicked() {
                                     action = Some((entry.plugin.clone(), DeviceAction::Instrument)); ui.close();
                                 }
@@ -1160,13 +1190,13 @@ impl DawApp {
                                     action = Some((entry.plugin.clone(), DeviceAction::Insert)); ui.close();
                                 }
                             }
-                            if state.kind == DeviceKind::Instrument {
+                            if state.kind == LibrarySection::Instrument {
                                 let can_assign = self.selected_track.and_then(|id| self.project.track(id)).is_some_and(|track| track.kind == TrackKind::Midi);
                                 if !assign && can_assign && daw_ui::button(ui, "Assign to selected track").on_hover_text(action_hint(DeviceAction::Assign)).clicked() {
                                     action = Some((entry.plugin.clone(), DeviceAction::Assign));
                                     ui.close();
                                 }
-                            } else if state.kind == DeviceKind::Effect && source.is_some() {
+                            } else if state.kind == LibrarySection::Effect && source.is_some() {
                                 let (label, alternate) = if primary == DeviceAction::Send { ("Add to effect chain", DeviceAction::Insert) } else { ("Create send track", DeviceAction::Send) };
                                 if daw_ui::button(ui, label).on_hover_text(action_hint(alternate)).clicked() {
                                     action = Some((entry.plugin.clone(), alternate));
@@ -1198,13 +1228,13 @@ impl DawApp {
                             .on_disabled_hover_text("Select a device first");
                     });
                     if daw_ui::dialog_button(ui, "Device details").on_hover_text("Open the selected device’s information and controls").clicked() && let Some(item) = selected {
-                        if state.kind == DeviceKind::Unknown {
+                        if state.kind == LibrarySection::Unknown {
                             diagnostic_request = Some(device_diagnostics(item.entry));
                         } else {
                             details_request = Some(item.entry.clone());
                         }
                     }
-                    if state.kind == DeviceKind::Unknown && daw_ui::dialog_button(ui, "Inspect device").on_hover_text("Show identification and validation details for the unverified device").clicked() && let Some(item) = selected { diagnostic_request = Some(device_diagnostics(item.entry)); }
+                    if state.kind == LibrarySection::Unknown && daw_ui::dialog_button(ui, "Inspect device").on_hover_text("Show identification and validation details for the unverified device").clicked() && let Some(item) = selected { diagnostic_request = Some(device_diagnostics(item.entry)); }
                 }, |ui| {
                     // The selected device and where it will go share one status
                     // column, so the actions keep a fixed corner.
@@ -1215,7 +1245,7 @@ impl DawApp {
                         daw_ui::text::truncated(ui, daw_ui::text::TextRole::Label, name)
                             .on_hover_text(name);
                     }
-                    if state.kind == DeviceKind::Instrument {
+                    if state.kind == LibrarySection::Instrument {
                         let context = if assign {
                             assignment_target.and_then(|id| self.project.track(id))
                                 .map(|track| format!("Assign to {}", track.name))

@@ -131,7 +131,7 @@ impl DawApp {
             .range
             .map_or(String::new(), |range| {
                 format!(
-                    " · Loop beats {}–{}",
+                    " · Range beats {}–{}",
                     daw_ui::parameter_value_text(range.start_beat + 1.0),
                     daw_ui::parameter_value_text(range.end_beat + 1.0)
                 )

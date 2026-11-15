@@ -315,3 +315,274 @@ fn without_a_sample_it_is_silent() {
     let (left, right) = render(&mut *device, 0.1, &[(0.0, on(60))]);
     assert!(left.iter().chain(&right).all(|x| *x == 0.0));
 }
+
+use daw_dsp::sample_player::{PlayerKind, PlayerNode, VelocityChild};
+
+fn branch(id: u64, kind: PlayerKind) -> PlayerNode {
+    PlayerNode {
+        id,
+        name: String::new(),
+        kind,
+    }
+}
+
+#[test]
+fn all_children_share_one_voice_and_keep_independent_sample_lengths() {
+    let mut device = sampler(recording(RATE, 0.04, |_| 0.01), &[(VOICES, 1.0)]);
+    device.set_sample(127, Some(recording(44_100.0, 0.12, |_| 0.01)));
+    let root = branch(
+        100,
+        PlayerKind::All {
+            children: (0..32)
+                .map(|index| PlayerNode::sample(index + 1, if index < 16 { 0 } else { 127 }))
+                .collect(),
+        },
+    );
+    device.set_sample_player(0, Some(&root));
+    device.reset();
+    let (left, right) = render(&mut *device, 0.16, &[(0.0, on(60))]);
+    assert_eq!(left, right);
+    assert!(
+        (left[at(0.02)] - 0.32).abs() < 1e-5,
+        "all32 leaves play: {}",
+        left[at(0.02)]
+    );
+    assert!(
+        (left[at(0.08)] - 0.16).abs() < 1e-5,
+        "long leaves keep playing after short ones: {}",
+        left[at(0.08)]
+    );
+    assert_eq!(peak(span(&left, 0.125, 0.16)), 0.0);
+}
+
+#[test]
+fn velocity_round_robin_random_trees_select_independently_and_reset_exactly() {
+    let mut device = sampler(recording(RATE, 0.03, |_| 0.05), &[]);
+    for slot in 1..12 {
+        let level = (slot + 1) as f32 * 0.05;
+        device.set_sample(slot, Some(recording(RATE, 0.03, |_| level)));
+    }
+    let root = branch(
+        1,
+        PlayerKind::Velocity {
+            children: (0..3)
+                .map(|velocity| VelocityChild {
+                    min: [1, 43, 85][velocity],
+                    max: [42, 84, 127][velocity],
+                    child: branch(
+                        10 + velocity as u64,
+                        PlayerKind::RoundRobin {
+                            children: (0..2)
+                                .map(|round| {
+                                    branch(
+                                        20 + (velocity * 2 + round) as u64,
+                                        PlayerKind::Random {
+                                            children: (0..2)
+                                                .map(|random| {
+                                                    let slot =
+                                                        (velocity * 4 + round * 2 + random) as u32;
+                                                    PlayerNode::sample(100 + u64::from(slot), slot)
+                                                })
+                                                .collect(),
+                                        },
+                                    )
+                                })
+                                .collect(),
+                        },
+                    ),
+                })
+                .collect(),
+        },
+    );
+    device.set_sample_player(0, Some(&root));
+    device.reset();
+    // Interleave three velocity branches. Their round-robin positions must
+    // advance independently, not every time any other branch receives a hit.
+    let events: Vec<_> = (0..18)
+        .map(|hit| {
+            (
+                hit as f32 * 0.05,
+                EventKind::NoteOn {
+                    note: 60,
+                    pitch: 60.0,
+                    velocity: [20.0, 60.0, 100.0][hit % 3] / 127.0,
+                },
+            )
+        })
+        .collect();
+    let (first, _) = render(&mut *device, 0.95, &events);
+    for hit in 0..18 {
+        let branch = hit % 3;
+        let round = (hit / 3) % 2;
+        let low = (branch * 4 + round * 2 + 1) as f32 * 0.05;
+        let actual = first[at(hit as f32 * 0.05 + 0.015)];
+        assert!(
+            (actual - low).abs() < 1e-5 || (actual - (low + 0.05)).abs() < 1e-5,
+            "hit{hit}: {actual}, expected {low} or {}",
+            low + 0.05
+        );
+    }
+    device.reset();
+    let (second, _) = render(&mut *device, 0.95, &events);
+    assert_eq!(
+        first, second,
+        "each random branch resets with its own repeatable seed"
+    );
+}
+
+#[test]
+fn leaf_regions_compose_with_master_markers_and_reverse_without_rewriting_samples() {
+    let sample = recording(RATE, 0.2, |time| {
+        time * (std::f32::consts::TAU * 400.0 * time).sin()
+    });
+    let mut reference = sampler(
+        Arc::clone(&sample),
+        &[(START, 50.0), (END, 75.0), (REVERSE, 1.0)],
+    );
+    let (expected, _) = render(&mut *reference, 0.1, &[(0.0, on(60))]);
+    let mut device = sampler(sample, &[(START, 50.0)]);
+    let root = branch(
+        1,
+        PlayerKind::Sample {
+            slot: 0,
+            start: 0.25,
+            end: 0.75,
+            reverse: true,
+            gain_db: -6.0206,
+        },
+    );
+    device.set_sample_player(0, Some(&root));
+    device.reset();
+    let (actual, _) = render(&mut *device, 0.1, &[(0.0, on(60))]);
+    assert!(
+        expected
+            .iter()
+            .zip(actual)
+            .all(|(expected, actual)| (actual - expected * 0.5).abs() < 1e-6)
+    );
+    assert_eq!(peak(span(&expected, 0.055, 0.1)), 0.0);
+}
+
+#[test]
+fn legato_pitch_changes_do_not_retrigger_or_advance_round_robin() {
+    let mut device = sampler(
+        recording(RATE, 1.0, |_| 0.1),
+        &[(VOICE_MODE, 2.0), (AENV_RELEASE, 1.0)],
+    );
+    device.set_sample(1, Some(recording(RATE, 1.0, |_| 0.5)));
+    let root = branch(
+        1,
+        PlayerKind::RoundRobin {
+            children: vec![PlayerNode::sample(2, 0), PlayerNode::sample(3, 1)],
+        },
+    );
+    device.set_sample_player(0, Some(&root));
+    device.reset();
+    let (left, _) = render(
+        &mut *device,
+        0.3,
+        &[
+            (0.0, on(60)),
+            (0.05, on(64)),
+            (0.1, off(64)),
+            (0.15, off(60)),
+            (0.2, on(60)),
+        ],
+    );
+    for time in [0.03, 0.08, 0.13] {
+        assert!((left[at(time)] - 0.1).abs() < 1e-5);
+    }
+    assert!(
+        (left[at(0.23)] - 0.5).abs() < 1e-5,
+        "the next new phrase selects the next child"
+    );
+}
+
+#[test]
+fn velocity_gaps_are_silent_and_overlaps_play_every_matching_child() {
+    let mut device = sampler(recording(RATE, 0.03, |_| 0.1), &[]);
+    device.set_sample(1, Some(recording(RATE, 0.03, |_| 0.2)));
+    let root = branch(
+        1,
+        PlayerKind::Velocity {
+            children: vec![
+                VelocityChild {
+                    min: 1,
+                    max: 64,
+                    child: PlayerNode::sample(2, 0),
+                },
+                VelocityChild {
+                    min: 64,
+                    max: 100,
+                    child: PlayerNode::sample(3, 1),
+                },
+            ],
+        },
+    );
+    device.set_sample_player(0, Some(&root));
+    device.reset();
+    let events: Vec<_> = [1, 63, 64, 65, 100, 101, 127]
+        .into_iter()
+        .enumerate()
+        .map(|(index, velocity)| {
+            (
+                index as f32 * 0.05,
+                EventKind::NoteOn {
+                    note: 60,
+                    pitch: 60.0,
+                    velocity: velocity as f32 / 127.0,
+                },
+            )
+        })
+        .collect();
+    let (left, _) = render(&mut *device, 0.36, &events);
+    for (index, expected) in [0.1, 0.1, 0.3, 0.2, 0.2, 0.0, 0.0].into_iter().enumerate() {
+        assert!((left[at(index as f32 * 0.05 + 0.015)] - expected).abs() < 1e-5);
+    }
+}
+
+#[test]
+fn stealing_keeps_the_selection_made_at_note_on_and_tail_ignores_unused_sources() {
+    let mut device = sampler(
+        recording(RATE, 0.1, |_| 0.1),
+        &[(VOICES, 1.0), (LOOP_MODE, 3.0), (AENV_RELEASE, 5.0)],
+    );
+    device.set_sample(1, Some(recording(RATE, 0.1, |_| 0.2)));
+    device.set_sample(2, Some(recording(RATE, 0.1, |_| 0.3)));
+    // An unrelated loaded recording is available to the editor but must not
+    // extend this player's offline tail by an unused ten seconds.
+    device.set_sample(127, Some(recording(8000.0, 10.0, |_| 0.4)));
+    let root = branch(
+        1,
+        PlayerKind::RoundRobin {
+            children: vec![
+                PlayerNode::sample(2, 0),
+                PlayerNode::sample(3, 1),
+                PlayerNode::sample(4, 2),
+            ],
+        },
+    );
+    device.set_sample_player(0, Some(&root));
+    device.reset();
+    let events: Vec<_> = (0..3)
+        .map(|index| {
+            (
+                index as f32 * 0.001,
+                EventKind::NoteOn {
+                    note: 60 + index,
+                    pitch: 60.0,
+                    velocity: 1.0,
+                },
+            )
+        })
+        .collect();
+    let (left, _) = render(&mut *device, 0.04, &events);
+    assert!(
+        (left[at(0.02)] - 0.3).abs() < 1e-5,
+        "the final pending hit keeps its third selection"
+    );
+    assert!(
+        device.tail_samples() < at(0.2) as u32,
+        "unused sample must not extend the tail"
+    );
+}

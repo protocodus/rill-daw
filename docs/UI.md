@@ -303,7 +303,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Native pane middle-drag navigation | `scroll_area`, `scroll_area_is_panning` |
 | Arrangement overlay controls | `button_at`, `picker_at`, `selectable_at`, `number_at` |
 | Text input | `text_field` |
-| Mouse naming | `inline_name_editor`, `name_keyboard`, `set_name_keyboard_open`, `name_keyboard_open` |
+| Mouse naming | `inline_name_editor`, `name_keyboard`, `name_keyboard_button`, `name_keyboard_icon_button`, `set_name_keyboard_open`, `name_keyboard_open` |
 | Assistant workspace, examples, tools and tips | `assistant`, `AssistantState`, `AssistantPage`, `AssistantOptions`, `AssistantSubmitState`, `AssistantExample`, `AssistantTool`, `AssistantTip`, `AssistantMessage`, `AssistantResponse`, `contextual_ai_button`, `contextual_ai_button_compact` |
 | Masked credential input | `secret_field` |
 | Aligned settings and paths | `form_grid`, `form_label`, `path_row`, `section_gap` |
@@ -390,6 +390,12 @@ same editor with its pad visible; **File → Rename project…** also uses it. A
 unsaved project's name supplies Save/WAV/MIDI defaults; naming a saved project
 does not rename its existing file. The title tooltip keeps that distinction
 visible alongside the arrangement duration.
+
+`name_keyboard_button` attaches the same pointer keyboard to an ordinary text
+field in an anchored popup. Narrow inspectors, including the favorite tag editor,
+can offer mouse entry without expanding their parent pane.
+`name_keyboard_icon_button` provides the same popup through a labelled 34-point
+icon target for narrow search rows. Both variants include a visible Done action.
 
 `duration::duration_presets` offers exact 5, 10, 15, 30, 60 and 120-second targets
 in an on-demand choice menu. It returns the selected duration and preserves the
@@ -632,7 +638,9 @@ groups such as MIDI multi-draw's two selectors; keep `toolbar_trailing` for
 existing right-aligned controls.
 
 Horizontal control rows center their labels, icons, fields and actions vertically
-by default. Ordinary rows use the 34-point control height. A calibrated slider
+by default. Ordinary rows use the 34-point control height.
+`control_row` and `control_row_wrapped` reserve that compact height for labels,
+buttons and plain fields. A calibrated slider
 with scale captions reserves 55 points: its rail stays on the row's center line,
 with balanced space around it and readable captions below. Use
 `parameter_row(ui, contents)` when mixing those sliders with other controls.
@@ -1270,7 +1278,24 @@ empty clips and source notes outside trimmed bounds do not trigger it.
 **Export…** explicitly continues without those notes; healthy audio exports add
 no confirmation. Offline rendering does not depend on the output device. VST3 mixdown and baked audio use explicit offline processing with a bounded five-second processing-response budget; live playback retains its 100 ms processing deadline.
 
-A running export keeps its filename and elapsed time visible independently of editor status. Completion remains distinct from rendering. **Retry export** repeats the failed mix, destination and options, retaining its original project snapshot even if later edits were made; hover the action for that scope. New/Open/Quit wait for active export completion. If export fails while switching, **Cancel** returns to its retry action and **Continue** resumes the normal document-save decision without claiming a WAV was completed.
+**File → Bounce audio…**, a clip's **Bounce selection…**, and the Samples
+browser's **Bounce…** use the same export dialog and renderer. **Source** chooses
+the arrangement, exact loop markers, or the selected audio/MIDI clips, preserving
+spaces between clips and their channel processing, sends and Master. A selected
+MIDI clip renders its complete gesture. **Destination** chooses a file or
+**Project samples**; **Name**, sample rate and bit depth define the reusable
+recording. File delivery also offers FLAC, Vorbis and MP3; project samples use
+WAV so loading does not introduce another encoding step. Selected clips can keep
+instrument/effect releases; loops stay exact. **Sample actions → Export sample…** uses
+the same dialog for the loaded recording without applying the track's mix gain.
+Project-sample publication is one undoable edit and portable saving includes the
+asset even before a clip or instrument uses it. The application `document_action`
+export API uses the same source/destination choices and transaction, with
+`source: selected_clips` capturing the current selection and
+`destination: project_samples` plus `name` choosing managed storage. Cancellation, failed renders and
+song edits made during rendering publish nothing and remove unpublished media.
+
+A running export keeps its filename and elapsed time visible independently of editor status. Completion remains distinct from rendering. **Retry export** for a file repeats the failed mix, destination and options, retaining its original project snapshot even if later edits were made. A Project sample retry reopens Bounce with its name and quality retained, letting the user review the current source before a fresh render; hover the action for that scope. New/Open/Quit wait for active export completion. If export fails while switching, **Cancel** returns to its retry action and **Continue** resumes the normal document-save decision without claiming a WAV was completed.
 
 **File → Recent exports** retains the current document's last five successful
 WAV/MIDI destinations with their format, filename, full-path tooltip and **Copy
@@ -1438,6 +1463,26 @@ arrow keys), and canvas handles use the 21-point `HIT_TARGET`.
 | `wheel` | Pitch (`bipolar`, springs back to center) and mod wheels. Every instrument panel carries both. |
 | `mod_source_chip`, `mod_slot_row` | Draggable modulation source and one row of the matrix. |
 
+`sample_player_editor` ([sample_player.rs](../crates/daw-ui/src/sample_player.rs))
+is the shared full-page editor for Sampler and drum-pad players. Its indented,
+collapsible tree keeps Sample, All at once, Round robin, Random, and Velocity
+players in one hierarchy. Add, Wrap, Duplicate, Remove and Move actions preserve
+node identities; duplication shares recordings while giving copied nodes new
+identities. The selected node inspector exposes its name, playback mode or
+sample region, gain and reverse state. Velocity ranges belong to a group's
+children and may overlap; Distribute velocities divides the range evenly.
+Leaf rows and the waveform accept native files and `SampleDrop` payloads.
+
+`sample_actions`, `sample_name_editor`, `sample_identity`, and
+`sample_group_overview` ([sample_controls.rs](../crates/daw-ui/src/sample_controls.rs))
+keep the same naming, library/file loading, export and boundary actions in both
+sampling instruments. The name editor includes the shared pointer keyboard.
+Composite players show a count and an Edit player entry point instead of a
+misleading single waveform. Their drop target adds a child; a leaf drop replaces
+that recording. The waveform's quiet bottom bracket marks detected audible
+bounds independently of the editable playback markers. Trim silence intersects
+the current crop with those bounds; Reverse audible region also reverses it.
+
 ### Visualizations ([`device_plots.rs`](../crates/daw-ui/src/device_plots.rs))
 
 `frequency_plot` draws curves on the shared log grid `log_grid_frequency`,
@@ -1530,7 +1575,62 @@ when a long span crowds them into one corner. The
 view knows no parameters: R1 Spacer maps the handles to Time or Division,
 Feedback, Pre-delay, Decay and the two levels.
 
-The other plots: `spectrum`, `scope`, `wavetable_view` and `sample_view` (draggable start, end and loop markers, an optional amplifier envelope drawn from start to end; it takes a sample or file dropped on it). They take plain data and own no audio state.
+The other plots: `spectrum`, `scope`, `wavetable_view` and `sample_view` (draggable start, end and loop markers, an optional amplifier envelope drawn from start to end, and an optional audible-region preview; it takes a sample or file dropped on it). They take plain data and own no audio state.
+
+`sample_player_editor` presents a shared DSP `PlayerNode` as an indented,
+collapsible tree and a selected-node inspector. Structural actions (Add sample,
+Add group, Wrap, Duplicate, Move and Remove) have visible controls. Velocity
+edges expose editable inclusive ranges; Sample leaves expose independent gain,
+region and direction. The host supplies previews and free source slots, applies
+the returned edit as one transaction, and handles requested file/library loads.
+The application opens this large editor as a page with Back to its device panel.
+Its optional Samples sidebar reuses `sample_search`, `sample_results` and
+`SampleDrop`, allowing direct browser-to-leaf dragging. A fixed
+`sample_project_drop_target` preserves project admission in every source scope;
+Browse opens the full browser with the same navigation context.
+
+`sample_actions`, `sample_identity` and `sample_name_editor` share compact load,
+trim, reverse, export and naming controls between R1 Sampler and R1 Drums. Pad
+names remain distinct from recording names. Library indexing is an explicit
+Scan folders action; painting or searching a tree never starts a scan.
+
+`sample_browser_workspace` divides the available viewport into Sources (196
+points, 190 at laptop widths), flexible Results, and a 280-point inspector with
+13-point gaps. `sample_regions` reserves fixed header/footer heights and clips
+three independent regions to the actual available height. The host scrolls the
+middle where needed; headers and primary actions stay reachable. Use the same
+regions and result primitives in the 260-point Player palette.
+
+`sample_sources` receives opaque `SampleSourceNode` identities, fixed collection
+rows, and a cached folder-only hierarchy. Its chevron expands without selecting;
+the adjacent label changes scope. A collection opts into named `SampleDrop`
+payloads with `drop_target`; the response identifies both destination and source.
+Collections stay mounted while the folder tree scrolls. This component never
+filters, scans, recursively counts files, or manages source storage.
+
+`sample_search` combines a bounded search/clear/mouse-keyboard row with a
+scope/count caption. `sample_results` renders a flat virtualized slice of
+`SampleResult` values with stable IDs, semantic provenance, lazy duration,
+constant favorite stars and separate category decoration. Row height starts at
+44 points and increases uniformly if the shared font metrics require it. The
+name/provenance area selects and drags; the star changes only membership. Known
+Loading, Playing and Failed states have text/icon cues independent of color.
+
+Results own Up/Down selection/reveal, Space preview toggle, and Enter or
+double-click preview requests only while their group has focus and no popup is
+open. They emit commands and never import audio. Global shortcut handlers consult
+`sample_results_owns_keys` before taking Enter/Space. Text fields, source rows,
+menus, and favorite controls retain their own keyboard behavior.
+
+`sample_details` shows bounded source metadata: length, format/codec, rate,
+channels, known encoding/depth and size. Omit its name when the fixed inspector
+header already names the source. Raw PCM tokens become readable labels such as
+32-bit float. It accepts prepared values only; probing never happens during
+painting. `sample_favorite_button` always shows an outlined/filled star;
+`sample_tag` carries the separate colored icon and readable tag. The on-demand
+`sample_favorite_editor` shares optional text tags, named vector icon choices and
+the standard color picker with Clear color. The host owns global favorite
+storage, drafts, source identities and transaction outcomes.
 
 ### Panels ([`device_panel.rs`](../crates/daw-ui/src/device_panel.rs))
 
@@ -1560,7 +1660,7 @@ color, so the two levels never read alike. Built-in device cards use the same
 pair.
 `preset_group` holds every preset control in one bordered group with its own
 dimmed **Preset** title: previous and next, the preset menu, **Save as…**
-(the name is typed in the group), **Reset**, and **Random** 1% · 10% · 100%
+(the name is typed in the group), **Reset**, and **Randomize** 1% · 10% · 100%
 (`PresetAction::Randomize`). It returns a `PresetAction` and is the same
 wherever presets appear.
 `preset_browser` provides search, category and tag filters, Factory/User,

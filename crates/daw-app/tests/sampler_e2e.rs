@@ -234,9 +234,8 @@ fn the_panel_loads_a_sample_by_its_button_and_by_a_dropped_file() {
     assert!((hz - 440.0).abs() < 8.0, "{hz} Hz");
 
     // Clear empties it again, as one step.
-    let state = app.inspect();
-    let (x, y) = label_center(&state, "Clear");
-    let cleared = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    app.click("Sample actions");
+    let cleared = app.click("Clear sample");
     assert_eq!(samples(&cleared, keys), Value::Null);
     assert_eq!(cleared["history"]["undo"][0], "Clear sample");
     app.quit();

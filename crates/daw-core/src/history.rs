@@ -238,8 +238,34 @@ impl History {
 
 // Heap sizes of cloned data plus inline storage. No JSON serialization or
 // sample buffers are involved. Allocator bookkeeping is outside this estimate.
+fn sample_player_bytes(node: &daw_dsp::sample_player::PlayerNode) -> usize {
+    use daw_dsp::sample_player::PlayerKind;
+    size_of_val(node)
+        + node.name.len()
+        + match &node.kind {
+            PlayerKind::Sample { .. } => 0,
+            PlayerKind::All { children }
+            | PlayerKind::RoundRobin { children }
+            | PlayerKind::Random { children } => {
+                children.iter().map(sample_player_bytes).sum::<usize>()
+            }
+            PlayerKind::Velocity { children } => children
+                .iter()
+                .map(|entry| {
+                    size_of_val(entry) - size_of_val(&entry.child)
+                        + sample_player_bytes(&entry.child)
+                })
+                .sum::<usize>(),
+        }
+}
+
 pub(crate) fn snapshot_bytes(project: &Project) -> usize {
     let mut bytes = size_of::<Project>() + project.name.len();
+    bytes += project
+        .samples
+        .iter()
+        .map(|sample| size_of_val(sample) + sample.name.len() + sample.path.len())
+        .sum::<usize>();
     for track in project.channels() {
         bytes += size_of_val(track)
             + track.name.len()
@@ -252,11 +278,24 @@ pub(crate) fn snapshot_bytes(project: &Project) -> usize {
             Instrument::Vst3 { path, class_id } => {
                 bytes += path.len() + class_id.as_ref().map_or(0, String::len);
             }
-            Instrument::Builtin { device, samples } => {
+            Instrument::Builtin {
+                device,
+                samples,
+                sample_names,
+                sample_players,
+            } => {
                 bytes += device.len()
                     + samples
                         .iter()
-                        .map(|s| size_of_val(s) + s.path.len())
+                        .map(|s| size_of_val(s) + s.path.len() + s.name.len())
+                        .sum::<usize>()
+                    + sample_names
+                        .iter()
+                        .map(|(slot, name)| size_of_val(slot) + size_of_val(name) + name.len())
+                        .sum::<usize>()
+                    + sample_players
+                        .values()
+                        .map(sample_player_bytes)
                         .sum::<usize>();
             }
             Instrument::None => {}

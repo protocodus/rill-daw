@@ -82,6 +82,19 @@ impl DawApp {
         explicit_lanes: &[u64],
     ) -> Result<bool, ToolError> {
         candidate.validate().map_err(failure)?;
+        for track in &mut candidate.tracks {
+            validate_changed_sample_layout(track, self.project.track(track.id))?;
+            if let Some(previous) = self.project.track(track.id)
+                && let Some(descriptor) = track
+                    .instrument
+                    .builtin_device()
+                    .and_then(daw_devices::descriptor)
+            {
+                track
+                    .instrument
+                    .release_removed_sample_bindings(&previous.instrument, descriptor.sample_slots);
+            }
+        }
         crate::automation_state::capture_manual_parameter_changes(
             &self.project,
             &mut candidate,
@@ -94,6 +107,13 @@ impl DawApp {
             return Ok(false);
         }
         let audio_changed = !crate::app::audio_equivalent(&self.project, &candidate);
+        let sources_changed = self
+            .project
+            .audio_paths()
+            .collect::<std::collections::HashSet<_>>()
+            != candidate
+                .audio_paths()
+                .collect::<std::collections::HashSet<_>>();
         let editor_state = self.editor_state_signature();
         self.assistant
             .known_parameters
@@ -158,6 +178,13 @@ impl DawApp {
             self.revision = self.revision.wrapping_add(1);
             self.update_playback();
         }
+        if sources_changed {
+            // Pool-only edits need fresh metadata and waveforms without
+            // restarting playback. If admission is busy, leave it dirty so
+            // even a disconnected worker retries against the new sources.
+            self.audio_source_revision = self.revision.wrapping_sub(1);
+            self.cache_audio();
+        }
         Ok(true)
     }
 
@@ -172,11 +199,23 @@ impl DawApp {
         slot: u32,
         sample: Option<DeviceSample>,
     ) -> Result<bool, ToolError> {
+        self.set_device_sample_with_player(track_id, slot, sample, None)
+    }
+
+    /// A managed import can publish a new recording and its playback leaf in
+    /// the same transaction; failed decoding never leaves an empty branch.
+    pub(crate) fn set_device_sample_with_player(
+        &mut self,
+        track_id: u64,
+        slot: u32,
+        sample: Option<DeviceSample>,
+        player: Option<(u32, daw_core::PlayerNode)>,
+    ) -> Result<bool, ToolError> {
         let descriptor = self.tool_device(track_id, None)?;
-        if slot >= descriptor.sample_slots {
+        if slot >= descriptor.sample_capacity {
             return Err(ToolError::new(
                 "invalid_arguments",
-                match descriptor.sample_slots {
+                match descriptor.sample_capacity {
                     0 => format!("{} plays no samples", descriptor.name),
                     1 => format!("{} has one sample slot, 0", descriptor.name),
                     n => format!("{} has sample slots 0 to {}", descriptor.name, n - 1),
@@ -185,6 +224,11 @@ impl DawApp {
         }
         if let Some(sample) = &sample {
             check_sample_size(&sample.path)?;
+        }
+        if let Some((group, root)) = &player {
+            self.check_device_sample_group(track_id, *group)?;
+            root.validate(descriptor.sample_capacity)
+                .map_err(|message| ToolError::new("invalid_arguments", message))?;
         }
         let label = if sample.is_some() {
             "Load sample"
@@ -197,9 +241,104 @@ impl DawApp {
             None => candidate.clear_device_sample(track_id, slot),
         }
         .map_err(failure)?;
+        if let Some((group, root)) = player {
+            candidate
+                .set_sample_player(track_id, group, Some(root))
+                .map_err(failure)?;
+        }
         let changed = self.commit_song_candidate(candidate, label)?;
         self.cache_audio();
         Ok(changed)
+    }
+
+    fn check_device_sample_group(&self, track: u64, group: u32) -> Result<(), ToolError> {
+        let descriptor = self.tool_device(track, None)?;
+        if group >= descriptor.sample_slots {
+            return Err(ToolError::new(
+                "invalid_arguments",
+                if descriptor.sample_slots == 0 {
+                    format!("{} plays no samples", descriptor.name)
+                } else {
+                    format!(
+                        "{} has sample slots 0 to {}",
+                        descriptor.name,
+                        descriptor.sample_slots - 1
+                    )
+                },
+            ));
+        }
+        Ok(())
+    }
+
+    /// Resolve a logical player and optional sample node to its recording.
+    /// A composite player needs an explicit node, so loading never silently
+    /// replaces an unrelated branch of a kit.
+    pub(crate) fn device_sample_slot(
+        &self,
+        track: u64,
+        group: u32,
+        node: Option<u64>,
+    ) -> Result<u32, ToolError> {
+        self.check_device_sample_group(track, group)?;
+        let instrument = &self
+            .project
+            .track(track)
+            .expect("validated track")
+            .instrument;
+        let Some(root) = instrument.sample_player(group) else {
+            return if node.is_none() || node == Some(1) {
+                Ok(group)
+            } else {
+                Err(ToolError::new("not_found", "Sample player node not found"))
+            };
+        };
+        let target = match node {
+            Some(id) => root
+                .find(id)
+                .ok_or_else(|| ToolError::new("not_found", "Sample player node not found"))?,
+            None => root,
+        };
+        match target.kind {
+            daw_core::PlayerKind::Sample { slot, .. } => Ok(slot),
+            _ => Err(ToolError::new(
+                "invalid_arguments",
+                "Choose a Sample node_id within this player",
+            )),
+        }
+    }
+
+    pub(crate) fn rename_device_sample_slot(
+        &mut self,
+        track: u64,
+        slot: u32,
+        name: &str,
+    ) -> Result<bool, ToolError> {
+        self.check_device_sample_group(track, slot)?;
+        let mut candidate = self.project.clone();
+        candidate
+            .rename_device_sample_slot(track, slot, name)
+            .map_err(failure)?;
+        self.commit_song_candidate(candidate, "Rename sample slot")
+    }
+
+    pub(crate) fn set_sample_player(
+        &mut self,
+        track: u64,
+        slot: u32,
+        player: Option<daw_core::PlayerNode>,
+    ) -> Result<bool, ToolError> {
+        self.check_device_sample_group(track, slot)?;
+        let descriptor = self.tool_device(track, None)?;
+        if let Some(player) = &player {
+            player
+                .validate(descriptor.sample_capacity)
+                .map_err(|message| ToolError::new("invalid_arguments", message))?;
+        }
+        let mut candidate = self.project.clone();
+        candidate
+            .set_sample_player(track, slot, player)
+            .map_err(failure)?;
+        self.commit_song_candidate(candidate, "Edit sample player")
     }
 
     /// A new MIDI track below the clip's, named after the clip, whose R1
@@ -243,6 +382,64 @@ impl DawApp {
         }
         Ok(())
     }
+}
+
+/// Device-independent project validation bounds stored data; the application
+/// additionally checks new edits against the installed device's actual layout.
+/// Unchanged future metadata stays intact when editing an older project.
+fn validate_changed_sample_layout(
+    track: &Track,
+    previous: Option<&Track>,
+) -> Result<(), ToolError> {
+    let Instrument::Builtin {
+        device,
+        samples,
+        sample_names,
+        sample_players,
+    } = &track.instrument
+    else {
+        return Ok(());
+    };
+    let Some(descriptor) = daw_devices::descriptor(device) else {
+        return Ok(());
+    };
+    let previous = previous
+        .filter(|old| old.instrument.builtin_device() == Some(device))
+        .map(|old| &old.instrument);
+    for sample in samples {
+        if previous.and_then(|old| old.sample(sample.slot)) != Some(sample)
+            && sample.slot >= descriptor.sample_capacity
+        {
+            return Err(ToolError::new(
+                "invalid_arguments",
+                "Sample recording slot is outside this instrument's capacity",
+            ));
+        }
+    }
+    for (slot, name) in sample_names {
+        if previous.and_then(|old| old.sample_name(*slot)) != Some(name.as_str())
+            && *slot >= descriptor.sample_slots
+        {
+            return Err(ToolError::new(
+                "invalid_arguments",
+                "Sample player slot is outside this instrument's layout",
+            ));
+        }
+    }
+    for (slot, player) in sample_players {
+        if previous.and_then(|old| old.sample_player(*slot)) != Some(player) {
+            if *slot >= descriptor.sample_slots {
+                return Err(ToolError::new(
+                    "invalid_arguments",
+                    "Sample player slot is outside this instrument's layout",
+                ));
+            }
+            player
+                .validate(descriptor.sample_capacity)
+                .map_err(|message| ToolError::new("invalid_arguments", message))?;
+        }
+    }
+    Ok(())
 }
 
 impl SongToolHost for DawApp {
@@ -715,35 +912,113 @@ impl ToolHost for DawApp {
                     track_id: u64,
                     #[serde(default)]
                     slot: u32,
+                    node_id: Option<u64>,
                     clip_id: Option<u64>,
+                    sample_id: Option<u64>,
                     #[serde(default)]
                     clear: bool,
                 }
                 let args: Args = parse_arguments(arguments)?;
                 self.check_tool_revision(args.session_id, args.expected_revision)?;
-                let sample = match (args.clip_id, args.clear) {
-                    (Some(clip), false) => {
-                        Some(self.project.clip_sample(clip, args.slot).ok_or_else(|| {
+                let slot = self.device_sample_slot(args.track_id, args.slot, args.node_id)?;
+                let sample = match (args.clip_id, args.sample_id, args.clear) {
+                    (Some(clip), None, false) => {
+                        Some(self.project.clip_sample(clip, slot).ok_or_else(|| {
                             ToolError::new("not_found", "Choose an audio clip of this song")
                         })?)
                     }
-                    (None, true) => None,
+                    (None, Some(id), false) => {
+                        let sample = self.project.project_sample(id).ok_or_else(|| {
+                            ToolError::new("not_found", "Project sample not found")
+                        })?;
+                        Some(DeviceSample {
+                            slot,
+                            path: sample.path.clone(),
+                            name: sample.name.clone(),
+                        })
+                    }
+                    (None, None, true) => None,
                     _ => {
                         return Err(ToolError::new(
                             "invalid_arguments",
-                            "Give clip_id to load a recording, or clear: true to empty the slot",
+                            "Give clip_id or sample_id to load a recording, or clear: true to empty the recording",
                         ));
                     }
                 };
-                self.set_device_sample(args.track_id, args.slot, sample)?;
+                self.set_device_sample(args.track_id, slot, sample)?;
                 let sample = self
                     .project
                     .track(args.track_id)
-                    .and_then(|track| track.instrument.sample(args.slot))
+                    .and_then(|track| track.instrument.sample(slot))
                     .map(|sample| sample.name.clone());
                 Ok(
                     json!({"session_id":self.song_session.id,"revision":self.song_session.revision,
-                    "track_id":args.track_id,"slot":args.slot,"sample":sample}),
+                    "track_id":args.track_id,"slot":args.slot,"node_id":args.node_id,"sample":sample}),
+                )
+            }
+            "get_sample_player" => {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Args {
+                    track_id: u64,
+                    #[serde(default)]
+                    slot: u32,
+                }
+                let args: Args = parse_arguments(arguments)?;
+                self.check_device_sample_group(args.track_id, args.slot)?;
+                let instrument = &self
+                    .project
+                    .track(args.track_id)
+                    .expect("validated track")
+                    .instrument;
+                let player = instrument
+                    .sample_player(args.slot)
+                    .cloned()
+                    .unwrap_or_else(|| daw_core::PlayerNode::sample(1, args.slot));
+                Ok(
+                    json!({"session_id":self.song_session.id,"revision":self.song_session.revision,
+                    "track_id":args.track_id,"slot":args.slot,"name":instrument.sample_name(args.slot),"player":player,
+                    "samples":instrument.samples().iter().map(|sample| json!({"slot":sample.slot,"name":sample.name})).collect::<Vec<_>>()}),
+                )
+            }
+            "set_sample_player" => {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Args {
+                    session_id: u64,
+                    expected_revision: u64,
+                    track_id: u64,
+                    slot: u32,
+                    #[serde(deserialize_with = "Option::deserialize")]
+                    player: Option<daw_core::PlayerNode>,
+                }
+                let args: Args = parse_arguments(arguments)?;
+                self.check_tool_revision(args.session_id, args.expected_revision)?;
+                self.set_sample_player(args.track_id, args.slot, args.player)?;
+                Ok(
+                    json!({"session_id":self.song_session.id,"revision":self.song_session.revision,"track_id":args.track_id,"slot":args.slot}),
+                )
+            }
+            "rename_device_sample_slot" => {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Args {
+                    session_id: u64,
+                    expected_revision: u64,
+                    track_id: u64,
+                    slot: u32,
+                    name: String,
+                }
+                let args: Args = parse_arguments(arguments)?;
+                self.check_tool_revision(args.session_id, args.expected_revision)?;
+                self.rename_device_sample_slot(args.track_id, args.slot, &args.name)?;
+                let name = self
+                    .project
+                    .track(args.track_id)
+                    .and_then(|track| track.instrument.sample_name(args.slot));
+                Ok(
+                    json!({"session_id":self.song_session.id,"revision":self.song_session.revision,
+                    "track_id":args.track_id,"slot":args.slot,"name":name}),
                 )
             }
             "list_device_presets" | "load_device_preset" | "store_device_preset" => {
