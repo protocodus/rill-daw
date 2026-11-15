@@ -419,6 +419,10 @@ impl DawApp {
             .and_then(|(track, clip)| {
                 Some((track, self.project.automation_clip(track, clip)?.clone()))
             });
+        let automation_paste = self
+            .selected_track
+            .filter(|track| self.project.automation_lane(*track).is_some())
+            .zip(crate::arranger_automation::automation_clipboard(ctx));
         match action {
             // A selected pattern copies to the automation clipboard, which
             // pastes onto the selected automation lane at the cursor.
@@ -432,12 +436,9 @@ impl DawApp {
                 true
             }
             AudioClipboardAction::Paste
-                if self.arranger_selection.clipboard.is_none()
-                    && let Some(track) = self
-                        .selected_track
-                        .filter(|track| self.project.automation_lane(*track).is_some())
-                    && let Some(clip) = crate::arranger_automation::automation_clipboard(ctx) =>
+                if self.arranger_selection.clipboard.is_none() && automation_paste.is_some() =>
             {
+                let (track, clip) = automation_paste.unwrap();
                 self.begin_edit();
                 match self
                     .project
