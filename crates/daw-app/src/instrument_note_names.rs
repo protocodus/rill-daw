@@ -191,17 +191,43 @@ fn builtin_names(instrument: &Instrument) -> Vec<NamedNote> {
     use daw_devices::devices::drums::{FIRST_NOTE, PADS};
     (0..PADS)
         .map(|pad| {
+            let slot = pad as u32;
+            let player = instrument.sample_player(slot);
+            let source_slot = player.map_or(slot, |player| match player.kind {
+                daw_core::PlayerKind::Sample { slot, .. } => slot,
+                _ => slot,
+            });
             let name = instrument
-                .sample(pad as u32)
-                .map(|sample| {
-                    let name = clean_name(&sample.name);
-                    if !name.is_empty() {
-                        return name;
-                    }
-                    std::path::Path::new(&sample.path)
-                        .file_stem()
-                        .map(|stem| clean_name(&stem.to_string_lossy()))
-                        .unwrap_or_default()
+                .sample_name(slot)
+                .map(clean_name)
+                .filter(|name| !name.is_empty())
+                .or_else(|| {
+                    player
+                        .map(|player| clean_name(&player.name))
+                        .filter(|name| !name.is_empty())
+                })
+                .or_else(|| {
+                    player
+                        .and_then(|player| match player.kind {
+                            daw_core::PlayerKind::Sample { .. } => None,
+                            daw_core::PlayerKind::All { .. } => Some("All at once"),
+                            daw_core::PlayerKind::RoundRobin { .. } => Some("Round robin"),
+                            daw_core::PlayerKind::Random { .. } => Some("Random"),
+                            daw_core::PlayerKind::Velocity { .. } => Some("Velocity"),
+                        })
+                        .map(str::to_owned)
+                })
+                .or_else(|| {
+                    instrument.sample(source_slot).map(|sample| {
+                        let name = clean_name(&sample.name);
+                        if !name.is_empty() {
+                            return name;
+                        }
+                        std::path::Path::new(&sample.path)
+                            .file_stem()
+                            .map(|stem| clean_name(&stem.to_string_lossy()))
+                            .unwrap_or_default()
+                    })
                 })
                 .filter(|name| !name.is_empty())
                 .unwrap_or_else(|| format!("Pad {} · Empty", pad + 1));
@@ -304,6 +330,8 @@ mod tests {
                     name: String::new(),
                 },
             ],
+            sample_names: Default::default(),
+            sample_players: Default::default(),
         };
         let names = builtin_names(&instrument);
         assert_eq!(names.len(), 16);
@@ -311,6 +339,64 @@ mod tests {
         assert_eq!(names[1].name, "Pad 2 · Empty");
         assert_eq!(names[2].name, "Clap");
         assert_eq!(names[15].pitch, 51);
+    }
+
+    #[test]
+    fn drum_names_follow_custom_pads_composite_players_and_referenced_leaves() {
+        use daw_core::{PlayerKind, PlayerNode};
+        let mut instrument = Instrument::builtin("r1-drums");
+        let Instrument::Builtin {
+            samples,
+            sample_names,
+            sample_players,
+            ..
+        } = &mut instrument
+        else {
+            unreachable!()
+        };
+        samples.push(daw_core::DeviceSample {
+            slot: 64,
+            path: "clap.wav".into(),
+            name: "Leaf clap".into(),
+        });
+        sample_names.insert(0, "  Custom kick\n".into());
+        sample_players.insert(
+            0,
+            PlayerNode {
+                id: 1,
+                name: "Root name".into(),
+                kind: PlayerKind::All {
+                    children: vec![PlayerNode::sample(2, 64)],
+                },
+            },
+        );
+        sample_players.insert(
+            1,
+            PlayerNode {
+                id: 3,
+                name: "Acoustic snare".into(),
+                kind: PlayerKind::Random {
+                    children: vec![PlayerNode::sample(4, 64)],
+                },
+            },
+        );
+        sample_players.insert(
+            2,
+            PlayerNode {
+                id: 5,
+                name: String::new(),
+                kind: PlayerKind::RoundRobin {
+                    children: vec![PlayerNode::sample(6, 64)],
+                },
+            },
+        );
+        sample_players.insert(3, PlayerNode::sample(7, 64));
+        let names = builtin_names(&instrument);
+        assert_eq!(names[0].name, "Custom kick");
+        assert_eq!(names[1].name, "Acoustic snare");
+        assert_eq!(names[2].name, "Round robin");
+        assert_eq!(names[3].name, "Leaf clap");
+        assert_eq!(names[4].name, "Pad 5 · Empty");
     }
 
     #[test]
@@ -328,6 +414,8 @@ mod tests {
                 path: "kick.wav".into(),
                 name: "Kick".into(),
             }],
+            sample_names: Default::default(),
+            sample_players: Default::default(),
         };
         session.bump();
         assert_eq!(cache.get(&ctx, session, 1, &track)[0].name, "Kick");

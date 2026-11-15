@@ -15,6 +15,8 @@ and Auto-play switching/stopping in both the full browser and Player palette.
 `sample_browser_async_e2e` covers captured loading, cancellation, failure and successful
 return, ordinary browsing that stays open after loading, focus-scoped preview keys,
 double-click audition and selected-source metadata Retry without rescanning.
+`sample_visual_e2e` checks selected-source background waveform and spectrum analysis,
+selection changes, inspector bounds and failure isolation without song or transport edits.
 `project_sample_import_e2e` covers the Add to Project Samples button and collection
 drop target, managed copies and source reuse, one Undo/Redo, portable reopening
 after deleting sources, and failed imports leaving the pool unchanged.
@@ -25,7 +27,7 @@ cursor preservation and unchanged project/history.
 step restoring every changed parameter, with Redo retaining the same result.
 
 ```sh
-cargo test --locked -p daw-app --test sample_player_e2e --test sample_player_tools_e2e --test sample_browser_e2e --test sample_browser_async_e2e --test project_sample_import_e2e --test sample_preview_e2e --test sample_bounce_e2e --test device_randomize_e2e -- --test-threads=1
+cargo test --locked -p daw-app --test sample_player_e2e --test sample_player_tools_e2e --test sample_browser_e2e --test sample_browser_async_e2e --test sample_visual_e2e --test project_sample_import_e2e --test sample_preview_e2e --test sample_bounce_e2e --test device_randomize_e2e -- --test-threads=1
 ```
 
 `save_optimize_e2e` uses **File → Save and optimize** to remove deleted-clip

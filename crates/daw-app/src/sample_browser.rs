@@ -90,6 +90,10 @@ pub(crate) struct SampleBrowser {
     metadata_index_revision: u64,
     library: crate::sample_library::SampleLibrary,
     metadata: crate::sample_metadata::SampleMetadataState,
+    visual: crate::sample_visual::SampleVisualState,
+    visual_bounds: Option<egui::Rect>,
+    visual_waveform: Option<egui::Rect>,
+    visual_spectrum: Option<egui::Rect>,
     scope: SourceScope,
     tag_draft: Option<FavoriteDraft>,
     session: u64,
@@ -205,6 +209,10 @@ impl DawApp {
                 matches!(
                     self.sample_browser.metadata.selected(&source.path),
                     Some(crate::sample_metadata::SampleMetadataStatus::Loading)
+                ) || matches!(
+                    self.sample_browser.visual.selected(&source.path),
+                    crate::sample_visual::SampleVisualStatus::Idle
+                        | crate::sample_visual::SampleVisualStatus::Loading
                 )
             })
     }
@@ -231,9 +239,17 @@ impl DawApp {
         self.sample_browser.index.poll();
         self.sample_browser.library.poll(ctx);
         self.sample_browser.metadata.poll(ctx);
+        self.sample_browser.visual.poll(ctx);
+        if !self.library_open || !crate::library::samples_visible(ctx) {
+            self.sample_browser.visual.clear_selection();
+            self.sample_browser.visual_bounds = None;
+            self.sample_browser.visual_waveform = None;
+            self.sample_browser.visual_spectrum = None;
+        }
         if self.sample_browser.metadata_index_revision != self.sample_browser.index.revision {
             self.sample_browser.metadata_index_revision = self.sample_browser.index.revision;
             self.sample_browser.metadata.invalidate();
+            self.sample_browser.visual.invalidate();
             if let Some(source) = self
                 .sample_browser
                 .selected
@@ -255,6 +271,7 @@ impl DawApp {
             self.sample_browser.notice = None;
             self.sample_browser.memberships.clear();
             self.sample_browser.metadata.invalidate();
+            self.sample_browser.visual.invalidate();
             self.sample_browser.session = self.song_session.id;
             self.sample_browser.context = self.sample_browser.context.wrapping_add(1);
         }
@@ -618,6 +635,7 @@ impl DawApp {
                         |region, ui| match region {
                             SampleRegion::Header => self.sample_inspector_header(ui),
                             SampleRegion::Body => {
+                                self.sample_inspector_backdrop(ui);
                                 egui::ScrollArea::vertical()
                                     .id_salt("sample_inspector_scroll")
                                     .show(ui, |ui| self.sample_selection_details(ui));
@@ -981,6 +999,46 @@ impl DawApp {
             daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, message, 2);
         }
     }
+    /// Only the visible selected-source inspector requests analysis. Painting
+    /// is behind the scrolling metadata and allocates no interaction targets.
+    fn sample_inspector_backdrop(&mut self, ui: &egui::Ui) {
+        self.sample_browser.visual_bounds = None;
+        self.sample_browser.visual_waveform = None;
+        self.sample_browser.visual_spectrum = None;
+        let Some(source) = self
+            .sample_browser
+            .selected
+            .as_deref()
+            .and_then(|id| self.sample_source(id))
+        else {
+            self.sample_browser.visual.clear_selection();
+            return;
+        };
+        self.sample_browser.visual.request(
+            source.path.clone(),
+            self.settings.scratch_dir.clone(),
+            ui.ctx(),
+        );
+        let bounds = ui.max_rect().intersect(ui.clip_rect());
+        self.sample_browser.visual_bounds = Some(bounds);
+        if let crate::sample_visual::SampleVisualStatus::Ready(data) =
+            self.sample_browser.visual.selected(&source.path)
+        {
+            let painted = daw_ui::paint_audio_preview_backdrop(
+                ui.painter(),
+                bounds,
+                daw_ui::AudioPreviewBackdrop {
+                    waveform: &data.waveform,
+                    spectrum: &data.spectrum,
+                    state: daw_ui::AudioPreviewState::Ready,
+                },
+                daw_ui::theme::palette(ui.ctx()).bg,
+            );
+            self.sample_browser.visual_waveform = painted.waveform;
+            self.sample_browser.visual_spectrum = painted.spectrum;
+        }
+    }
+
     fn sample_selection_details(&mut self, ui: &mut egui::Ui) {
         let Some(row) = self.selected_sample_row().cloned() else {
             return;
@@ -1014,9 +1072,32 @@ impl DawApp {
             self.sample_browser
                 .metadata
                 .retry(row.path.clone().into(), ui.ctx());
+            self.sample_browser.visual.retry(
+                row.path.clone().into(),
+                self.settings.scratch_dir.clone(),
+                ui.ctx(),
+            );
         }
         daw_ui::choice_menu(ui, "File details…", |ui| {
             daw_ui::text::bounded_block(ui, daw_ui::text::TextRole::Note, &row.path, 8);
+            if let crate::sample_visual::SampleVisualStatus::Failed(error) =
+                self.sample_browser.visual.selected(Path::new(&row.path))
+            {
+                daw_ui::text::bounded_block(
+                    ui,
+                    daw_ui::text::TextRole::Note,
+                    format!("Visual analysis unavailable · {error}"),
+                    4,
+                );
+                if daw_ui::quiet_button(ui, "Retry visual analysis").clicked() {
+                    self.sample_browser.visual.retry(
+                        row.path.clone().into(),
+                        self.settings.scratch_dir.clone(),
+                        ui.ctx(),
+                    );
+                    ui.close();
+                }
+            }
             if daw_ui::button(ui, "Copy path").clicked() {
                 ui.ctx().copy_text(row.path.clone());
                 ui.close();
@@ -1688,6 +1769,36 @@ impl DawApp {
             _ => serde_json::json!({"state":"loading"}),
         }
     }
+    fn sample_visual_diagnostics(&self) -> serde_json::Value {
+        let Some(source) = self
+            .sample_browser
+            .selected
+            .as_deref()
+            .and_then(|id| self.sample_source(id))
+        else {
+            return serde_json::Value::Null;
+        };
+        let rect = |rect: egui::Rect| serde_json::json!({"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]});
+        let mut value = match self.sample_browser.visual.selected(&source.path) {
+            crate::sample_visual::SampleVisualStatus::Idle => serde_json::json!({"state":"idle"}),
+            crate::sample_visual::SampleVisualStatus::Loading => {
+                serde_json::json!({"state":"loading"})
+            }
+            crate::sample_visual::SampleVisualStatus::Failed(error) => {
+                serde_json::json!({"state":"failed","error":error})
+            }
+            crate::sample_visual::SampleVisualStatus::Ready(data) => serde_json::json!({
+                "state":"ready","waveform":data.waveform,"spectrum":data.spectrum,
+                "min_frequency":data.min_frequency,"max_frequency":data.max_frequency,
+                "sample_rate":data.sample_rate,"source_frames":data.source_frames,
+            }),
+        };
+        value["path"] = serde_json::json!(source.path);
+        value["bounds"] = self.sample_browser.visual_bounds.map(rect).into();
+        value["waveform_rect"] = self.sample_browser.visual_waveform.map(rect).into();
+        value["spectrum_rect"] = self.sample_browser.visual_spectrum.map(rect).into();
+        value
+    }
     fn sample_browser_diagnostics(
         &self,
         ui: &egui::Ui,
@@ -1719,7 +1830,7 @@ impl DawApp {
             "scope":self.sample_browser.scope.key(),"scope_label":self.sample_browser.scope.label(),"query":self.sample_browser.query,"selected":self.sample_browser.selected,"target":self.sample_browser.target,"captured":self.sample_browser.captured,
             "auto_play":self.settings.sample_auto_play,"favorites_only":self.sample_browser.scope==SourceScope::Favorites,
             "favorites":self.sample_browser.library.entries().iter().map(|entry| serde_json::json!({"id":entry.id,"path":entry.path,"name":entry.name,"favorite":entry.favorite})).collect::<Vec<_>>(),"favorite_busy":self.sample_browser.library.busy(),
-            "metadata":self.sample_metadata_diagnostics(),"notice":self.sample_browser.notice,"pending_import":self.sample_browser.pending.as_ref().map(|pending| pending.ticket.id),
+            "visual_analysis":self.sample_visual_diagnostics(),"metadata":self.sample_metadata_diagnostics(),"notice":self.sample_browser.notice,"pending_import":self.sample_browser.pending.as_ref().map(|pending| pending.ticket.id),
             "drop_targets":sources.drop_targets.iter().map(|(id,response)|serde_json::json!({"id":id,"rect":rect(response.rect),"min":[response.rect.min.x,response.rect.min.y],"max":[response.rect.max.x,response.rect.max.y]})).collect::<Vec<_>>(),
             "sources":sources.rows.iter().map(|(id,response)|serde_json::json!({"id":id,"rect":rect(response.rect)})).collect::<Vec<_>>(),"samples":samples,
         });

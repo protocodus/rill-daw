@@ -54,6 +54,7 @@ mod sample_metadata;
 mod sample_operations;
 mod sample_player_ui;
 mod sample_preview;
+mod sample_visual;
 mod selection_history;
 mod session_service;
 mod settings;

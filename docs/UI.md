@@ -1622,6 +1622,19 @@ open. They emit commands and never import audio. Global shortcut handlers consul
 `sample_results_owns_keys` before taking Enter/Space. Text fields, source rows,
 menus, and favorite controls retain their own keyboard behavior.
 
+`paint_audio_preview_backdrop` paints actual selected-source analysis behind
+inspector metadata without allocating widgets, changing layout/focus, or taking
+input. Pass the bounded body rectangle, its actual opaque surface color, and
+`AudioPreviewBackdrop` data: uniform time-bin min/max waveform peaks and
+normalized levels at uniform logarithmic-frequency band centers. The host owns
+analysis, its frequency/dB ranges, caching, and source identity. Only Ready data
+paints; Empty, Loading, Failed, missing and invalid series never produce
+placeholder audio. The waveform and spectrum occupy separate clipped regions,
+with bounded mesh size and no axes or progress marks. Theme-aware preblended
+colors prevent overlapping strokes from accumulating opacity and preserve
+foreground text contrast. Paint the metadata afterward on the same surface;
+the returned geometry describes only analysis actually drawn.
+
 `sample_details` shows bounded source metadata: length, format/codec, rate,
 channels, known encoding/depth and size. Omit its name when the fixed inspector
 header already names the source. Raw PCM tokens become readable labels such as

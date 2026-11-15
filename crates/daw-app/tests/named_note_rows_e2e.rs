@@ -112,6 +112,8 @@ fn drum_names_audition_and_draw_their_midi_pitch_and_other_notes_remain_reachabl
                 path: path.to_string_lossy().into(),
                 name: "Round kick".into(),
             }],
+            sample_names: [(0, "Custom low kick".into())].into(),
+            sample_players: Default::default(),
         },
         vec![mapped, other],
     );
@@ -121,7 +123,7 @@ fn drum_names_audition_and_draw_their_midi_pitch_and_other_notes_remain_reachabl
         before["midi_editor"]["visible_pitches"],
         json!((36..52).collect::<Vec<_>>())
     );
-    assert_eq!(key(&before, 36)["label"], "Round kick");
+    assert_eq!(key(&before, 36)["label"], "Custom low kick");
     assert_eq!(key(&before, 37)["label"], "Pad 2 · Empty");
     assert_eq!(before["midi_editor"]["unmapped_notes"], 1);
     for hidden in ["Multi-draw", "Generate…", "Scale guide C · Major"] {
@@ -138,7 +140,7 @@ fn drum_names_audition_and_draw_their_midi_pitch_and_other_notes_remain_reachabl
             json!({"command":"viewport","width":width,"height":800,"pixels_per_point":density}),
         );
         let state = app.command(json!({"command":"inspect","paint":true}));
-        for label in ["Round kick", "Pad 2 · Empty", "Other MIDI notes (1)"] {
+        for label in ["Custom low kick", "Pad 2 · Empty", "Other MIDI notes (1)"] {
             assert!(
                 state["painted_text"]
                     .as_array()
