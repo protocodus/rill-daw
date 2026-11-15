@@ -70,6 +70,7 @@ fn device_details_read_native_ports_search_parameters_and_preserve_project() {
         app.click("Device browser");
         common::wait_library_device(&mut app, "No Editor Probe");
         let before = app.inspect();
+        app.click("Details");
         app.click("Device details");
         let ready = wait_until(&mut app, |state| {
             state["plugin_details"]["status"] == "ready" && visible(state, "0 audio · MIDI")
@@ -128,6 +129,7 @@ fn device_details_read_native_ports_search_parameters_and_preserve_project() {
         let closed = app.click("Close");
         assert!(closed["plugin_details"].is_null());
         assert_eq!(closed["project"], before["project"]);
+        app.click("Details");
         app.click("Device details");
         assert_eq!(app.inspect()["plugin_details"]["status"], "ready");
         let escaped = app.key("Escape");
@@ -148,6 +150,7 @@ fn unavailable_device_details_remain_unknown_and_can_retry_or_close() {
     app.command(json!({"command":"viewport", "width":800, "height":600}));
     common::fixture_library(&mut app);
     let before = app.inspect();
+    app.click("Details");
     app.click("Device details");
     let failed = wait_until(&mut app, |state| {
         state["plugin_details"]["status"] == "failed" && visible(state, "Details unavailable")

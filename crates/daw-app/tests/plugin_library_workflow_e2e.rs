@@ -46,35 +46,45 @@ fn select_device(app: &mut Harness, name: &str) -> Value {
 }
 
 fn collection(app: &mut Harness, label: &str) -> Value {
-    let state = common::reveal_library_filter(app, label);
-    let sidebar = &state["library"]["sidebar"];
-    let label_rect = state["label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|rect| rect["text"] == label && contains(sidebar, rect))
-        .unwrap_or_else(|| panic!("Missing sidebar {label}: {}", state["library"]));
-    click_rect(app, label_rect);
+    let state = app.inspect();
+    if state["library"]["sidebar"].is_null() {
+        app.click("Collection");
+        app.click(label);
+    } else {
+        let state = common::reveal_library_filter(app, label);
+        let sidebar = &state["library"]["sidebar"];
+        let rect = state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|rect| rect["text"] == label && contains(sidebar, rect))
+            .unwrap();
+        click_rect(app, rect);
+    }
     wait_until(app, |state| state["library"]["collection"] == label)
 }
 
-fn footer_favorite(app: &mut Harness) -> Value {
+fn details_favorite(app: &mut Harness) -> Value {
     let state = app.inspect();
-    let footer = &state["library"]["footer"];
+    let compact = state["library"]["details"].is_null();
+    if compact {
+        app.click("Details");
+    }
+    let state = app.inspect();
     let rect = state["label_rects"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|rect| rect["text"] == "Favorite" && contains(footer, rect))
-        .unwrap_or_else(|| {
-            panic!(
-                "Favorite must remain in the pinned footer: {}",
-                state["label_rects"]
-            )
-        });
+        .rev()
+        .find(|rect| rect["text"] == "Favorite")
+        .expect("Favorite in device details");
     assert!(rect["max"][0].as_f64().unwrap() <= state["viewport"][0].as_f64().unwrap());
     assert!(rect["max"][1].as_f64().unwrap() <= state["viewport"][1].as_f64().unwrap());
-    click_rect(app, rect)
+    click_rect(app, rect);
+    if compact {
+        app.key("Escape");
+    }
+    app.inspect()
 }
 
 fn compact_layout(state: &Value) {
@@ -88,7 +98,7 @@ fn compact_layout(state: &Value) {
     }
     let labels = state["label_rects"].as_array().unwrap();
     let mut centers = Vec::new();
-    for label in ["Rill Fixture", "All categories", "All producers", "View"] {
+    for label in ["All categories", "All developers", "View"] {
         let rect = labels.iter().find(|rect| rect["text"] == label).unwrap();
         centers.push((rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5);
     }
@@ -96,7 +106,7 @@ fn compact_layout(state: &Value) {
         centers
             .iter()
             .all(|center| (center - centers[0]).abs() <= 1.0),
-        "Search and filter controls share one center line: {centers:?}"
+        "Filter controls share one center line below search: {centers:?}"
     );
     assert!(
         state["library"]["cards"]
@@ -141,9 +151,9 @@ fn fixture_key(fixture: &std::path::Path, class: &str) -> String {
 fn replace_instrument(app: &mut Harness, name: &str) -> Value {
     menu(app, "Window", "Instrument");
     app.click("Change instrument");
-    collection(app, "All plug-ins");
+    collection(app, "All devices");
     select_device(app, name);
-    app.click("Assign instrument")
+    common::assign_library_instrument(app)
 }
 
 #[test]
@@ -154,15 +164,15 @@ fn recently_used_tracks_assignments_in_mru_order_and_survives_restart() {
 
     // Selecting or favouriting a device does not count as using it.
     select_device(&mut app, "Rill Fixture B");
-    footer_favorite(&mut app);
+    details_favorite(&mut app);
     let unused = collection(&mut app, "Recently used");
     assert_eq!(unused["library"]["total"], 0);
     assert_eq!(saved_library(&app)["recently_used"], json!([]));
-    collection(&mut app, "All plug-ins");
+    collection(&mut app, "All devices");
 
     menu(&mut app, "Track", "Add MIDI track");
     select_device(&mut app, "Rill Fixture A");
-    let first = app.click("Assign instrument");
+    let first = common::assign_library_instrument(&mut app);
     assert_eq!(first["project"]["tracks"].as_array().unwrap().len(), 1);
     assert_eq!(first["native_editor"]["open"], false);
     replace_instrument(&mut app, "Rill Fixture B");
@@ -275,8 +285,8 @@ fn search_combines_name_producer_and_categories_in_any_word_order() {
     app.click("All categories");
     let category = app.click("Piano");
     assert_eq!(category["library"]["order"], json!(["Rill Fixture B"]));
-    app.click("All producers");
-    app.click("Search producers");
+    app.click("All developers");
+    app.click("Search developers");
     let producers = app.command(json!({"command":"text", "text":"TESTS"}));
     assert!(visible(&producers, "Rill tests"));
     // Choose the popup's copy of the producer, rather than its sidebar row.
@@ -288,11 +298,12 @@ fn search_combines_name_producer_and_categories_in_any_word_order() {
         .count();
     app.command(json!({"command":"click", "label":"Rill tests", "occurrence":occurrences - 1}));
     assert_eq!(app.inspect()["library"]["developer"], "Rill tests");
-    app.click("Clear filters");
+    app.click("Reset filters");
 
     // User categories participate in the same all-word query.
     select_device(&mut app, "Rill Fixture B");
-    app.click("Piano");
+    app.click("Organize");
+    common::click_last_label(&mut app, "Piano");
     app.command(json!({"command":"key", "key":"A", "cmd":true}));
     app.command(json!({"command":"text", "text":"Vintage, Keys"}));
     app.click("Save");
@@ -309,7 +320,7 @@ fn search_combines_name_producer_and_categories_in_any_word_order() {
 }
 
 #[test]
-fn favorite_action_remains_in_the_footer_on_small_screens_and_persists() {
+fn favorite_action_remains_in_details_on_small_screens_and_persists() {
     let fixture = common::plugin_fixture();
     let mut app = Harness::with_vst_path(fixture.path());
     app.command(json!({"command":"viewport", "width":800, "height":600, "pixels_per_point":2.0}));
@@ -317,11 +328,11 @@ fn favorite_action_remains_in_the_footer_on_small_screens_and_persists() {
     compact_layout(&app.inspect());
     let cleared = app.click("Clear");
     assert!(visible(&cleared, "Search instruments"));
-    // The two fixtures and the built-in R1 Mini.
-    assert_eq!(cleared["library"]["total"], 3);
+    // The two fixtures and three built-in instruments.
+    assert_eq!(cleared["library"]["total"], 5);
     select_device(&mut app, "Rill Fixture B");
     assert!(app.inspect()["library"]["details"].is_null());
-    let marked = footer_favorite(&mut app);
+    let marked = details_favorite(&mut app);
     assert_eq!(entry(&marked, "Rill Fixture B")["favorite"], true);
     let filtered = collection(&mut app, "Favorites");
     assert_eq!(filtered["library"]["order"], json!(["Rill Fixture B"]));
@@ -332,7 +343,7 @@ fn favorite_action_remains_in_the_footer_on_small_screens_and_persists() {
     common::fixture_library(&mut app);
     let recalled = collection(&mut app, "Favorites");
     assert_eq!(recalled["library"]["order"], json!(["Rill Fixture B"]));
-    footer_favorite(&mut app);
+    details_favorite(&mut app);
     let removed = wait_until(&mut app, |state| state["library"]["total"] == 0);
     assert_eq!(entry(&removed, "Rill Fixture B")["favorite"], false);
     assert_eq!(saved_library(&app)["favorites"], json!([]));

@@ -147,40 +147,6 @@ fn summary(details: &PluginInspection) -> daw_ui::DeviceIoSummary {
     }
 }
 
-pub(crate) fn show_summary(ui: &mut egui::Ui, entry: &CatalogEntry) {
-    let mut status = status(ui.ctx(), entry);
-    // Built-in details cost nothing to read, so show them without a click.
-    if status.is_none() && crate::builtin_devices::is_builtin(&entry.plugin) {
-        start(ui.ctx(), entry);
-        status = self::status(ui.ctx(), entry);
-    }
-    daw_ui::device_io_summary(
-        ui,
-        match &status {
-            Some(Inspection::Ready(details)) => Some(summary(details)),
-            _ => None,
-        },
-    );
-    let label = match status {
-        Some(Inspection::Ready(_)) => "Browse parameters",
-        Some(Inspection::Loading) => "Reading details…",
-        Some(Inspection::Failed(_)) => "Retry details",
-        None => "Read details",
-    };
-    if ui
-        .add_enabled(
-            !matches!(status, Some(Inspection::Loading)),
-            daw_ui::button_widget(label),
-        )
-        .clicked()
-    {
-        if matches!(status, Some(Inspection::Failed(_))) {
-            start(ui.ctx(), entry);
-        }
-        open(ui.ctx(), entry);
-    }
-}
-
 pub(crate) fn open(ctx: &egui::Context, entry: &CatalogEntry) {
     if status(ctx, entry).is_none() {
         start(ctx, entry);

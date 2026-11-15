@@ -43,7 +43,7 @@ fn assert_bounded(state: &Value) {
         library["catalog"]["max"][1].as_f64().unwrap()
             <= library["footer"]["min"][1].as_f64().unwrap()
     );
-    for action in ["Assign instrument", "More"] {
+    for action in ["Set instrument", "More"] {
         let label = state["label_rects"]
             .as_array()
             .unwrap()

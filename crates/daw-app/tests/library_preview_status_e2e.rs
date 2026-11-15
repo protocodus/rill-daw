@@ -60,42 +60,26 @@ fn unavailable_images_keep_details_retry_and_the_original_assignment_identity() 
             .contains(CAPTURE_ERROR)
     );
     assert!(entry(&opened)["thumbnail"].is_null());
-    assert!(visible(&opened, "Without preview"));
+    assert!(!visible(&opened, "Without preview"));
+    assert!(!visible(&opened, "With preview"));
     assert!(!visible(&opened, "Preview failed"));
+    assert!(
+        opened["library"]["order"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|name| name == "Rill Fixture A")
+    );
 
-    // Missing and failed images belong to a neutral collection, not a list of
-    // broken instruments. An empty image collection is not an empty inventory.
-    let without = app.click("Without preview");
-    // The two fixtures; the built-in R1 Mini ships its own image.
-    assert_eq!(without["library"]["total"], 2);
-    preserved(&without, &baseline);
-    let with = app.click("With preview");
-    assert_eq!(with["library"]["order"], json!(["R1 Mini"]));
-    assert!(!visible(&with, "No VST3 instruments found"));
-    preserved(&with, &baseline);
-    app.click("All plug-ins");
-    app.click("Rill Fixture A");
-
-    // The full underlying capture error remains available in the scrollable
-    // details pane, alongside language that makes no audio-readiness promise.
-    let details = app.inspect()["library"]["details"].clone();
-    let state = app.command(json!({
-        "command":"scroll",
-        "x":(details["min"][0].as_f64().unwrap() + details["max"][0].as_f64().unwrap()) * 0.5,
-        "y":(details["min"][1].as_f64().unwrap() + details["max"][1].as_f64().unwrap()) * 0.5,
-        "delta":-500.0
-    }));
+    // Image status and its underlying failure live in the on-demand details.
+    let state = app.click("Details");
     assert!(visible(&state, "Preview image"));
     assert!(visible(&state, "Unavailable"));
-    assert!(visible(
-        &state,
-        "Optional image; assignment remains available."
-    ));
     assert!(visible(&state, CAPTURE_ERROR));
     preserved(&state, &baseline);
+    app.key("Escape");
 
     let more = app.click("More");
-    assert!(visible(&more, "Image unavailable"));
     assert!(visible(&more, "Capture preview"));
     preserved(&more, &baseline);
     app.click("Capture preview");
@@ -113,8 +97,8 @@ fn unavailable_images_keep_details_retry_and_the_original_assignment_identity() 
     common::wait_library_device(&mut app, "Rill Fixture A");
     app.click("Rill Fixture A");
     let caller = app.inspect();
-    assert!(visible(&caller, "Assign instrument"));
-    let assigned = app.click("Assign instrument");
+    assert!(visible(&caller, "Set instrument"));
+    let assigned = common::assign_library_instrument(&mut app);
     assert_eq!(assigned["project"]["tracks"].as_array().unwrap().len(), 1);
     assert_eq!(
         assigned["project"]["tracks"][0]["id"],

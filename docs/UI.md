@@ -141,6 +141,16 @@ Selectable device cards and a searchable parameter browser with example catalogu
 
 [`device_card`](../crates/daw-ui/src/device_cards.rs) · [`parameter_browser`](../crates/daw-ui/src/parameter_browser.rs)
 
+Search-first discovery uses a dedicated search row, readable result count,
+concise selected-device details and a bounded selection/destination summary.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/device-browser-dark.png">
+  <img alt="Device browser search, list rows, concise inspector and a stable insertion action with its destination." src="assets/ui-gallery/device-browser-light.png" width="1120">
+</picture>
+
+[`device_browser_search`, `device_browser_results_heading`, `device_browser_identity`, `device_browser_selection_summary`](../crates/daw-ui/src/device_browser.rs) · [Light preview](assets/ui-gallery/device-browser-light.png) · [Dark preview](assets/ui-gallery/device-browser-dark.png)
+
 Inspected audio/MIDI capabilities and a read-only parameter catalogue preserve
 unknown values until the isolated metadata read completes.
 
@@ -335,6 +345,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | On-demand error diagnostics | `error_details`, `ErrorDetailsResponse`, `text::selectable_block` |
 | Complementary audio crossfades | `crossfade_editor`, `CrossfadeCurve`, `CrossfadeResponse`, `paint_crossfade` |
 | Plug-in library cards, rows and previews | `device_card`, `device_grid`, `device_grid_layout`, `device_row`, `device_list`, `device_list_layout`, `device_preview`, `favorite_toggle`, `image_preview` |
+| Device discovery surfaces | `device_browser_search`, `device_browser_results_heading`, `device_browser_identity`, `device_browser_selection_summary` |
 | Library navigation and active filters | `count_item`, `filter_chip`, `Icon::Star`, `Icon::StarFilled` |
 | Bounded context titles | `text::bounded_block` |
 | Inactive clip regions | `paint_clip_tail` |
@@ -702,7 +713,12 @@ editing saved folder state or musical content. The persistent Arranger/Mixer
 workspace choices also reveal the selected track; a valid clip selection stays
 with its track.
 
-`device_row` is the list counterpart of `device_card`: one whole-row target with a small preview, name, producer and an optional trailing detail such as categories, sharing the card's double-click activation, focus and selected state. `device_list` virtualizes rows with the same `scroll_to` contract as `device_grid`; `device_list_layout` gives keyboard steps a single column. Cards and rows mark favorites with a star badge that adds no hit target; `favorite_toggle` changes the mark and reports checkbox semantics. `device_preview` shows a selected device's preview at a fixed size. `count_item` is a full-width selectable navigation row with a trailing count, for collections and producers. `filter_chip` shows an active filter and removes it when clicked; pair it with a **Clear filters** action.
+`device_row` is the list counterpart of `device_card`: one whole-row target with a small preview, name, producer and an optional trailing detail such as categories, sharing the card's double-click activation, focus and selected state. `device_list` virtualizes rows with the same `scroll_to` contract as `device_grid`; `device_list_layout` gives keyboard steps a single column. Cards and rows mark favorites with a star badge that adds no hit target; `favorite_toggle` changes the mark and reports checkbox semantics. `device_preview` shows a selected device's preview at a fixed size. `count_item` is a full-width selectable navigation row with a trailing count, for collections or other grouped navigation. `filter_chip` shows an active filter and removes it when clicked; pair it with a visible reset action.
+
+Grid cards adapt from 208 down to 131 logical points in short viewports. The
+two-line device name and developer retain their space; only the optional image
+shrinks, to a minimum 21-point strip. The selected card remains fully visible
+when keyboard navigation scrolls a compact catalogue.
 
 **Setup → Appearance** applies and persists System, Light, or Dark. Cancel discards the draft. Changing only appearance leaves playback and native editors running. Piano-roll black-key rows remain slightly darker than natural-key rows in both modes. Scale and chord guides use subtle green tints. `Palette::piano_note_fill(velocity, out_of_scale)` keeps every note neutral with velocity-dependent strength; `paint_outside_scale_marker` adds a small blue underline for optional scale guidance. `piano_note_stroke_in_rect(selected, fill, rect)` adds a neutral contrasting selection outline after the guidance marker, with thinner strokes at dense zoom levels. `piano_velocity_marker` shares the neutral velocity colors. Note labels select a contrasting foreground for their fill.
 
@@ -1305,38 +1321,65 @@ primary notice, and the last-WAV re-export command keeps its own destination.
 
 ## Device library and effect chains
 
-**Window → Device browser** opens a movable card grid with Instruments,
-Effects, and Unverified tabs. Choosing an instrument opens it on Instruments;
-adding an insert or send effect opens it on Effects. The **Built-in (R1)**
-collection lists Rill's own devices. Drag any edge or lower corner to resize both its
-width and height, including when choosing an instrument or effect. Its catalogue,
-collections and details share the resized body height while actions remain
-reachable below them; each pane scrolls independently. Instrument and effect lists require a declared
-matching type. Bundles with missing, malformed, or unrecognized metadata remain
-in Unverified. Selecting one opens Device details with its bundle path, class,
-developer, metadata parsing result, preview capture status and available error.
-The report can be copied and gives repair/retry guidance. Verified devices offer
-the same **Device details** action. **More** retains Capture/Refresh preview and
-explicit Try as instrument/effect actions for unverified bundles. The selected
-device's model/category and preview availability appear in its details pane. Search,
-developer filter and actions remain visible while cards scroll. Click selects;
-double-click or Enter activates the contextual action. Arrow keys move the
-selection; Left/Right remain text-editing keys while search has focus. Preview
-loading preserves the action footer's position.
+**Window → Device browser** opens a full workspace with **Back**, Instruments,
+Effects, and Unverified choices. List is the initial view; Grid remains available
+for visual browsing. **All devices**, **Favorites**, **Recently used**, and
+**Built-in (R1)** are the four collections. Their counts describe the active type,
+while the results heading reports the filtered count. On narrow windows a visible
+**Collection** chooser replaces the rail. Independent body scrolling preserves
+the search and fixed bottom action area.
 
-Empty inventory explains that instruments/effects must be installed as VST3,
-offers **Plug-in folders**, and points to **Scan**. When instruments are absent it also
-states that unassigned MIDI notes are silent. Inventory hidden by search or
-developer filters instead shows **No matching instruments/effects** with
-**Clear filters**.
+`device_browser_search(ui, query, hint)` gives search its own full-width row and
+returns the native input response, Clear response, and `cleared` flag. Clear
+removes only the query and returns keyboard focus to search. The caller owns
+initial focus and filter state. `device_browser_results_heading` displays the
+filtered count with optional secondary progress or sort context.
+`device_browser_identity` presents a bounded name, developer, type/format,
+categories and optional image; absent images consume no extra inspector space.
+`device_browser_selection_summary` keeps selected device and destination in two
+truncated lines with their full hover/accessibility labels. These components
+reuse the shared theme and do not inspect plug-ins or mutate the song.
 
-Search matches every entered word across names, producers, and category metadata, in any order and without case sensitivity. Searchable category and producer choices narrow results independently; **Clear filters** also clears the text query. Filter controls wrap on narrow windows without shrinking the search field. **More** holds alternate actions, available metadata, and preview capture/refresh. **Scan** stays visible; **Manage → Folders** opens scanning setup. The footer keeps one primary action appropriate to the insertion context. Background preview completion cannot move its target or change the selection. Only visible card rows are built; a bounded asynchronous cache decodes previews off the UI thread, memoizes failures, and invalidates refreshed images without clearing unrelated previews. The shared `device_card` and `device_grid` components own card styling, stable input identities, focus, and virtualized layout.
+Search matches every word across name, developer, automatic/custom categories
+and format, in any order and without case sensitivity. One category chooser and
+one developer chooser narrow results independently. Changing type retains the
+query and clears incompatible facets. **Reset filters** clears the query and
+facets while preserving type. Collection-specific empty states offer **Browse
+all**, filtered empty states offer search/filter recovery, and Unverified uses
+its own truthful empty state. Installation guidance is format-neutral.
 
-**Recently used** lists the last 50 distinct plug-ins assigned to instruments, inserted as effects, or used on send tracks, newest first. Browsing, preview capture, and opening a project do not change that order. History is saved independently of the project and survives app restarts and plug-in updates. **Favorites** filters saved stars; the **Favorite** toggle stays in the pinned footer in both Grid and List views. At compact widths, **View** holds sorting choices; if the sidebar cannot fit, **View** also holds its collection choices.
+Click selects; same-device double click or Enter activates the visible primary
+action. Arrow keys move selection; Left/Right remain text-editing keys while
+search has focus. Menus and category editing retain their own keyboard input.
+Already discovered devices remain actionable during scans; Enter never queues a
+future insertion. Selected identity and action geometry survive preview loading.
+Only visible result rows are built; the shared `device_card`, `device_grid`,
+`device_row` and `device_list` own selection, focus, activation and virtualized
+layout. A bounded asynchronous cache decodes images off the UI thread.
 
-The details pane shows **Inputs**, **Outputs**, and **Parameters**. **Read details** or **Device details** inspects the selected plug-in in a disposable isolated helper and opens a searchable parameter catalogue. Counts describe its initial bus layout, including separate MIDI support; unknown and failed reads never appear as zero. Inspection does not insert a device or alter a loaded instance. The catalogue shows parameter names, IDs, units, steps, read-only status, and automation availability. Closing the details returns to the same selection and filters.
+The wide inspector is read-only by default. **Favorite** persists the star;
+**Organize** reveals category editing and reset to plug-in defaults. **Details**
+keeps the same controls reachable when the inspector does not fit. **Device
+details** opens isolated I/O and parameter inspection without loading an instance
+into the song. Unknown/failed counts never appear as zero. Unverified devices
+retain explicit **Try as instrument/effect** actions and diagnostic information.
+Optional editor screenshot status never determines insertion eligibility.
 
-The instrument tab creates a MIDI track and pattern or assigns the selected MIDI track, then opens its native editor. **Effects → + Insert** opens this same browser pinned to that channel. **Add to effect chain** returns to the channel's inserts. **Create send track** creates a bus containing the effect and a post-fader send from the source at 25%; configure the plugin's wet/dry control for the desired return. Routing also offers **Create send track**. Escape returns to the caller without inserting anything.
+**Recently used** lists the last 50 distinct devices assigned to instruments,
+inserted as effects, or used on send tracks, newest first. Browsing, preview
+capture, and opening a project do not change that order. Favorites and recent
+history survive restarts. **Manage plug-ins** contains **Refresh** and **Plug-in
+folders…**. **More** holds alternate insertion and optional image capture actions.
+
+The fixed footer identifies the selected device and pinned destination beside
+one primary action: **Add instrument track**, **Set instrument**, **Replace
+instrument**, **Add to effect chain**, or **Create send track**. Missing or
+incompatible destinations remain explained and disabled rather than redirecting
+an operation. Master accepts inserts but cannot send. A fresh intent-specific
+chooser resets stale type/search/facets. Successful replacement returns to the
+caller, new instruments open their panel, and effects open their chain. Back or
+Escape cancels browsing without a browser-induced edit; provisional MIDI tracks
+created before opening it intentionally remain. Standard Undo behavior applies.
 
 Plugin discovery stays metadata-only. After discovery, one isolated helper at a time initializes verified instruments and effects and captures native previews into Rill's fingerprinted cache. A selected device is prioritized. Failures are retained and retried only with **Capture preview**; **Refresh preview** explicitly updates a cached image. Existing cache entries display immediately. The browser limits resident small textures to 128 and scales the selected preview to at most 1000×600 pixels.
 

@@ -110,7 +110,7 @@ fn clip_instrument_action_survives_assignment_and_restores_notes_and_view_on_ret
         common::wait_library_device(&mut app, "Rill Fixture A");
         // The built-in R1 Mini is listed first; pick the plug-in.
         app.click("Rill Fixture A");
-        let assigned = app.click("Assign instrument");
+        let assigned = common::assign_library_instrument(&mut app);
         assert_eq!(editing_context(&assigned), editing_context(&before));
         assert_eq!(
             assigned["project"]["tracks"][0]["clips"],

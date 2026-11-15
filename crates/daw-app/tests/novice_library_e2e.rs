@@ -82,14 +82,14 @@ fn plugin_free_libraries_offer_the_builtin_synth_and_plugin_setup_and_restore_th
         app.click("Track");
         app.click("Add MIDI track");
         let baseline = wait(&mut app, |state| {
-            visible(state, "R1 Mini") && visible(state, "Refresh")
+            visible(state, "R1 Mini") && visible(state, "Manage plug-ins")
         });
         assert_eq!(baseline["popups"]["library"], true);
-        // Without plug-ins the built-in synth is the only instrument.
-        assert_eq!(baseline["library"]["total"], 1);
+        // Without plug-ins all three built-in instruments remain available.
+        assert_eq!(baseline["library"]["total"], 3);
         assert!(!visible(&baseline, "No VST3 instruments found"));
         assert!(!visible(&baseline, "No matching instruments"));
-        assert!(!visible(&baseline, "Clear filters"));
+        assert!(!visible(&baseline, "Reset filters"));
         assert_eq!(
             baseline["plugin_catalog"]
                 .as_array()
@@ -99,6 +99,7 @@ fn plugin_free_libraries_offer_the_builtin_synth_and_plugin_setup_and_restore_th
             effect_only
         );
 
+        app.click("Manage plug-ins");
         let setup = app.click("Plug-in folders…");
         assert_eq!(setup["popups"]["setup"], true);
         assert_eq!(setup["popups"]["library"], false);
@@ -114,12 +115,13 @@ fn plugin_free_libraries_offer_the_builtin_synth_and_plugin_setup_and_restore_th
         assert_eq!(cancelled["popups"]["setup"], false);
         assert_eq!(cancelled["popups"]["library"], true);
         assert_eq!(cancelled["settings"], original_settings);
-        assert!(visible(&cancelled, "Assign instrument"));
+        assert!(visible(&cancelled, "Set instrument"));
         preserved(&cancelled, &baseline);
 
+        app.click("Manage plug-ins");
         app.click("Refresh");
         let scanned = wait(&mut app, |state| {
-            visible(state, "R1 Mini") && visible(state, "Refresh")
+            visible(state, "R1 Mini") && visible(state, "Manage plug-ins")
         });
         preserved(&scanned, &baseline);
         let caller = app.key("Escape");
@@ -152,19 +154,19 @@ fn unmatched_searches_clear_both_search_and_developer_without_assigning_a_stale_
     let missing = wait(&mut app, |state| visible(state, "No matching instruments"));
     assert!(visible(
         &missing,
-        "Try another search or clear the filters."
+        "Try another search or reset the filters."
     ));
     assert!(!visible(&missing, "No VST3 instruments found"));
     assert_eq!(missing["library"]["total"], 0);
     assert!(missing["library"]["selected"].is_null());
     preserved(&app.key("Enter"), &baseline);
-    let cleared = app.click("Clear filters");
+    let cleared = app.click("Reset filters");
     assert!(visible(&cleared, "Search instruments"));
     assert!(visible(&cleared, "All developers"));
     common::wait_library_device(&mut app, "Rill Fixture A");
     common::wait_library_device(&mut app, "Novice Keys");
-    // Two plug-ins and the built-in R1 Mini.
-    assert_eq!(app.inspect()["library"]["total"], 4);
+    // Three fixture instruments and three built-in instruments.
+    assert_eq!(app.inspect()["library"]["total"], 6);
     preserved(&app.inspect(), &baseline);
 
     app.click("Effects");
@@ -173,7 +175,7 @@ fn unmatched_searches_clear_both_search_and_developer_without_assigning_a_stale_
     app.command(json!({"command":"text", "text":"no such effect 987654"}));
     let missing = wait(&mut app, |state| visible(state, "No matching effects"));
     assert!(missing["library"]["selected"].is_null());
-    app.click("Clear filters");
+    app.click("Reset filters");
     common::wait_library_device(&mut app, "Rill Fixture FX");
     preserved(&app.inspect(), &baseline);
     app.quit();
@@ -217,7 +219,7 @@ fn silent_instrument_overview_opens_assignment_and_restores_the_clip_editor() {
     let chooser = app.click("Choose instrument");
     assert_eq!(chooser["popups"]["library"], true);
     assert_eq!(chooser["popups"]["instrument"], false);
-    assert!(visible(&chooser, "Assign instrument"));
+    assert!(visible(&chooser, "Replace instrument"));
     assert_eq!(
         chooser["popup_context"]["source"],
         "Instrument · Unassigned melody"
@@ -252,10 +254,13 @@ fn device_browser_opens_on_the_callers_kind_and_lists_built_in_devices() {
     common::wait_library_device(&mut app, "Rill Fixture A");
     let builtin = app.click("Built-in (R1)");
     assert_eq!(builtin["library"]["collection"], "Built-in (R1)");
-    assert_eq!(builtin["library"]["order"], json!(["R1 Mini"]));
+    assert_eq!(
+        builtin["library"]["order"],
+        json!(["R1 Drums", "R1 Mini", "R1 Sampler"])
+    );
     app.key("Escape");
 
-    // An insert browses effects, still within the chosen collection.
+    // A fresh insert chooser resets stale collection filters and browses effects.
     window(&mut app, "Effects");
     let inserts = app.click("+ Insert");
     assert!(visible(&inserts, "Search effects"), "{inserts}");
@@ -267,7 +272,8 @@ fn device_browser_opens_on_the_callers_kind_and_lists_built_in_devices() {
             "R1 Filter",
             "R1 Modulator",
             "R1 Saturator",
-            "R1 Spacer"
+            "R1 Spacer",
+            "Rill Fixture FX"
         ])
     );
     app.key("Escape");
@@ -278,7 +284,7 @@ fn device_browser_opens_on_the_callers_kind_and_lists_built_in_devices() {
     let send = app.click("New return with effect…");
     assert_eq!(send["popups"]["library"], true);
     assert!(visible(&send, "Search effects"), "{send}");
-    let all = app.click("All plug-ins");
+    let all = app.click("All devices");
     assert!(
         all["library"]["order"]
             .as_array()

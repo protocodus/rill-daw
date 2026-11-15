@@ -31,10 +31,10 @@ fn initial_midi_assignment_and_replacement_keep_the_same_track_and_pattern() {
     let track = tracks(&initial)[0]["id"].clone();
     let pattern = tracks(&initial)[0]["clips"][0].clone();
     common::wait_library_device(&mut app, "Rill Fixture A");
-    assert!(visible(&app.inspect(), "Assign to New instrument"));
+    assert_eq!(app.inspect()["library"]["destination"], "New instrument");
     // The built-in R1 Mini is listed first; pick the plug-in.
     app.click("Rill Fixture A");
-    let assigned = app.click("Assign instrument");
+    let assigned = common::assign_library_instrument(&mut app);
     assert_eq!(tracks(&assigned).len(), 1);
     assert_eq!(tracks(&assigned)[0]["id"], track);
     assert_eq!(tracks(&assigned)[0]["name"], "Rill Fixture A");
@@ -51,9 +51,12 @@ fn initial_midi_assignment_and_replacement_keep_the_same_track_and_pattern() {
     menu(&mut app, "Window", "Instrument");
     app.click("Change instrument");
     common::wait_library_device(&mut app, "Rill Fixture B");
-    assert!(visible(&app.inspect(), "Assign to Rill Fixture A"));
+    assert_eq!(
+        app.inspect()["library"]["destination"],
+        "Rill Fixture A · Rill tests · Rill Fixture A"
+    );
     app.click("Rill Fixture B");
-    let replaced = app.click("Assign instrument");
+    let replaced = common::assign_library_instrument(&mut app);
     assert_eq!(tracks(&replaced).len(), 1);
     assert_eq!(tracks(&replaced)[0]["id"], track);
     assert_eq!(tracks(&replaced)[0]["name"], "Rill Fixture A");
@@ -97,7 +100,7 @@ fn assigning_from_clip_editor_returns_to_the_same_phrase_without_opening_an_edit
     app.click("Choose instrument…");
     common::wait_library_device(&mut app, "Rill Fixture A");
     app.click("Rill Fixture A");
-    let assigned = app.click("Assign instrument");
+    let assigned = common::assign_library_instrument(&mut app);
     assert_eq!(assigned["view"], "Clip");
     assert_eq!(assigned["selected_track"], track);
     assert_eq!(assigned["selected_clip"], phrase);
@@ -124,7 +127,7 @@ fn explicit_add_instrument_keeps_an_intentionally_empty_track() {
     app.key("Escape");
     menu(&mut app, "Track", "Add instrument track…");
     common::wait_library_device(&mut app, "Rill Fixture A");
-    assert!(visible(&app.inspect(), "Create a new MIDI track"));
+    assert!(visible(&app.inspect(), "New MIDI track"));
     app.click("Rill Fixture A");
     let added = app.click("Add instrument track");
     assert_eq!(tracks(&added).len(), 2);

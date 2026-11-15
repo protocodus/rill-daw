@@ -109,9 +109,15 @@ pub fn device_identity_button(
     ))
 }
 
-const MIN_CARD_HEIGHT: f32 = 144.0;
 const NAME_HEIGHT: f32 = 2.0 * tokens::SPACE_LG;
 const PRODUCER_HEIGHT: f32 = tokens::SPACE_LG;
+// Keep both name lines and the developer intact; a compact viewport only
+// shrinks the optional image to a 21-point strip (131 points overall).
+const MIN_CARD_HEIGHT: f32 = 3.0 * tokens::SPACE_MD
+    + NAME_HEIGHT
+    + tokens::SPACE_SM
+    + PRODUCER_HEIGHT
+    + tokens::COMPACT_HEIGHT;
 pub const DEVICE_ROW_HEIGHT: f32 =
     2.0 * tokens::SPACE_MD + 2.0 * tokens::SPACE_LG + tokens::SPACE_XS;
 const ROW_PREVIEW_WIDTH: f32 = 89.0;
@@ -833,7 +839,7 @@ mod tests {
 
     #[test]
     fn keyboard_scroll_reveals_the_entire_selected_card_in_short_viewports() {
-        for height in [144.0, 183.5, 260.0, 400.0] {
+        for height in [131.0, 138.0, 144.0, 183.5, 260.0, 400.0] {
             let ctx = egui::Context::default();
             theme::apply(&ctx);
             render_grid(&ctx, 940.0, 10_000, height, None);
@@ -849,6 +855,7 @@ mod tests {
                 selected.1.response.rect,
                 grid.rect
             );
+            assert!(selected.1.preview_rect.height() >= tokens::COMPACT_HEIGHT);
         }
     }
 

@@ -66,7 +66,7 @@ fn clap_instrument_and_effect_scan_insert_render_save_reopen_and_undo() {
     menu(&mut app, "Window", "Instrument");
     app.click("Choose instrument");
     choose(&mut app, "Search instruments", "Rill CLAP Synth");
-    let assigned = app.click("Assign instrument");
+    let assigned = common::assign_library_instrument(&mut app);
     let instrument = &assigned["project"]["tracks"][0]["instrument"]["Vst3"];
     assert_eq!(instrument["class_id"], SYNTH_ID, "{assigned}");
     assert!(

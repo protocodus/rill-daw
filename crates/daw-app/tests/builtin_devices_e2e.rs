@@ -1266,9 +1266,15 @@ fn visible(state: &Value, label: &str) -> bool {
 fn builtin_details(app: &mut Harness, name: &str, id: &str, instrument: bool) {
     let selected = select_card(app, name);
     assert_eq!(selected["library"]["selected"], id);
-    let pane = common::wait_until(app, |state| visible(state, "Browse parameters"));
+    let pane = app.click("Details");
+    let rect = &pane["library"]["details_popup"];
+    let x = (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"scroll","x":x,"y":y,"delta":-300.0}));
+    let pane = app.inspect();
     assert!(visible(&pane, "Included"), "{}", pane["visible_labels"]);
     assert!(!visible(&pane, "Capture preview"));
+    app.command(json!({"command":"scroll","x":x,"y":y,"delta":10000.0}));
     let details = app.click("Device details");
     assert_eq!(
         details["plugin_details"]["status"], "ready",

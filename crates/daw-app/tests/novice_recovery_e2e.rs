@@ -36,7 +36,7 @@ fn unassigned_clip_offers_instrument_setup_without_leaving_the_editor_first() {
     assert!(visible(&before, "Choose instrument…"));
     let opened = app.click("Choose instrument…");
     assert_eq!(opened["popups"]["library"], true);
-    assert!(visible(&opened, "Assign instrument"));
+    assert!(visible(&opened, "Set instrument"));
     app.click("Window");
     let restored = app.click("Clip Editor");
     assert_eq!(restored["view"], "Clip");

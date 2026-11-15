@@ -557,13 +557,22 @@ pub fn wait_library_device(app: &mut Harness, name: &str) {
         let catalog = &state["library"]["catalog"];
         let top = catalog["min"][1].as_f64().unwrap_or(0.0);
         let bottom = catalog["max"][1].as_f64().unwrap_or(0.0);
-        if state["label_rects"].as_array().is_some_and(|labels| {
-            labels.iter().any(|label| {
-                label["text"] == name
-                    && label["min"][1].as_f64().unwrap_or(-1.0) >= top
-                    && label["max"][1].as_f64().unwrap_or(f64::INFINITY) <= bottom
+        let complete_card = state["library"]["cards"].as_array().is_some_and(|cards| {
+            cards.iter().any(|card| {
+                card["name"] == name
+                    && card["rect"]["min"][1].as_f64().unwrap_or(-1.0) >= top - 1.0
+                    && card["rect"]["max"][1].as_f64().unwrap_or(f64::INFINITY) <= bottom + 1.0
             })
-        }) {
+        });
+        if complete_card
+            && state["label_rects"].as_array().is_some_and(|labels| {
+                labels.iter().any(|label| {
+                    label["text"] == name
+                        && label["min"][1].as_f64().unwrap_or(-1.0) >= top
+                        && label["max"][1].as_f64().unwrap_or(f64::INFINITY) <= bottom
+                })
+            })
+        {
             return;
         }
         if let Some(index) = state["library"]["order"]
@@ -571,8 +580,13 @@ pub fn wait_library_device(app: &mut Harness, name: &str) {
             .and_then(|order| order.iter().position(|item| item == name))
         {
             let columns = state["library"]["columns"].as_u64().unwrap_or(1).max(1) as usize;
-            let row_height = state["library"]["card_size"][1].as_f64().unwrap_or(208.0)
-                + f64::from(daw_ui::tokens::SPACE_MD);
+            let gap = if state["library"]["view"] == "list" {
+                daw_ui::tokens::SPACE_SM
+            } else {
+                daw_ui::tokens::SPACE_MD
+            };
+            let row_height =
+                state["library"]["card_size"][1].as_f64().unwrap_or(208.0) + f64::from(gap);
             let target = ((index / columns) as f64 * row_height - (bottom - top) * 0.25).max(0.0);
             let offset = state["library"]["scroll_offset"].as_f64().unwrap_or(0.0);
             if (target - offset).abs() > 1.0 {
@@ -655,6 +669,7 @@ pub fn refresh_library(app: &mut Harness) -> Value {
     wait_until(app, |state| state["plugin_scanning"] == false);
     app.click("Window");
     app.click("Device browser");
+    app.click("Manage plug-ins");
     app.click("Refresh");
     wait_until(app, |state| state["plugin_scanning"] == false)
 }
@@ -734,4 +749,29 @@ pub fn close_utility(app: &mut Harness, state: &Value, title: &str) -> Value {
     // edge equals that centerline's distance from the top.
     let x = bounds["max"][0].as_f64().unwrap() - (y - bounds["min"][1].as_f64().unwrap());
     app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}))
+}
+
+/// Execute the chooser's explicit assignment intent through its visible control.
+pub fn assign_library_instrument(app: &mut Harness) -> Value {
+    let state = app.inspect();
+    let labels = state["visible_labels"].as_array().unwrap();
+    let action = ["Set instrument", "Replace instrument"]
+        .into_iter()
+        .find(|action| labels.iter().any(|label| label == action))
+        .unwrap_or_else(|| panic!("Missing instrument assignment action: {}", state["library"]));
+    app.click(action)
+}
+
+/// Click the frontmost painted occurrence, e.g. an editable field whose value
+/// also appears in the read-only summary behind or above it.
+pub fn click_last_label(app: &mut Harness, label: &str) -> Value {
+    let state = app.inspect();
+    let count = state["visible_labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|text| *text == label)
+        .count();
+    assert!(count > 0, "Missing {label}: {}", state["visible_labels"]);
+    app.command(json!({"command":"click","label":label,"occurrence":count - 1}))
 }

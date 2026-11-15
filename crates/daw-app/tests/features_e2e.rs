@@ -252,7 +252,7 @@ fn instrument_and_library_selection_are_undoable_and_escape_closes_the_popup() {
     common::fixture_library(&mut app);
     app.click("Rill Fixture B");
     app.click("More");
-    let state = app.click("Assign to selected track");
+    let state = app.click("Replace instrument on Rill Fixture A");
     assert_eq!(state["project"]["tracks"].as_array().unwrap().len(), 2);
     assert_eq!(
         state["project"]["tracks"][1]["instrument"]["Vst3"]["class_id"],
@@ -920,7 +920,7 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
     change_instrument(&mut app, &first);
     app.command(json!({"command":"text","text":"Fixture A"}));
     common::wait_visible(&mut app, "Rill Fixture A");
-    assert!(visible(&app.inspect(), "Assign instrument"));
+    assert!(visible(&app.inspect(), "Replace instrument"));
     let assigned = app.key("Enter");
     assert_eq!(assigned["project"]["tracks"].as_array().unwrap().len(), 2);
     assert_eq!(assigned["selected_track"], first);

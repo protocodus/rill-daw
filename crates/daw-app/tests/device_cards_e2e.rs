@@ -126,6 +126,8 @@ fn open(app: &mut Harness) -> Value {
     app.click("Window");
     app.click("Device browser");
     app.click("Instruments");
+    app.click("View");
+    app.click("Grid");
     app.click("Search instruments");
     app.command(json!({"command":"text", "text":"Card Synth"}));
     wait(app, |state| state["library"]["total"] == 24)
@@ -157,18 +159,14 @@ fn selected_name(state: &Value) -> &str {
 }
 
 fn sidebar_filter(app: &mut Harness, label: &str) -> Value {
-    let state = common::reveal_library_filter(app, label);
-    let sidebar = Bounds::from(&state["library"]["sidebar"]);
-    let rect = state["label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|rect| rect["text"] == label && sidebar.contains(Bounds::from(rect)))
-        .unwrap();
-    let bounds = Bounds::from(rect);
-    app.command(json!({"command":"pointer", "phase":"click",
-        "x":(bounds.left + bounds.right) * 0.5,
-        "y":(bounds.top + bounds.bottom) * 0.5}))
+    let state = app.inspect();
+    let current = state["library"]["developer"].as_str().unwrap();
+    app.click(if current.is_empty() {
+        "All developers"
+    } else {
+        current
+    });
+    app.click(label)
 }
 
 fn assert_layout(state: &Value, width: f64, height: f64) {

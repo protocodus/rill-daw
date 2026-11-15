@@ -14,6 +14,8 @@ use std::{
 mod actions;
 #[path = "component_gallery/curves.rs"]
 mod curves;
+#[path = "component_gallery/device_browser.rs"]
+mod device_browser;
 #[path = "component_gallery/device_controls.rs"]
 mod device_controls;
 #[path = "component_gallery/device_details.rs"]
@@ -41,7 +43,7 @@ mod timeline;
 #[path = "component_gallery/tracks.rs"]
 mod tracks;
 
-const PAGES: [(&str, &str, &str); 15] = [
+const PAGES: [(&str, &str, &str); 16] = [
     (
         "actions",
         "Actions, tools, and views",
@@ -117,6 +119,11 @@ const PAGES: [(&str, &str, &str); 15] = [
         "Device panels",
         "The shared device frame and a panel generated from parameter rows.",
     ),
+    (
+        "device-browser",
+        "Device discovery",
+        "Search, readable results, progressive details, and a stable selection and destination summary.",
+    ),
 ];
 
 #[derive(Default)]
@@ -148,6 +155,7 @@ struct Gallery {
     device_controls: device_controls::State,
     device_plots: device_plots::State,
     device_panels: device_panels::State,
+    device_browser: device_browser::State,
 }
 
 impl Gallery {
@@ -181,6 +189,7 @@ impl Gallery {
             device_controls: Default::default(),
             device_plots: Default::default(),
             device_panels: Default::default(),
+            device_browser: Default::default(),
         }
     }
 
@@ -331,6 +340,7 @@ impl eframe::App for Gallery {
                     12 => device_controls::show(ui, &mut self.device_controls),
                     13 => device_plots::show(ui, &mut self.device_plots),
                     14 => device_panels::show(ui, &mut self.device_panels),
+                    15 => device_browser::show(ui, &mut self.device_browser),
                     _ => unreachable!(),
                 });
             });

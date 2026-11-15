@@ -92,20 +92,29 @@ fn browser_toolbar_explains_filters_actions_and_destinations() {
         ("Instruments", &["MIDI notes", "sound"][..]),
         ("Effects", &["processing audio", "channel"]),
         ("Unverified", &["type", "verified"]),
-        ("Plug-in folders…", &["folders", "scans"]),
-        ("Refresh", &["Rescan", "previews"]),
+        ("Manage plug-ins", &["folders", "scan"]),
         ("All categories", &["Filter devices", "category"]),
-        ("All producers", &["Filter devices", "developer"]),
-        ("View", &["grid", "list", "sorting"]),
+        ("All developers", &["Filter devices", "developer"]),
+        ("View", &["grid", "list"]),
+        ("Sort: Name", &["Sort", "devices"]),
         (
             "Add instrument track",
             &["Create", "MIDI track", "instrument"],
         ),
         ("More", &["device", "favorites", "preview"]),
+        ("Details", &["device", "information"]),
         ("Device details", &["information", "controls"]),
     ] {
         hover(&mut app, label, fragments);
     }
+    app.click("Manage plug-ins");
+    for (label, fragments) in [
+        ("Plug-in folders…", &["folders", "scans"][..]),
+        ("Refresh", &["Rescan", "previews"]),
+    ] {
+        hover(&mut app, label, fragments);
+    }
+    app.key("Escape");
     app.quit();
 }
 

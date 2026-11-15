@@ -118,36 +118,6 @@ fn pointer(app: &mut Harness, card: &Value, phase: &str) -> Value {
     app.command(json!({"command":"pointer", "phase":phase, "x":x, "y":y}))
 }
 
-fn scroll_details(app: &mut Harness, delta: f64) -> Value {
-    let before = app.inspect();
-    let pane = &before["library"]["details"];
-    let x = (pane["min"][0].as_f64().unwrap() + pane["max"][0].as_f64().unwrap()) * 0.5;
-    let y = (pane["min"][1].as_f64().unwrap() + pane["max"][1].as_f64().unwrap()) * 0.5;
-    app.command(json!({"command":"scroll", "x":x, "y":y, "delta":delta}));
-    let mut state = app.inspect();
-    for _ in 0..20 {
-        state = app.inspect();
-    }
-    for field in ["catalog", "footer", "selected"] {
-        assert_eq!(state["library"][field], before["library"][field]);
-    }
-    assert_eq!(state["project"], before["project"]);
-    state
-}
-
-fn readable_detail(state: &Value, label: &str) -> bool {
-    let pane = &state["library"]["details"];
-    state["label_rects"].as_array().unwrap().iter().any(|rect| {
-        rect["text"] == label
-            && rect["min"][0].as_f64().unwrap() >= pane["min"][0].as_f64().unwrap()
-            && rect["max"][0].as_f64().unwrap() <= pane["max"][0].as_f64().unwrap()
-            && rect["min"][1].as_f64().unwrap() >= pane["min"][1].as_f64().unwrap()
-            && rect["max"][1].as_f64().unwrap() <= pane["max"][1].as_f64().unwrap()
-            && rect["max"][1].as_f64().unwrap() - rect["min"][1].as_f64().unwrap()
-                >= f64::from(daw_ui::tokens::FONT_BODY)
-    })
-}
-
 #[test]
 fn catalog_syncs_on_open_captures_previews_in_background_and_refreshes_on_request() {
     let workers = tempfile::tempdir().unwrap();
@@ -183,19 +153,19 @@ fn catalog_syncs_on_open_captures_previews_in_background_and_refreshes_on_reques
     wait_until(&mut app, |state| {
         card(state, "Acme Keys")["preview"] == true
     });
-    // Installation metadata follows identity and editable categories in the
-    // independently scrolling detail pane. Catalog and actions stay pinned.
-    let details = scroll_details(&mut app, -10000.0);
-    for label in ["Format", "2.5", "x86_64-linux", "Captured"] {
-        assert!(readable_detail(&details, label), "Clipped detail {label}");
+    // Technical installation metadata is available on demand without moving results.
+    let details = app.click("Details");
+    for label in ["Install path", "Copy path", "Preview image", "Captured"] {
+        assert!(visible(&details, label), "Missing detail {label}");
     }
-    scroll_details(&mut app, 10000.0);
+    app.key("Escape");
 
     // Selecting the unverified bundle captures it on demand; More refreshes it.
     app.click("Unverified");
     let unknown = app.inspect();
     let selected = pointer(&mut app, card(&unknown, "Mystery Box"), "click");
     assert!(visible(&selected, "Device details"));
+    app.click("Device details");
     app.click("Close");
     assert!(selected["project"]["tracks"].as_array().unwrap().is_empty());
     let state = wait_until(&mut app, |state| {
@@ -242,6 +212,7 @@ fn catalog_syncs_on_open_captures_previews_in_background_and_refreshes_on_reques
     assert_eq!(captures(workers.path()), 5);
     assert!(entry(&state, "Nova Pad")["added_unix_ms"].as_u64().unwrap() > keys_added);
     assert_eq!(state["library"]["order"][0], "Acme Keys");
+    app.click("Sort: Name");
     let sorted = app.click("Recently added");
     assert_eq!(sorted["library"]["sort"], "Recently added");
     assert_eq!(sorted["library"]["order"][0], "Nova Pad");
@@ -280,11 +251,12 @@ fn favorites_categories_filters_and_list_view_work_by_mouse_and_persist() {
     assert_eq!(favorites["library"]["total"], 1);
     assert!(favorites["library"]["sidebar"]["min"][1].as_f64() > Some(0.0));
     let chip = click_topmost(&mut app, "Favorites");
-    assert_eq!(chip["library"]["collection"], "All plug-ins");
+    assert_eq!(chip["library"]["collection"], "All devices");
     assert_eq!(chip["library"]["total"], 2);
 
     // Categories are the user's own once saved, and drive the category filter.
     // Enter belongs to the focused field: it saves rather than adding a device.
+    app.click("Organize");
     app.click("Compressor, Vintage");
     app.command(json!({"command":"text", "text":"Vintage, Keys, vintage"}));
     let saved = app.key("Enter");
@@ -293,7 +265,7 @@ fn favorites_categories_filters_and_list_view_work_by_mouse_and_persist() {
         entry(&saved, "Rill Fixture B")["categories"],
         json!(["Vintage", "Keys"])
     );
-    assert!(visible(&saved, "Yours · save empty to reset"));
+    assert!(visible(&saved, "Your categories"));
     assert!(
         visible(&saved, "Vintage, Keys"),
         "the field shows the saved, normalized categories"
@@ -303,32 +275,27 @@ fn favorites_categories_filters_and_list_view_work_by_mouse_and_persist() {
     let filtered = app.click("Vintage");
     assert_eq!(filtered["library"]["category"], "Vintage");
     assert_eq!(filtered["library"]["total"], 1);
-    // Developers follow the collections; scroll the sidebar to reach them.
-    let sidebar = &filtered["library"]["sidebar"];
-    let x = (sidebar["min"][0].as_f64().unwrap() + sidebar["max"][0].as_f64().unwrap()) * 0.5;
-    let y = (sidebar["min"][1].as_f64().unwrap() + sidebar["max"][1].as_f64().unwrap()) * 0.5;
-    app.command(json!({"command":"scroll","x":x,"y":y,"delta":-400.0}));
+    // One developer chooser composes with category and text filters.
+    app.click("All developers");
     app.click("Rill tests");
     let both = app.inspect();
     assert_eq!(both["library"]["developer"], "Rill tests");
-    assert!(visible(&both, "Clear filters"));
-    let cleared = app.click("Clear filters");
+    assert!(visible(&both, "Reset filters"));
+    let cleared = app.click("Reset filters");
     assert_eq!(cleared["library"]["category"], "");
     assert_eq!(cleared["library"]["developer"], "");
-    // The two fixtures and the built-in R1 Mini.
-    assert_eq!(cleared["library"]["total"], 3);
+    // The two fixtures and three built-in instruments.
+    assert_eq!(cleared["library"]["total"], 5);
 
-    // Installation information follows the I/O and parameter summary in the
-    // independently scrolling detail pane. Keep the pinned actions stationary.
-    let details = scroll_details(&mut app, -300.0);
-    assert!(readable_detail(&details, "Copy path"));
-    // Copy path uses the selected device's install path.
+    // Copy path remains available through on-demand details.
+    let details = app.click("Details");
+    assert!(visible(&details, "Copy path"));
     let state = app.click("Copy path");
     assert_eq!(
         state["clipboard_text"],
         json!(bundle_path.display().to_string())
     );
-    scroll_details(&mut app, 10_000.0);
+    app.key("Escape");
 
     // The list view keeps selection and double-click creation.
     app.click("View");
@@ -382,6 +349,7 @@ fn favorites_categories_filters_and_list_view_work_by_mouse_and_persist() {
     common::fixture_library(&mut app);
     let library = app.inspect();
     pointer(&mut app, card(&library, "Rill Fixture A"), "click");
+    app.click("Organize");
     assert!(visible(&app.inspect(), "Compressor, Vintage"));
     let tool = |app: &mut Harness, name: &str, arguments: Value| {
         app.command(json!({"command":"song_tool", "name":name, "arguments":arguments}))
@@ -436,11 +404,11 @@ fn favorites_categories_filters_and_list_view_work_by_mouse_and_persist() {
     // Saving an empty field restores the plug-in's own categories.
     let library = app.inspect();
     pointer(&mut app, card(&library, "Rill Fixture B"), "click");
-    app.click("Vintage, Keys");
+    common::click_last_label(&mut app, "Vintage, Keys");
     app.command(json!({"command":"key", "key":"A", "cmd":true}));
     app.command(json!({"command":"key", "key":"Backspace"}));
     let reset = app.click("Save");
     assert_eq!(entry(&reset, "Rill Fixture B")["categories"], json!([]));
-    assert!(visible(&reset, "From the plug-in"));
+    assert!(visible(&reset, "From the device"));
     app.quit();
 }

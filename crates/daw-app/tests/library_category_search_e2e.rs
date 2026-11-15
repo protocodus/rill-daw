@@ -37,7 +37,7 @@ fn searchable_categories_filter_instruments_and_effects_without_instantiating_th
     assert_eq!(selected["library"]["total"], 1);
     assert!(visible(&selected, "Rill Fixture A"));
     assert!(!visible(&selected, "Rill Fixture B"));
-    app.click("Clear filters");
+    app.click("Reset filters");
     app.click("All categories");
     app.click("Search categories");
     let no_matches = app.command(json!({"command":"text","text":"no-such-category"}));

@@ -660,7 +660,7 @@ fn installed_vst_parameter_discovery_creates_named_lane_with_current_value() {
         .count();
     app.command(json!({"command":"click","label":name,"occurrence":count-1}));
     app.click("More");
-    let state = app.click("Assign to selected track");
+    let state = app.click("Replace instrument on New instrument");
     assert_eq!(
         std::path::Path::new(
             state["project"]["tracks"][0]["instrument"]["Vst3"]["path"]

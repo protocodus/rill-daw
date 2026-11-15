@@ -299,6 +299,8 @@ pub struct DawApp {
     pub plugin_search_focus: bool,
     pub plugin_assign_target: Option<u64>,
     pub(crate) library_target: crate::library::LibraryTarget,
+    pub(crate) library_generation: u64,
+    pub(crate) library_source: Option<u64>,
     pub instrument_autolaunch: Option<u64>,
     pub last_editor_clip: Option<u64>,
     pub frame_count: usize,
@@ -479,6 +481,8 @@ impl DawApp {
             plugin_search_focus: false,
             plugin_assign_target: None,
             library_target: crate::library::LibraryTarget::Browse,
+            library_generation: 0,
+            library_source: None,
             instrument_autolaunch: None,
             last_editor_clip: None,
             frame_count: 0,
@@ -908,6 +912,8 @@ impl DawApp {
                 self.plugin_search_focus = true;
                 self.plugin_assign_target = None;
                 self.library_target = crate::library::LibraryTarget::Browse;
+                self.library_generation = self.library_generation.wrapping_add(1);
+                self.library_source = self.selected_track;
                 if self.vst_paths.is_empty() && !self.plugin_sync.scanning() {
                     self.refresh_plugins();
                 }
@@ -2239,6 +2245,7 @@ impl DawApp {
         if self.document_guard.is_some()
             || self.error_details.is_some()
             || crate::plugin_details::is_open(ctx)
+            || crate::library::details_open(ctx)
             || crate::audio_silence::is_open(ctx)
             || crate::audio_batch::is_open(ctx)
             || crate::timeline_marks::meter_dialog_open(ctx)
@@ -3617,6 +3624,7 @@ impl DawApp {
         }
         if std::mem::take(&mut self.reset_views) {
             crate::plugin_details::close(ctx);
+            crate::library::close_details(ctx);
             self.midi_editor.clear_generation_memory();
             ctx.data_mut(|data| {
                 data.remove::<daw_ui::TimelineViewport>(egui::Id::new(
@@ -3642,12 +3650,14 @@ impl DawApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.error_details = None;
             crate::plugin_details::close(ctx);
+            crate::library::close_details(ctx);
             self.finish_inline_rename(ctx, true);
             self.request_document_transition(crate::document_ui::DocumentTransition::Quit);
         }
         if self.document_guard.is_none()
             && self.error_details.is_none()
             && !crate::plugin_details::is_open(ctx)
+            && !crate::library::details_open(ctx)
             && ctx.input(|i| {
                 i.pointer.any_pressed()
                     || i.events.iter().any(|e| {
@@ -3720,6 +3730,11 @@ impl DawApp {
         self.poll_plugin_catalog(ctx);
         self.poll_document_guard(ctx);
         self.poll_assistant(ctx);
+        if crate::library::details_open(ctx) {
+            self.library_details_window(ctx);
+            self.capture_screenshot(ctx);
+            return;
+        }
         if crate::plugin_details::is_open(ctx) {
             crate::plugin_details::show_window(ctx);
             self.capture_screenshot(ctx);

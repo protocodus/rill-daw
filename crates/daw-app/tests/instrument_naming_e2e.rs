@@ -17,7 +17,7 @@ fn tracks(state: &Value) -> &[Value] {
 fn assign(app: &mut Harness, name: &str) -> Value {
     common::wait_library_device(app, name);
     app.click(name);
-    app.click("Assign instrument")
+    common::assign_library_instrument(app)
 }
 
 #[test]

@@ -72,7 +72,7 @@ fn apple_audio_units_scan_insert_render_save_reopen_and_undo() {
     menu(&mut app, "Window", "Instrument");
     app.click("Choose instrument");
     choose(&mut app, "Search instruments", "DLSMusicDevice");
-    let assigned = app.click("Assign instrument");
+    let assigned = common::assign_library_instrument(&mut app);
     let instrument = &assigned["project"]["tracks"][0]["instrument"]["Vst3"];
     assert_eq!(instrument["class_id"], DLS, "{assigned}");
     assert_eq!(instrument["path"], AU_LOCATOR);

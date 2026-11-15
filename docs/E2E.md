@@ -78,8 +78,26 @@ and long destination lists with fixed creation/detail actions.
 cargo test --locked -p daw-app --test mixer_order_e2e --test mixer_inline_routing_e2e --test mixer_group_bus_e2e --test mixer_send_choice_e2e -- --test-threads=1
 ```
 
+`device_browser_redesign_e2e` exercises the search-first List default, retained
+queries across instrument/effect types, the four musical collections, truthful
+empty states, filter reset and Back without song edits. At 800×600 in both themes
+and display densities it checks the visible Details route, Favorite, category
+save/reset, and bounded catalog/actions. It also reopens the same instrument
+destination after stale search/type changes and deletes a pinned destination
+through the song service to verify that Enter cannot add a replacement track.
+Master insertion asserts its named destination, no offered send, and exact Undo.
+Unverified replacement exposes the pinned intent without loading on selection.
+A compact save-failure scenario verifies the visible error, unchanged categories,
+retained draft and successful retry after repairing its isolated settings path.
+A 125% short-window scenario combines query/category/collection filters and
+requires one complete selected result row.
+
+```sh
+cargo test --locked -p daw-app --test device_browser_redesign_e2e --test library_e2e --test library_resize_e2e --test library_category_search_e2e --test library_preview_status_e2e --test device_cards_e2e --test plugin_catalog_e2e --test plugin_library_workflow_e2e --test plugin_details_e2e -- --test-threads=1
+```
+
 `plugin_library_workflow_e2e` covers recently used assignment/insert/send ordering,
-restart persistence, favourites in the pinned footer, and combined name/category/
+restart persistence, favorites in responsive device details, and combined name/category/
 producer search. `plugin_details_e2e` covers isolated I/O and parameter inspection,
 search, failure/retry, and returning to the library without changing the project.
 `native_parameter_automation_e2e` includes the one-shot **Automate** flow,
