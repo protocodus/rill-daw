@@ -127,13 +127,20 @@ fn new_midi_tracks_play_r1_mini_shaped_by_tools_presets_and_its_panel() {
     let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(undone["project"], before["project"]);
 
-    // The panel: drag the hero Cutoff knob, then right-click it and Automate.
+    // The Sound task: drag Cutoff, then right-click it and Automate.
     app.command(json!({"command":"viewport","width":1600,"height":1400,"pixels_per_point":1.0}));
     app.click("New pattern");
     menu(&mut app, "Window", "Instrument");
     common::wait_visible(&mut app, "Cutoff");
     let state = app.inspect();
-    for label in ["OSCILLATORS", "MASTER", "AMP ENVELOPE", "LFO", "Mod wheel"] {
+    for label in [
+        "Sound",
+        "Motion",
+        "OSCILLATORS",
+        "SOURCE MIX",
+        "AMP ENVELOPE",
+        "Volume",
+    ] {
         assert!(
             state["visible_labels"]
                 .as_array()
@@ -160,7 +167,7 @@ fn new_midi_tracks_play_r1_mini_shaped_by_tools_presets_and_its_panel() {
         .unwrap();
     let x = (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5;
     let name = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
-    let knob = name + 12.0 + f64::from(daw_devices_ui::KNOB_HERO) * 0.5;
+    let knob = name + 12.0 + 34.0 * 0.5;
     let dragged = app.command(
         json!({"command":"pointer","phase":"drag","x":x,"y":knob,"to_x":x,"to_y":knob - 40.0}),
     );
@@ -208,7 +215,7 @@ fn panel_keyboard_and_wheels_play_the_track_and_let_go_when_the_panel_closes() {
     app.command(json!({"command":"viewport","width":1600,"height":1400,"pixels_per_point":1.0}));
     menu(&mut app, "Window", "Instrument");
     common::wait_visible(&mut app, "Cutoff");
-    // The keyboard is the panel's last row: scroll it into view.
+    // The keyboard remains reachable below the fixed task workspace.
     let window = app.inspect()["window_rects"][0].clone();
     let (x, y) = center(&window);
     let state = app.command(json!({"command":"scroll","x":x,"y":y,"delta":-2000.0}));

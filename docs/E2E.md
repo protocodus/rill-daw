@@ -30,6 +30,21 @@ step restoring every changed parameter, with Redo retaining the same result.
 cargo test --locked -p daw-app --test sample_player_e2e --test sample_player_tools_e2e --test sample_browser_e2e --test sample_browser_async_e2e --test sample_visual_e2e --test project_sample_import_e2e --test sample_preview_e2e --test sample_bounce_e2e --test device_randomize_e2e -- --test-threads=1
 ```
 
+`r1_workspaces_e2e` opens all nine built-in devices in both themes through the
+running application, visits every task with the mouse, checks output and
+keyboard stability and reachability, and verifies navigation preserves the
+project and Undo history. It also selects every Equalizer band independently
+of band enablement, edits a Motion parameter across task changes and
+Undo/Redo/save/reopen, and checks that tool edits retain the drum task and its
+silent-volume readout. Knob coverage checks hover-only min/max/current values,
+disabled inspection, dragging, hiding after focus, stable geometry, compact
+output values and mouse selection from revealed choice menus. Run alongside
+the existing sound/automation workflows:
+
+```sh
+cargo test --locked -p daw-app --test r1_workspaces_e2e --test builtin_devices_e2e --test mini_synth_e2e --test sampler_e2e --test drums_e2e -- --test-threads=1
+```
+
 `save_optimize_e2e` uses **File → Save and optimize** to remove deleted-clip
 assets from the song file, merge byte-identical sources and losslessly compress
 retained audio. It checks Undo/export after optimization, portable restart after

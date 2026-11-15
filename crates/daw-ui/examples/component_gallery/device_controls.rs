@@ -197,7 +197,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
         picture_row(ui, state);
     });
     ui.add_space(tokens::SPACE_MD);
-    ui.horizontal(|ui| {
+    ui::text::note(
+        ui,
+        "control_row: aligned choices and inline values in one compact row",
+    );
+    ui::control_row(ui, |ui| {
         ui.spacing_mut().item_spacing.x = tokens::SPACE_LG;
         let text = |label| ui::ToggleFace::Text(label);
         ui::glyph_toggle(
@@ -242,6 +246,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
         let mut send = 0.6;
         ui.add(
             ui::inline_knob("Send", &mut send, 0.0..=1.0, "60 %")
+                .value_on_hover()
                 .automation(Some(ui::AutomationState::Read)),
         );
     });

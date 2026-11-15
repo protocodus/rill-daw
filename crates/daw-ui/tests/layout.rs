@@ -10,6 +10,41 @@ fn input(events: Vec<Event>, size: Vec2) -> RawInput {
 }
 
 #[test]
+fn compact_control_row_centers_inline_values_choices_and_actions() {
+    for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
+        let ctx = Context::default();
+        theme::apply(&ctx);
+        ctx.set_theme(appearance.preference());
+        let mut level = 0.5;
+        let mut enabled = true;
+        let mut targets = Vec::new();
+        let mut bounds = Rect::NOTHING;
+        let _ = ctx.run(input(vec![], egui::vec2(1000.0, 400.0)), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                bounds = controls::control_row(ui, |ui| {
+                    targets.push(controls::control_caption(ui, "Output"));
+                    targets.push(ui.add(controls::inline_knob(
+                        "Level",
+                        &mut level,
+                        0.0..=1.0,
+                        "−6 dB",
+                    )));
+                    targets.push(controls::switch(ui, &mut enabled, "Auto gain"));
+                    targets.push(controls::button(ui, "Reset"));
+                })
+                .response
+                .rect;
+            });
+        });
+        assert!((bounds.height() - controls::tokens::CONTROL_HEIGHT).abs() <= 1.0);
+        for target in &targets {
+            assert!((target.rect.center().y - bounds.center().y).abs() <= 0.5);
+            assert!(bounds.contains_rect(target.rect));
+        }
+    }
+}
+
+#[test]
 fn mixed_control_rows_keep_targets_and_text_centered_during_numeric_entry() {
     for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
         for (density, width) in [

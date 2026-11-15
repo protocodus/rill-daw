@@ -35,7 +35,7 @@ fn label_center(state: &Value, label: &str) -> (f64, f64) {
         .as_array()
         .unwrap()
         .iter()
-        .find(|entry| entry["text"] == label)
+        .rfind(|entry| entry["text"] == label)
         .unwrap_or_else(|| panic!("Missing {label}: {}", state["visible_labels"]));
     (
         (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5,
@@ -227,7 +227,7 @@ fn r1_filter_shapes_audio_loads_presets_and_automates_from_its_panel() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|entry| entry["text"] == "1" && inside(entry))
+        .find(|entry| entry["text"] == "Cutoff" && inside(entry))
         .unwrap_or_else(|| panic!("No cutoff node: {}", undone["label_rects"]));
     // The node's number sits 10 points above its center.
     let node_x = (marker["min"][0].as_f64().unwrap() + marker["max"][0].as_f64().unwrap()) * 0.5;
@@ -363,7 +363,7 @@ fn r1_equalizer_shapes_audio_loads_presets_and_edits_from_its_plot() {
     app.click("Window");
     app.click("Effects");
     app.click("Open editor");
-    common::wait_visible(&mut app, "Freq");
+    common::wait_visible(&mut app, "Frequency");
     let before = app.inspect();
     let window = &before["window_rects"][0];
     let inside = |rect: &Value| {
@@ -816,7 +816,7 @@ fn r1_compressor_reduces_limits_and_ducks_under_a_routed_sidechain() {
     // The panel names the source under Sidechain; clicking it opens Routing
     // on this device, where the mouse removes and adds sources.
     open_effect_editor(&mut app, "Pad tone", "Threshold");
-    let state = app.inspect();
+    let state = app.click("Detector");
     assert!(visible(&state, "External"), "{}", state["visible_labels"]);
 
     // The curve's handle is the Threshold: its "T" stands up and to the
@@ -1181,7 +1181,8 @@ fn r1_spacer_rings_longer_with_decay_and_feedback_and_switches_from_its_panel() 
 
     // Seed: another hall of the same size and decay. The stepper stands
     // over its number; its right button is Next.
-    let number = label_center(&hall, "#1");
+    let texture = app.click("Texture");
+    let number = label_center(&texture, "#1");
     let next = app.command(json!({"command":"pointer","phase":"click",
         "x":number.0 + 21.0,"y":number.1 - 34.0}));
     let seed = stored(&next, SEED).unwrap();
@@ -1230,6 +1231,18 @@ fn r1_spacer_rings_longer_with_decay_and_feedback_and_switches_from_its_panel() 
     let again = repeat(&mut app);
     assert!((again - saved).abs() < 0.1, "{saved} {again}");
     app.quit();
+}
+
+fn assert_preview(app: &mut Harness, name: &str) {
+    common::wait_library_device(app, name);
+    let state = app.inspect();
+    let card = state["library"]["cards"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|card| card["name"] == name)
+        .unwrap();
+    assert_eq!(card["preview"], true, "Missing rendered preview: {name}");
 }
 
 fn select_card(app: &mut Harness, name: &str) -> Value {
@@ -1319,6 +1332,9 @@ fn builtin_devices_show_metadata_and_preview_in_the_device_browser() {
     assert_eq!(chooser["popups"]["library"], true);
     app.click("Built-in (R1)");
     let before = app.inspect();
+    for name in ["R1 Mini", "R1 Sampler", "R1 Drums"] {
+        assert_preview(&mut app, name);
+    }
     builtin_details(&mut app, "R1 Mini", "rill:r1-mini", true);
     assert_eq!(app.inspect()["project"], before["project"]);
     app.key("Escape");
@@ -1337,6 +1353,16 @@ fn builtin_devices_show_metadata_and_preview_in_the_device_browser() {
             "R1 Spacer"
         ])
     );
+    for name in [
+        "R1 Compressor",
+        "R1 Equalizer",
+        "R1 Filter",
+        "R1 Modulator",
+        "R1 Saturator",
+        "R1 Spacer",
+    ] {
+        assert_preview(&mut app, name);
+    }
     builtin_details(&mut app, "R1 Filter", "rill:r1-filter", false);
     app.quit();
 }

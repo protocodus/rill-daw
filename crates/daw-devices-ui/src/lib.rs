@@ -127,6 +127,19 @@ pub trait DeviceHost {
 /// Per-panel UI state the host keeps between frames.
 #[derive(Debug, Default)]
 pub struct PanelState {
+    /// The selected task. Navigation never changes device parameters.
+    pub page: usize,
+    workspace_device: Option<&'static str>,
+    /// The persistent output controls, for host geometry diagnostics.
+    pub output_rect: Option<egui::Rect>,
+    #[cfg(test)]
+    tab_rects: Vec<egui::Rect>,
+    #[cfg(test)]
+    band_rects: Vec<egui::Rect>,
+    #[cfg(test)]
+    workspace_rect: Option<egui::Rect>,
+    #[cfg(test)]
+    sections_rect: Option<egui::Rect>,
     /// Name of the last loaded or saved preset.
     pub preset: Option<String>,
     /// Draft name while "Save as…" is open.
@@ -276,50 +289,233 @@ pub fn show(
     host: &mut dyn DeviceHost,
     state: &mut PanelState,
 ) {
-    let layout = panels::layout_for(descriptor, state.pad);
+    if state.workspace_device.is_some_and(|id| id != descriptor.id) {
+        state.page = 0;
+        state.selected = None;
+    }
+    state.workspace_device = Some(descriptor.id);
+    state.output_rect = None;
+    if descriptor.kind != DeviceKind::Instrument {
+        state.performance_rects = None;
+    }
+    let tabs = panels::workspaces::tabs(descriptor);
+    state.page = state.page.min(tabs.len().saturating_sub(1));
+    let equalizer = descriptor.id == daw_devices::devices::equalizer::DESCRIPTOR.id;
+    if equalizer && state.selected.is_none() {
+        state.selected = Some(1);
+    }
     ui.set_width(panel_width(descriptor).min(ui.available_width()));
     #[cfg(test)]
     {
         state.control_rects.clear();
         state.grid_rects.clear();
         state.picture_rects.clear();
+        state.response_rect = None;
+        state.sections_rect = None;
         state.disabled.clear();
+        state.tab_rects.clear();
+        state.band_rects.clear();
     }
     let mut frame = daw_ui::device_frame(ui, descriptor.name);
     preset_bar(&mut frame.bar, descriptor, host, state);
     frame.body(ui, |ui| {
-        if layout.picture_place == panels::PicturePlace::Above && layout.picture.is_some() {
-            picture(ui, descriptor, &layout, host, state);
-            daw_ui::section_gap(ui);
+        // Device workspaces use the shared compact rhythm between a caption,
+        // control and value; full workspace spacing would triple that gap.
+        ui.spacing_mut().item_spacing.y = daw_ui::tokens::SPACE_XS;
+        if !tabs.is_empty() {
+            ui.horizontal(|ui| {
+                for (page, label) in tabs.iter().enumerate() {
+                    let response = daw_ui::tab_choice(ui, state.page == page, *label);
+                    if response.clicked() {
+                        state.page = page;
+                    }
+                    #[cfg(test)]
+                    state.tab_rects.push(response.rect);
+                }
+            });
         }
-        let rows = layout.sections.iter().map(|section| section.row).max();
-        for row in 0..=rows.unwrap_or(0) {
-            let sections: Vec<_> = layout
-                .sections
-                .iter()
-                .filter(|section| section.row == row)
-                .collect();
-            let drawn = if layout.cells {
-                // The picture's columns, when it stands in this row.
-                let beside = match layout.picture_place {
-                    panels::PicturePlace::Row { row: place, span } if place == row => Some(span),
-                    _ => None,
-                };
-                cell_row(ui, descriptor, &sections, beside, host, state, &layout);
-                true
-            } else {
-                natural_row(ui, descriptor, &sections, host, state, &layout)
-            };
-            if drawn {
-                // The gutter between rows equals the one between cards.
-                ui.add_space((daw_ui::tokens::SPACE_SM - ui.spacing().item_spacing.y).max(0.0));
-            }
+        let mut workspace = panels::workspaces::build(
+            descriptor,
+            state.pad,
+            state.page,
+            state.selected.unwrap_or(1),
+        );
+        let body = ui.allocate_ui(
+            egui::vec2(ui.available_width(), workspace.body_height),
+            |ui| {
+                ui.set_min_height(workspace.body_height);
+                if !workspace.toolbar.is_empty() {
+                    compact_parameters(
+                        ui,
+                        descriptor,
+                        &workspace.toolbar,
+                        host,
+                        state,
+                        &workspace.layout,
+                    );
+                }
+                if workspace.layout.picture_place == panels::PicturePlace::Above
+                    && workspace.layout.picture.is_some()
+                {
+                    picture(ui, descriptor, &workspace.layout, host, state);
+                    ui.add_space(daw_ui::tokens::SPACE_SM);
+                }
+                if equalizer {
+                    ui.horizontal(|ui| {
+                        daw_ui::control_caption(ui, "Band");
+                        for (index, label) in ["HP", "1", "2", "3", "4", "LP"].iter().enumerate() {
+                            let name = match index {
+                                0 => "High-pass".to_owned(),
+                                5 => "Low-pass".to_owned(),
+                                _ => format!("Band {index}"),
+                            };
+                            let response =
+                                daw_ui::tab_choice(ui, state.selected == Some(index), *label)
+                                    .on_hover_text(&name);
+                            response.widget_info(|| {
+                                egui::WidgetInfo::selected(
+                                    egui::WidgetType::SelectableLabel,
+                                    ui.is_enabled(),
+                                    state.selected == Some(index),
+                                    &name,
+                                )
+                            });
+                            if response.clicked() {
+                                state.selected = Some(index);
+                            }
+                            #[cfg(test)]
+                            state.band_rects.push(response.rect);
+                        }
+                    });
+                    // A graph gesture and the selector update the inspector in this frame.
+                    workspace = panels::workspaces::build(
+                        descriptor,
+                        state.pad,
+                        state.page,
+                        state.selected.unwrap_or(1),
+                    );
+                } else if descriptor.id == daw_devices::devices::drums::DESCRIPTOR.id {
+                    // A pad click updates its inspector immediately as well.
+                    workspace = panels::workspaces::build(descriptor, state.pad, state.page, 0);
+                }
+                // The drum kit keeps its large audition pads beside the sample
+                // and task inspector; its picture composes those cards on the right.
+                if descriptor.id != daw_devices::devices::drums::DESCRIPTOR.id {
+                    workspace_sections(ui, descriptor, &workspace.layout, host, state);
+                }
+            },
+        );
+        #[cfg(test)]
+        {
+            state.workspace_rect = Some(body.response.rect);
+        }
+        let _ = body;
+        if !workspace.output.is_empty() {
+            ui.separator();
+            state.output_rect = Some(compact_parameters(
+                ui,
+                descriptor,
+                &workspace.output,
+                host,
+                state,
+                &workspace.layout,
+            ));
         }
         if descriptor.kind == DeviceKind::Instrument {
-            daw_ui::section_gap(ui);
+            ui.add_space(daw_ui::tokens::SPACE_SM);
             performance(ui, host, state);
         }
     });
+}
+
+fn workspace_sections(
+    ui: &mut Ui,
+    descriptor: &DeviceDescriptor,
+    layout: &panels::Layout,
+    host: &mut dyn DeviceHost,
+    state: &mut PanelState,
+) {
+    #[cfg(test)]
+    let bounds = (ui.cursor().min, ui.available_width());
+    let rows = layout.sections.iter().map(|section| section.row).max();
+    for row in 0..=rows.unwrap_or(0) {
+        let sections: Vec<_> = layout
+            .sections
+            .iter()
+            .filter(|section| section.row == row)
+            .collect();
+        let drawn = if layout.cells {
+            let beside = match layout.picture_place {
+                panels::PicturePlace::Row { row: place, span } if place == row => Some(span),
+                _ => None,
+            };
+            cell_row(ui, descriptor, &sections, beside, host, state, layout);
+            true
+        } else {
+            natural_row(ui, descriptor, &sections, host, state, layout)
+        };
+        if drawn {
+            ui.add_space((daw_ui::tokens::SPACE_SM - ui.spacing().item_spacing.y).max(0.0));
+        }
+    }
+    #[cfg(test)]
+    {
+        state.sections_rect = Some(egui::Rect::from_min_max(
+            bounds.0,
+            egui::pos2(bounds.0.x + bounds.1, ui.cursor().min.y),
+        ));
+    }
+}
+
+/// Shared inline parameter controls keep the final level and global choices
+/// reachable without giving them another full row of captioned knobs.
+fn compact_parameters(
+    ui: &mut Ui,
+    descriptor: &DeviceDescriptor,
+    ids: &[u32],
+    host: &mut dyn DeviceHost,
+    #[cfg_attr(not(test), expect(unused_variables))] state: &mut PanelState,
+    layout: &panels::Layout,
+) -> egui::Rect {
+    daw_ui::control_row(ui, |ui| {
+        for spec in ids.iter().filter_map(|id| descriptor.parameter(*id)) {
+            let caption = caption(descriptor, spec, host, layout);
+            ui.push_id((descriptor.id, spec.id, "persistent"), |ui| {
+                daw_ui::control_caption(ui, caption);
+                let drawn = ui.scope(|ui| {
+                    ui.spacing_mut().button_padding.x = daw_ui::tokens::SPACE_SM;
+                    table_control(ui, spec, host, layout, 108.0);
+                });
+                #[cfg(test)]
+                {
+                    state.control_rects.push((spec.id, drawn.response.rect));
+                    if !active(spec, host, layout) {
+                        state.disabled.push(spec.id);
+                    }
+                }
+                if let Some(hint) = (layout.hint)(spec.id, &|id| host.value(id)) {
+                    drawn
+                        .response
+                        .on_hover_text(hint)
+                        .on_disabled_hover_text(hint);
+                }
+                // Compensation has a reserved value slot even while switched off.
+                if matches!(spec.range, ParamRange::Toggle) {
+                    let readout = (layout.readout)(spec.id, &|id| host.value(id));
+                    if spec.key == "auto_gain" {
+                        ui.allocate_ui(egui::vec2(70.0, daw_ui::tokens::COMPACT_HEIGHT), |ui| {
+                            daw_ui::text::note(ui, readout.as_deref().unwrap_or(""));
+                        });
+                    } else if let Some(text) = readout {
+                        daw_ui::text::note(ui, &text);
+                    }
+                }
+                ui.add_space(daw_ui::tokens::SPACE_SM);
+            });
+        }
+    })
+    .response
+    .rect
 }
 
 /// The device's picture, in the space the caller gave it.
@@ -343,7 +539,7 @@ fn picture(
         Some(panels::Picture::Modulation { height }) => {
             pictures::modulation(ui, *height, host, state);
         }
-        Some(panels::Picture::Space) => pictures::space(ui, host, state),
+        Some(panels::Picture::Space { height }) => pictures::space(ui, *height, host, state),
         Some(panels::Picture::Sample { height }) => {
             pictures::sample(ui, descriptor, *height, host, state);
         }
@@ -504,7 +700,11 @@ fn cell_row(
             .any(|slot| matches!(slot, panels::Slot::Faders(..)))
     });
     let tall = if faders {
-        tall.max(2.0 * daw_ui::tokens::CONTROL_HEIGHT + between)
+        tall.max(
+            layout
+                .fader_min_height
+                .unwrap_or(2.0 * daw_ui::tokens::CONTROL_HEIGHT + between),
+        )
     } else {
         tall
     };
@@ -1364,14 +1564,20 @@ fn table_control(
                 &name,
                 &mut value,
                 0.0..=1.0,
-                value_text(spec, normalized as f32),
+                (layout.readout)(spec.id, &|id| host.value(id))
+                    .unwrap_or_else(|| value_text(spec, normalized as f32)),
             )
             .width(column - TABLE_CELL_GAP)
+            .value_on_hover()
             .automation(automation.map(|(_, state)| state));
             if spec.plain_min() == -spec.plain_max() {
                 knob = knob.bipolar();
             }
-            let response = ui.add(knob);
+            let range = format!("{} to {}", value_text(spec, 0.0), value_text(spec, 1.0));
+            let response = ui
+                .add(knob)
+                .on_hover_text(&range)
+                .on_disabled_hover_text(&range);
             let navigation = knob_edits(
                 ui, spec, host, &response, value, normalized, automation, false,
             );
@@ -1399,7 +1605,12 @@ fn table_control(
                 }
             };
             if response.changed() {
-                host.set_value(spec.id, f64::from(spec.to_normalized(current)));
+                edit(
+                    host,
+                    layout,
+                    spec.id,
+                    f64::from(spec.to_normalized(current)),
+                );
             }
             let navigation =
                 daw_ui::automatable_parameter_context(ui, &response, control, automation);
@@ -1499,317 +1710,393 @@ fn control(
     let control = AutomationControl::DeviceParameter { id: spec.id };
     let caption = caption(descriptor, spec, host, layout);
     let applies = active(spec, host, layout);
+    // Use the last measured footprint so caption, dial and revealed value
+    // form one stable hover target, including disabled controls. Keep drawing
+    // the readout at zero opacity when idle to preserve its size and widget ID.
+    let hover_id = ui.id().with((id, "knob_hover_bounds"));
+    let hover_rect = ui
+        .data(|data| data.get_temp::<egui::Rect>(hover_id))
+        .unwrap_or(egui::Rect::NOTHING);
+    let hovered = ui.rect_contains_pointer(hover_rect);
     #[cfg(test)]
     if !applies {
         state.disabled.push(spec.id);
     }
-    let _drawn = ui.allocate_ui_with_layout(
-        egui::vec2(width, 0.0),
-        egui::Layout::top_down(egui::Align::Center),
-        |ui| {
-            if !applies {
-                ui.disable();
-            }
-            // Compact horizontal padding leaves a choice's text the room of its cell.
-            ui.spacing_mut().button_padding.x = daw_ui::tokens::SPACE_SM;
-            ui.add_space(lead);
-            // A lamp carries its own label.
-            let named = led(spec, layout).is_none();
-            daw_ui::control_caption(ui, if named { caption } else { " " });
-            let own = if fader {
-                height
-            } else {
-                control_height(spec, layout)
-            };
-            let offset = (height - own) * 0.5;
-            if offset > 0.0 {
-                ui.add_space(offset);
-            }
-            let lane = mark(host, spec, |normalized| {
-                Some(match spec.range {
-                    // A knob over the options turns with the lane.
-                    ParamRange::Choice(_) if dial(spec, layout) => normalized,
-                    ParamRange::Choice(labels) => {
-                        let plain = spec.to_plain(normalized as f32).round() as usize;
-                        if faces(spec, layout).is_some() {
-                            plain as f64
-                        } else {
-                            // The option's place among those offered now.
+    let _drawn = ui
+        .push_id(id, |ui| {
+            ui.allocate_ui_with_layout(
+                egui::vec2(width, 0.0),
+                egui::Layout::top_down(egui::Align::Center),
+                |ui| {
+                    if !applies {
+                        ui.disable();
+                    }
+                    // Compact horizontal padding leaves a choice's text the room of its cell.
+                    ui.spacing_mut().button_padding.x = daw_ui::tokens::SPACE_SM;
+                    ui.add_space(lead);
+                    // A lamp carries its own label.
+                    let named = led(spec, layout).is_none();
+                    daw_ui::control_caption(ui, if named { caption } else { " " });
+                    let own = if fader {
+                        height
+                    } else {
+                        control_height(spec, layout)
+                    };
+                    let offset = (height - own) * 0.5;
+                    if offset > 0.0 {
+                        ui.add_space(offset);
+                    }
+                    let lane = mark(host, spec, |normalized| {
+                        Some(match spec.range {
+                            // A knob over the options turns with the lane.
+                            ParamRange::Choice(_) if dial(spec, layout) => normalized,
+                            ParamRange::Choice(labels) => {
+                                let plain = spec.to_plain(normalized as f32).round() as usize;
+                                if faces(spec, layout).is_some() {
+                                    plain as f64
+                                } else {
+                                    // The option's place among those offered now.
+                                    let offered = (layout.options)(spec.id, &|id| host.value(id))
+                                        .unwrap_or(labels);
+                                    let label = labels.get(plain)?;
+                                    offered.iter().position(|option| option == label)? as f64
+                                }
+                            }
+                            ParamRange::Toggle => f64::from(u8::from(normalized >= 0.5)),
+                            _ => normalized,
+                        })
+                    });
+                    let navigation = daw_ui::automated(ui, lane, |ui| match spec.range {
+                        ParamRange::Linear { .. }
+                        | ParamRange::Log { .. }
+                        | ParamRange::Integer { .. } => {
+                            let mut value = normalized;
+                            let state = automation.map(|(_, state)| state);
+                            let response = if fader {
+                                let size = egui::vec2(daw_ui::FADER_CAP_WIDTH, height);
+                                daw_ui::fader(ui, &mut value, spec.name, size, state)
+                            } else if let (true, ParamRange::Integer { min, max }) =
+                                (layout.steppers.contains(&spec.id), spec.range)
+                            {
+                                let mut whole = spec.to_plain(normalized as f32).round() as i32;
+                                let response =
+                                    daw_ui::variation_stepper(ui, &mut whole, min..=max, caption);
+                                value = f64::from(spec.to_normalized(whole as f32));
+                                response
+                            } else {
+                                let mut knob = daw_ui::Knob::new(&mut value, 0.0..=1.0)
+                                    .compact()
+                                    .pointer()
+                                    .diameter(knob_diameter(spec, layout))
+                                    .text(caption)
+                                    .endpoint_labels(end_label(spec, 0.0), end_label(spec, 1.0))
+                                    .endpoint_labels_on_hover(hover_rect)
+                                    .automation(state);
+                                if spec.plain_min() == -spec.plain_max() {
+                                    // A range around zero fills from its center.
+                                    knob = knob.bipolar();
+                                }
+                                if let ParamRange::Integer { min, max } = spec.range {
+                                    // One detent per whole value.
+                                    knob = knob.step_by(1.0 / f64::from((max - min).max(1)));
+                                }
+                                ui.add(knob)
+                            };
+                            // What the device uses, where that is not the knob's value.
+                            let own = value_text(spec, normalized as f32);
+                            let replaced = (layout.readout)(spec.id, &|id| host.value(id));
+                            // Values share one baseline across the line.
+                            ui.add_space(offset);
+                            let opacity = ui.opacity();
+                            if !hovered
+                                && !response.dragged()
+                                && !fader
+                                && !layout.steppers.contains(&spec.id)
+                            {
+                                ui.set_opacity(0.0);
+                            }
+                            match replaced {
+                                Some(text) if text != own => {
+                                    let note = daw_ui::text::note(ui, &text);
+                                    // The pointer and the number disagree: say where
+                                    // the knob is. Another wording of the knob's own
+                                    // value ("+50 %") needs no such note.
+                                    let same = spec.parse(&text).is_some_and(|value| {
+                                        (f64::from(value) - normalized).abs() < 1e-3
+                                    });
+                                    if !same {
+                                        note.on_hover_text(format!("The knob is at {own}"));
+                                    }
+                                }
+                                _ => {
+                                    daw_ui::text::note(ui, &own);
+                                }
+                            }
+                            ui.set_opacity(opacity);
+                            let hint = (layout.hint)(spec.id, &|id| host.value(id));
+                            let response = match hint {
+                                Some(hint) => response.on_hover_text(hint),
+                                None => response,
+                            };
+                            let stepper = layout.steppers.contains(&spec.id);
+                            knob_edits(
+                                ui, spec, host, &response, value, normalized, automation, stepper,
+                            )
+                        }
+                        ParamRange::Choice(labels) => {
+                            // Option indices with their labels.
                             let offered =
                                 (layout.options)(spec.id, &|id| host.value(id)).unwrap_or(labels);
-                            let label = labels.get(plain)?;
-                            offered.iter().position(|option| option == label)? as f64
-                        }
-                    }
-                    ParamRange::Toggle => f64::from(u8::from(normalized >= 0.5)),
-                    _ => normalized,
-                })
-            });
-            let navigation = daw_ui::automated(ui, lane, |ui| match spec.range {
-                ParamRange::Linear { .. } | ParamRange::Log { .. } | ParamRange::Integer { .. } => {
-                    let mut value = normalized;
-                    let state = automation.map(|(_, state)| state);
-                    let response = if fader {
-                        let size = egui::vec2(daw_ui::FADER_CAP_WIDTH, height);
-                        daw_ui::fader(ui, &mut value, spec.name, size, state)
-                    } else if let (true, ParamRange::Integer { min, max }) =
-                        (layout.steppers.contains(&spec.id), spec.range)
-                    {
-                        let mut whole = spec.to_plain(normalized as f32).round() as i32;
-                        let response =
-                            daw_ui::variation_stepper(ui, &mut whole, min..=max, caption);
-                        value = f64::from(spec.to_normalized(whole as f32));
-                        response
-                    } else {
-                        let mut knob = daw_ui::Knob::new(&mut value, 0.0..=1.0)
-                            .compact()
-                            .pointer()
-                            .diameter(knob_diameter(spec, layout))
-                            .text(caption)
-                            .endpoint_labels(end_label(spec, 0.0), end_label(spec, 1.0))
-                            .automation(state);
-                        if spec.plain_min() == -spec.plain_max() {
-                            // A range around zero fills from its center.
-                            knob = knob.bipolar();
-                        }
-                        if let ParamRange::Integer { min, max } = spec.range {
-                            // One detent per whole value.
-                            knob = knob.step_by(1.0 / f64::from((max - min).max(1)));
-                        }
-                        ui.add(knob)
-                    };
-                    // What the device uses, where that is not the knob's value.
-                    let own = value_text(spec, normalized as f32);
-                    let replaced = (layout.readout)(spec.id, &|id| host.value(id));
-                    // Values share one baseline across the line.
-                    ui.add_space(offset);
-                    match replaced {
-                        Some(text) if text != own => {
-                            let note = daw_ui::text::note(ui, &text);
-                            // The pointer and the number disagree: say where
-                            // the knob is. Another wording of the knob's own
-                            // value ("+50 %") needs no such note.
-                            let same = spec
-                                .parse(&text)
-                                .is_some_and(|value| (f64::from(value) - normalized).abs() < 1e-3);
-                            if !same {
-                                note.on_hover_text(format!("The knob is at {own}"));
-                            }
-                        }
-                        _ => {
-                            daw_ui::text::note(ui, &own);
-                        }
-                    }
-                    let hint = (layout.hint)(spec.id, &|id| host.value(id));
-                    let response = match hint {
-                        Some(hint) => response.on_hover_text(hint),
-                        None => response,
-                    };
-                    let stepper = layout.steppers.contains(&spec.id);
-                    knob_edits(
-                        ui, spec, host, &response, value, normalized, automation, stepper,
-                    )
-                }
-                ParamRange::Choice(labels) => {
-                    // Option indices with their labels.
-                    let offered = (layout.options)(spec.id, &|id| host.value(id)).unwrap_or(labels);
-                    let options: Vec<(f32, String)> = offered
-                        .iter()
-                        .map(|option| {
-                            let index = labels.iter().position(|o| o == option);
-                            (index.unwrap_or(0) as f32, (*option).to_string())
-                        })
-                        .collect();
-                    let mut current = spec.to_plain(normalized as f32);
-                    let label = spec.format(normalized as f32);
-                    let response = if dial(spec, layout) {
-                        // One detent per option; the value below names the
-                        // option and lists them all.
-                        let last = labels.len().saturating_sub(1).max(1);
-                        // The ends of a scale ("1/32 T" to "1/1 D") stand
-                        // under the arc; names that are no scale ("Single",
-                        // "Golden") would only collide there.
-                        let scale = labels
-                            .iter()
-                            .all(|label| label.starts_with(|first: char| first.is_ascii_digit()));
-                        let ends = if scale {
-                            (labels[0], labels[last])
-                        } else {
-                            ("", "")
-                        };
-                        let mut value = normalized;
-                        let response = ui.add(
-                            daw_ui::Knob::new(&mut value, 0.0..=1.0)
-                                .compact()
-                                .pointer()
-                                .diameter(layout.knob.diameter())
-                                .text(caption)
-                                .endpoint_labels(ends.0, ends.1)
-                                .step_by(1.0 / last as f64)
-                                .automation(automation.map(|(_, state)| state)),
-                        );
-                        if response.double_clicked() {
-                            edit(host, layout, spec.id, f64::from(spec.default_normalized()));
-                        } else if response.changed() {
-                            edit(host, layout, spec.id, value.clamp(0.0, 1.0));
-                        }
-                        ui.add_space(offset);
-                        let text = (layout.readout)(spec.id, &|id| host.value(id)).unwrap_or(label);
-                        let (_, picked) = daw_ui::value_menu(
-                            ui,
-                            &text,
-                            labels,
-                            current.round() as usize,
-                            width - CELL_GAP,
-                        );
-                        if let Some(index) = picked {
-                            let value = f64::from(spec.to_normalized(index as f32));
-                            edit(host, layout, spec.id, value);
-                        }
-                        response
-                    } else if let Some(faces) = faces(spec, layout) {
-                        let options: Vec<_> = faces
-                            .faces
-                            .iter()
-                            .enumerate()
-                            .map(|(index, (face, name))| (index as f32, *face, *name))
-                            .collect();
-                        let response =
-                            daw_ui::glyph_toggle(ui, &mut current, &options, faces.segment_width);
-                        if response.changed() {
-                            let value = f64::from(spec.to_normalized(current));
-                            edit(host, layout, spec.id, value);
-                        }
-                        response
-                    } else if toggles(spec) {
-                        let options: Vec<(f32, &str)> = options
-                            .iter()
-                            .map(|(plain, option)| (*plain, option.as_str()))
-                            .collect();
-                        let response = match toggle_columns(spec, layout) {
-                            Some(columns) => {
-                                // Columns as wide as the longest name: less
-                                // padding where the place is narrower.
-                                let padding = ui.spacing().button_padding.x;
-                                let widest = options
-                                    .iter()
-                                    .map(|(_, option)| {
-                                        daw_ui::toggle_group_width(ui, std::iter::once(*option))
-                                    })
-                                    .fold(0.0, f32::max);
-                                let over = widest - (width - CELL_GAP) / columns as f32;
-                                ui.spacing_mut().button_padding.x =
-                                    (padding - 0.5 * over.max(0.0)).max(0.0);
-                                let response =
-                                    daw_ui::toggle_grid(ui, &mut current, &options, columns);
-                                ui.spacing_mut().button_padding.x = padding;
-                                #[cfg(test)]
-                                state.grid_rects.push((spec.id, response.rect));
+                            let options: Vec<(f32, String)> = offered
+                                .iter()
+                                .map(|option| {
+                                    let index = labels.iter().position(|o| o == option);
+                                    (index.unwrap_or(0) as f32, (*option).to_string())
+                                })
+                                .collect();
+                            let mut current = spec.to_plain(normalized as f32);
+                            let label = spec.format(normalized as f32);
+                            let response = if dial(spec, layout) {
+                                // One detent per option; the value below names the
+                                // option and lists them all.
+                                let last = labels.len().saturating_sub(1).max(1);
+                                // The ends of a scale ("1/32 T" to "1/1 D") stand
+                                // under the arc; names that are no scale ("Single",
+                                // "Golden") would only collide there.
+                                let scale = labels.iter().all(|label| {
+                                    label.starts_with(|first: char| first.is_ascii_digit())
+                                });
+                                let ends = if scale {
+                                    (labels[0], labels[last])
+                                } else {
+                                    ("", "")
+                                };
+                                let mut value = normalized;
+                                let response = ui.add(
+                                    daw_ui::Knob::new(&mut value, 0.0..=1.0)
+                                        .compact()
+                                        .pointer()
+                                        .diameter(layout.knob.diameter())
+                                        .text(caption)
+                                        .endpoint_labels(ends.0, ends.1)
+                                        .endpoint_labels_on_hover(hover_rect)
+                                        .step_by(1.0 / last as f64)
+                                        .automation(automation.map(|(_, state)| state)),
+                                );
+                                if response.double_clicked() {
+                                    edit(
+                                        host,
+                                        layout,
+                                        spec.id,
+                                        f64::from(spec.default_normalized()),
+                                    );
+                                } else if response.changed() {
+                                    edit(host, layout, spec.id, value.clamp(0.0, 1.0));
+                                }
+                                ui.add_space(offset);
+                                let text = (layout.readout)(spec.id, &|id| host.value(id))
+                                    .unwrap_or(label);
+                                let opacity = ui.opacity();
+                                if !hovered && !response.dragged() {
+                                    ui.set_opacity(0.0);
+                                }
+                                let (_, picked) = daw_ui::value_menu(
+                                    ui,
+                                    &text,
+                                    labels,
+                                    current.round() as usize,
+                                    width - CELL_GAP,
+                                );
+                                ui.set_opacity(opacity);
+                                if let Some(index) = picked {
+                                    let value = f64::from(spec.to_normalized(index as f32));
+                                    edit(host, layout, spec.id, value);
+                                }
                                 response
+                            } else if let Some(faces) = faces(spec, layout) {
+                                let options: Vec<_> = faces
+                                    .faces
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(index, (face, name))| (index as f32, *face, *name))
+                                    .collect();
+                                let response = daw_ui::glyph_toggle(
+                                    ui,
+                                    &mut current,
+                                    &options,
+                                    faces.segment_width,
+                                );
+                                if response.changed() {
+                                    let value = f64::from(spec.to_normalized(current));
+                                    edit(host, layout, spec.id, value);
+                                }
+                                response
+                            } else if toggles(spec) {
+                                let options: Vec<(f32, &str)> = options
+                                    .iter()
+                                    .map(|(plain, option)| (*plain, option.as_str()))
+                                    .collect();
+                                let response = match toggle_columns(spec, layout) {
+                                    Some(columns) => {
+                                        // Columns as wide as the longest name: less
+                                        // padding where the place is narrower.
+                                        let padding = ui.spacing().button_padding.x;
+                                        let widest = options
+                                            .iter()
+                                            .map(|(_, option)| {
+                                                daw_ui::toggle_group_width(
+                                                    ui,
+                                                    std::iter::once(*option),
+                                                )
+                                            })
+                                            .fold(0.0, f32::max);
+                                        let over = widest - (width - CELL_GAP) / columns as f32;
+                                        ui.spacing_mut().button_padding.x =
+                                            (padding - 0.5 * over.max(0.0)).max(0.0);
+                                        let response = daw_ui::toggle_grid(
+                                            ui,
+                                            &mut current,
+                                            &options,
+                                            columns,
+                                        );
+                                        ui.spacing_mut().button_padding.x = padding;
+                                        response
+                                    }
+                                    None => {
+                                        // A row of names a little wider than its
+                                        // cells gives up padding instead of leaving
+                                        // the card's margins.
+                                        let padding = ui.spacing().button_padding.x;
+                                        let names = options.iter().map(|(_, option)| *option);
+                                        let over = daw_ui::toggle_group_width(ui, names)
+                                            - (width - CELL_GAP);
+                                        ui.spacing_mut().button_padding.x = (padding
+                                            - 0.5 * over.max(0.0) / options.len().max(1) as f32)
+                                            .max(0.0);
+                                        let response =
+                                            daw_ui::toggle_group(ui, &mut current, &options);
+                                        ui.spacing_mut().button_padding.x = padding;
+                                        response
+                                    }
+                                };
+                                if response.changed() {
+                                    let value = f64::from(spec.to_normalized(current));
+                                    edit(host, layout, spec.id, value);
+                                }
+                                response
+                            } else {
+                                let size =
+                                    egui::vec2(natural - CELL_GAP, daw_ui::tokens::CONTROL_HEIGHT);
+                                // A child of the choice's own width, which the cell centers.
+                                ui.allocate_ui_with_layout(
+                                    size,
+                                    egui::Layout::left_to_right(egui::Align::Center),
+                                    |ui| {
+                                        daw_ui::select(id, &label)
+                                            .width(size.x)
+                                            // Long names ("Transistor Ladder") must not push the
+                                            // next control out of its cell; the list shows them whole.
+                                            .truncate()
+                                            .show_ui(ui, |ui| {
+                                                for (plain, option) in &options {
+                                                    if daw_ui::selectable(
+                                                        ui,
+                                                        *plain == current,
+                                                        option,
+                                                    )
+                                                    .clicked()
+                                                    {
+                                                        let value =
+                                                            f64::from(spec.to_normalized(*plain));
+                                                        edit(host, layout, spec.id, value);
+                                                    }
+                                                }
+                                            })
+                                            .response
+                                    },
+                                )
+                                .inner
+                                .on_hover_text(&label)
+                            };
+                            #[cfg(test)]
+                            state.grid_rects.push((spec.id, response.rect));
+                            daw_ui::automatable_parameter_context(
+                                ui, &response, control, automation,
+                            )
+                        }
+                        ParamRange::Toggle => {
+                            let mut on = normalized >= 0.5;
+                            let response = match led(spec, layout) {
+                                Some(label) => daw_ui::toggle_led(ui, &mut on, label),
+                                None => daw_ui::switch(ui, &mut on, ""),
+                            };
+                            if response.changed() {
+                                host.set_value(spec.id, f64::from(u8::from(on)));
+                            }
+                            daw_ui::automatable_parameter_context(
+                                ui, &response, control, automation,
+                            )
+                        }
+                    });
+                    if !is_knob(spec) && !dial(spec, layout) {
+                        // A value line, empty unless the layout has something to
+                        // say there, so every cell of a line is as tall as a knob's
+                        // and the next line starts level across cards.
+                        ui.add_space(offset);
+                        let source =
+                            (layout.sidechain == Some(spec.id) && applies && normalized >= 0.5)
+                                .then(|| host.sidechain_sources())
+                                .flatten();
+                        match source {
+                            Some(sources) => {
+                                let text = match &sources[..] {
+                                    [] => "No source".to_owned(),
+                                    [only] => only.clone(),
+                                    [first, rest @ ..] => format!("{first} +{}", rest.len()),
+                                };
+                                let link = daw_ui::value_link(
+                                    ui,
+                                    &text,
+                                    sources.is_empty(),
+                                    width - CELL_GAP,
+                                )
+                                .on_hover_text(
+                                    if sources.is_empty() {
+                                        "Nothing is routed to the sidechain input. Open Routing"
+                                            .to_owned()
+                                    } else {
+                                        format!(
+                                            "Sidechain from {}. Open Routing",
+                                            sources.join(", ")
+                                        )
+                                    },
+                                );
+                                if link.clicked() {
+                                    host.route_sidechain();
+                                }
                             }
                             None => {
-                                // A row of names a little wider than its
-                                // cells gives up padding instead of leaving
-                                // the card's margins.
-                                let padding = ui.spacing().button_padding.x;
-                                let names = options.iter().map(|(_, option)| *option);
-                                let over =
-                                    daw_ui::toggle_group_width(ui, names) - (width - CELL_GAP);
-                                ui.spacing_mut().button_padding.x = (padding
-                                    - 0.5 * over.max(0.0) / options.len().max(1) as f32)
-                                    .max(0.0);
-                                let response = daw_ui::toggle_group(ui, &mut current, &options);
-                                ui.spacing_mut().button_padding.x = padding;
-                                response
+                                let readout = (layout.readout)(spec.id, &|id| host.value(id));
+                                daw_ui::text::note(ui, readout.as_deref().unwrap_or(" "));
                             }
-                        };
-                        if response.changed() {
-                            let value = f64::from(spec.to_normalized(current));
-                            edit(host, layout, spec.id, value);
-                        }
-                        response
-                    } else {
-                        let size = egui::vec2(natural - CELL_GAP, daw_ui::tokens::CONTROL_HEIGHT);
-                        // A child of the choice's own width, which the cell centers.
-                        ui.allocate_ui_with_layout(
-                            size,
-                            egui::Layout::left_to_right(egui::Align::Center),
-                            |ui| {
-                                daw_ui::select(id, &label)
-                                    .width(size.x)
-                                    // Long names ("Transistor Ladder") must not push the
-                                    // next control out of its cell; the list shows them whole.
-                                    .truncate()
-                                    .show_ui(ui, |ui| {
-                                        for (plain, option) in &options {
-                                            if daw_ui::selectable(ui, *plain == current, option)
-                                                .clicked()
-                                            {
-                                                let value = f64::from(spec.to_normalized(*plain));
-                                                edit(host, layout, spec.id, value);
-                                            }
-                                        }
-                                    })
-                                    .response
-                            },
-                        )
-                        .inner
-                        .on_hover_text(&label)
-                    };
-                    daw_ui::automatable_parameter_context(ui, &response, control, automation)
-                }
-                ParamRange::Toggle => {
-                    let mut on = normalized >= 0.5;
-                    let response = match led(spec, layout) {
-                        Some(label) => daw_ui::toggle_led(ui, &mut on, label),
-                        None => daw_ui::switch(ui, &mut on, ""),
-                    };
-                    if response.changed() {
-                        host.set_value(spec.id, f64::from(u8::from(on)));
-                    }
-                    daw_ui::automatable_parameter_context(ui, &response, control, automation)
-                }
-            });
-            if !is_knob(spec) && !dial(spec, layout) {
-                // A value line, empty unless the layout has something to
-                // say there, so every cell of a line is as tall as a knob's
-                // and the next line starts level across cards.
-                ui.add_space(offset);
-                let source = (layout.sidechain == Some(spec.id) && applies && normalized >= 0.5)
-                    .then(|| host.sidechain_sources())
-                    .flatten();
-                match source {
-                    Some(sources) => {
-                        let text = match &sources[..] {
-                            [] => "No source".to_owned(),
-                            [only] => only.clone(),
-                            [first, rest @ ..] => format!("{first} +{}", rest.len()),
-                        };
-                        let link =
-                            daw_ui::value_link(ui, &text, sources.is_empty(), width - CELL_GAP)
-                                .on_hover_text(if sources.is_empty() {
-                                    "Nothing is routed to the sidechain input. Open Routing"
-                                        .to_owned()
-                                } else {
-                                    format!("Sidechain from {}. Open Routing", sources.join(", "))
-                                });
-                        if link.clicked() {
-                            host.route_sidechain();
                         }
                     }
-                    None => {
-                        let readout = (layout.readout)(spec.id, &|id| host.value(id));
-                        daw_ui::text::note(ui, readout.as_deref().unwrap_or(" "));
+                    if let Some(action) = navigation {
+                        host.navigate(action);
                     }
-                }
-            }
-            if let Some(action) = navigation {
-                host.navigate(action);
-            }
-        },
-    );
+                },
+            )
+        })
+        .inner;
+    ui.data_mut(|data| data.insert_temp(hover_id, _drawn.response.rect));
     #[cfg(test)]
     state.control_rects.push((spec.id, _drawn.response.rect));
+    if let Some(hint) = (layout.hint)(spec.id, &|id| host.value(id)) {
+        _drawn
+            .response
+            .on_hover_text(hint)
+            .on_disabled_hover_text(hint);
+    }
 }
 
 /// The device's `daw_ui::preset_group`, for its frame's bar. Identical for

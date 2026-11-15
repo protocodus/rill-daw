@@ -6,6 +6,8 @@ use daw_devices::devices::{
 };
 use daw_ui::{Glyph, ToggleFace};
 
+pub(crate) mod workspaces;
+
 pub type Values<'a> = &'a dyn Fn(u32) -> f64;
 
 /// The rate a curve is drawn at when the device does not report its own;
@@ -89,6 +91,8 @@ pub struct Layout {
     pub hero: Option<u32>,
     /// Every other knob: standard, or dense for a panel with many controls.
     pub knob: daw_ui::KnobSize,
+    /// A workspace may use shorter envelope faders while retaining all stages.
+    pub fader_min_height: Option<f32>,
     /// Captions that differ from the parameter's name.
     pub captions: &'static [(u32, &'static str)],
     /// Whether every card divides into equal cells, one control each unless
@@ -166,7 +170,7 @@ pub enum Picture {
     /// A modulation effect: its LFO beside the response it sweeps.
     Modulation { height: f32 },
     /// Echoes and a reverb's decay over time.
-    Space,
+    Space { height: f32 },
     /// The recording of sample slot 0 with its markers and the voices
     /// playing it.
     Sample { height: f32 },
@@ -1206,7 +1210,7 @@ fn spacer_layout(mut layout: Layout) -> Layout {
     // Every control applies in every model, so nothing moves on a change.
     layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
     layout.cells = true;
-    layout.picture = Some(Picture::Space);
+    layout.picture = Some(Picture::Space { height: 160.0 });
     layout.picture_place = PicturePlace::Row { row: 0, span: 8 };
     // The two routings stacked: side by side they would take three cells.
     layout.toggle_columns = &[(ROUTING, 1)];
@@ -1406,6 +1410,7 @@ fn generic(descriptor: &DeviceDescriptor) -> Layout {
         sections,
         hero: None,
         knob: daw_ui::KnobSize::Standard,
+        fader_min_height: None,
         captions: &[],
         cells: false,
         toggle_columns: &[],

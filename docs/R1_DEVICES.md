@@ -1,5 +1,10 @@
 # R1 built-in devices: design draft
 
+The nine implemented devices now follow the task-based layouts in
+[R1 device UX redesign](R1_UX_REDESIGN.md). That agreed specification supersedes
+the all-controls-at-once panel layouts below; the sound engines, parameter
+contracts and preset format remain as documented here.
+
 Status: **design approved on 2026-11-10. Steps 2, 3 and 4 of the
 [implementation order](#implementation-order) are in place:** the device
 foundation, model/engine/app/tools integration including the sidechain input

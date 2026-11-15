@@ -1,0 +1,86 @@
+R1 UX redesign — verified 2026-11-15
+
+Scope: nine registered R1 devices; five UX agents reached consensus, followed
+by three coding agents. DSP, parameter IDs and preset formats are unchanged.
+
+Passing relevant suites (124 distinct tests):
+  daw-devices-ui --lib                              73
+  daw-ui --test layout                              15
+  daw-app --bin rill plugin_ui::tests                15
+  daw-app --test builtin_devices_e2e                  7
+  daw-app --test mini_synth_e2e                       2
+  daw-app --test sampler_e2e                          4
+  daw-app --test drums_e2e                            2
+  daw-app --test r1_workspaces_e2e                    4
+  daw-app --test arranger_automation_e2e              2
+
+The device-browser scenario was rerun after all nine preview assets were
+updated; all nine cards render their compiled-in preview.
+
+All device tasks, all six EQ bands and all sixteen drum pads were measured
+in both themes. Complete frames fit within 620 logical points at their
+declared width. Output and keyboard positions remain stable across tasks,
+band/pad selection, and empty/loaded sample states, including long names.
+
+Running-app checks use the production headless subprocess and real parameter,
+audio rendering, automation, history and project persistence paths. Native
+screenshots were captured from the built app at 1480x960 in both themes;
+UX lead visually reviewed every device and representative light panels.
+
+Formatting was checked for all 18 changed/new Rust sources, and
+`git diff --check` passes. No full-workspace test claim is made.
+
+Reproduction (activate the workspace's Rust/native-library environment first):
+  cargo test --locked -p daw-devices-ui --lib
+  cargo test --locked -p daw-ui --test layout
+  cargo test --locked -p daw-app --bin rill plugin_ui::tests
+  cargo test --locked -p daw-app --test builtin_devices_e2e --test mini_synth_e2e --test sampler_e2e --test drums_e2e --test r1_workspaces_e2e --test arranger_automation_e2e -- --test-threads=1
+
+Hover-only knob refinement — verified 2026-11-15
+
+R1 pointer-knob endpoints and current values reveal over the complete control
+footprint and during an active drag. Compact inline readouts reveal over their
+cell, with range hints on hover. Labels, geometry, automation, precision menus,
+faders and variation steppers retain their existing behavior.
+
+Passing relevant suites (160 distinct tests):
+  daw-devices-ui --lib                              73
+  daw-ui --test knob                                15
+  daw-ui --test device_library                      51
+  daw-app --test r1_workspaces_e2e                    6
+  daw-app --test builtin_devices_e2e                  7
+  daw-app --test mini_synth_e2e                       2
+  daw-app --test sampler_e2e                          4
+  daw-app --test drums_e2e                            2
+
+The workspace E2Es exercise caption/dial/value hover, hidden idle readouts,
+disabled inspection, active dragging outside the footprint, hiding after
+mouse focus, stable layout, inline readouts, and choosing from a revealed
+choice menu after moving the pointer outside its knob. All nine native
+previews and light/dark screenshots were refreshed for the idle appearance.
+
+Integration with main a0fc03d — verified 2026-11-15
+
+Preserved the newer device browser and composable sample-player workflows,
+including sample actions, audible-region editing, naming and composite drops.
+Drums keeps the larger 85×70 minimum pads on the left with its waveform and
+task inspector on the right. All nine frames again fit the original 620-point
+budget, with stable output/keyboard positions for empty, loaded and composite
+players. Native previews were refreshed after integration.
+
+Passing post-integration suites (129 distinct tests):
+  daw-devices-ui --lib                              77
+  daw-ui --test layout                              18
+  daw-app --test r1_workspaces_e2e                    6
+  daw-app --test builtin_devices_e2e                  7
+  daw-app --test mini_synth_e2e                       2
+  daw-app --test sampler_e2e                          4
+  daw-app --test drums_e2e                            2
+  daw-app --test sample_player_e2e                    4
+  daw-app --test sample_player_tools_e2e              1
+  daw-app --test device_browser_redesign_e2e          7
+  daw-app --test device_randomize_e2e                 1
+
+The complete workspace formatting check and git diff whitespace check pass.
+The production running-app checks verify the footer and keyboard are visible
+inside the real Instrument dialog at 1480×960, in both themes.

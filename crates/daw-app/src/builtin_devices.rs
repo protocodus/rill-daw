@@ -20,6 +20,11 @@ pub(crate) const VENDOR: &str = "Rill";
 const PREVIEWS: &[(&str, &[u8])] = &[
     ("r1-mini", include_bytes!("../assets/r1-mini-preview.png")),
     (
+        "r1-sampler",
+        include_bytes!("../assets/r1-sampler-preview.png"),
+    ),
+    ("r1-drums", include_bytes!("../assets/r1-drums-preview.png")),
+    (
         "r1-filter",
         include_bytes!("../assets/r1-filter-preview.png"),
     ),

@@ -526,7 +526,20 @@ impl DawApp {
     }
 
     pub(crate) fn reconcile_editor_history(&mut self, previous: Option<EditorStateSignature>) {
-        if previous.is_some() && previous != self.editor_state_signature() {
+        let current = self.editor_state_signature();
+        if let (Some((before_target, before, ..)), Some((after_target, after, ..))) =
+            (&previous, &current)
+            && before_target == after_target
+            && before.builtin_device().is_some()
+            && before.builtin_device() == after.builtin_device()
+        {
+            // Built-ins read parameters from the project each frame and own no
+            // opaque editor state. Undo and sample changes keep the current
+            // task, selected band/pad and audition controls in place.
+            self.instrument_ui.owner = Some((*after_target, after.clone()));
+            return;
+        }
+        if previous.is_some() && previous != current {
             // A native snapshot from the abandoned history state must never
             // overwrite the restored project, including when the class is unchanged.
             if let Some(session) = self.instrument_ui.session.take() {

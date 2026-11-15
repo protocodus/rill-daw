@@ -105,6 +105,7 @@ pub struct Knob<'a> {
     text: String,
     suffix: String,
     endpoint_labels: Option<[String; 2]>,
+    endpoint_hover_rect: Option<Rect>,
     diameter: f32,
     min_decimals: usize,
     max_decimals: Option<usize>,
@@ -144,6 +145,7 @@ impl<'a> Knob<'a> {
             text: String::new(),
             suffix: String::new(),
             endpoint_labels: None,
+            endpoint_hover_rect: None,
             diameter: 84.0,
             min_decimals: 0,
             max_decimals: None,
@@ -225,6 +227,13 @@ impl<'a> Knob<'a> {
         if diameter.is_finite() {
             self.diameter = diameter.clamp(34.0, 180.0);
         }
+        self
+    }
+    /// Reveal scale endpoints only while the pointer is in the caller's
+    /// control footprint, or while dragging. Include any external caption
+    /// and readout in `rect`; the dial and its layout stay unchanged.
+    pub fn endpoint_labels_on_hover(mut self, rect: Rect) -> Self {
+        self.endpoint_hover_rect = Some(rect);
         self
     }
     /// A text-free ring. The caller provides its label, unit-aware hover,
@@ -543,6 +552,9 @@ impl<'a> Knob<'a> {
             ]
         });
         let colors = theme::palette(ui.ctx());
+        let show_endpoints = self
+            .endpoint_hover_rect
+            .is_none_or(|rect| ui.rect_contains_pointer(rect) || response.dragged());
         if !ring_only {
             let labels_rect = ui
                 .allocate_exact_size(
@@ -562,13 +574,15 @@ impl<'a> Knob<'a> {
                     &labels[1],
                 ),
             ] {
-                ui.painter().text(
-                    position,
-                    align,
-                    value,
-                    egui::FontId::proportional(tokens::FONT_CANVAS),
-                    colors.muted,
-                );
+                if show_endpoints {
+                    ui.painter().text(
+                        position,
+                        align,
+                        value,
+                        egui::FontId::proportional(tokens::FONT_CANVAS),
+                        colors.muted,
+                    );
+                }
             }
         } else if !self.compact {
             // Keep the native Number ID stable when resizing across the small
@@ -878,7 +892,7 @@ impl<'a> Knob<'a> {
                         },
                     ),
                 );
-                if let Some(labels) = &self.endpoint_labels {
+                if show_endpoints && let Some(labels) = &self.endpoint_labels {
                     let font =
                         egui::FontId::proportional(if self.diameter >= 48.0 { 9.0 } else { 8.0 });
                     for (end, label) in [

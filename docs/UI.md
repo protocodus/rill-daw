@@ -660,6 +660,11 @@ wrap. Each reserves the height before painting. Form grids center each label bes
 its complete control. Structural columns align at the top; mixer bus and send-return
 cards reserve their type heading above the lower card edge.
 
+`control_row(ui, contents)` reserves the ordinary 34-point row for labels,
+inline knobs, switches and choices that have no scale captions. R1 uses it for
+persistent output controls and global mode choices. Use `parameter_row` when a
+slider's scale needs the taller 55-point allowance.
+
 `editor_tools` keeps selection/drawing, cut/join/erase, copy, and timing tools
 together as individual quiet buttons. A fine vertical separator distinguishes
 families sharing a row; wrapped rows start cleanly. Every supported tool stays
@@ -1689,6 +1694,22 @@ the standard color picker with Clear color. The host owns global favorite
 storage, drafts, source identities and transaction outcomes.
 
 ### Panels ([`device_panel.rs`](../crates/daw-ui/src/device_panel.rs))
+
+R1 panels use the [shared task-workspace contract](R1_UX_REDESIGN.md): explicit
+task tabs where needed, persistent output controls, and a fixed body height
+that keeps the instrument keyboard in place. Task and EQ-band selection are
+presentation state and never change sound parameters or Undo history. The
+Equalizer pairs its interactive graph with a band selector and focused
+inspector; simple effects keep one screen. All nine panels retain the shared
+precision-entry, reset and automation interactions described below.
+
+R1 knob names stay visible. Their minimum, maximum and current value appear
+only while hovering the control's caption, dial or value area, and remain
+visible during an active drag. Readout space stays reserved so hovering never
+moves a control. Compact inline knobs reveal the current value over their cell
+and show their range in the hover hint. Disabled knobs can still be inspected;
+fader and variation-stepper readouts remain visible. Shared components opt in
+with `Knob::endpoint_labels_on_hover(rect)` and `InlineKnob::value_on_hover()`.
 
 `device_frame` is the one frame every device sits in: a thick rounded border
 and a bar in the border's color (`Palette::device`) with the device's name at

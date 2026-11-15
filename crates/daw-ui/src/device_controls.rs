@@ -381,6 +381,7 @@ pub struct InlineKnob<'a> {
     taper: Taper,
     default: Option<f64>,
     automation: Option<AutomationState>,
+    value_on_hover: bool,
 }
 
 /// `text` is the value as it reads, with its unit ("2.50 kHz").
@@ -400,6 +401,7 @@ pub fn inline_knob<'a>(
         taper: Taper::Linear,
         default: None,
         automation: None,
+        value_on_hover: false,
     }
 }
 
@@ -418,6 +420,13 @@ pub fn inline_knob_width(ui: &Ui, text: &str) -> f32 {
 }
 
 impl InlineKnob<'_> {
+    /// Keep the value's space reserved, revealing it on hover (including
+    /// disabled controls) and during a drag. Mouse focus alone does not keep
+    /// the readout visible after the pointer leaves.
+    pub fn value_on_hover(mut self) -> Self {
+        self.value_on_hover = true;
+        self
+    }
     /// A fixed cell width, so the values of a column start on one line
     /// whatever they read. Without it the cell fits its text.
     pub fn width(mut self, width: f32) -> Self {
@@ -461,7 +470,9 @@ impl egui::Widget for InlineKnob<'_> {
             knob = knob.default_value(default);
         }
         let response = ui.add(knob);
-        if ui.is_rect_visible(response.rect) {
+        if ui.is_rect_visible(response.rect)
+            && (!self.value_on_hover || response.contains_pointer() || response.dragged())
+        {
             let colors = theme::palette(ui.ctx());
             let mut text = response.rect;
             text.min.x += crate::MINI_KNOB_DIAMETER + INLINE_GAP;
