@@ -9,7 +9,10 @@ Rill is a free, open-source desktop music workstation for **macOS, Linux, and Wi
 
 [Download](#download) · [Features](#make-it-your-song) · [AI assistant](#make-music-with-ai) · [Screenshots](#screenshots) · [All screens](#every-screen-and-dialog) · [User guide](docs/USER_GUIDE.md) · [Website](https://protocodus.cz/product/rill/)
 
-![Rill Arrangement with audio and MIDI parts, colored tracks, and a song timeline](artifacts/readme-arrangement.png)
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="artifacts/readme-arrangement-light.png">
+  <img alt="The Night ferry arrangement in Compact density, with drum waveforms, bass notes, piano chords and vocal pickups aligned to section markers" src="artifacts/readme-arrangement.png">
+</picture>
 
 ## Make it your song
 
@@ -64,7 +67,14 @@ Prefer an external AI client? Rill also exposes the live song through **MCP**. S
 
 ## Screenshots
 
-From the arrangement above to notes, audio and mixing below: these are captures of the running desktop app.
+### See the whole arrangement
+
+Choose **View → Track density → Overview** to fit more tracks on screen. The same song shown above fits all sixteen tracks in this view. Clip colors follow their tracks, and waveform peaks and MIDI notes stay visible at this height.
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="artifacts/readme-arrangement-overview-light.png">
+  <img alt="All sixteen Night ferry tracks in Overview density, from room drums and percussion through guitars, vocals, strings and echo return" src="artifacts/readme-arrangement-overview-dark.png">
+</picture>
 
 ### Write the parts
 
@@ -156,7 +166,7 @@ Rill ships its own instruments and effects, so a new song makes sound before any
 | --- | --- |
 | ![R1 Mini panel](artifacts/readme-r1-mini.png) **R1 Mini** · instrument | A two-oscillator subtractive synth and the default instrument of new MIDI tracks. Circuit-modelled VCO and DCO oscillators, a sub and noise source, a choice of five analog filter circuits, two envelopes, an LFO, and poly, mono and legato voicing. Play it from the panel keyboard with pitch and mod wheels. |
 | ![R1 Sampler panel](artifacts/readme-r1-sampler.png) **R1 Sampler** · instrument | Plays one recording across the keyboard. Load a WAV, MP3, FLAC or OGG file from the panel or drop it on the waveform, or right-click an audio clip and choose **Use as sampler instrument**. Drag the start, end and loop markers on the waveform; loop forward with a crossfade, ping-pong or play one-shot. Band-limited playback stays clean far above the root key; a filter, two envelopes, an LFO, glide and up to 32 voices shape the sound. |
-| ![R1 Drums panel](artifacts/readme-r1-drums.png) **R1 Drums** · instrument | Sixteen pads on MIDI notes 36 – 51, one recording each. Drop a WAV, MP3, FLAC or OGG file on a pad to load it; click a pad to select and hear it. Each pad has its own start and end, pitch with a pitch envelope, attack, hold and decay, one-knob low-pass/high-pass filter with resonance, drive, volume, pan, mute and one of four choke groups, so an open hi-hat is cut by the closed one. Up to four hits of a pad overlap for rolls. |
+| ![R1 Drums with eight loaded pads and the kick waveform](artifacts/readme-r1-drums.png) **R1 Drums** · instrument | Drop a WAV, MP3, FLAC or OGG file onto any of sixteen pads, then click the pad to hear it. Set its playback region, tune soft hits separately, and shape the attack, hold, decay, filter, drive and bit depth. Each pad has volume, pan and mute. Assign open and closed hi-hats to the same choke group to let one cut off the other. |
 | ![R1 Filter panel](artifacts/readme-r1-filter.png) **R1 Filter** · effect | A filter for inserts and sends. Pick the transparent Clean model or one of eight characters (transistor ladder, Sallen-Key, two OTA designs, diode pair, state variable, comb and vowel), then move it with the built-in LFO and envelope follower. |
 | ![R1 Equalizer panel](artifacts/readme-r1-equalizer.png) **R1 Equalizer** · effect | A six-band equalizer: high-pass, four bands (bell, low shelf, high shelf or notch) and low-pass, with slopes up to 48 dB per octave. Drag the bands in the plot over a live spectrum of the track, or set them in the table below. Digital mode is exact and neutral; Analog adds proportional-Q bells, passive-style shelves and a trace of colour. Auto gain keeps the level steady while you compare. |
 | ![R1 Saturator panel](artifacts/readme-r1-saturator.png) **R1 Saturator** · effect | Harmonic colour and drive in three styles: an edgy Transistor clipper, a Tube curve with adjustable bias, and Tape with its own compression. The panel shows the curve and the harmonics it adds at the level of your signal. Focus keeps bass clean under heavy drive, Auto gain holds the loudness while you turn Drive, and 2×, 4× or 8× oversampling keeps aliasing out without ever shifting the track's timing. |
