@@ -80,8 +80,8 @@ pub fn paint_audio_preview(
             lower.push(pos2(x, y(low)));
         }
         fill_between(&painter, &upper, &lower, palette.action);
-        painter.add(Shape::line(upper, Stroke::new(1.0, palette.action)));
-        painter.add(Shape::line(lower, Stroke::new(1.0, palette.action)));
+        painter.add(Shape::line(upper, Stroke::new(1.0_f32, palette.action)));
+        painter.add(Shape::line(lower, Stroke::new(1.0_f32, palette.action)));
         geometry.waveform = Some(waveform_rect);
     }
     if !data.spectrum.is_empty() && data.spectrum.iter().all(|level| level.is_finite()) {
@@ -104,7 +104,7 @@ pub fn paint_audio_preview(
             baseline.push(pos2(x, spectrum_rect.bottom()));
         }
         fill_between(&painter, &trace, &baseline, palette.muted);
-        painter.add(Shape::line(trace, Stroke::new(1.0, palette.muted)));
+        painter.add(Shape::line(trace, Stroke::new(1.0_f32, palette.muted)));
         geometry.spectrum = Some(spectrum_rect);
     }
     geometry

@@ -1713,12 +1713,12 @@ pub fn sample_view(ui: &mut Ui, data: &SampleViewData<'_>, size: Vec2) -> Sample
             let y = inner.bottom() - 2.0;
             painter.line_segment(
                 [pos2(x_of(start), y), pos2(x_of(end), y)],
-                Stroke::new(2.0, color),
+                Stroke::new(2.0_f32, color),
             );
             for at in [start, end] {
                 painter.line_segment(
                     [pos2(x_of(at), y - 5.0), pos2(x_of(at), y)],
-                    Stroke::new(1.0, color),
+                    Stroke::new(1.0_f32, color),
                 );
             }
         }
