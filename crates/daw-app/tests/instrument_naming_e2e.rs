@@ -91,17 +91,14 @@ fn blank_arranger_creation_names_its_initial_instrument_assignment() {
 }
 
 #[test]
-fn a_mouse_renamed_track_keeps_its_name_through_assignment_save_and_replacement() {
+fn a_renamed_track_keeps_its_name_through_assignment_save_and_replacement() {
     let fixture = common::plugin_fixture();
     let mut app = Harness::with_vst_path(fixture.path());
     menu(&mut app, "Track", "Add MIDI track");
     app.key("Escape");
     menu(&mut app, "Window", "Mixer");
     menu(&mut app, "Edit", "Rename…");
-    app.click("Keyboard");
-    for letter in ["l", "e", "a", "d"] {
-        app.click(letter);
-    }
+    app.command(json!({"command":"text","text":"lead"}));
     let renamed = app.click("Apply name");
     assert_eq!(tracks(&renamed)[0]["name"], "lead");
     menu(&mut app, "Window", "Instrument");

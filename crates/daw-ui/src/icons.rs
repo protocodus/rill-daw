@@ -96,6 +96,30 @@ impl Icon {
         Self::for_exact_label(label).or_else(|| Self::for_label_pattern(label))
     }
 
+    pub(crate) fn for_context_label(label: &str) -> Option<Self> {
+        Some(match label.trim_end_matches('…') {
+            "+ Insert" => Self::Add,
+            "Edit notes" | "MIDI timing and pitch" => Self::Note,
+            "Edit audio" | "Bounce selection" => Self::Waveform,
+            "Edit instrument" | "Use as sampler instrument" => Self::Instrument,
+            "Preview sample" => Self::Play,
+            "Start loop here" => Self::Start,
+            "End loop here" => Self::End,
+            "Slip contents" => Self::Slip,
+            "Move up" | "Move Up" => Self::Up,
+            "Move down" | "Move Down" => Self::Down,
+            "Move left" | "Shift Left" => Self::Back,
+            "Move right" | "Shift Right" => Self::ChevronRight,
+            "Move to folder" => Self::Folder,
+            "Override automation" | "Resume automation" => Self::Automation,
+            "Mute clip" | "Unmute clip" | "Bypass insert" | "Enable insert" => Self::Power,
+            "Parameters" => Self::Settings,
+            "Collapse" | "Collapse all automation tracks" => Self::ChevronRight,
+            "Expand" | "Expand all automation tracks" => Self::ChevronDown,
+            _ => return Self::for_label(label),
+        })
+    }
+
     /// Labels built from a verb and a subject ("Add bus", "Cancel export",
     /// "Snap 1/16") share the verb's icon, so new commands get one without a
     /// table entry. Exact labels above win.
@@ -138,7 +162,7 @@ impl Icon {
             "Rename" | "Type" => Self::Pencil,
             "Loop" | "Repeat" => Self::Loop,
             "Freeze" => Self::Freeze,
-            "Choose" | "Change" | "Keyboard" | "Try" => Self::Instrument,
+            "Choose" | "Change" | "Try" => Self::Instrument,
             "Snap" | "Quantize" | "Grid" => Self::Grid,
             "Nudge" => Self::Nudge,
             "Arranger" => Self::Arranger,
@@ -1128,11 +1152,12 @@ impl Widget for IconButton {
         let previous_style = ui.style().clone();
         let in_menu = egui::containers::menu::is_in_menu(ui);
         let toolbar = crate::layout::compact_toolbar(ui);
+        let context = crate::widgets::in_context_menu(ui);
         // Atom spacing belongs to the icon/label pair, not the surrounding row.
         if toolbar {
             ui.spacing_mut().icon_spacing = crate::tokens::ICON_LABEL_GAP;
         }
-        if in_menu {
+        if in_menu && !context {
             // Native menus install compact defaults after the shared theme.
             // Keep ordinary label padding on shared controls in those menus.
             ui.spacing_mut().button_padding = egui::vec2(
@@ -1140,15 +1165,22 @@ impl Widget for IconButton {
                 crate::tokens::BUTTON_PADDING_Y,
             );
         }
-        // Menu rows are text only, so every label in a menu starts at the same
-        // x. Icon-only controls keep their glyph; it is their whole identity.
         let icon_only = self.label.text().is_empty();
-        let icon = self.icon.filter(|_| !in_menu || icon_only);
+        let icon = if context && !icon_only {
+            Icon::for_context_label(self.label.text()).or(self.icon)
+        } else {
+            self.icon.filter(|_| !in_menu || icon_only)
+        };
         let icon_id = Id::new("rill-button-icon");
         let disclosure_id = Id::new("rill-button-disclosure");
         let mut atoms = egui::Atoms::new(self.label.clone());
-        if icon.is_some() {
-            let atom = Atom::custom(icon_id, Vec2::splat(crate::layout::button_icon_size(ui)));
+        if icon.is_some() || context && !icon_only {
+            let size = if context {
+                crate::tokens::TOOLBAR_ICON_SIZE
+            } else {
+                crate::layout::button_icon_size(ui)
+            };
+            let atom = Atom::custom(icon_id, Vec2::splat(size));
             if icon_only {
                 atoms = egui::Atoms::new(atom);
             } else {
@@ -1165,7 +1197,7 @@ impl Widget for IconButton {
             .min_size(self.min_size.unwrap_or_else(|| {
                 egui::vec2(
                     0.0,
-                    if toolbar {
+                    if context || toolbar {
                         ui.spacing().interact_size.y
                     } else {
                         crate::tokens::CONTROL_HEIGHT

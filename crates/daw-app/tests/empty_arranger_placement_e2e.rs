@@ -230,3 +230,29 @@ fn pattern_creation_at_and_beyond_the_timeline_limit_stays_valid_and_undoable() 
         app.quit();
     }
 }
+
+#[test]
+fn new_instrument_patterns_follow_the_loop_up_to_one_local_bar() {
+    let mut app = fixture(true);
+    for (loop_length, meter, expected) in [(1.75, 4, 1.75), (12.0, 3, 3.0)] {
+        let mut project = Project::new();
+        project.add_bus("Reference");
+        project.beats_per_bar = meter;
+        project.loop_start = 2.0;
+        project.loop_end = 2.0 + loop_length;
+        let path = app.directory.path().join("starter-length.rill");
+        project.save(&path).unwrap();
+        let before = app.command(json!({"command":"open","path":path}));
+        let point = empty_point(&before, 6.0);
+        let made = pointer(&mut app, "double_click", point);
+        assert_eq!(made["project"]["tracks"][1]["clips"][0]["length"], expected);
+        app.key("Escape");
+        app.click("Track");
+        app.click("Add instrument track…");
+        app.click("R1 Mini");
+        let made = app.click("Add instrument track");
+        assert_eq!(made["project"]["tracks"][2]["clips"][0]["length"], expected);
+        app.key("Escape");
+    }
+    app.quit();
+}

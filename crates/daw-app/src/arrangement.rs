@@ -7,20 +7,48 @@ use eframe::egui::{self, Align2, FontId, Pos2, Rect, Sense, Stroke, Vec2};
 
 const HEADER: f32 = daw_ui::TRACK_HEADER_WIDTH;
 const ROW: f32 = daw_ui::TRACK_HEADER_HEIGHT;
-const COMPACT_ROW: f32 = daw_ui::TRACK_HEADER_COMPACT_HEIGHT;
 
-/// Height of a visible row in units of the adjustable row height. A folder
-/// shows only its identity line, so it keeps one physical height at any zoom.
-fn track_row_units(track: &Track, row_height: f32) -> f32 {
-    if track.kind == TrackKind::Folder {
-        daw_ui::TRACK_HEADER_FOLDER_HEIGHT / row_height.max(1.0)
-    } else if track.collapsed {
-        // A global compact view should not make an individually collapsed
-        // channel lose its basic mix controls. Fit can still go smaller when
-        // the user deliberately asks to see an entire large arrangement.
-        (row_height * COMPACT_ROW / ROW).max(56.0).min(row_height) / row_height.max(1.0)
+const TRACK_ICONS: &[(TrackIcon, &str, daw_ui::Icon)] = &[
+    (TrackIcon::Note, "Note", daw_ui::Icon::Note),
+    (
+        TrackIcon::Microphone,
+        "Microphone",
+        daw_ui::Icon::Microphone,
+    ),
+    (TrackIcon::Drum, "Drum", daw_ui::Icon::Drum),
+    (
+        TrackIcon::Percussion,
+        "Percussion",
+        daw_ui::Icon::Percussion,
+    ),
+    (
+        TrackIcon::Instrument,
+        "Instrument",
+        daw_ui::Icon::Instrument,
+    ),
+    (TrackIcon::Waveform, "Waveform", daw_ui::Icon::Waveform),
+    (TrackIcon::Effect, "Effect", daw_ui::Icon::Effect),
+    (TrackIcon::Star, "Star", daw_ui::Icon::Star),
+];
+
+fn default_track_icon(kind: TrackKind) -> daw_ui::Icon {
+    match kind {
+        TrackKind::Folder => daw_ui::Icon::Folder,
+        TrackKind::Audio => daw_ui::Icon::Waveform,
+        TrackKind::Midi => daw_ui::Icon::Instrument,
+        TrackKind::Bus => daw_ui::Icon::Routing,
+        TrackKind::Automation => daw_ui::Icon::Automation,
+    }
+}
+
+/// Folders and folded tracks have a fixed physical height at every row zoom.
+fn fixed_row_height(track: &Track, revealed: &std::collections::HashSet<u64>) -> Option<f32> {
+    if track.collapsed && !revealed.contains(&track.id) {
+        Some(daw_ui::TRACK_HEADER_COLLAPSED_HEIGHT)
+    } else if track.kind == TrackKind::Folder {
+        Some(daw_ui::TRACK_HEADER_FOLDER_HEIGHT)
     } else {
-        1.0
+        None
     }
 }
 
@@ -51,6 +79,7 @@ enum Edit {
     Color(u64, [u8; 3]),
     Output(u64, Option<u64>),
     Collapse(u64),
+    AutomationHeights(Vec<u64>, bool),
     DeleteTrack(u64),
     TransferGroup(u64),
     Fades(u64, u64, f64, f64, FadeCurve, FadeCurve),
@@ -68,6 +97,51 @@ struct ClipEdgeDrag {
     pixels_per_beat: f32,
     moved: bool,
     frame: u64,
+}
+
+fn automation_height_actions(
+    ui: &mut egui::Ui,
+    project: &Project,
+    scope: Option<&Track>,
+) -> Option<Edit> {
+    let lanes: Vec<_> = project
+        .tracks
+        .iter()
+        .filter(|track| {
+            let Some(lane) = &track.automation else {
+                return false;
+            };
+            let Some(scope) = scope else { return true };
+            if scope.kind != TrackKind::Folder {
+                return lane.target.track
+                    == scope
+                        .automation
+                        .as_ref()
+                        .map_or(scope.id, |a| a.target.track);
+            }
+            let mut owner = project.track(lane.target.track);
+            while let Some(track) = owner {
+                if track.parent_folder == Some(scope.id) {
+                    return true;
+                }
+                owner = track.parent_folder.and_then(|id| project.track(id));
+            }
+            false
+        })
+        .collect();
+    let collapse = daw_ui::automation_track_height_actions(
+        ui,
+        lanes.iter().any(|track| !track.collapsed),
+        lanes.iter().any(|track| track.collapsed),
+    )?;
+    Some(Edit::AutomationHeights(
+        lanes
+            .into_iter()
+            .filter(|track| track.collapsed != collapse)
+            .map(|track| track.id)
+            .collect(),
+        collapse,
+    ))
 }
 
 /// A folder cannot be moved into itself or one of its descendants. Filtering
@@ -137,7 +211,7 @@ fn reveal_track(
     let mut top = 0.0;
     for (row_index, (index, _)) in visible.into_iter().enumerate() {
         let track = &project.tracks[index];
-        let rows = track_row_units(track, view.row_height);
+        let rows = fixed_row_height(track, expanded).unwrap_or(view.row_height) / view.row_height;
         if track.id == target {
             if rows > visible_rows || top < view.row_offset {
                 view.row_offset = top;
@@ -376,21 +450,24 @@ impl DawApp {
         let folder_closures = daw_ui::folder_closures(&folder_rows);
         let (folder_step, folder_padding) = daw_ui::folder_lane_padding(&folder_rows, header_width);
         let folder_footer = daw_ui::folder_footer_spacing(folder_step);
-        // Physical heights that do not scale with row zoom: each folder's
-        // closing strip and its one-line row.
-        let folder_footers = folder_rows.iter().filter(|row| row.folder).count() as f32
-            * (folder_footer + daw_ui::TRACK_HEADER_FOLDER_HEIGHT);
+        let revealed = &self.arranger_selection.revealed_folders;
+        let fixed_heights: Vec<_> = visible_tracks
+            .iter()
+            .map(|(index, _)| fixed_row_height(&self.project.tracks[*index], revealed))
+            .collect();
+        let fixed_height = fixed_heights.iter().flatten().sum::<f32>()
+            + folder_rows.iter().filter(|row| row.folder).count() as f32 * folder_footer;
+        let row_units = fixed_heights
+            .iter()
+            .filter(|height| height.is_none())
+            .count() as f32;
+        let folder_members =
+            crate::track_order::collapsed_folder_members(&self.project, &visible_tracks, revealed);
         let right_inset = if folder_padding > 0.0 {
             folder_padding + 4.0
         } else {
             0.0
         };
-        let row_units: f32 = visible_tracks
-            .iter()
-            .map(|(index, _)| &self.project.tracks[*index])
-            .filter(|track| track.kind != TrackKind::Folder)
-            .map(|track| track_row_units(track, viewport.row_height))
-            .sum();
         let earliest = self
             .project
             .tracks
@@ -404,7 +481,7 @@ impl DawApp {
             start_beat: earliest,
             end_beat: content_end.max(earliest + 0.25),
             start_row: 0.0,
-            end_row: (row_units + folder_footers / viewport.row_height).max(1.0),
+            end_row: (row_units + fixed_height / viewport.row_height).max(1.0),
         };
         let ruler_height = daw_ui::tokens::TIMELINE_RULER_HEIGHT
             + daw_ui::tokens::TIMELINE_LOOP_HEIGHT
@@ -468,11 +545,8 @@ impl DawApp {
             let mut selected_rows = None::<(f32, f32, f32, f32)>;
             for (row_index, (index, _)) in visible_tracks.iter().enumerate() {
                 let track = &self.project.tracks[*index];
-                let (rows, fixed) = if track.kind == TrackKind::Folder {
-                    (0.0, daw_ui::TRACK_HEADER_FOLDER_HEIGHT)
-                } else {
-                    (track_row_units(track, viewport.row_height), 0.0)
-                };
+                let (rows, fixed) =
+                    fixed_heights[row_index].map_or((1.0, 0.0), |height| (0.0, height));
                 if selected_tracks.contains(&track.id) {
                     selected_rows = Some(selected_rows.map_or(
                         (
@@ -510,14 +584,16 @@ impl DawApp {
                     .min(canvas.width() * 0.1)
                     .min(canvas.height() * 0.1);
                 let fixed = last_fixed - first_fixed;
-                viewport.row_height = ((canvas.height() - padding * 2.0 - fixed).max(1.0)
-                    / (last - first).max(0.01))
-                .max(0.01);
+                viewport.row_height = if last > first {
+                    ((canvas.height() - padding * 2.0 - fixed).max(1.0) / (last - first)).max(0.01)
+                } else {
+                    view_before.row_height
+                };
                 viewport.row_offset =
                     (first + (first_fixed - padding) / viewport.row_height).max(0.0);
             }
         }
-        bounds.end_row = (row_units + folder_footers / viewport.row_height).max(1.0);
+        bounds.end_row = (row_units + fixed_height / viewport.row_height).max(1.0);
         if fit {
             viewport.fit_bounds(canvas, bounds);
         }
@@ -525,17 +601,20 @@ impl DawApp {
         let navigation = daw_ui::TimelinePane::new("arrangement_pane", canvas)
             .keyboard_active()
             .navigate(ui, &mut viewport, bounds);
-        if (fit || navigation.fit) && folder_footers > 0.0 {
-            viewport.row_height =
-                ((canvas.height() - 24.0 - folder_footers).max(1.0) / row_units.max(1.0)).max(0.01);
+        if (fit || navigation.fit) && fixed_height > 0.0 {
+            viewport.row_height = if row_units > 0.0 {
+                ((canvas.height() - 24.0 - fixed_height).max(1.0) / row_units).max(0.01)
+            } else {
+                view_before.row_height
+            };
             viewport.row_offset = 0.0;
         }
         if fit || navigation.fit {
             // Fit keeps sparse projects at an ordinary track scale; explicit
             // selection fitting and manual dimensions retain their own sizing.
             viewport.row_height = viewport.row_height.min(ROW);
-            bounds.end_row = (row_units + folder_footers / viewport.row_height).max(1.0);
         }
+        bounds.end_row = (row_units + fixed_height / viewport.row_height).max(1.0);
         // Beat 0 is the earliest position; the canvas never shows negative time.
         viewport.start_beat = viewport.start_beat.max(0.0);
         self.zoom = viewport.pixels_per_beat;
@@ -615,6 +694,8 @@ impl DawApp {
             .collect();
         let mut popup = None;
         let mut new_track = None;
+        let mut insert_sample = None;
+        let can_insert_sample = !self.recording_busy();
         let mut add_track_diagnostic = None;
         let mut channel_target = None;
         let mut mixer_target = None;
@@ -628,6 +709,7 @@ impl DawApp {
         let mut recording_controls = Vec::new();
         let mut arm_toggles = Vec::new();
         let mut open_editor = false;
+        let mut open_automation_clip = None;
         let mut clip_clipboard = None;
         let mut repeat_clip = None;
         let mut clip_diagnostics = Vec::new();
@@ -733,6 +815,10 @@ impl DawApp {
             "arrangement_tracks",
             "Tracks",
             |ui| {
+                if let Some(action) = automation_height_actions(ui, &self.project, None) {
+                    edits.push(action);
+                }
+                ui.separator();
                 if daw_ui::button(ui, "Add folder")
                     .on_hover_text("Add an empty folder to organize related tracks")
                     .clicked()
@@ -843,11 +929,9 @@ impl DawApp {
         let mut row_tops = Vec::with_capacity(visible_tracks.len());
         let mut folder_after_spans = vec![None; visible_tracks.len()];
         let mut row_top = 0.0;
-        for (row_index, (index, _)) in visible_tracks.iter().enumerate() {
+        for (row_index, height) in fixed_heights.iter().enumerate() {
             row_tops.push(row_top);
-            let track = &self.project.tracks[*index];
-            let bottom =
-                row_top + viewport.row_height * track_row_units(track, viewport.row_height);
+            let bottom = row_top + height.unwrap_or(viewport.row_height);
             for (order, start) in folder_closures[row_index].iter().enumerate() {
                 folder_after_spans[*start] =
                     Some(bottom + (order + 1) as f32 * folder_footer - row_tops[*start]);
@@ -861,8 +945,7 @@ impl DawApp {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 for (row_index, (index, depth)) in visible_tracks.into_iter().enumerate() {
                     let track = &self.project.tracks[index];
-                    let row_height = viewport.row_height * track_row_units(track, viewport.row_height);
-                    let compact = track.collapsed && track.kind != TrackKind::Folder;
+                    let row_height = fixed_heights[row_index].unwrap_or(viewport.row_height);
                     let (row, mut row_response) = ui
                         .allocate_exact_size(Vec2::new(content_width, row_height), Sense::click());
                     folder_rows[row_index].rect = row;
@@ -901,13 +984,24 @@ impl DawApp {
                         p.rect_filled(header.shrink2(Vec2::new(4.0, 4.0)), 3.0,
                             color(track.color).gamma_multiply(0.10));
                     }
-                    let mut header_layout = daw_ui::TrackHeaderLayout::new(header);
+                    let collapsed = track.collapsed && !self.arranger_selection.revealed_folders.contains(&track.id);
+                    let disclosure_action = match (collapsed, track.kind) {
+                        (true, TrackKind::Folder) => "Expand folder",
+                        (false, TrackKind::Folder) => "Collapse folder",
+                        (true, _) => "Expand track",
+                        (false, _) => "Collapse track",
+                    };
+                    let mut header_layout = if collapsed {
+                        daw_ui::TrackHeaderLayout::collapsed(header)
+                    } else {
+                        daw_ui::TrackHeaderLayout::new(header)
+                    };
                     if track.kind == TrackKind::Bus {
                         header_layout = header_layout.with_bus_badge();
                     } else if matches!(track.kind, TrackKind::Audio | TrackKind::Midi) {
                         header_layout = header_layout.with_record_arm();
                     } else if track.kind == TrackKind::Folder {
-                        header_layout = header_layout.with_folder_disclosure().with_state_toggles();
+                        header_layout = header_layout.with_state_toggles();
                     }
                     if !channels.contains_key(&track.id) {
                         header_layout = header_layout.without_channel_sections();
@@ -931,40 +1025,48 @@ impl DawApp {
                     if let Some(badge) = bus_badge {
                         daw_ui::paint_bus_badge(&header_painter, badge, color(track.color));
                     }
-                    let reorder_grip = header_layout.reorder;
-                    daw_ui::track_reorder_grip_at(ui, reorder_grip,
-                        ui.id().with((track.id, "reorder_track")), track.id);
+                    if let Some(rect) = header_layout.reorder {
+                        daw_ui::track_reorder_grip_at(ui, rect, ui.id().with((track.id, "reorder_track")), track.id);
+                    }
+                    if let Some(rect) = header_layout.disclosure {
+                        let response = daw_ui::track_header_disclosure_at(ui, rect, (track.id, "disclosure"), collapsed,
+                            &format!("{disclosure_action} · {}", track.name));
+                        if response.clicked() && !navigation.navigating {
+                            edits.push(Edit::Collapse(track.id));
+                        }
+                        if response.secondary_clicked() {
+                            row_response = row_response.union(response);
+                        }
+                    }
                     let name_rect = daw_ui::paint_track_header_identity(&header_painter,
                         &header_layout, daw_ui::TrackHeaderIdentity {
                             name: &track.name,
-                            icon: match track.kind {
-                                TrackKind::Folder => daw_ui::Icon::Folder,
-                                TrackKind::Audio => daw_ui::Icon::Waveform,
-                                TrackKind::Midi => daw_ui::Icon::Instrument,
-                                TrackKind::Bus => daw_ui::Icon::Routing,
-                                TrackKind::Automation => daw_ui::Icon::Automation,
-                            },
-                            tint: color(track.color), folder: track.kind == TrackKind::Folder,
-                            collapsed: track.collapsed && !self.arranger_selection.revealed_folders.contains(&track.id),
+                            icon: TRACK_ICONS.iter().find(|(icon, _, _)| Some(*icon) == track.icon)
+                                .map_or(default_track_icon(track.kind), |(_, _, glyph)| *glyph),
+                            tint: color(track.color),
                         });
-                    if track.kind == TrackKind::Midi
-                        && ui.interact(header_layout.icon, ui.id().with((track.id, "instrument_icon")), Sense::click())
-                            .on_hover_text(if track.instrument == Instrument::None { "Choose an instrument" } else { "Edit instrument" })
-                            .clicked()
-                    {
-                        if track.instrument == Instrument::None { instrument_target = Some(track.id); } else { instrument_editor = Some(track.id); }
-                    }
+                    let icon_response = ui.interact(header_layout.icon, ui.id().with((track.id, "identity_icon")), Sense::click());
                     let name_response = ui.interact(name_rect,
                         ui.id().with((track.id, "reorder_name")), Sense::click_and_drag());
                     let name_response = daw_ui::track_reorder_source(ui, &name_response, track.id);
-                    // The title retains selection, folder disclosure and reorder;
-                    // each section below it owns only its own controls.
-                    row_response = row_response.union(name_response);
+                    let identity = name_response.union(icon_response)
+                        .on_hover_text("Double-click to edit track name, color and icon");
+                    if identity.clicked() && !navigation.navigating
+                        && let Some(position) = identity.interact_pointer_pos()
+                        && self.arranger_selection.header_click_tracker.register(track.id, position, ui.input(|i| i.time),
+                            ui.input(|i| i.modifiers == egui::Modifiers::NONE))
+                    {
+                        self.inspector_page = InspectorPage::Track;
+                        ui.data_mut(|data| data.insert_temp(egui::Id::new(("focus_track_name", track.id)), true));
+                        popup = Some(PopupKind::Inspector);
+                    }
+                    row_response = row_response.union(identity);
                     track_diagnostics.push(serde_json::json!({"track":track.id,"depth":depth,
                         "folder":track.kind == TrackKind::Folder,"bus":track.kind == TrackKind::Bus,
                         "bus_badge":bus_badge.map(rect_json),"header_fill":header_fill.to_array(),
                         "left_padding":left_padding,"header":rect_json(header),"name":rect_json(name_rect),
-                        "reorder_grip":rect_json(reorder_grip),"reorder_target":rect_json(header),
+                        "icon":rect_json(header_layout.icon), "disclosure":header_layout.disclosure.map(rect_json),
+                        "reorder_grip":header_layout.reorder.map(rect_json),"reorder_target":rect_json(header),
                         "sections": {
                             "identity":rect_json(header_layout.identity),
                             "mix":header_layout.mix.map(rect_json),"meter":header_layout.meter.map(rect_json),
@@ -1010,24 +1112,22 @@ impl DawApp {
                             let response = daw_ui::track_header_link_at(ui, rect, (track.id, "output"),
                                 daw_ui::Icon::Routing, "Routing", destination)
                                 .on_hover_text(format!("Channel {channel} → {destination}\nChange output bus"));
-                            egui::Popup::menu(&response).show(|ui| {
+                            daw_ui::show_menu(egui::Popup::menu(&response), |ui| {
                                 ui.set_min_width(160.0);
-                                egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
-                                    if daw_ui::selectable(ui, track.output_bus.is_none(), "Master").clicked() {
-                                        if track.output_bus.is_some() { edits.push(Edit::Output(track.id, None)); }
-                                        ui.close();
+                                if daw_ui::selectable(ui, track.output_bus.is_none(), "Master").clicked() {
+                                    if track.output_bus.is_some() { edits.push(Edit::Output(track.id, None)); }
+                                    ui.close();
+                                }
+                                if let Ok(buses) = self.project.eligible_output_buses(track.id) {
+                                    for bus in buses {
+                                        ui.push_id(bus.id, |ui| {
+                                            if daw_ui::selectable(ui, track.output_bus == Some(bus.id), &bus.name).clicked() {
+                                                if track.output_bus != Some(bus.id) { edits.push(Edit::Output(track.id, Some(bus.id))); }
+                                                ui.close();
+                                            }
+                                        });
                                     }
-                                    if let Ok(buses) = self.project.eligible_output_buses(track.id) {
-                                        for bus in buses {
-                                            ui.push_id(bus.id, |ui| {
-                                                if daw_ui::selectable(ui, track.output_bus == Some(bus.id), &bus.name).clicked() {
-                                                    if track.output_bus != Some(bus.id) { edits.push(Edit::Output(track.id, Some(bus.id))); }
-                                                    ui.close();
-                                                }
-                                            });
-                                        }
-                                    }
-                                });
+                                }
                             });
                         }
                         if let Some(rect) = header_layout.device {
@@ -1056,7 +1156,7 @@ impl DawApp {
                                     if response.clicked() {
                                         if assigned { instrument_editor = Some(track.id); } else { instrument_target = Some(track.id); }
                                     }
-                                    response.context_menu(|ui| {
+                                    daw_ui::context_menu(&response, |ui| {
                                         if ui.add_enabled(assigned, daw_ui::button_widget("Edit instrument")).clicked() {
                                             instrument_editor = Some(track.id);
                                             ui.close();
@@ -1210,16 +1310,41 @@ impl DawApp {
                             && pos.x >= grid_left && pos.x <= canvas.right() {
                             new_cursor = Some(self.snapped(((pos.x - origin) / self.zoom) as f64).max(0.0));
                         }
-                        if track.kind == TrackKind::Folder
-                            && row_response
-                                .interact_pointer_pos()
-                                .is_some_and(|p| p.x < grid_left)
-                        {
-                            edits.push(Edit::Collapse(track.id));
-                        }
                     }
-                    row_response.context_menu(|ui| {
- daw_ui::command_menu_contents(ui, |ui| {
+                    let menu_beat_id = ui.id().with((track.id, "track_menu_beat"));
+                    if row_response.secondary_clicked() {
+                        // Anchor to the original right-click before the pointer moves into the menu.
+                        let beat = row_response.interact_pointer_pos()
+                            .filter(|position| position.x >= grid_left)
+                            .map_or(pattern_start, |position| self.snapped(((position.x - origin) / self.zoom) as f64).max(0.0));
+                        ui.data_mut(|data| data.insert_temp(menu_beat_id, beat));
+                    }
+                    daw_ui::context_menu(&row_response, |ui| {
+                        let beat = ui.data(|data| data.get_temp::<f64>(menu_beat_id)).unwrap_or(pattern_start);
+                        match track.kind {
+                            TrackKind::Audio => {
+                                if ui.add_enabled(can_insert_sample, daw_ui::button_widget("Insert sample…")).clicked() {
+                                    insert_sample = Some((track.id, beat));
+                                    ui.close();
+                                }
+                                ui.separator();
+                            }
+                            TrackKind::Midi | TrackKind::Automation => {
+                                if daw_ui::button(ui, "Insert clip").clicked() {
+                                    edits.push(if track.kind == TrackKind::Midi {
+                                        Edit::New(track.id, beat)
+                                    } else {
+                                        Edit::Automation(track.id, crate::arranger_automation::AutomationEdit::Create(beat))
+                                    });
+                                    ui.close();
+                                }
+                                ui.separator();
+                            }
+                            TrackKind::Folder | TrackKind::Bus => {}
+                        }
+                        if let Some(action) = automation_height_actions(ui, &self.project, Some(track)) {
+                            edits.push(action);
+                        }
                         daw_ui::menu_button(ui, "Add track", |ui| {
                             if let Some(choice) = crate::app::add_track_buttons(ui) {
                                 new_track = Some((choice, Some(track.id)));
@@ -1238,12 +1363,6 @@ impl DawApp {
                             ui.close();
                         }
                         ui.separator();
-                        if track.kind == TrackKind::Midi
-                            && daw_ui::button(ui, "Add pattern").clicked()
-                        {
-                            edits.push(Edit::New(track.id, pattern_start));
-                            ui.close();
-                        }
                         if matches!(track.kind, TrackKind::Audio | TrackKind::Midi)
                             && ui.add_enabled(freeze_channels.contains(&track.id), daw_ui::button_widget("Freeze track"))
                                 .on_hover_text("Print this channel's clips and insert processing to new audio tracks below; retain and mute the originals")
@@ -1299,16 +1418,7 @@ impl DawApp {
                             channel_target = Some(track.id);
                             ui.close();
                         }
-                        if daw_ui::button(
-                            ui,
-                            if track.collapsed && !self.arranger_selection.revealed_folders.contains(&track.id) {
-                                "Expand"
-                            } else {
-                                "Collapse"
-                            },
-                        )
-                        .clicked()
-                        {
+                        if daw_ui::button(ui, disclosure_action).clicked() {
                             edits.push(Edit::Collapse(track.id));
                             ui.close();
                         }
@@ -1317,12 +1427,31 @@ impl DawApp {
                             ui.close();
                         }
                     });
-});
+                    let timeline_row = Rect::from_x_y_ranges(grid_left..=canvas.right(), row.y_range());
+                    if let Some(members) = folder_members.get(&track.id) {
+                        let paint = |start, end| {
+                            daw_ui::collapsed_track_span(&p, timeline_row, view, start, end, color(track_color));
+                        };
+                        for index in members {
+                            let child = &self.project.tracks[*index];
+                            for clip in child.clips.iter().filter(|clip| !clip.is_take_source()) {
+                                paint(clip.start, clip.end());
+                            }
+                            if let Some(lane) = &child.automation {
+                                for clip in &lane.clips { paint(clip.start, clip.end()); }
+                                for point in &lane.points { paint(point.beat, point.beat); }
+                            }
+                        }
+                        // Armed descendants share the current take's time range.
+                        if let Some((start, end)) = members.iter().find_map(|&index| self.recording_region(self.project.tracks[index].id)) {
+                            daw_ui::collapsed_track_span(&p, timeline_row, view, start, end, daw_ui::recording_color(ui.ctx()));
+                        }
+                    }
                     if let Some(lane) = &track.automation {
-                        let rect = Rect::from_min_max(Pos2::new(grid_left, row.top() + 8.0), Pos2::new(canvas.right(), row.bottom() - 8.0));
+                        let rect = if track.collapsed { timeline_row } else { timeline_row.shrink2(Vec2::new(0.0, 8.0)) };
                         empty_action_rects.push(row);
                         let response = crate::arranger_automation::automation_lane(ui, crate::arranger_automation::LaneView {
-                            track: track.id, rect, viewport: view, snap: self.snap_step(view.pixels_per_beat), tool: self.tool, new_length: self.last_clip_length, cursor: self.cursor, pointer_blocked: edge_popup_was_open, color: if automation.get(&lane.target).is_some_and(|(_, state, _)| *state != daw_ui::AutomationState::Read) { palette(ui.ctx()).muted } else { palette(ui.ctx()).automation }, navigating: navigation.navigating,
+                            track: track.id, rect, collapsed_color: track.collapsed.then(|| color(track_color)), viewport: view, snap: self.snap_step(view.pixels_per_beat), tool: self.tool, cursor: self.cursor, pointer_blocked: edge_popup_was_open, color: if automation.get(&lane.target).is_some_and(|(_, state, _)| *state != daw_ui::AutomationState::Read) { palette(ui.ctx()).muted } else { palette(ui.ctx()).automation }, navigating: navigation.navigating,
                         }, lane, &mut self.selected_clip);
                         if response.interacted {
                             self.selected_track = Some(track.id);
@@ -1332,19 +1461,23 @@ impl DawApp {
                         if response.cursor.is_some() { new_cursor = response.cursor; }
                         clicked_background |= response.background_click.is_some();
                         clicked_clip |= response.clip_click.is_some();
-                        if let Some((clip, pos)) = response.clip_click
-                            && self.arranger_selection.click_tracker.register(clip, pos, ui.input(|input| input.time),
+                        if let Some((clip, pos, title)) = response.clip_click
+                            && self.arranger_selection.click_tracker.register((clip, title), pos, ui.input(|input| input.time),
                                 ui.input(|input| input.modifiers == egui::Modifiers::NONE)
                                     && matches!(self.tool, daw_ui::EditorTool::Select | daw_ui::EditorTool::Pencil))
                         {
-                            edits.push(Edit::Rename(track.id, clip));
+                            if title {
+                                edits.push(Edit::Rename(track.id, clip));
+                            } else {
+                                open_automation_clip = Some(clip);
+                            }
                         }
                         match response.command {
-                            // Patterns are drawn in place; the Automation editor only edits the lane's own curve.
                             Some(crate::arranger_automation::LaneCommand::EditAutomation(clip)) => {
                                 self.selected_track = Some(track.id);
                                 self.selected_clip = Some(clip);
-                                self.tool = daw_ui::EditorTool::Pencil;
+                                if track.collapsed { open_automation_clip = Some(clip); }
+                                else { self.tool = daw_ui::EditorTool::Pencil; }
                             }
                             Some(crate::arranger_automation::LaneCommand::Rename(clip)) => edits.push(Edit::Rename(track.id, clip)),
                             Some(crate::arranger_automation::LaneCommand::Copy(clip)) => edits.push(Edit::CopyPattern(track.id, clip)),
@@ -1359,13 +1492,12 @@ impl DawApp {
                             && self.arranger_selection.background_click_tracker.register(track.id, pos,
                                 ui.input(|input| input.time), self.tool == daw_ui::EditorTool::Select && !ui.input(|input| input.modifiers.shift))
                         {
-                            let length = self.last_clip_length;
-                            let start = self.snapped(((pos.x - origin) / self.zoom) as f64).clamp(0.0, MAX_BEAT - length);
-                            edits.push(Edit::Automation(track.id, crate::arranger_automation::AutomationEdit::Create(start, length)));
+                            let beat = self.snapped(((pos.x - origin) / self.zoom) as f64);
+                            edits.push(Edit::Automation(track.id, crate::arranger_automation::AutomationEdit::Create(beat)));
                         }
                         edits.extend(response.edits.into_iter().map(|edit| Edit::Automation(track.id, edit)));
                         automation_diagnostics.push(response.diagnostic);
-                        if let Some((_, daw_ui::AutomationState::Overridden, value)) = automation.get(&lane.target) {
+                        if !track.collapsed && let Some((_, daw_ui::AutomationState::Overridden, value)) = automation.get(&lane.target) {
                             daw_ui::paint_curve(&p, rect, view.start_beat, view.beat_at(rect, rect.right()), palette(ui.ctx()).automation_override, |_| *value);
                         }
                     }
@@ -1395,29 +1527,37 @@ impl DawApp {
                         clips.sort_by(|a, b| a.start.total_cmp(&b.start));
                     }
                     for clip in clips {
-                        let rect = Rect::from_min_size(
-                            Pos2::new(origin + clip.start as f32 * self.zoom, row.top() + 8.0),
-                            Vec2::new((clip.length as f32 * self.zoom).max(4.0), (row_height - 16.0).max(1.0)),
-                        );
-                        selection_items.push((track.id, clip.id, rect));
-                        if !ui.is_rect_visible(rect) || rect.right() <= grid_left {
-                            continue;
-                        }
-                        let p = p.with_clip_rect(Rect::from_min_max(Pos2::new(grid_left, row.top()), Pos2::new(canvas.right(), row.bottom())));
-                        let col = color(track_color).gamma_multiply(if clip.muted { 0.38 } else { 1.0 });
+                        let col = color(track_color);
                         let is_selected = self.arranger_selection.ids.contains(&clip.id);
-                        let surface = daw_ui::clip_surface_named(&p, rect, col, is_selected, &clip.name);
-                        let cp = p.with_clip_rect(rect.shrink(3.0).intersect(Rect::from_min_max(
-                            Pos2::new(grid_left, row.top()), Pos2::new(canvas.right(), row.bottom()))));
-                        let title = daw_ui::clip_title(&p, surface.title,
-                            FontId::proportional(daw_ui::tokens::FONT_CANVAS), surface.title_color, &clip.name, clip.link_group.is_some());
-                        folder_rows[row_index].color = color(track_color);
-                    let rect_json = |rect: Rect| serde_json::json!({"min": [rect.min.x,rect.min.y], "max": [rect.max.x,rect.max.y]});
-                        let visible_clip = rect.intersect(Rect::from_min_max(Pos2::new(grid_left, row.top()), Pos2::new(canvas.right(), row.bottom())));
-                        clip_diagnostics.push(serde_json::json!({"id":clip.id,"track":track.id,"rect":rect_json(rect),"visible_rect":rect_json(visible_clip),"title_rect":rect_json(surface.title),"content_rect":rect_json(surface.content),"name_hit_rect":rect_json(surface.name_hit),"named_header":!clip.name.trim().is_empty(),"linked":clip.link_group.is_some(),"muted":clip.muted,"link_icon":title.icon.map(rect_json)}));
+                        let (rect, mark) = if collapsed {
+                            let Some(mark) = daw_ui::collapsed_track_span(&p, timeline_row, view, clip.start, clip.end(), col) else { continue };
+                            (Rect::from_x_y_ranges(mark.x_range(), row.y_range()), Some(mark))
+                        } else {
+                            let rect = Rect::from_min_size(Pos2::new(origin + clip.start as f32 * self.zoom, row.top() + 8.0),
+                                Vec2::new((clip.length as f32 * self.zoom).max(4.0), (row_height - 16.0).max(1.0)));
+                            (rect, None)
+                        };
+                        selection_items.push((track.id, clip.id, rect));
+                        if !ui.is_rect_visible(rect) || !rect.intersects(timeline_row) { continue; }
+                        let p = p.with_clip_rect(timeline_row);
+                        let col = col.gamma_multiply(if clip.muted { 0.38 } else { 1.0 });
+                        let surface = (!collapsed).then(|| daw_ui::clip_surface_named(&p, rect, col, is_selected, &clip.name));
+                        let title = surface.map(|layout| daw_ui::clip_title(&p, layout.title,
+                            FontId::proportional(daw_ui::tokens::FONT_CANVAS), layout.title_color, &clip.name, clip.link_group.is_some()));
+                        let name_hit = surface.map_or(Rect::NOTHING, |layout| layout.name_hit);
+                        let content = surface.map_or_else(|| mark.unwrap_or(rect), |layout| layout.content);
+                        if is_selected && let Some(mark) = mark {
+                            daw_ui::paint_selection_glow(&p, mark, daw_ui::tokens::RADIUS, col);
+                        }
+                        let cp = p.with_clip_rect(rect.shrink(3.0));
+                        let visible_clip = rect.intersect(timeline_row);
+                        clip_diagnostics.push(serde_json::json!({"id":clip.id,"track":track.id,"rect":rect_json(rect),"visible_rect":rect_json(visible_clip),
+                            "overview":mark.map(rect_json),"title_rect":surface.map(|layout| rect_json(layout.title)),"content_rect":rect_json(content),
+                            "name_hit_rect":surface.map(|layout| rect_json(layout.name_hit)),"named_header":!collapsed && !clip.name.trim().is_empty(),
+                            "linked":clip.link_group.is_some(),"muted":clip.muted,"link_icon":title.and_then(|t| t.icon).map(rect_json)}));
                         let disk_streamed=self.clip_is_disk_streamed(track.id,clip);
                         if let Some(diagnostic)=clip_diagnostics.last_mut(){diagnostic["source_mode"]=serde_json::json!(if disk_streamed{"disk"}else{match &clip.content{ClipContent::Audio{path,..}=>self.audio_source_info(path).map_or("pending",|_|"memory"),_=>"memory"}});diagnostic["disk_badge"]=serde_json::Value::Null;}
-                        if !compact && row_height >= 44.0 {
+                        if !collapsed && row_height >= 44.0 {
                             match &clip.content {
                                 ClipContent::Midi { notes } => {
                                     let pitches = notes.iter().filter(|note| {
@@ -1441,7 +1581,7 @@ impl DawApp {
                                             continue;
                                         }
                                         daw_ui::clip_note_preview(
-                                            &cp, surface.content,
+                                            &cp, content,
                                             left..right,
                                             n.pitch, pitches.0..=pitches.1, col,
                                         );
@@ -1451,7 +1591,7 @@ impl DawApp {
                                     if let Some(audio) = self.waveforms.get(path) {
                                         crate::audio_editor::paint_audio_clip(
                                             &cp,
-                                            Rect::from_min_max(Pos2::new(rect.left(), surface.content.top()), Pos2::new(rect.right(), surface.content.bottom())),
+                                            Rect::from_min_max(Pos2::new(rect.left(), content.top()), Pos2::new(rect.right(), content.bottom())),
                                             audio,
                                             clip,
                                             self.project.tempo,
@@ -1459,7 +1599,7 @@ impl DawApp {
                                             waveform_amplitude,
                                         );
                                     } else if let Some(file)=self.audio_files.get(path) {
-                                        crate::audio_editor::paint_audio_file_clip(&cp,Rect::from_min_max(Pos2::new(rect.left(),surface.content.top()),Pos2::new(rect.right(),surface.content.bottom())),file,clip,self.project.tempo,col,"arranger",waveform_amplitude);
+                                        crate::audio_editor::paint_audio_file_clip(&cp,Rect::from_min_max(Pos2::new(rect.left(),content.top()),Pos2::new(rect.right(),content.bottom())),file,clip,self.project.tempo,col,"arranger",waveform_amplitude);
                                     }
                                 }
                             }
@@ -1472,7 +1612,7 @@ impl DawApp {
                         );
                         let response=if disk_streamed {daw_ui::hover_text(response,daw_ui::DISK_STREAMED_AUDIO)}else{response};
                         let edge_handles = [true, false].map(|start| {
-                            (self.tool == daw_ui::EditorTool::Select && !navigation.navigating)
+                            (!collapsed && self.tool == daw_ui::EditorTool::Select && !navigation.navigating)
                                 .then(|| daw_ui::clip_edge_handle(
                                     ui, ui.id().with((clip.id, start, "trim")), rect, visible_clip, start,
                                 ))
@@ -1480,8 +1620,8 @@ impl DawApp {
                         });
                         let clip_view = daw_ui::TimelineViewport { start_beat: clip.start, ..viewport };
                         let mut fade_preview = None;
-                        let fades = if matches!(clip.content, ClipContent::Audio { .. }) {
-                            let fade_canvas = Rect::from_min_max(Pos2::new(rect.left(), surface.content.top()), Pos2::new(rect.right(), surface.content.bottom()));
+                        let fades = if !collapsed && matches!(clip.content, ClipContent::Audio { .. }) {
+                            let fade_canvas = Rect::from_min_max(Pos2::new(rect.left(), content.top()), Pos2::new(rect.right(), content.bottom()));
                             fade_preview = daw_ui::paint_clip_fades(&p, fade_canvas, clip_view, clip.start, clip.end(), |beat| clip.audio_envelope_gain(beat - clip.start));
                             let mut fade_ui = ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(*ui.layout()));
                             fade_ui.set_clip_rect(p.clip_rect().intersect(rect));
@@ -1514,8 +1654,8 @@ impl DawApp {
                                 diagnostic["fade_out_handle"] = serde_json::json!(fades.handles[1].map(rect_json));
                             }
                         }
-                        if disk_streamed {
-                            let mut excluded=vec![surface.name_hit];
+                        if !collapsed && disk_streamed {
+                            let mut excluded=vec![name_hit];
                             if let Some(fades)=&fades{excluded.extend(fades.handles.iter().flatten().copied());}
                             let badge=daw_ui::paint_audio_streaming_badge_avoiding(&p,rect,&excluded);
                             if let Some(diagnostic)=clip_diagnostics.last_mut(){diagnostic["disk_badge"]=badge.map(rect_json).into();}
@@ -1645,26 +1785,29 @@ impl DawApp {
                             }
                         }
                         clicked_clip |= response.clicked() || edge_moved;
-                        let double = response.clicked() && !edge_moved && response.interact_pointer_pos().is_some_and(|position| {
-                            self.arranger_selection.click_tracker.register(clip.id, position, ui.input(|input| input.time),
-                                plain_click || self.tool == daw_ui::EditorTool::Pencil && !press_shift
-                                    && ui.input(|input| input.modifiers == egui::Modifiers::NONE))
-                        });
-                        // Double-click renames an existing clip of any kind; its
-                        // editor opens from the context menu or Window menu.
-                        if double {
-                            edits.push(Edit::Rename(track.id, clip.id));
+                        if response.clicked() && !edge_moved
+                            && let Some(position) = response.interact_pointer_pos()
+                        {
+                            let title = name_hit.contains(position);
+                            let plain = plain_click || self.tool == daw_ui::EditorTool::Pencil && !press_shift
+                                && ui.input(|input| input.modifiers == egui::Modifiers::NONE);
+                            if self.arranger_selection.click_tracker.register((clip.id, title), position, ui.input(|input| input.time), plain) {
+                                if title {
+                                    edits.push(Edit::Rename(track.id, clip.id));
+                                } else {
+                                    open_editor = true;
+                                }
+                            }
                         }
                         if response.hovered()
                             && !editing_fade
                             && let Some(pos) = response.hover_pos()
                         {
                             let icon = match self.tool {
-                                daw_ui::EditorTool::Select if clip.name.trim().is_empty()
-                                    && surface.name_hit.contains(pos)
+                                daw_ui::EditorTool::Select if name_hit.contains(pos)
                                     && !fades.as_ref().is_some_and(|fades| fades.handles.iter().flatten().any(|handle| handle.contains(pos))) => egui::CursorIcon::Text,
                                 daw_ui::EditorTool::Select
-                                    if pos.x > rect.right() - 8.0 || pos.x < rect.left() + 8.0 =>
+                                    if !collapsed && (pos.x > rect.right() - 8.0 || pos.x < rect.left() + 8.0) =>
                                 {
                                     egui::CursorIcon::ResizeHorizontal
                                 }
@@ -1735,8 +1878,7 @@ impl DawApp {
                             }
                         }
                         let has_clipboard = self.has_arranger_clipboard();
-                        response.context_menu(|ui| {
- daw_ui::command_menu_contents(ui, |ui| {
+                        daw_ui::context_menu(&response, |ui| {
                             let selected_count = self.arranger_selection.ids.len();
                             if selected_count > 1 && self.arranger_selection.ids.contains(&clip.id) {
                                 daw_ui::text::note(ui, format!("{selected_count} clips selected"));
@@ -1915,9 +2057,8 @@ impl DawApp {
                                 ui.close();
                             }
                         });
-});
                     }
-                    if track.kind == TrackKind::Audio && let Ok(schedule) = daw_core::AudioSchedule::new(&track.clips) {
+                    if !collapsed && track.kind == TrackKind::Audio && let Ok(schedule) = daw_core::AudioSchedule::new(&track.clips) {
                         for fade in &schedule.crossfades {
                             let rect = Rect::from_min_max(
                                 Pos2::new(origin + fade.start as f32 * self.zoom, row.top() + 31.0),
@@ -1965,8 +2106,12 @@ impl DawApp {
                         }
                     }
                     if let Some((start, end)) = self.recording_region(track.id) {
-                        let rect = Rect::from_min_max(Pos2::new((origin + start as f32 * self.zoom).max(grid_left), row.top()+8.0), Pos2::new((origin + end as f32 * self.zoom).min(canvas.right()), row.bottom()-8.0));
-                        daw_ui::paint_recording_region(&p, rect);
+                        if collapsed {
+                            daw_ui::collapsed_track_span(&p, timeline_row, view, start, end, daw_ui::recording_color(ui.ctx()));
+                        } else {
+                            let rect = Rect::from_min_max(Pos2::new((origin + start as f32 * self.zoom).max(grid_left), row.top()+8.0), Pos2::new((origin + end as f32 * self.zoom).min(canvas.right()), row.bottom()-8.0));
+                            daw_ui::paint_recording_region(&p, rect);
+                        }
                     }
                     if let Some(pos) = ui.ctx().input(|i| i.pointer.hover_pos())
                         && row.contains(pos)
@@ -1988,17 +2133,19 @@ impl DawApp {
                             ); }
                         }
                     }
-                    let resize_rect = Rect::from_min_max(
-                        Pos2::new(header.left() + 14.0, header.bottom() - 5.0),
-                        Pos2::new(header.right() - 5.0, header.bottom()));
-                    let mut height = viewport.row_height;
-                    let resize_id = ui.id().with((track.id, "all_row_height"));
-                    if daw_ui::resize_value_at(ui, resize_id, resize_rect,
-                        &mut height, 56.0..=1024.0, daw_ui::ResizeAxis::Vertical,
-                        "Drag to resize all track rows").changed() {
-                        resized_rows = Some(height);
+                    if !collapsed {
+                        let resize_rect = Rect::from_min_max(
+                            Pos2::new(header.left() + 14.0, header.bottom() - 5.0),
+                            Pos2::new(header.right() - 5.0, header.bottom()));
+                        let mut height = viewport.row_height;
+                        let resize_id = ui.id().with((track.id, "all_row_height"));
+                        if daw_ui::resize_value_at(ui, resize_id, resize_rect,
+                            &mut height, 56.0..=1024.0, daw_ui::ResizeAxis::Vertical,
+                            "Drag to resize all track rows").changed() {
+                            resized_rows = Some(height);
+                        }
+                        row_resize_diagnostics.push(serde_json::json!({"track":track.id,"rect":rect_json(resize_rect)}));
                     }
-                    row_resize_diagnostics.push(serde_json::json!({"track":track.id,"rect":rect_json(resize_rect)}));
                     if !navigation.navigating {
                         let target = daw_ui::track_reorder_target_with_after_edge(ui, header, track.id,
                             daw_ui::TrackReorderAxis::Vertical, track.kind == TrackKind::Folder,
@@ -2035,11 +2182,11 @@ impl DawApp {
                     })
                 }).inner.response.on_hover_text("Add an instrument, MIDI, audio, bus, folder or automation track");
                 add_track_diagnostic = Some(add_track.rect);
-                response.context_menu(|ui| daw_ui::command_menu_contents(ui, |ui| {
+                daw_ui::context_menu(&response, |ui| {
                     if let Some(choice) = crate::app::add_track_buttons(ui) {
                         new_track = Some((choice, None));
                     }
-                }));
+                });
                 if self.project.tracks.is_empty() {
                     let area = Rect::from_min_max(
                         Pos2::new(grid_left + daw_ui::tokens::SPACE_LG, empty.top() + daw_ui::tokens::SPACE_XL),
@@ -2375,6 +2522,9 @@ impl DawApp {
         if let Some((choice, after)) = new_track {
             self.add_track(choice, after);
         }
+        if let Some((track, beat)) = insert_sample {
+            self.import_audio_dialog(Some(track), beat);
+        }
         if let Some(track) = instrument_editor {
             self.selected_track = Some(track);
             self.selected_clip = None;
@@ -2389,6 +2539,10 @@ impl DawApp {
             self.selected_clip = None;
             self.selected_notes.clear();
             self.open_instrument_chooser(true);
+        }
+        if let Some(clip) = open_automation_clip {
+            self.open_popup(PopupKind::Automation);
+            self.automation_editor_clip = Some(clip);
         }
         if open_editor {
             self.open_workspace(WorkspaceView::Clip);
@@ -2414,6 +2568,37 @@ impl DawApp {
             edits.push(Edit::TransferGroup(target));
         }
         for edit in edits {
+            if let Edit::Automation(track, ref action) = edit {
+                use crate::arranger_automation::AutomationEdit;
+                match action {
+                    AutomationEdit::Independent(clip) if self.confirm_unlink(track, *clip) => {
+                        continue;
+                    }
+                    AutomationEdit::Stretch(original, length) if original.link_group.is_some() => {
+                        let original = original.clone();
+                        let length = *length;
+                        if self.queue_ghost_change(
+                            &[(track, original.id)],
+                            "Stretch automation clip",
+                            move |app, choice, _| {
+                                if choice == crate::ghost_edit::GhostChoice::Propagate {
+                                    app.project.stretch_linked_automation_clips(
+                                        track,
+                                        original.id,
+                                        length,
+                                    )
+                                } else {
+                                    app.project
+                                        .stretch_automation_clip(track, &original, length)
+                                }
+                            },
+                        ) {
+                            continue;
+                        }
+                    }
+                    _ => {}
+                }
+            }
             // Closing a folder opened only for navigation restores its saved
             // collapsed view without making a document edit.
             if let Edit::Collapse(id) = &edit
@@ -2660,6 +2845,22 @@ impl DawApp {
                     Ok(())
                 }
                 Edit::Output(id, output) => self.project.set_output(id, output),
+                Edit::AutomationHeights(lanes, collapse) => {
+                    for id in lanes {
+                        if let Some(track) = self.project.track_mut(id) {
+                            track.collapsed = collapse;
+                        }
+                    }
+                    self.edit_label = Some(
+                        if collapse {
+                            "Collapse automation tracks"
+                        } else {
+                            "Expand automation tracks"
+                        }
+                        .into(),
+                    );
+                    Ok(())
+                }
                 Edit::Collapse(id) => {
                     if let Some(t) = self.project.track_mut(id)
                         && (!self.arranger_selection.revealed_folders.remove(&id) || !t.collapsed)
@@ -2721,20 +2922,24 @@ impl DawApp {
                     result
                 }
                 Edit::New(id, start) => {
-                    // New patterns take the length of the last selected clip,
-                    // kept inside the project range.
-                    let length = self.last_clip_length;
-                    let start = start.clamp(0.0, MAX_BEAT - length);
                     let new_track = id == 0;
+                    let (start, length) = if new_track {
+                        self.initial_pattern_bounds(start)
+                    } else {
+                        (
+                            start.clamp(0.0, MAX_BEAT - self.last_clip_length),
+                            self.last_clip_length,
+                        )
+                    };
                     let id = if id == 0 {
                         self.project.add_instrument_track("New instrument")
                     } else {
                         id
                     };
                     let clip = Clip::midi("New pattern", start, length, Vec::new());
-                    self.selected_clip = Some(clip.id);
-                    self.selected_track = Some(id);
+                    let clip_id = clip.id;
                     self.project.track_mut(id).unwrap().clips.push(clip);
+                    self.arranger_select_only_clip(id, clip_id);
                     self.edit_label = Some("Add pattern".into());
                     if new_track {
                         self.open_new_instrument_chooser();
@@ -2952,7 +3157,6 @@ impl DawApp {
             .map(|subject| format!("Properties · {subject}"))
             .unwrap_or_else(|| "Properties".into());
         let mut navigated = false;
-        let mut name_keyboard = None;
         let mut automation_navigation = None;
         daw_ui::popup(title, ctx)
             .id(egui::Id::new("inspector"))
@@ -3040,13 +3244,7 @@ impl DawApp {
                             }
                             daw_ui::form_grid(ui, "clip_properties", |ui| {
                                 let label = daw_ui::form_label(ui, "Name");
-                                let name = ui.horizontal(|ui| {
-                                    let name = daw_ui::form_text_field(ui, &mut clip.name, "Clip name");
-                                    if ui.add(daw_ui::quiet_button_widget("Keyboard…").small()).on_hover_text("Name this clip with the mouse").clicked() {
-                                        name_keyboard = Some(true);
-                                    }
-                                    name
-                                }).inner
+                                let name = daw_ui::form_text_field(ui, &mut clip.name, "Clip name")
                                     .labelled_by(label.id)
                                     .on_hover_text(if linked.is_some() {
                                         "Shared name · renaming any ghost renames the whole group"
@@ -3099,8 +3297,7 @@ impl DawApp {
                                         });
                                         let response = slider.union(readout);
                                         let mut exact = None;
-                                        response.context_menu(|ui| {
- daw_ui::command_menu_contents(ui, |ui| {
+                                        daw_ui::context_menu(&response, |ui| {
                                             exact = daw_ui::value_entry_named(
                                                 ui,
                                                 ("inspector_clip_gain", id, clip.id),
@@ -3110,7 +3307,6 @@ impl DawApp {
                                                 &format!("{} · Clip gain", clip.name),
                                             );
                                         });
-});
                                         if let Some(db) = exact {
                                             let next = daw_ui::channel_gain_from_db(db as f32).clamp(0.0, 2.0);
                                             if *gain != next {
@@ -3168,24 +3364,20 @@ impl DawApp {
                     let mut parent_change = None;
                     if let Some(track) = self.project.track_mut(id) {
                         daw_ui::form_grid(ui, "track_properties", |ui| {
-                            let label = daw_ui::form_label(ui, "Name");
-                            changed |= ui.horizontal(|ui| {
-                                let name = daw_ui::form_text_field(ui, &mut track.name, "Track name").labelled_by(label.id);
-                                if ui.add(daw_ui::quiet_button_widget("Keyboard…").small()).on_hover_text("Name this track with the mouse").clicked() {
-                                    name_keyboard = Some(false);
-                                }
-                                name.changed()
-                            }).inner;
-                            ui.end_row();
-                            let label = daw_ui::form_label(ui, "Color");
-                            changed |= daw_ui::color_edit(ui, &mut track.color).labelled_by(label.id).changed();
-                            ui.end_row();
+                            let focus = ui.is_enabled() && ui.data_mut(|data| data.remove_temp::<bool>(egui::Id::new(("focus_track_name", id)))).unwrap_or(false);
+                            changed |= daw_ui::track_identity_fields(ui, &mut track.name, &mut track.color, &mut track.icon,
+                                TRACK_ICONS, default_track_icon(track.kind), focus);
                             daw_ui::form_label(ui, "Display");
-                            changed |= daw_ui::checkbox(ui, &mut track.collapsed, if track.kind == TrackKind::Folder {
+                            let mut collapsed = track.collapsed && !self.arranger_selection.revealed_folders.contains(&id);
+                            if daw_ui::checkbox(ui, &mut collapsed, if track.kind == TrackKind::Folder {
                                 "Collapse folder"
                             } else {
-                                "Compact track"
-                            }).changed();
+                                "Collapse track"
+                            }).changed() {
+                                self.arranger_selection.revealed_folders.remove(&id);
+                                changed |= track.collapsed != collapsed;
+                                track.collapsed = collapsed;
+                            }
                             ui.end_row();
                             let label = daw_ui::form_label(ui, "Folder");
                             let mut parent = track.parent_folder;
@@ -3232,9 +3424,6 @@ impl DawApp {
             self.inspector_open = open;
         }
         self.apply_automation_navigation(automation_navigation);
-        if let Some(clip) = name_keyboard {
-            self.start_item_name_keyboard(ctx, clip);
-        }
     }
 
     fn channel_properties(

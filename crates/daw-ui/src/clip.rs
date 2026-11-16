@@ -7,13 +7,50 @@ use egui::{
     Vec2,
 };
 
+/// Paint one occupied interval on a collapsed track. A zero-duration interval
+/// marks a base automation point. Each clip or point owns its own mark, so gaps
+/// remain visible. The returned bounds exclude any scrolled-out portion.
+pub fn collapsed_track_span(
+    painter: &Painter,
+    lane: Rect,
+    viewport: crate::TimelineViewport,
+    start: f64,
+    end: f64,
+    color: Color32,
+) -> Option<Rect> {
+    let visible = lane.intersect(painter.clip_rect());
+    if !visible.is_positive() || !start.is_finite() || !end.is_finite() || end < start {
+        return None;
+    }
+    let left = viewport.x_at(lane, start);
+    let right = viewport.x_at(lane, end);
+    if right < visible.left() || left > visible.right() {
+        return None;
+    }
+    let half_height = tokens::SPACE_XS.min(lane.height()) * 0.5;
+    let extra = (tokens::SPACE_XS - (right - left)).max(0.0) * 0.5;
+    let rect = Rect::from_min_max(
+        Pos2::new(left - extra, lane.center().y - half_height),
+        Pos2::new(right + extra, lane.center().y + half_height),
+    )
+    .round_to_pixels(painter.pixels_per_point())
+    .intersect(visible);
+    if !rect.is_positive() {
+        return None;
+    }
+    painter
+        .with_clip_rect(visible)
+        .rect_filled(rect, tokens::RADIUS, color);
+    Some(rect)
+}
+
 /// Separate clip identity from its musical preview at every track height.
 #[derive(Clone, Copy, Debug)]
 pub struct ClipSurfaceLayout {
     pub title: Rect,
     pub content: Rect,
     pub title_color: Color32,
-    /// Generous interior target for restoring an intentionally hidden name.
+    /// The painted title band, including the thin strip on unnamed clips.
     /// It is geometry only; the caller retains body, edge and fade ownership.
     pub name_hit: Rect,
 }
@@ -43,6 +80,21 @@ pub fn clip_surface_named(
     clip_surface_with_name(painter, rect, color, selected, !name.trim().is_empty())
 }
 
+/// The painted title is the rename target. Even a collapsed row keeps room
+/// below the title for selecting and opening the clip body.
+pub fn clip_title_band(rect: Rect, named: bool, pixels_per_point: f32) -> Rect {
+    let rect = rect.round_to_pixels(pixels_per_point);
+    let height = if named {
+        tokens::FONT_CANVAS + tokens::SPACE_SM
+    } else {
+        3.0
+    };
+    let body_height = tokens::SPACE_SM.min(rect.height() * 0.5);
+    let bottom =
+        (rect.top() + height.min(rect.height() - body_height)).round_to_pixels(pixels_per_point);
+    Rect::from_min_max(rect.min, Pos2::new(rect.right(), bottom))
+}
+
 fn clip_surface_with_name(
     painter: &Painter,
     rect: Rect,
@@ -55,14 +107,8 @@ fn clip_surface_with_name(
     // title band meets it, at any display density.
     let pixel = 1.0 / painter.pixels_per_point();
     let rect = rect.round_to_pixels(painter.pixels_per_point());
-    let header_height = if named {
-        tokens::FONT_CANVAS + tokens::SPACE_SM
-    } else {
-        3.0
-    };
-    let header_bottom = (rect.top() + header_height)
-        .min(rect.bottom())
-        .round_to_pixels(painter.pixels_per_point());
+    let band = clip_title_band(rect, named, painter.pixels_per_point());
+    let header_bottom = band.bottom();
     let inset_x = tokens::SPACE_XS.min(rect.width().max(0.0) * 0.5);
     let content_top = (header_bottom + tokens::SPACE_XS * 0.5).min(rect.bottom());
     let content_bottom = (rect.bottom() - tokens::SPACE_XS).max(content_top);
@@ -80,13 +126,7 @@ fn clip_surface_with_name(
             Pos2::new(rect.right() - inset_x, content_bottom),
         ),
         title_color: crate::theme::contrast_text(header_fill),
-        name_hit: Rect::from_min_max(
-            Pos2::new(rect.left() + 12.0_f32.min(rect.width() * 0.25), rect.top()),
-            Pos2::new(
-                rect.right() - 12.0_f32.min(rect.width() * 0.25),
-                (rect.top() + 16.0).min(rect.top() + rect.height() * 0.4),
-            ),
-        ),
+        name_hit: band,
     };
     if !rect.is_positive() || !rect.is_finite() {
         return layout;
@@ -227,7 +267,7 @@ pub fn clip_occurrence_hover(
     crate::hover_text(
         response,
         format!(
-            "{title}\n{track} · {}\n{}–{}{}",
+            "{title}\n{track} · {}\n{}–{}{}\nDouble-click the title to rename or the body to edit",
             crate::duration::musical_position(range.start, meter),
             crate::duration::format_seconds(range.start * seconds_per_beat),
             crate::duration::format_seconds(range.end * seconds_per_beat),

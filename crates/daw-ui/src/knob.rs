@@ -526,7 +526,7 @@ impl<'a> Knob<'a> {
             && valid_range
         {
             let mut reset = response.double_clicked();
-            response.context_menu(|ui| {
+            crate::context_menu(&response, |ui| {
                 if crate::menu_item(ui, "Reset", None).clicked() {
                     reset = true;
                     ui.close();

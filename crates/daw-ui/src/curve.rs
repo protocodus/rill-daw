@@ -708,7 +708,7 @@ fn curve_editor_inner(
             });
         }
         if !navigation.navigating {
-            point_response.context_menu(|ui| {
+            crate::context_menu(&point_response, |ui| {
                 for (mode, label) in [
                     (CurveInterpolation::Linear, "Linear segment"),
                     (CurveInterpolation::Smooth, "Smooth segment"),

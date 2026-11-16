@@ -153,6 +153,7 @@ pub(crate) enum ClipCommand {
 }
 
 pub struct DawApp {
+    pub(crate) cpu_monitor: crate::cpu_monitor::CpuMonitor,
     pub(crate) analysis: crate::analysis_ui::SignalAnalysis,
     pub(crate) midi_expression: Option<crate::midi_expression::MidiExpressionDraft>,
     pub(crate) midi_expression_open: bool,
@@ -187,6 +188,7 @@ pub struct DawApp {
     pub(crate) audio_import: crate::audio_import::AudioImportState,
     pub(crate) sample_preview: crate::sample_preview::SamplePreview,
     pub(crate) freeze: crate::freeze_ui::FreezeState,
+    pub(crate) ghost_change: Option<crate::ghost_edit::GhostChange>,
     pub(crate) document_guard: Option<crate::document_ui::DocumentGuard>,
     pub(crate) next_document_dialog: Option<crate::document_ui::DocumentDialogSelection>,
     pub export_job:
@@ -232,6 +234,7 @@ pub struct DawApp {
     pub effects_open: bool,
     pub routing_open: bool,
     pub automation_open: bool,
+    pub(crate) automation_editor_clip: Option<u64>,
     pub history_open: bool,
     pub crossfade_open: bool,
     pub join_open: bool,
@@ -336,6 +339,7 @@ impl DawApp {
             .and_then(|t| t.clips.iter().find(|clip| !clip.is_take_source()))
             .map(|c| c.id);
         let mut app = Self {
+            cpu_monitor: Default::default(),
             analysis: Default::default(),
             midi_expression: None,
             midi_expression_open: false,
@@ -367,6 +371,7 @@ impl DawApp {
             audio_import: Default::default(),
             sample_preview: Default::default(),
             freeze: Default::default(),
+            ghost_change: None,
             document_guard: None,
             next_document_dialog: None,
             export_job: None,
@@ -410,6 +415,7 @@ impl DawApp {
             effects_open: false,
             routing_open: false,
             automation_open: false,
+            automation_editor_clip: None,
             history_open: false,
             crossfade_open: false,
             join_open: false,
@@ -930,6 +936,7 @@ impl DawApp {
                 }
             }
             PopupKind::Join => self.prepare_join(),
+            PopupKind::Automation => self.automation_editor_clip = None,
             PopupKind::Inspector
             | PopupKind::Assistant
             | PopupKind::Crossfade
@@ -937,7 +944,6 @@ impl DawApp {
             | PopupKind::Recording
             | PopupKind::Effects
             | PopupKind::Routing
-            | PopupKind::Automation
             | PopupKind::History
             | PopupKind::Export
             | PopupKind::ExportMidi
@@ -2147,6 +2153,9 @@ impl DawApp {
 
     /// Every clip entry point shares result selection and one history label.
     pub(crate) fn apply_clip_command(&mut self, track: u64, clip: u64, command: ClipCommand) {
+        if matches!(command, ClipCommand::MakeIndependent) && self.confirm_unlink(track, clip) {
+            return;
+        }
         self.begin_edit();
         let (label, result) =
             if let Some(automation_clip) = self.project.automation_clip(track, clip).cloned() {
@@ -2229,7 +2238,7 @@ impl DawApp {
         }
     }
     fn keyboard(&mut self, ctx: &egui::Context) {
-        if self.sample_browser_keyboard(ctx) {
+        if self.ghost_change.is_some() || self.sample_browser_keyboard(ctx) {
             return;
         }
         self.sync_workspace_tool();
@@ -2765,7 +2774,7 @@ Current loop: beats {:.2}–{:.2}", self.project.loop_start + 1.0, self.project.
                         }
                         ui.separator();
                         if ui.add_enabled(!self.recording_busy(), daw_ui::button_widget("Import audio…")).clicked() {
-                            self.import_audio_dialog();
+                            self.import_audio_dialog(None, self.cursor);
                             ui.close();
                         }
                         if ui.add_enabled(!self.recording_busy(), daw_ui::button_widget("Import…")).clicked() {
@@ -3078,6 +3087,7 @@ Current loop: beats {:.2}–{:.2}", self.project.loop_start + 1.0, self.project.
                             if self.assistant.busy() && daw_ui::small_button(ui, "Stop AI").clicked() {
                                 self.assistant.stop();
                             }
+                            daw_ui::cpu_load_indicator(ui, &self.cpu_monitor.sample());
                             let overrides = self.automation_override_count();
                             if overrides > 0
                                 && daw_ui::automation_override_warning(ui, overrides).clicked() {
@@ -3265,6 +3275,13 @@ Current loop: beats {:.2}–{:.2}", self.project.loop_start + 1.0, self.project.
         }
     }
 
+    /// First pattern on a new instrument track, in the meter at its insertion point.
+    pub(crate) fn initial_pattern_bounds(&self, start: f64) -> (f64, f64) {
+        let bar = f64::from(self.project.meter_map().meter_at(start));
+        let length = (self.project.loop_end - self.project.loop_start).min(bar);
+        (start.clamp(0.0, daw_core::MAX_BEAT - length), length)
+    }
+
     /// Add a track chosen from [`add_track_buttons`]. A new track appears after
     /// `after` when given, otherwise at the end; instruments continue in
     /// their chooser first.
@@ -3293,11 +3310,12 @@ Current loop: beats {:.2}–{:.2}", self.project.loop_start + 1.0, self.project.
             });
         }
         if choice == NewTrack::Midi {
+            let (start, length) = self.initial_pattern_bounds(self.snapped(self.cursor));
             edits.push(SongEdit::AddMidiClip {
                 track: EntityRef::Key("new_track".into()),
                 name: "New pattern".into(),
-                start: self.snapped(self.cursor).max(0.0),
-                length: 4.0,
+                start,
+                length,
                 notes: Vec::new(),
                 key: Some("new_clip".into()),
             });
@@ -3655,6 +3673,7 @@ impl DawApp {
             self.request_document_transition(crate::document_ui::DocumentTransition::Quit);
         }
         if self.document_guard.is_none()
+            && self.ghost_change.is_none()
             && self.error_details.is_none()
             && !crate::plugin_details::is_open(ctx)
             && !crate::library::details_open(ctx)
@@ -3742,6 +3761,11 @@ impl DawApp {
         }
         if self.error_details.is_some() {
             self.error_details_frame(ctx);
+            self.capture_screenshot(ctx);
+            return;
+        }
+        if self.ghost_change.is_some() && self.document_guard.is_none() {
+            self.ghost_change_frame(ctx);
             self.capture_screenshot(ctx);
             return;
         }
@@ -4017,7 +4041,8 @@ impl DawApp {
         {
             self.close_popup();
         }
-        let files = if self.error_details.is_none()
+        let files = if self.ghost_change.is_none()
+            && self.error_details.is_none()
             && !crate::audio_silence::is_open(ctx)
             && !crate::audio_batch::is_open(ctx)
             && !crate::timeline_marks::meter_dialog_open(ctx)

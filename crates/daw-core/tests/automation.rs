@@ -1047,3 +1047,35 @@ fn pasted_patterns_are_independent_and_removal_is_by_id() {
     assert_eq!(remaining, [source, pasted]);
     project.validate().unwrap();
 }
+
+#[test]
+fn propagated_stretch_preserves_trimmed_placements_and_rejects_an_overflow_atomically() {
+    let (mut project, _, track) = fixture();
+    let pattern = project.create_automation_clip(track, 1.0, 4.0).unwrap();
+    let peer = project
+        .copy_automation_clip(track, pattern, 9.0, true)
+        .unwrap();
+    project
+        .set_automation_clip_bounds(track, peer, 9.0, 2.0, 1.0)
+        .unwrap();
+    let before = project.automation_clip(track, peer).unwrap().clone();
+    project
+        .stretch_linked_automation_clips(track, pattern, 8.0)
+        .unwrap();
+    let after = project.automation_clip(track, peer).unwrap();
+    assert_eq!((after.start, after.length, after.offset), (9.0, 4.0, 2.0));
+    assert_eq!(after.link_group, before.link_group);
+    for (point, original) in after.points.iter().zip(before.points) {
+        assert_eq!((point.id, point.beat), (original.id, 2.0 * original.beat));
+    }
+    project
+        .set_automation_clip_bounds(track, peer, daw_core::MAX_BEAT - 4.0, 4.0, 2.0)
+        .unwrap();
+    let saved = project.clone();
+    assert!(
+        project
+            .stretch_linked_automation_clips(track, pattern, 12.0)
+            .is_err()
+    );
+    assert_eq!(saved, project);
+}

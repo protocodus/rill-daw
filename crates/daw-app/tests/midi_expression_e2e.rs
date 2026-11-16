@@ -106,17 +106,6 @@ fn click_rect(app: &mut Harness, rect: &Value) -> Value {
     let (x, y) = center(rect);
     app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}))
 }
-fn front(app: &mut Harness, label: &str) -> Value {
-    let state = app.inspect();
-    let rect = state["label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .rev()
-        .find(|item| item["text"] == label)
-        .unwrap_or_else(|| panic!("Missing {label}: {}", state["visible_labels"]));
-    click_rect(app, rect)
-}
 fn clip(state: &Value, id: u64) -> &Value {
     state["project"]["tracks"]
         .as_array()
@@ -193,29 +182,6 @@ fn edit(app: &mut Harness, field: &str, text: &str) -> Value {
     app.key("Enter")
 }
 
-fn mouse_integer(app: &mut Harness, field: &str, value: &str) -> Value {
-    let state = visible(app, field);
-    let rect = &state["midi_expression"][field];
-    let (_, y) = center(rect);
-    let keypad = state["label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|label| {
-            label["text"] == "123"
-                && (center(label).1 - y).abs() < 2.0
-                && label["min"][0].as_f64().unwrap() >= rect["max"][0].as_f64().unwrap()
-        })
-        .min_by(|a, b| center(a).0.total_cmp(&center(b).0))
-        .expect("Exact editor has a mouse keypad");
-    click_rect(app, keypad);
-    front(app, "Clear");
-    for digit in value.chars() {
-        front(app, &digit.to_string());
-    }
-    front(app, "Apply value")
-}
-
 fn select_point(app: &mut Harness, id: u64) -> Value {
     let state = visible(app, "velocity");
     let rect = &state["midi_expression"]["rows"]
@@ -277,7 +243,7 @@ fn exact_attack_release_and_expression_edits_are_one_reversible_ghost_safe_trans
         }
         let state = app.command(json!({"command":"key","key":"Z","cmd":true}));
         assert_eq!(state["project"], before["project"]);
-        let draft = mouse_integer(&mut app, "velocity", "32770");
+        let draft = edit(&mut app, "velocity", "32770");
         assert_eq!(draft["midi_expression"]["velocity16"], 32770);
         assert_eq!(draft["project"], before["project"]);
         edit(&mut app, "release_velocity", "65534");

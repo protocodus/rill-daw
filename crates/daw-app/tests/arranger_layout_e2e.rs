@@ -226,8 +226,8 @@ fn tracks_menu_creates_subfolders_and_moves_tracks_with_cycle_safe_choices_and_r
     );
     app.key("Escape");
     app.key("Escape");
-    // Clicking the folder header collapses all descendants; Undo restores them.
-    let state = select(&mut app, root);
+    // The folder disclosure collapses all descendants; Undo restores them.
+    let state = app.click_track_disclosure(root);
     assert_eq!(state["timeline"]["tracks"].as_array().unwrap().len(), 1);
     let state = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(state["timeline"]["tracks"].as_array().unwrap().len(), 4);
@@ -547,9 +547,7 @@ fn recursive_folder_borders_enclose_descendant_lanes_with_common_grid_and_clippe
         "Scrolling must not invent a top cap"
     );
     app.command(json!({"command":"scroll","x":x,"y":y,"delta":100000.}));
-    let state = app.inspect();
-    let (x, y) = center(&track(&state, outer)["name"]);
-    let state = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    let state = app.click_track_disclosure(outer);
     assert_eq!(
         state["timeline"]["folder_containers"]
             .as_array()

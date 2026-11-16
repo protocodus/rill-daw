@@ -75,6 +75,10 @@ impl DawApp {
             self.sync_arranger_selection();
             return;
         };
+        self.restore_selection_snapshot(snapshot);
+    }
+
+    pub(crate) fn restore_selection_snapshot(&mut self, snapshot: SelectionSnapshot) {
         self.selected_track = snapshot
             .track
             .filter(|id| self.project.track(*id).is_some());

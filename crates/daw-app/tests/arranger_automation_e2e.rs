@@ -66,6 +66,7 @@ fn pattern_copy_paste_derivation_and_both_trim_edges_preserve_source_points() {
             },
         )
         .unwrap();
+    project.track_mut(track).unwrap().collapsed = false;
     let original = project.create_automation_clip(track, 1.0, 2.0).unwrap();
     let path = app.directory.path().join("pattern-tools.daw.json");
     project.save(&path).unwrap();
@@ -73,7 +74,8 @@ fn pattern_copy_paste_derivation_and_both_trim_edges_preserve_source_points() {
     click(&mut app, pattern_header(&initial, 0), "secondary");
     let ghost = app.click("Ghost copy");
     click(&mut app, pattern_header(&ghost, 1), "secondary");
-    let independent = app.click("Make independent");
+    app.click("Make independent");
+    let independent = app.click("Apply and disconnect");
     assert!(lane(&independent)["clips"][1]["link_group"].is_null());
     // Points are drawn with Pencil, as notes are in the piano roll.
     app.click("Pencil");
@@ -177,6 +179,7 @@ fn points_patterns_ghosts_placement_precedence_undo_and_archive_work_in_arranger
             },
         )
         .unwrap();
+    project.track_mut(automation).unwrap().collapsed = false;
     project.automation_lane_mut(automation).unwrap().points = vec![
         AutomationPoint::new(0.0, 0.2),
         AutomationPoint::new(8.0, 0.2),
@@ -206,7 +209,7 @@ fn points_patterns_ghosts_placement_precedence_undo_and_archive_work_in_arranger
     assert_eq!(undo["project"], before["project"]);
     let at = point(&undo, 2.0, 0.7);
     click(&mut app, at, "secondary");
-    let created = app.click("Create automation clip");
+    let created = app.click("Insert clip");
     assert_eq!(lane(&created)["clips"].as_array().unwrap().len(), 1);
     assert_eq!(lane(&created)["clips"][0]["start"], 2.0);
     let plot = &diagram(&created)["clips"][0]["plot"];
@@ -291,5 +294,209 @@ fn points_patterns_ghosts_placement_precedence_undo_and_archive_work_in_arranger
     assert_eq!(lane(&recalled)["clips"], lane(&shared)["clips"]);
     assert_eq!(default.samples, export(&mut app, "recalled.wav").samples);
     assert_eq!(std::fs::read(source).unwrap(), original_bytes);
+    app.quit();
+}
+
+#[test]
+fn automation_starts_compact_and_saved_expansion_preserves_the_curve_and_sound() {
+    let mut app = Harness::new();
+    let source = app.directory.path().join("source.wav");
+    AudioData {
+        sample_rate: 8_000,
+        channels: 1,
+        samples: vec![0.4; 16_000],
+    }
+    .write_wav(&source)
+    .unwrap();
+    let mut project = Project::new();
+    let channel = project.add_audio_track("Voice");
+    project.track_mut(channel).unwrap().clips.push(Clip::audio(
+        "Voice clip",
+        0.0,
+        4.0,
+        source.to_string_lossy(),
+    ));
+    let automation = project
+        .add_automation_track(
+            "Voice volume",
+            AutomationTarget {
+                track: channel,
+                parameter: AutomationParameter::TrackGain,
+            },
+        )
+        .unwrap();
+    project
+        .create_automation_clip(automation, 0.0, 4.0)
+        .unwrap();
+    let path = app.directory.path().join("automation-heights.rill");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open","path":path}));
+    let compact = app.set_track_density("Detailed");
+    let height = |state: &Value| {
+        let rect = &state["timeline"]["tracks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["track"] == automation)
+            .unwrap()["header"];
+        rect["max"][1].as_f64().unwrap() - rect["min"][1].as_f64().unwrap()
+    };
+    assert_eq!(compact["project"]["tracks"][1]["collapsed"], true);
+    let compact_audio = export(&mut app, "compact.wav");
+    let expanded = app.click_track_disclosure(automation);
+    assert_eq!(expanded["project"]["tracks"][1]["collapsed"], false);
+    assert!(height(&expanded) > height(&compact));
+    assert_eq!(
+        expanded["project"]["tracks"][1]["automation"],
+        compact["project"]["tracks"][1]["automation"]
+    );
+    assert!(height(&compact) <= 22.0);
+    assert_eq!(
+        diagram(&expanded)["clips"][0]["id"],
+        compact["project"]["tracks"][1]["automation"]["clips"][0]["id"]
+    );
+    assert_eq!(
+        export(&mut app, "expanded.wav").samples,
+        compact_audio.samples
+    );
+
+    app.command(json!({"command":"save","path":path}));
+    let reopened = app.command(json!({"command":"open","path":path}));
+    assert_eq!(
+        reopened["project"]["tracks"][1],
+        expanded["project"]["tracks"][1]
+    );
+    assert_eq!(height(&reopened), height(&expanded));
+    let collapsed = app.click_track_disclosure(automation);
+    assert_eq!(
+        collapsed["project"]["tracks"][1],
+        compact["project"]["tracks"][1]
+    );
+    assert_eq!(height(&collapsed), height(&compact));
+    app.quit();
+}
+
+#[test]
+fn linked_automation_stretch_asks_once_and_applies_the_chosen_scope() {
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    let channel = project.add_midi_track("Source");
+    project.add_midi_track("Other");
+    let track = project
+        .add_automation_track(
+            "Curve",
+            AutomationTarget {
+                track: channel,
+                parameter: AutomationParameter::TrackGain,
+            },
+        )
+        .unwrap();
+    project.track_mut(track).unwrap().collapsed = false;
+    let clip = project.create_automation_clip(track, 0.0, 2.0).unwrap();
+    project
+        .copy_automation_clip(track, clip, 6.0, true)
+        .unwrap();
+    project
+        .copy_automation_clip(track, clip, 10.0, true)
+        .unwrap();
+    let path = app.directory.path().join("ghost-scope.daw.json");
+    project.save(&path).unwrap();
+    let initial = app.command(json!({"command":"open","path":path}));
+    for choice in [
+        "Cancel",
+        "Propagate change",
+        "Apply and disconnect",
+        "Apply and delete all copies",
+    ] {
+        let current = app.inspect();
+        click(&mut app, pattern_header(&current, 0), "secondary");
+        let stretch = app.click("Stretch");
+        let at = pattern_header(&stretch, 0);
+        let ppb = stretch["timeline"]["pixels_per_beat"].as_f64().unwrap();
+        let prompt = app.command(json!({"command":"pointer","phase":"drag","x":at.0,"y":at.1,"to_x":at.0+ppb,"to_y":at.1}));
+        assert_eq!(prompt["project"], initial["project"]);
+        assert_eq!(prompt["history"]["undo"], initial["history"]["undo"]);
+        let applied = app.click(choice);
+        let clips = lane(&applied)["clips"].as_array().unwrap();
+        if choice == "Cancel" {
+            assert_eq!(applied["project"], initial["project"]);
+            assert_eq!(applied["history"]["undo"], initial["history"]["undo"]);
+            continue;
+        }
+        assert_eq!(clips[0]["length"], 3.0);
+        if choice == "Propagate change" {
+            assert_eq!(clips.len(), 3);
+            assert_eq!(clips[1]["start"], 6.0);
+            assert_eq!(clips[2]["start"], 10.0);
+            for peer in clips {
+                assert_eq!(peer["length"], 3.0);
+                assert_eq!(peer["link_group"], lane(&initial)["clips"][0]["link_group"]);
+                assert_eq!(peer["points"][1]["beat"], 3.0);
+            }
+        } else {
+            assert!(clips[0]["link_group"].is_null());
+            if choice == "Apply and disconnect" {
+                assert_eq!(clips[1..], lane(&initial)["clips"].as_array().unwrap()[1..]);
+            } else {
+                assert_eq!(clips.len(), 1);
+            }
+        }
+        assert_eq!(applied["history"]["undo"].as_array().unwrap().len(), 1);
+        let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+        assert_eq!(undone["project"], initial["project"]);
+    }
+    app.quit();
+}
+
+#[test]
+fn panning_an_automation_clip_keeps_its_paint_and_hit_targets_inside_the_grid() {
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    let channel = project.add_midi_track("Source");
+    project.add_midi_track("Other");
+    let track = project
+        .add_automation_track(
+            "Curve",
+            AutomationTarget {
+                track: channel,
+                parameter: AutomationParameter::TrackGain,
+            },
+        )
+        .unwrap();
+    project.track_mut(track).unwrap().collapsed = false;
+    project.create_automation_clip(track, 0.0, 6.0).unwrap();
+    let path = app.directory.path().join("panned-automation.daw.json");
+    project.save(&path).unwrap();
+    let initial = app.command(json!({"command":"open","path":path}));
+    let (x, y) = center(&diagram(&initial)["rect"]);
+    let panned = app.command(json!({"command":"pointer","phase":"drag","button":"middle","x":x,"y":y,"to_x":x-80.0,"to_y":y}));
+    assert!(panned["timeline"]["start_beat"].as_f64().unwrap() > 0.0);
+    let plot_left = diagram(&panned)["rect"]["min"][0].as_f64().unwrap();
+    let clip = &diagram(&panned)["clips"][0];
+    for region in ["rect", "title_rect", "plot"] {
+        assert!(clip[region]["min"][0].as_f64().unwrap() >= plot_left);
+    }
+    let paint = app.command(json!({"command":"inspect","paint":true}));
+    let edge = clip["plot"]["max"][0].as_f64().unwrap();
+    let path = paint["painted_paths"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|path| {
+            let points = path["points"].as_array().unwrap();
+            points.len() > 2
+                && points[0][0].as_f64().unwrap() < plot_left - 1.0
+                && (points.last().unwrap()[0].as_f64().unwrap() - edge).abs() < 1.0
+        })
+        .expect("partially offscreen automation curve was painted");
+    assert!(path["clip"]["min"][0].as_f64().unwrap() >= plot_left);
+    let header = click(
+        &mut app,
+        (plot_left - 35.0, center(&clip["title_rect"]).1),
+        "secondary",
+    );
+    let labels = header["visible_labels"].as_array().unwrap();
+    assert!(!labels.iter().any(|label| label == "Duplicate after"));
+    assert_eq!(header["project"], initial["project"]);
     app.quit();
 }

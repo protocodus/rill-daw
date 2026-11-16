@@ -69,6 +69,12 @@ fn top_level_menus_scroll_inside_the_viewport_and_last_window_action_is_clickabl
                 let original = state["project"].clone();
                 let scroll = &state["native_menu"]["scroll_rect"];
                 assert!(scroll.is_array(), "{menu} must have a bounded command body");
+                let body_height = scroll[3].as_f64().unwrap() - scroll[1].as_f64().unwrap();
+                let three_rows =
+                    3.0 * daw_ui::tokens::CONTROL_HEIGHT + 2.0 * daw_ui::tokens::SPACE_XS;
+                if menu == "Edit" {
+                    assert!(body_height >= f64::from(three_rows), "{menu}: {scroll}");
+                }
                 let x = (scroll[0].as_f64().unwrap() + scroll[2].as_f64().unwrap()) * 0.5;
                 let y = (scroll[1].as_f64().unwrap() + scroll[3].as_f64().unwrap()) * 0.5;
                 app.command(json!({"command":"scroll", "x":x, "y":y, "delta":-2000.0}));
@@ -78,6 +84,8 @@ fn top_level_menus_scroll_inside_the_viewport_and_last_window_action_is_clickabl
                 let state = app.inspect();
                 assert_eq!(state["project"], original);
                 for area in state["native_menu"]["foreground_areas"].as_array().unwrap() {
+                    let frame_height = area[3].as_f64().unwrap() - area[1].as_f64().unwrap();
+                    assert!(frame_height <= 300.0 + 1.0 / density, "{menu}: {area}");
                     assert!(area[0].as_f64().unwrap() >= 0.0, "{menu}: {area}");
                     assert!(area[1].as_f64().unwrap() >= 0.0, "{menu}: {area}");
                     assert!(area[2].as_f64().unwrap() <= 800.0, "{menu}: {area}");

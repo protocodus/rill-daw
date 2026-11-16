@@ -89,18 +89,8 @@ fn scroll_properties(app: &mut Harness, delta: f64) -> Value {
 }
 
 fn select_track(app: &mut Harness, name: &str) {
-    let arrangement = window(app, "Arranger");
-    if name == "Track folder" {
-        // The folder header toggles collapse; its empty timeline row only selects.
-        let y = center(rect(&arrangement, "Track folder")).1;
-        let x = arrangement["timeline"]["canvas"]["min"][0]
-            .as_f64()
-            .unwrap()
-            + 24.0;
-        app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}));
-    } else {
-        app.click(name);
-    }
+    window(app, "Arranger");
+    app.click(name);
 }
 
 fn undo(app: &mut Harness, redo: bool) -> Value {
@@ -209,12 +199,12 @@ fn properties_pages_fit_and_expose_only_controls_for_the_selected_item() {
                     "Make independent",
                 ],
             );
-            assert!(!visible(&selected, "Compact track"));
+            assert!(!visible(&selected, "Collapse track"));
             assert!(!visible(&selected, "Path latency"));
             let lower = scroll_properties(&mut app, -10000.0);
             accessible(&lower, &["Fade in", "Fade out"]);
             let track = front(&mut app, "Track");
-            accessible(&track, &["Color", "Compact track", "Folder"]);
+            accessible(&track, &["Color", "Collapse track", "Folder"]);
             for channel_control in [
                 "Input gain",
                 "Volume",
@@ -377,7 +367,8 @@ fn clip_gain_and_fades_edit_linked_instances_and_support_undo_then_independence(
     assert_eq!(undo(&mut app, false)["project"], faded_in["project"]);
     assert_eq!(undo(&mut app, true)["project"], faded_out["project"]);
     scroll_properties(&mut app, 10000.0);
-    let detached = app.click("Make independent");
+    app.click("Make independent");
+    let detached = app.click("Apply and disconnect");
     assert!(clip(&detached, first)["link_group"].is_null());
     let independent = edit_fade(&mut app, "Fade out", "1.5");
     assert_eq!(

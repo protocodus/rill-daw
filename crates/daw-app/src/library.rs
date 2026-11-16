@@ -19,7 +19,7 @@ const SIDEBAR_WIDTH: f32 = 196.0;
 const DETAILS_WIDTH: f32 = 233.0;
 /// Two card columns and the grid's scrollbar gutter.
 const CATALOG_MIN_WIDTH: f32 = 440.0;
-const PANE_GAP: f32 = daw_ui::tokens::SPACE_LG;
+const PANE_GAP: f32 = daw_ui::tokens::SPACE_MD;
 const PREVIEW_IMAGE_HELP: &str = "An optional image of the plug-in editor. Image capture does not verify whether the plug-in can load or play; assignment remains available.";
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
@@ -32,8 +32,30 @@ pub(crate) enum LibraryTarget {
         /// provisional name. Existing names never imply naming permission.
         name_new_track: bool,
     },
-    Insert(u64),
+    Insert {
+        track: u64,
+        anchor: Option<(u64, daw_ui::EffectInsertSide)>,
+    },
     Send(u64),
+}
+
+impl LibraryTarget {
+    /// Resolve the pinned slot when the choice is applied so reordering or
+    /// removing it while browsing cannot insert next to a different effect.
+    fn insert_index(self, track: &daw_core::Track) -> Option<usize> {
+        match self {
+            Self::Insert { track: pinned, .. } if pinned != track.id => None,
+            Self::Insert {
+                anchor: Some((id, side)),
+                ..
+            } => track
+                .inserts
+                .iter()
+                .position(|slot| slot.id == id)
+                .map(|index| index + usize::from(side == daw_ui::EffectInsertSide::After)),
+            _ => Some(track.inserts.len()),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
@@ -614,13 +636,20 @@ impl DawApp {
     }
 
     pub(crate) fn open_effect_library(&mut self, track: u64, send: bool) {
-        self.open_popup(PopupKind::Library);
-        self.plugin_filter.clear();
-        self.library_target = if send {
+        self.open_effect_chooser(if send {
             LibraryTarget::Send(track)
         } else {
-            LibraryTarget::Insert(track)
-        };
+            LibraryTarget::Insert {
+                track,
+                anchor: None,
+            }
+        });
+    }
+
+    pub(crate) fn open_effect_chooser(&mut self, target: LibraryTarget) {
+        self.open_popup(PopupKind::Library);
+        self.plugin_filter.clear();
+        self.library_target = target;
     }
 
     pub(crate) fn plugin_library(&mut self, ctx: &egui::Context) {
@@ -642,7 +671,7 @@ impl DawApp {
                 state.selected = None;
                 state.kind = if matches!(
                     state.target,
-                    LibraryTarget::Insert(_) | LibraryTarget::Send(_)
+                    LibraryTarget::Insert { .. } | LibraryTarget::Send(_)
                 ) {
                     LibrarySection::Effect
                 } else {
@@ -665,7 +694,7 @@ impl DawApp {
         }
         let pinned = match self.library_target {
             LibraryTarget::Instrument { track, .. } => track,
-            LibraryTarget::Insert(track) | LibraryTarget::Send(track) => Some(track),
+            LibraryTarget::Insert { track, .. } | LibraryTarget::Send(track) => Some(track),
             LibraryTarget::Browse => self.library_source,
         };
         let assign = matches!(
@@ -685,6 +714,10 @@ impl DawApp {
                 )
             })
         });
+        let can_insert = source
+            .and_then(|id| self.project.track(id))
+            .and_then(|track| self.library_target.insert_index(track))
+            .is_some();
         let can_send = source.is_some_and(|id| id != daw_core::MASTER_CHANNEL_ID);
         let mut action = None;
         let mut folders = false;
@@ -826,13 +859,13 @@ impl DawApp {
                 LibrarySection::Effect => DeviceAction::Insert,
                 LibrarySection::Unknown if assign => DeviceAction::Assign,
                 LibrarySection::Unknown if matches!(self.library_target, LibraryTarget::Send(_)) => DeviceAction::Send,
-                LibrarySection::Unknown if matches!(self.library_target, LibraryTarget::Insert(_)) => DeviceAction::Insert,
+                LibrarySection::Unknown if matches!(self.library_target, LibraryTarget::Insert { .. }) => DeviceAction::Insert,
                 LibrarySection::Unknown => DeviceAction::Instrument,
                 LibrarySection::Sample => unreachable!("Samples uses the shared sample browser"),
             };
             let enabled = state.kind != LibrarySection::Unknown && match primary {
                 DeviceAction::Assign => assignment_target.is_some(), DeviceAction::Instrument => state.kind != LibrarySection::Unknown,
-                DeviceAction::Insert => source.is_some(), DeviceAction::Send => can_send,
+                DeviceAction::Insert => can_insert, DeviceAction::Send => can_send,
             };
             let primary_label = match primary {
                 DeviceAction::Instrument => "Add instrument track",
@@ -849,6 +882,11 @@ impl DawApp {
                 DeviceAction::Insert | DeviceAction::Send => source.and_then(|id| self.project.track(id)).map(|track| {
                     if primary == DeviceAction::Send {
                         if can_send { format!("Send from {}", track.name) } else { "Master cannot send to a return".into() }
+                    } else if let LibraryTarget::Insert { anchor: Some((id, side)), .. } = self.library_target {
+                        track.inserts.iter().find(|slot| slot.id == id).map(|slot| {
+                            let position = if side == daw_ui::EffectInsertSide::Before { "Before" } else { "After" };
+                            format!("{position} {} on {}", slot.name, track.name)
+                        }).unwrap_or_else(|| "Insert no longer available".into())
                     } else { format!("Insert on {}", track.name) }
                 }).unwrap_or_else(|| if pinned.is_some() { "Destination no longer available".into() } else { "Choose a channel to add an effect".into() }),
             };
@@ -872,7 +910,8 @@ impl DawApp {
                 });
             }
             if !compact_height || !has_filters { daw_ui::device_browser_results_heading(ui, matches.len(), singular, plural, scan_status.as_deref()); }
-            let catalog_width = width - if sidebar > 0.0 { sidebar + PANE_GAP } else { 0.0 } - if details > 0.0 { details + PANE_GAP } else { 0.0 };
+            let panes = daw_ui::BrowserPanes::new(ui, egui::Id::new("device_browser_panes"), [sidebar, details], CATALOG_MIN_WIDTH);
+            let catalog_width = panes.center_width;
             let layout = if state.list { daw_ui::device_list_layout(catalog_width) } else { daw_ui::device_grid_layout(catalog_width) };
             let reflowed = state.grid_columns != layout.columns;
             state.grid_columns = layout.columns;
@@ -902,7 +941,7 @@ impl DawApp {
             let mut grid = None;
             let mut sidebar_rect = None;
             let mut details_rect = None;
-            daw_ui::bounded_panes(ui, "library_panes", body_height, [sidebar, details], |pane, ui| match pane {
+            panes.show(ui, body_height, |pane, ui| match pane {
                 0 => {
                     sidebar_rect = Some(ui.max_rect());
                     egui::ScrollArea::vertical().id_salt("library_sidebar").auto_shrink([false, false]).show(ui, |ui| {
@@ -922,7 +961,7 @@ impl DawApp {
                         let card = if state.list { let detail = if item.categories.is_empty() { kind_label(&entry.plugin).to_owned() } else { item.categories.join(" · ") }; daw_ui::device_row(ui, &device, &detail, width) } else { daw_ui::device_card(ui, &device, width) };
                         if step != 0 && selected { card.request_focus(); }
                         if card.response.clicked() { state.selected = Some(entry.fingerprint.clone()); }
-                        card.response.context_menu(|ui| {
+                        daw_ui::context_menu(&card.response, |ui| {
                             if daw_ui::button(ui, if item.favorite { "Remove from favorites" } else { "Add to favorites" }).clicked() { edit = Some(LibraryEdit::Favorite(entry.plugin.clone(), !item.favorite)); ui.close(); }
                             if daw_ui::button(ui, "Details").clicked() { summary_request = Some(entry.clone()); ui.close(); }
                         });
@@ -985,9 +1024,9 @@ impl DawApp {
                         daw_ui::action_menu(ui, "More", |ui| {
                             let Some(item) = selected else { return; }; let entry = item.entry;
                             if state.kind == LibrarySection::Unknown {
-                                if ui.add_enabled(!assign || assignment_target.is_some(), daw_ui::button_widget(if assign { "Try replacing instrument" } else if matches!(self.library_target, LibraryTarget::Insert(_) | LibraryTarget::Send(_)) { "Try as new instrument track" } else { "Try as instrument" })).on_hover_text("Type is unverified; the isolated host will validate the device").clicked() { action = Some((entry.plugin.clone(), if assign { DeviceAction::Assign } else { DeviceAction::Instrument })); ui.close(); }
+                                if ui.add_enabled(!assign || assignment_target.is_some(), daw_ui::button_widget(if assign { "Try replacing instrument" } else if matches!(self.library_target, LibraryTarget::Insert { .. } | LibraryTarget::Send(_)) { "Try as new instrument track" } else { "Try as instrument" })).on_hover_text("Type is unverified; the isolated host will validate the device").clicked() { action = Some((entry.plugin.clone(), if assign { DeviceAction::Assign } else { DeviceAction::Instrument })); ui.close(); }
                                 let send = matches!(self.library_target, LibraryTarget::Send(_));
-                                if ui.add_enabled(if send { can_send } else { source.is_some() }, daw_ui::button_widget(if send { "Try as send effect" } else { "Try as effect" })).on_hover_text("Try this unverified device on the destination channel; the isolated host will validate its type").clicked() { action = Some((entry.plugin.clone(), if send { DeviceAction::Send } else { DeviceAction::Insert })); ui.close(); }
+                                if ui.add_enabled(if send { can_send } else { can_insert }, daw_ui::button_widget(if send { "Try as send effect" } else { "Try as effect" })).on_hover_text("Try this unverified device on the destination channel; the isolated host will validate its type").clicked() { action = Some((entry.plugin.clone(), if send { DeviceAction::Send } else { DeviceAction::Insert })); ui.close(); }
                                 if daw_ui::button(ui, "Inspect device").on_hover_text("Show identification and validation details for the unverified device").clicked() { diagnostic_request = Some(device_diagnostics(entry)); ui.close(); }
                             }
                             if state.kind == LibrarySection::Instrument && !assign && let Some(track) = assignment_target.and_then(|id| self.project.track(id)) && daw_ui::button(ui, format!("Replace instrument on {}", track.name)).on_hover_text(action_hint(DeviceAction::Assign)).clicked() { action = Some((entry.plugin.clone(), DeviceAction::Assign)); ui.close(); }
@@ -1195,6 +1234,17 @@ impl DawApp {
             }) else {
                 return;
             };
+            let index = if action == DeviceAction::Insert {
+                let Some(index) = self
+                    .library_target
+                    .insert_index(self.project.track(source).unwrap())
+                else {
+                    return;
+                };
+                index
+            } else {
+                0
+            };
             self.begin_edit();
             let track = if action == DeviceAction::Send {
                 self.project.add_bus(format!("{} return", plugin.name))
@@ -1202,7 +1252,11 @@ impl DawApp {
                 source
             };
             let slot = EffectSlot::new(&plugin.name, crate::builtin_devices::effect(&plugin));
-            self.project.track_mut(track).unwrap().inserts.push(slot);
+            self.project
+                .track_mut(track)
+                .unwrap()
+                .inserts
+                .insert(index, slot);
             if action == DeviceAction::Send
                 && let Err(error) = self.project.add_send(source, track, 0.25, false)
             {
@@ -1253,12 +1307,8 @@ impl DawApp {
                 // track at the end.
                 let _ = self.project.reorder_track(id, after, TrackPlacement::After);
             }
-            let clip = Clip::midi(
-                "New pattern",
-                self.snapped(self.cursor).max(0.0),
-                4.0,
-                Vec::new(),
-            );
+            let (start, length) = self.initial_pattern_bounds(self.snapped(self.cursor));
+            let clip = Clip::midi("New pattern", start, length, Vec::new());
             self.selected_clip = Some(clip.id);
             self.project.track_mut(id).unwrap().clips.push(clip);
             id

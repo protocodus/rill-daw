@@ -47,9 +47,9 @@ pub fn selection_item_context_menu<R>(
     let open = ui.is_enabled()
         && ui.rect_contains_pointer(rect)
         && ui.input(|input| input.pointer.button_clicked(egui::PointerButton::Secondary));
-    egui::Popup::context_menu(&response)
-        .open_memory(open.then_some(egui::SetOpenCommand::Bool(true)))
-        .show(contents)
+    let popup = egui::Popup::context_menu(&response)
+        .open_memory(open.then_some(egui::SetOpenCommand::Bool(true)));
+    crate::show_menu(popup, contents)
 }
 
 /// Left/right follows time; up/down follows rows and prefers overlapping time.

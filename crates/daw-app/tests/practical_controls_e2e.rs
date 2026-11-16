@@ -195,7 +195,6 @@ fn fixture(app: &mut Harness, compact: bool, automated: bool) -> (u64, u64, Opti
     let source = project.add_audio_track("Precise channel");
     project.track_mut(source).unwrap().gain = 0.75;
     project.track_mut(source).unwrap().pan = 0.173456;
-    project.track_mut(source).unwrap().collapsed = compact;
     project.add_audio_track("Other channel");
     let bus = project.add_bus("Room");
     project.add_send(source, bus, 8.0, false).unwrap();
@@ -219,6 +218,9 @@ fn fixture(app: &mut Harness, compact: bool, automated: bool) -> (u64, u64, Opti
     let path = app.directory.path().join("practical-controls.rill");
     project.save(&path).unwrap();
     app.command(json!({"command":"open","path":path}));
+    if compact {
+        app.set_track_density("Compact");
+    }
     (source, bus, automation)
 }
 
@@ -287,7 +289,7 @@ fn mixer_pan_exact_entry_shows_range_defers_commit_and_rejects_invalid_values() 
 }
 
 #[test]
-fn compact_header_gain_and_pan_have_exact_entry_without_expanding_the_track() {
+fn compact_density_keeps_precise_gain_and_pan_controls_on_the_expanded_track() {
     let mut app = Harness::new();
     let (source, _, _) = fixture(&mut app, true, false);
     app.command(json!({"command":"viewport","width":1100,"height":720}));
@@ -303,7 +305,7 @@ fn compact_header_gain_and_pan_have_exact_entry_without_expanding_the_track() {
         track(&gained, source)["gain"].as_f64().unwrap(),
         10_f64.powf(-18.125 / 20.0),
     );
-    assert_eq!(track(&gained, source)["collapsed"], true);
+    assert_eq!(track(&gained, source)["collapsed"], false);
     assert_eq!(channel(&gained, "timeline", source)["compact"], true);
     assert_eq!(gained["selected_track"], original["selected_track"]);
     let gain = open_control(&mut app, "timeline", source, "gain");
@@ -314,7 +316,7 @@ fn compact_header_gain_and_pan_have_exact_entry_without_expanding_the_track() {
     draft(&mut app, &before_pan, "12.345");
     let panned = app.click("Apply value");
     near(track(&panned, source)["pan"].as_f64().unwrap(), 0.12345);
-    assert_eq!(track(&panned, source)["collapsed"], true);
+    assert_eq!(track(&panned, source)["collapsed"], false);
     assert_eq!(undo(&mut app)["project"], gained["project"]);
     assert_eq!(undo(&mut app)["project"], original["project"]);
     app.quit();

@@ -328,7 +328,7 @@ fn source_disclosure_does_not_select_and_project_drop_stays_visible() {
 }
 
 #[test]
-fn search_keyboard_and_clear_fit_narrow_panes_without_widening() {
+fn search_and_clear_fit_narrow_panes_without_widening() {
     for width in [260.0, 420.0] {
         let ctx = context();
         let mut query = "warm analog".to_owned();
@@ -341,14 +341,16 @@ fn search_keyboard_and_clear_fit_narrow_panes_without_widening() {
             "Search expands parent: {rect:?}"
         );
         let labels = daw_ui::icon_only_labels(&ctx);
-        for expected in ["Clear search", "Keyboard"] {
-            let (_, rect) = labels.iter().find(|(label, _)| label == expected).unwrap();
-            assert!(rect.width() >= 33.9 && rect.height() >= 33.9);
-            assert!(
-                rect.right() <= width - 7.9,
-                "{expected} leaves search pane: {rect:?}"
-            );
-        }
+        assert!(labels.iter().all(|(label, _)| label != "Keyboard"));
+        let (_, clear) = labels
+            .iter()
+            .find(|(label, _)| label == "Clear search")
+            .unwrap();
+        assert!(clear.width() >= 33.9 && clear.height() >= 33.9);
+        assert!(
+            clear.right() <= width - 7.9,
+            "Clear search leaves pane: {clear:?}"
+        );
         assert!(paint.shapes.iter().any(|shape| matches!(&shape.shape, egui::Shape::Text(text) if text.galley.text().contains("12 samples"))));
     }
 }

@@ -25,13 +25,9 @@ fn browser(app: &mut Harness) {
 }
 
 fn configure_root(app: &mut Harness, root: &Path, count: usize) {
-    app.click("Folders…");
-    app.click("Sample folder path");
-    app.command(json!({"command":"text","text":root}));
-    let added = app.click("Add folder");
+    let added = app.add_sample_folder(root);
     assert_eq!(added["library"]["indexed"], 0);
     assert_eq!(added["library"]["scanning"], false);
-    app.click("Done");
     app.click("Scan folders");
     common::wait_until(app, |state| {
         state["library"]["indexed"] == count && state["library"]["scanning"] == false
@@ -120,7 +116,7 @@ fn captured_load_waits_for_commit_and_preserves_selection_on_cancel_or_failure()
     let mut app = Harness::with_audio_import_helper(&helper, 20_000);
     app.command(json!({"command":"viewport","width":1280,"height":900}));
     let track = seed_sampler(&mut app, None);
-    let root = app.directory.path().join("Library");
+    let root = app.directory.path().canonicalize().unwrap().join("Library");
     std::fs::create_dir(&root).unwrap();
     let source = root.join("Waiting tone.wav");
     tone(&source, 440.0);
@@ -274,7 +270,7 @@ fn loading_preview_can_be_stopped_before_the_decoder_finishes() {
     let (_gate, helper, started, release) = decoder_gate();
     let mut app = Harness::with_audio_import_helper_and_virtual_audio(&helper, 20_000);
     app.command(json!({"command":"viewport","width":1280,"height":900}));
-    let root = app.directory.path().join("Library");
+    let root = app.directory.path().canonicalize().unwrap().join("Library");
     std::fs::create_dir(&root).unwrap();
     let source = root.join("Slow preview.wav");
     tone(&source, 440.0);
@@ -323,7 +319,7 @@ fn focused_preview_keys_and_metadata_retry_never_edit_the_song_or_scan() {
     let mut app = Harness::with_virtual_audio(None, None);
     app.command(json!({"command":"viewport","width":1280,"height":900}));
     seed_sampler(&mut app, None);
-    let root = app.directory.path().join("Library");
+    let root = app.directory.path().canonicalize().unwrap().join("Library");
     std::fs::create_dir(&root).unwrap();
     let first = root.join("A tone.wav");
     let second = root.join("B tone.wav");

@@ -89,7 +89,6 @@ fn all_audio_clips_have_non_destructive_handles_including_compact_reverse_and_st
         *reverse = true;
     }
     let reversed_id = reversed.id;
-    project.track_mut(other).unwrap().collapsed = true;
     project.track_mut(other).unwrap().mute = true;
     project.track_mut(other).unwrap().clips.push(reversed);
     let before = open(&mut app, &project);

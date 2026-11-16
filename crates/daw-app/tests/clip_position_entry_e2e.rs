@@ -145,26 +145,6 @@ fn row_control(state: &Value, row: &str, symbol: Option<&str>) -> Value {
         .clone()
 }
 
-fn enter_mouse(app: &mut Harness, row: &str, value: &str, before: &Value) -> Value {
-    let state = app.inspect();
-    click_rect(app, &row_control(&state, row, Some("123")));
-    front(app, "Clear");
-    for digit in value.chars() {
-        unchanged(&front(app, &digit.to_string()), before);
-    }
-    unchanged(&front(app, "Apply value"), before);
-    let staged = app.inspect();
-    assert!(
-        staged["visible_labels"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|label| label == "Apply position"),
-        "Applying a nested keypad must retain the position draft and its commit action"
-    );
-    staged
-}
-
 fn type_field(app: &mut Harness, row: &str, value: &str) -> Value {
     let state = app.inspect();
     let (x, y) = center(&row_control(&state, row, None));
@@ -175,38 +155,16 @@ fn type_field(app: &mut Harness, row: &str, value: &str) -> Value {
 }
 
 #[test]
-fn cancelling_a_keypad_retains_the_staged_position_for_mouse_apply() {
+fn bar_steps_keep_fractional_beats_and_commit_with_apply_position() {
     let start = 1.234_567_891_234;
     let (mut app, id, _) = fixture(7, start, 800);
     let before = app.inspect();
     open_position(&mut app, id, 7);
-    enter_mouse(&mut app, "Bar", "5", &before);
-    for escape in [false, true] {
+    for _ in 0..4 {
         let state = app.inspect();
-        click_rect(&mut app, &row_control(&state, "Beat in bar", Some("123")));
-        front(&mut app, "Clear");
-        unchanged(&front(&mut app, "3"), &before);
-        let cancelled = if escape {
-            app.key("Escape")
-        } else {
-            front(&mut app, "Cancel")
-        };
-        unchanged(&cancelled, &before);
-        let staged = app.inspect();
-        assert!(
-            staged["visible_labels"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|label| label == "Apply position"),
-            "Cancelling the keypad with {} must return to the staged position",
-            if escape { "Escape" } else { "Cancel" }
-        );
-        assert_eq!(row_control(&staged, "Bar", None)["text"], "5");
-        assert_eq!(
-            row_control(&staged, "Beat in bar", None)["text"],
-            "2.234567891",
-            "Cancelling a keypad must discard only that keypad's draft"
+        unchanged(
+            &click_rect(&mut app, &row_control(&state, "Bar", Some("+"))),
+            &before,
         );
     }
     let staged = app.inspect();
@@ -244,18 +202,13 @@ fn rounded_position_caption_carries_without_retiming_the_untouched_draft() {
     unchanged(&front(&mut app, "Start position"), &before);
     let blurred = app.inspect();
     assert_eq!(row_control(&blurred, "Beat in bar", None)["text"], "4.999");
-    click_rect(&mut app, &row_control(&blurred, "Beat in bar", Some("123")));
-    let keypad = app.inspect();
-    unchanged(&keypad, &before);
     assert!(
-        keypad["visible_labels"]
+        !blurred["visible_labels"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|label| label == "4.9990000000000006"),
-        "The keypad must expose the same exact staged value"
+            .any(|label| label == "123")
     );
-    unchanged(&front(&mut app, "Apply value"), &before);
     unchanged(&front(&mut app, "Apply position"), &before);
     assert_eq!(
         clip(&app.inspect(), id)["start"]
@@ -306,20 +259,20 @@ fn untouched_cancelled_and_invalid_bar_beat_drafts_do_not_edit_exact_positions()
         unchanged(&app.key("Escape"), &before);
 
         open_position(&mut app, id, meter);
-        enter_mouse(&mut app, "Bar", "5", &before);
+        unchanged(&type_field(&mut app, "Bar", "5"), &before);
         unchanged(&front(&mut app, "Cancel"), &before);
         app.quit();
     }
 }
 
 #[test]
-fn mouse_bar_beat_placement_is_one_undoable_move_and_duplicate_still_appends_the_phrase() {
+fn exact_bar_beat_placement_is_one_undoable_move_and_duplicate_still_appends_the_phrase() {
     for meter in [3, 7] {
         let (mut app, id, ghost) = fixture(meter, 1.234_567_891_234, 1100);
         let before = app.inspect();
         open_position(&mut app, id, meter);
-        enter_mouse(&mut app, "Bar", "5", &before);
-        enter_mouse(&mut app, "Beat in bar", "1.125", &before);
+        unchanged(&type_field(&mut app, "Bar", "5"), &before);
+        unchanged(&type_field(&mut app, "Beat in bar", "1.125"), &before);
         let applied = front(&mut app, "Apply position");
         assert_eq!(clip(&applied, id)["start"], f64::from(meter) * 4.0 + 0.125);
         for field in ["length", "offset", "source_rate", "content", "link_group"] {

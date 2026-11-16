@@ -35,6 +35,7 @@ impl DawApp {
         self.assistant.known_parameters.clear();
         self.assistant.cancel_all_tools();
         self.tool_joins.cancel();
+        self.ghost_change = None;
         self.song_session.reset();
     }
 
@@ -43,6 +44,8 @@ impl DawApp {
     pub(crate) fn tool_block_reason(&self) -> Option<&'static str> {
         if self.recording_busy() {
             Some("Finish recording before continuing")
+        } else if self.ghost_change.is_some() {
+            Some("Choose how to apply the change to linked copies")
         } else if self.document_guard.is_some() || self.project_io_pending() {
             Some("Finish the current document operation first")
         } else if self.state_sync_pending() {
@@ -356,6 +359,17 @@ impl DawApp {
         check_sample_size(&sample.path)?;
         let mut candidate = self.project.clone();
         let track = candidate.add_instrument_track(sample.name.clone());
+        let (start, length) = self.initial_pattern_bounds(self.snapped(self.cursor));
+        candidate
+            .track_mut(track)
+            .unwrap()
+            .clips
+            .push(daw_core::Clip::midi(
+                "New pattern",
+                start,
+                length,
+                Vec::new(),
+            ));
         candidate
             .set_instrument(
                 track,
@@ -442,6 +456,154 @@ fn validate_changed_sample_layout(
     Ok(())
 }
 
+fn result_id(reference: &EntityRef, result: &EditResult) -> Option<u64> {
+    match reference {
+        EntityRef::Id(id) => Some(*id),
+        EntityRef::Key(key) => result
+            .created
+            .iter()
+            .find(|entity| entity.key.as_ref() == Some(key))
+            .map(|entity| entity.id),
+    }
+}
+
+impl DawApp {
+    fn guard_batch_ghost_changes(
+        &mut self,
+        batch: &EditBatch,
+        result: &EditResult,
+        candidate: &Project,
+    ) -> Result<(), ToolError> {
+        use std::collections::{HashMap, HashSet};
+        if !self
+            .project
+            .tracks
+            .iter()
+            .flat_map(|track| &track.clips)
+            .any(|clip| clip.link_group.is_some())
+        {
+            return Ok(());
+        }
+        let resolve = |reference: &EntityRef| result_id(reference, result);
+        let deleted: HashSet<_> = batch
+            .edits
+            .iter()
+            .filter_map(|edit| match edit {
+                SongEdit::DeleteClip { clip, .. } => resolve(clip),
+                _ => None,
+            })
+            .collect();
+        // Track and clip deletions intentionally remove occurrences. For every
+        // other edit, follow stable clip IDs even if they move between tracks.
+        let surviving: HashMap<_, _> = candidate
+            .tracks
+            .iter()
+            .flat_map(|t| &t.clips)
+            .map(|clip| (clip.id, clip.link_group))
+            .collect();
+        let mut affected = Vec::new();
+        for track in &self.project.tracks {
+            if candidate.track(track.id).is_some() {
+                affected.extend(
+                    track
+                        .clips
+                        .iter()
+                        .filter(|clip| {
+                            clip.link_group.is_some()
+                                && !deleted.contains(&clip.id)
+                                && surviving.get(&clip.id) != Some(&clip.link_group)
+                        })
+                        .map(|clip| (track.id, clip.id)),
+                );
+            }
+        }
+        // Comping a passage can leave the old clip ID on a shortened piece
+        // while the replacement for the edited passage has a different source.
+        for edit in &batch.edits {
+            if let SongEdit::SelectAudioTake {
+                track,
+                group,
+                range,
+                ..
+            } = edit
+                && let Some((track, group)) = resolve(track).zip(resolve(group))
+            {
+                affected.extend(
+                    self.project
+                        .audio_take_regions(track, group)
+                        .into_iter()
+                        .filter(|clip| range.is_none_or(|(a, b)| clip.start < b && clip.end() > a))
+                        .map(|clip| (track, clip.id)),
+                );
+            }
+        }
+        if affected.is_empty() {
+            return Ok(());
+        }
+        let explicit_unlink = batch.edits.iter().any(|edit| match edit {
+            SongEdit::MakeIndependent { track, clip } => resolve(track)
+                .zip(resolve(clip))
+                .is_some_and(|target| !self.ghost_peers(&[target]).is_empty()),
+            _ => false,
+        });
+        if !explicit_unlink && self.ghost_peers(&affected).is_empty() {
+            return Ok(());
+        }
+        if let Some(scope) = self.assistant.executing_scope {
+            scope.validate_candidate(&self.project, candidate)?;
+        }
+        let tip = match batch.edits.as_slice() {
+            [
+                SongEdit::MakeIndependent {
+                    track: EntityRef::Id(track),
+                    clip: EntityRef::Id(clip),
+                },
+            ] => {
+                self.confirm_unlink(*track, *clip);
+                "Choose how to apply Make independent in the Linked copies dialog."
+            }
+            [
+                SongEdit::JoinMidiClips {
+                    track: EntityRef::Id(track),
+                    clips,
+                    ..
+                },
+            ] => {
+                let ids = clips.iter().filter_map(resolve).collect();
+                self.submit_midi_join(*track, ids).map_err(failure)?;
+                "Choose how to join the linked clips in the Linked copies dialog."
+            }
+            [
+                SongEdit::GroupAudioTakes {
+                    track: EntityRef::Id(track),
+                    clip_ids,
+                    ..
+                },
+            ] => {
+                self.group_existing_audio_takes(*track, clip_ids.clone())
+                    .map_err(failure)?;
+                "Choose how to group the takes in the Linked copies dialog."
+            }
+            [
+                SongEdit::SelectAudioTake {
+                    track: EntityRef::Id(track),
+                    group: EntityRef::Id(group),
+                    source: EntityRef::Id(source),
+                    range,
+                    crossfade_beats,
+                },
+            ] => {
+                self.use_audio_take(*track, *group, *source, *range, *crossfade_beats);
+                "Choose how to edit the take in the Linked copies dialog."
+            }
+            _ => {
+                "This edit would disconnect linked copies. Choose Make independent for the affected occurrence, confirm its scope, and retry the batch with the new revision. Join and take edits can also be submitted individually."
+            }
+        };
+        Err(ToolError::new("confirmation_required", tip))
+    }
+}
+
 impl SongToolHost for DawApp {
     fn project(&self) -> &Project {
         &self.project
@@ -460,6 +622,7 @@ impl SongToolHost for DawApp {
                     .map(|info| info.frames as f64 / f64::from(info.sample_rate))
             })
             .map_err(failure)?;
+        self.guard_batch_ghost_changes(&batch, &result, &candidate)?;
         // An explicit override/resume is authoritative for its lane within
         // this atomic batch, regardless of operation order or unchanged value.
         let explicit_lanes: Vec<_> = batch
@@ -469,14 +632,7 @@ impl SongToolHost for DawApp {
                 let SongEdit::SetAutomationOverride { track, .. } = edit else {
                     return None;
                 };
-                match track {
-                    EntityRef::Id(id) => Some(*id),
-                    EntityRef::Key(key) => result
-                        .created
-                        .iter()
-                        .find(|entity| entity.key.as_ref() == Some(key))
-                        .map(|entity| entity.id),
-                }
+                result_id(track, &result)
             })
             .collect();
         self.commit_song_candidate_with_automation_intent(

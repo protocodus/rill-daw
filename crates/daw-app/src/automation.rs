@@ -77,6 +77,10 @@ enum Command {
     MidiError,
     OutputError,
     OutputXrun,
+    CpuSample {
+        total: u8,
+        cores: Vec<u8>,
+    },
     FeedInput {
         channels: u16,
         samples: Vec<f32>,
@@ -252,6 +256,7 @@ enum TestDocumentDialog {
     Open,
     Import,
     ImportAudio,
+    SampleFolder,
     Export,
     ExportMidi,
     ExportStems,
@@ -963,6 +968,17 @@ impl Harness {
         self.painted_text.clear();
         self.painted_images.clear();
         match command {
+            Command::CpuSample { total, cores } => {
+                ensure!(
+                    total <= 100
+                        && (1..=4096).contains(&cores.len())
+                        && cores.iter().all(|p| *p <= 100),
+                    "Invalid system CPU sample"
+                );
+                self.app.cpu_monitor =
+                    crate::cpu_monitor::CpuMonitor::fixed(daw_ui::CpuLoad::Sample { total, cores });
+                self.settle();
+            }
             Command::SongTool { name, arguments } => {
                 let result = self.execute_tool_wait(&name, arguments);
                 self.tool_result = Some(match result {
@@ -1253,6 +1269,7 @@ impl Harness {
                         TestDocumentDialog::Open => DocumentDialog::Open,
                         TestDocumentDialog::Import => DocumentDialog::Import,
                         TestDocumentDialog::ImportAudio => DocumentDialog::ImportAudio,
+                        TestDocumentDialog::SampleFolder => DocumentDialog::SampleFolder,
                         TestDocumentDialog::Export => DocumentDialog::Export,
                         TestDocumentDialog::ExportMidi => DocumentDialog::ExportMidi,
                         TestDocumentDialog::ExportStems => DocumentDialog::ExportStems,

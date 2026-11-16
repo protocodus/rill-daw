@@ -333,7 +333,7 @@ fn linked_midi_edits_cannot_change_other_occurrences_without_explicit_independen
         )],
     );
     unchanged(&denied, &initial);
-    let independent = run(
+    let pending = run(
         &mut app,
         vec![edits(
             &denied,
@@ -342,6 +342,12 @@ fn linked_midi_edits_cannot_change_other_occurrences_without_explicit_independen
             ]),
         )],
     );
+    unchanged(&pending, &denied);
+    assert_eq!(
+        pending["assistant"]["last_tool_error"]["code"],
+        "confirmation_required"
+    );
+    let independent = app.click("Apply and disconnect");
     assert!(clip(&independent, channel, selected)["link_group"].is_null());
     assert_eq!(
         clip(&independent, channel, linked),
@@ -933,5 +939,56 @@ fn deleting_the_pinned_target_cancels_pending_parameter_work_without_widening_sc
     );
     assert_eq!(finished["assistant"]["busy"], false);
     assert!(!finished["assistant"]["last_tool_error"].is_null());
+    app.quit();
+}
+
+#[test]
+fn song_batches_hold_linked_join_inputs_until_confirmed_and_allow_explicit_deletion() {
+    let mut app = Harness::new();
+    let mut song = Project::new();
+    let track = song.add_midi_track("Linked joins");
+    let head = Clip::midi("Head", 0.0, 2.0, vec![]);
+    let tail = Clip::midi("Tail", 2.0, 1.0, vec![]);
+    let (head_id, tail_id) = (head.id, tail.id);
+    song.track_mut(track).unwrap().clips = vec![head, tail];
+    let ghost = song.clone_clip(track, head_id).unwrap();
+    song.move_clip(track, ghost, 8.0).unwrap();
+    let file = app.directory.path().join("batch-ghosts.rill");
+    song.save(&file).unwrap();
+    let initial = app.command(json!({"command":"open","path":file}));
+    let submit = |app: &mut Harness, edits: Value| {
+        app.command(json!({"command":"song_tool","name":"apply_edits","arguments":{"session_id":initial["song_session"]["id"],"expected_revision":initial["song_session"]["revision"],"label":"Join request","edits":edits}}))
+    };
+    let join = json!({"op":"join_midi_clips","track":track,"clips":[head_id,tail_id]});
+    let batch = submit(
+        &mut app,
+        json!([{"op":"rename_song","name":"Changed"},join]),
+    );
+    assert_eq!(
+        batch["tool_result"]["error"]["code"],
+        "confirmation_required"
+    );
+    assert_eq!(batch["project"], initial["project"]);
+    assert!(!visible(&batch, "Propagate change"));
+    let single = submit(&mut app, json!([join]));
+    assert_eq!(
+        single["tool_result"]["error"]["code"],
+        "confirmation_required"
+    );
+    assert_eq!(single["project"], initial["project"]);
+    assert!(visible(&single, "Propagate change"));
+    assert_eq!(app.click("Cancel")["project"], initial["project"]);
+    let deleted = submit(
+        &mut app,
+        json!([{"op":"delete_clip","track":track,"clip":ghost}]),
+    );
+    assert_eq!(deleted["tool_result"]["ok"], true);
+    assert_eq!(
+        deleted["project"]["tracks"][0]["clips"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
     app.quit();
 }

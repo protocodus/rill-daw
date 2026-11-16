@@ -50,7 +50,7 @@ pub fn sample_actions(ui: &mut Ui, loaded: bool, audible: bool) -> Option<Sample
     action
 }
 
-/// Explicit naming with the shared text editor and optional pointer keyboard.
+/// Explicit naming with the shared text editor.
 /// Empty names ask the owner to restore its automatic source-derived label.
 pub fn sample_name_editor(ui: &mut Ui, current: &str, hint: &str) -> Option<String> {
     let button = crate::button(ui, "Rename…");

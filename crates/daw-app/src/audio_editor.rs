@@ -2142,19 +2142,20 @@ impl DawApp {
                 state.tool.hint()
             });
         let mut new_cursor = None;
+        let menu_beat_id = response.id.with("audio_menu_beat");
         if response.secondary_clicked()
             && let Some(pointer) = response.interact_pointer_pos()
         {
             let raw = state.view.beat_at(canvas, pointer.x);
             let snapped = snap(raw).0.clamp(clip.start, clip.end());
             ui.ctx()
-                .data_mut(|data| data.insert_temp(ui.id().with("audio_menu_beat"), snapped));
+                .data_mut(|data| data.insert_temp(menu_beat_id, snapped));
         }
         if !navigation.navigating && !strip_open {
-            response.context_menu(|ui| {
+            daw_ui::context_menu(&response, |ui| {
                 let menu_beat = ui
                     .ctx()
-                    .data(|data| data.get_temp::<f64>(ui.id().with("audio_menu_beat")))
+                    .data(|data| data.get_temp::<f64>(menu_beat_id))
                     .unwrap_or(self.cursor);
                 if ui
                     .add_enabled(
@@ -2505,6 +2506,9 @@ impl DawApp {
             state.preview.clear();
             state.preview_source = None;
             state.preview_file = None;
+            edit = None;
+        }
+        if matches!(edit, Some(Edit::Unlink)) && self.confirm_unlink(track, clip.id) {
             edit = None;
         }
         if let Some(edit) = edit {

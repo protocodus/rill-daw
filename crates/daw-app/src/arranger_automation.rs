@@ -8,7 +8,7 @@ use eframe::egui::{self, Pos2, Rect, Vec2};
 pub(crate) enum AutomationEdit {
     Clear,
     Curve(Option<u64>, CurveEdit),
-    Create(f64, f64),
+    Create(f64),
     Bounds(u64, f64, f64, f64),
     Stretch(AutomationClip, f64),
     Split(u64, f64),
@@ -43,11 +43,11 @@ pub(crate) struct LaneView {
     /// Resolved snap step in beats; zero is off.
     pub snap: f64,
     pub tool: daw_ui::EditorTool,
-    /// Length for a pattern from the context menu: the last selected clip's.
-    pub new_length: f64,
     /// The playhead, for Split at cursor.
     pub cursor: f64,
     pub color: egui::Color32,
+    /// Channel color for the thin overview, when the track is folded.
+    pub collapsed_color: Option<egui::Color32>,
     pub navigating: bool,
     pub pointer_blocked: bool,
 }
@@ -59,8 +59,8 @@ pub(crate) struct LaneResponse {
     pub cursor: Option<f64>,
     /// A plain click on the lane background; two make a new pattern.
     pub background_click: Option<Pos2>,
-    /// A click on a pattern; two rename it.
-    pub clip_click: Option<(u64, Pos2)>,
+    /// Pattern, pointer position and whether the click landed on its title.
+    pub clip_click: Option<(u64, Pos2, bool)>,
     pub command: Option<LaneCommand>,
     pub diagnostic: serde_json::Value,
 }
@@ -69,6 +69,7 @@ pub(crate) struct LaneResponse {
 struct PatternDrag {
     original: AutomationClip,
     edge: i8,
+    press_x: f32,
 }
 
 fn rect_json(rect: Rect) -> serde_json::Value {
@@ -115,6 +116,11 @@ pub(crate) fn automation_lane(
     lane: &AutomationLane,
     selected: &mut Option<u64>,
 ) -> LaneResponse {
+    // A scrolled pattern keeps its full time coordinates, but painting and hit
+    // testing belong exclusively to the timeline side of the track divider.
+    let mut canvas_ui = ui.new_child(egui::UiBuilder::new().max_rect(view.rect));
+    canvas_ui.set_clip_rect(ui.clip_rect().intersect(view.rect));
+    let ui = &mut canvas_ui;
     let mut result = LaneResponse {
         edits: Vec::new(),
         interacted: false,
@@ -127,7 +133,9 @@ pub(crate) fn automation_lane(
     let id = egui::Id::new(("arranger_automation", view.track));
     // Like MIDI and audio clips, patterns are selected, moved and trimmed with
     // the other tools; only Pencil draws points.
-    let drawing = view.tool == daw_ui::EditorTool::Pencil && !view.navigating;
+    let drawing = view.collapsed_color.is_none()
+        && view.tool == daw_ui::EditorTool::Pencil
+        && !view.navigating;
     let clip_rect = |clip: &AutomationClip| {
         Rect::from_min_max(
             Pos2::new(view.viewport.x_at(view.rect, clip.start), view.rect.top()),
@@ -144,20 +152,44 @@ pub(crate) fn automation_lane(
                 .iter()
                 .any(|clip| clip_rect(clip).contains(point))
         });
-    let response = daw_ui::automation_canvas_with_segments_at(
-        ui,
-        id,
-        &points(&lane.points),
-        &segments(&lane.points, lane.interpolation),
-        AutomationCanvas {
-            rect: view.rect,
-            viewport: view.viewport,
-            snap: view.snap,
-            color: view.color,
-            editable: drawing && !over_clip,
-        },
-        |beat| lane.arrangement_value_at(beat).unwrap_or(0.5),
-    );
+    let response = if let Some(color) = view.collapsed_color {
+        let marks = lane
+            .points
+            .iter()
+            .filter_map(|point| {
+                let rect = daw_ui::collapsed_track_span(
+                    ui.painter(),
+                    view.rect,
+                    view.viewport,
+                    point.beat,
+                    point.beat,
+                    color,
+                )?;
+                Some((point.id, rect))
+            })
+            .collect();
+        AutomationCanvasResponse {
+            response: ui.interact(view.rect, id, egui::Sense::hover()),
+            points: marks,
+            segments: Vec::new(),
+            edit: None,
+        }
+    } else {
+        daw_ui::automation_canvas_with_segments_at(
+            ui,
+            id,
+            &points(&lane.points),
+            &segments(&lane.points, lane.interpolation),
+            AutomationCanvas {
+                rect: view.rect,
+                viewport: view.viewport,
+                snap: view.snap,
+                color: view.color,
+                editable: drawing && !over_clip,
+            },
+            |beat| lane.arrangement_value_at(beat).unwrap_or(0.5),
+        )
+    };
     if let Some(edit) = response.edit {
         result.edits.push(AutomationEdit::Curve(None, edit));
         *selected = None;
@@ -208,42 +240,37 @@ pub(crate) fn automation_lane(
         });
     }
     if !view.navigating {
-        response.response.context_menu(|ui| {
-            daw_ui::command_menu_contents(ui, |ui| {
-                let beat = ui
-                    .ctx()
-                    .data(|data| data.get_temp::<f64>(id.with("menu_beat")))
-                    .unwrap_or(view.viewport.start_beat);
-                if daw_ui::automation_button(ui, "Create automation clip")
+        daw_ui::context_menu(&response.response, |ui| {
+            let beat = ui
+                .ctx()
+                .data(|data| data.get_temp::<f64>(id.with("menu_beat")))
+                .unwrap_or(view.viewport.start_beat);
+            if daw_ui::automation_button(ui, "Insert clip")
                     .on_hover_text("Derive a pattern from the arrangement curve here, as long as the last selected clip")
                     .clicked()
                 {
-                    result.edits.push(AutomationEdit::Create(
-                        beat,
-                        view.new_length.min(MAX_BEAT - beat),
-                    ));
+                    result.edits.push(AutomationEdit::Create(beat));
                     ui.close();
                 }
-                if daw_ui::automation_button(ui, "Clear arranger points")
-                    .on_hover_text("Keep patterns; use the manual value outside them")
-                    .clicked()
-                {
-                    result.edits.push(AutomationEdit::Clear);
-                    ui.close();
-                }
-                let clipboard = automation_clipboard(ui.ctx());
-                if ui
-                    .add_enabled(
-                        clipboard.is_some(),
-                        daw_ui::button_widget("Paste automation clip"),
-                    )
-                    .clicked()
-                    && let Some(clip) = clipboard
-                {
-                    result.edits.push(AutomationEdit::Paste(clip, beat));
-                    ui.close();
-                }
-            });
+            if daw_ui::automation_button(ui, "Clear arranger points")
+                .on_hover_text("Keep patterns; use the manual value outside them")
+                .clicked()
+            {
+                result.edits.push(AutomationEdit::Clear);
+                ui.close();
+            }
+            let clipboard = automation_clipboard(ui.ctx());
+            if ui
+                .add_enabled(
+                    clipboard.is_some(),
+                    daw_ui::button_widget("Paste automation clip"),
+                )
+                .clicked()
+                && let Some(clip) = clipboard
+            {
+                result.edits.push(AutomationEdit::Paste(clip, beat));
+                ui.close();
+            }
         });
     }
     let mut clips: Vec<_> = lane.clips.iter().collect();
@@ -255,18 +282,50 @@ pub(crate) fn automation_lane(
             continue;
         }
         let clip_id = id.with(clip.id);
-        let header = daw_ui::automation_pattern_header(
-            ui,
-            clip_id,
-            rect,
-            daw_ui::AutomationPatternHeader {
-                name: &clip.name,
-                linked: clip.link_group.is_some(),
-                selected: *selected == Some(clip.id),
-                color: view.color,
-            },
-            !view.navigating,
-        );
+        let title = view
+            .collapsed_color
+            .is_none()
+            .then(|| daw_ui::clip_title_band(rect, true, ui.pixels_per_point()));
+        let mark = view.collapsed_color.and_then(|color| {
+            daw_ui::collapsed_track_span(
+                ui.painter(),
+                view.rect,
+                view.viewport,
+                clip.start,
+                clip.end(),
+                color,
+            )
+        });
+        let header = if let Some(color) = view.collapsed_color {
+            let Some(mark) = mark else { continue };
+            if *selected == Some(clip.id) {
+                daw_ui::paint_selection_glow(ui.painter(), mark, daw_ui::tokens::RADIUS, color);
+            }
+            let hit = Rect::from_x_y_ranges(mark.x_range(), view.rect.y_range());
+            ui.interact(
+                hit,
+                clip_id,
+                if view.navigating {
+                    egui::Sense::hover()
+                } else {
+                    egui::Sense::click_and_drag()
+                },
+            )
+            .on_hover_text(&clip.name)
+        } else {
+            daw_ui::automation_pattern_header(
+                ui,
+                clip_id,
+                rect,
+                daw_ui::AutomationPatternHeader {
+                    name: &clip.name,
+                    linked: clip.link_group.is_some(),
+                    selected: *selected == Some(clip.id),
+                    color: view.color,
+                },
+                !view.navigating,
+            )
+        };
         let header = header.on_hover_cursor(match view.tool {
             daw_ui::EditorTool::Select => egui::CursorIcon::Grab,
             tool => tool.cursor_icon(),
@@ -278,7 +337,11 @@ pub(crate) fn automation_lane(
         if header.clicked()
             && let Some(position) = header.interact_pointer_pos()
         {
-            result.clip_click = Some((clip.id, position));
+            result.clip_click = Some((
+                clip.id,
+                position,
+                title.is_some_and(|band| band.contains(position)),
+            ));
         }
         let pointer_beat = |position: Pos2| view.viewport.beat_at(view.rect, position.x);
         if header.clicked()
@@ -316,9 +379,9 @@ pub(crate) fn automation_lane(
                 .unwrap_or(rect.center());
             let edge = if view.tool == daw_ui::EditorTool::Stretch {
                 2
-            } else if position.x < rect.left() + 8.0 {
+            } else if view.collapsed_color.is_none() && position.x < rect.left() + 8.0 {
                 -1
-            } else if position.x > rect.right() - 8.0 {
+            } else if view.collapsed_color.is_none() && position.x > rect.right() - 8.0 {
                 1
             } else {
                 0
@@ -328,18 +391,20 @@ pub(crate) fn automation_lane(
                     clip_id.with("drag"),
                     PatternDrag {
                         original: clip.clone(),
+                        press_x: position.x,
                         edge,
                     },
                 )
             });
         }
         if dragging
-            && header.dragged()
+            && (header.dragged() || header.drag_stopped())
             && let Some(drag) = ui
                 .ctx()
                 .data(|data| data.get_temp::<PatternDrag>(clip_id.with("drag")))
         {
-            let delta = header.total_drag_delta().unwrap_or_default().x as f64
+            let delta = (header.interact_pointer_pos().map_or(drag.press_x, |p| p.x) - drag.press_x)
+                as f64
                 / view.viewport.pixels_per_beat as f64;
             let original = drag.original;
             if drag.edge == 2 {
@@ -347,7 +412,21 @@ pub(crate) fn automation_lane(
                 let length = (snap(original.end() + delta) - original.start)
                     .clamp(original.length / 4.0, original.length * 4.0)
                     .min(MAX_BEAT - original.start);
-                if length != clip.length {
+                let shared = original.link_group.is_some_and(|group| {
+                    lane.clips
+                        .iter()
+                        .any(|peer| peer.id != original.id && peer.link_group == Some(group))
+                });
+                if shared && header.dragged() {
+                    let mut preview = rect;
+                    preview.max.x = view.viewport.x_at(view.rect, original.start + length);
+                    ui.painter().rect_stroke(
+                        preview,
+                        0,
+                        (2.0, view.color),
+                        egui::StrokeKind::Inside,
+                    );
+                } else if length != clip.length {
                     result.edits.push(AutomationEdit::Stretch(original, length));
                 }
             } else {
@@ -386,82 +465,83 @@ pub(crate) fn automation_lane(
         if !view.navigating {
             // The same actions, labels and order as audio and MIDI clips,
             // without those that do not apply to automation.
-            header.context_menu(|ui| {
-                daw_ui::command_menu_contents(ui, |ui| {
-                    if daw_ui::button(ui, "Edit automation")
-                        .on_hover_text("Select this clip and the Pencil to draw its points")
+            daw_ui::context_menu(&header, |ui| {
+                if daw_ui::button(ui, "Edit automation")
+                    .on_hover_text("Select this clip and the Pencil to draw its points")
+                    .clicked()
+                {
+                    result.command = Some(LaneCommand::EditAutomation(clip.id));
+                    ui.close();
+                }
+                if daw_ui::button(ui, "Loop playback over clip")
+                    .on_hover_text("Set the loop to this clip's exact bounds and enable looping")
+                    .clicked()
+                {
+                    result
+                        .edits
+                        .push(AutomationEdit::Loop(clip.start, clip.end()));
+                    ui.close();
+                }
+                ui.separator();
+                if daw_ui::button(ui, "Copy").clicked() {
+                    result.command = Some(LaneCommand::Copy(clip.id));
+                    ui.close();
+                }
+                if daw_ui::button(ui, "Duplicate after").clicked() {
+                    result
+                        .edits
+                        .push(AutomationEdit::Copy(clip.id, clip.end(), false));
+                    ui.close();
+                }
+                if daw_ui::button(ui, "Rename…").clicked() {
+                    result.command = Some(LaneCommand::Rename(clip.id));
+                    ui.close();
+                }
+                ui.separator();
+                if ui
+                    .add_enabled(
+                        view.cursor > clip.start && view.cursor < clip.end(),
+                        daw_ui::button_widget("Split at cursor"),
+                    )
+                    .clicked()
+                {
+                    result
+                        .edits
+                        .push(AutomationEdit::Split(clip.id, view.cursor));
+                    ui.close();
+                }
+                if daw_ui::button(ui, "Stretch").clicked() {
+                    result.command = Some(LaneCommand::Stretch(clip.id));
+                    ui.close();
+                }
+                if daw_ui::button(ui, "Ghost copy")
+                    .on_hover_text("Create another clip sharing its points")
+                    .clicked()
+                {
+                    result
+                        .edits
+                        .push(AutomationEdit::Copy(clip.id, clip.end(), true));
+                    ui.close();
+                }
+                if clip.link_group.is_some()
+                    && daw_ui::button(ui, "Make independent")
+                        .on_hover_text("Disconnect this ghost while keeping its current points")
                         .clicked()
-                    {
-                        result.command = Some(LaneCommand::EditAutomation(clip.id));
-                        ui.close();
-                    }
-                    if daw_ui::button(ui, "Loop playback over clip")
-                        .on_hover_text(
-                            "Set the loop to this clip's exact bounds and enable looping",
-                        )
-                        .clicked()
-                    {
-                        result
-                            .edits
-                            .push(AutomationEdit::Loop(clip.start, clip.end()));
-                        ui.close();
-                    }
-                    ui.separator();
-                    if daw_ui::button(ui, "Copy").clicked() {
-                        result.command = Some(LaneCommand::Copy(clip.id));
-                        ui.close();
-                    }
-                    if daw_ui::button(ui, "Duplicate after").clicked() {
-                        result
-                            .edits
-                            .push(AutomationEdit::Copy(clip.id, clip.end(), false));
-                        ui.close();
-                    }
-                    if daw_ui::button(ui, "Rename…").clicked() {
-                        result.command = Some(LaneCommand::Rename(clip.id));
-                        ui.close();
-                    }
-                    ui.separator();
-                    if ui
-                        .add_enabled(
-                            view.cursor > clip.start && view.cursor < clip.end(),
-                            daw_ui::button_widget("Split at cursor"),
-                        )
-                        .clicked()
-                    {
-                        result
-                            .edits
-                            .push(AutomationEdit::Split(clip.id, view.cursor));
-                        ui.close();
-                    }
-                    if daw_ui::button(ui, "Stretch").clicked() {
-                        result.command = Some(LaneCommand::Stretch(clip.id));
-                        ui.close();
-                    }
-                    if daw_ui::button(ui, "Ghost copy")
-                        .on_hover_text("Create another clip sharing its points")
-                        .clicked()
-                    {
-                        result
-                            .edits
-                            .push(AutomationEdit::Copy(clip.id, clip.end(), true));
-                        ui.close();
-                    }
-                    if clip.link_group.is_some()
-                        && daw_ui::button(ui, "Make independent")
-                            .on_hover_text("Disconnect this ghost while keeping its current points")
-                            .clicked()
-                    {
-                        result.edits.push(AutomationEdit::Independent(clip.id));
-                        ui.close();
-                    }
-                    ui.separator();
-                    if daw_ui::button(ui, "Delete").clicked() {
-                        result.edits.push(AutomationEdit::Delete(clip.id));
-                        ui.close();
-                    }
-                });
+                {
+                    result.edits.push(AutomationEdit::Independent(clip.id));
+                    ui.close();
+                }
+                ui.separator();
+                if daw_ui::button(ui, "Delete").clicked() {
+                    result.edits.push(AutomationEdit::Delete(clip.id));
+                    ui.close();
+                }
             });
+        }
+        if let Some(mark) = mark {
+            clip_diagnostics.push(serde_json::json!({"id":clip.id,"rect":rect_json(header.rect),"overview":rect_json(mark),
+                "title_rect":null,"plot":null,"segment_handles":[],"points":[]}));
+            continue;
         }
         let plot = Rect::from_min_max(
             rect.min + Vec2::new(0.0, 23.0_f32.min(rect.height() * 0.4)),
@@ -493,7 +573,7 @@ pub(crate) fn automation_lane(
                 .edits
                 .push(AutomationEdit::Curve(Some(clip.id), edit));
         }
-        clip_diagnostics.push(serde_json::json!({"id":clip.id,"rect":rect_json(rect),"plot":rect_json(plot),"segment_handles":segment_diagnostics(&response.segments),"points":response.points.into_iter().map(|(id,rect)| serde_json::json!({"id":id,"rect":rect_json(rect)})).collect::<Vec<_>>()}));
+        clip_diagnostics.push(serde_json::json!({"id":clip.id,"rect":rect_json(rect.intersect(ui.clip_rect())),"title_rect":title.map(|r| rect_json(r.intersect(ui.clip_rect()))),"plot":rect_json(plot.intersect(ui.clip_rect())),"segment_handles":segment_diagnostics(&response.segments),"points":response.points.into_iter().map(|(id,rect)| serde_json::json!({"id":id,"rect":rect_json(rect)})).collect::<Vec<_>>()}));
     }
     if view.pointer_blocked {
         result.edits.retain(|edit| {
@@ -564,13 +644,15 @@ impl DawApp {
                         }
                     })
             }
-            AutomationEdit::Create(start, length) => self
-                .project
-                .create_automation_clip(track, start, length)
-                .map(|id| {
-                    self.selected_track = Some(track);
-                    self.selected_clip = Some(id);
-                }),
+            AutomationEdit::Create(beat) => {
+                let length = self.last_clip_length;
+                let start = beat.clamp(0.0, MAX_BEAT - length);
+                let id = self.project.create_automation_clip(track, start, length)?;
+                self.arranger_select_clips([], None);
+                self.selected_track = Some(track);
+                self.selected_clip = Some(id);
+                Ok(())
+            }
             AutomationEdit::Copy(id, start, linked) => self
                 .project
                 .copy_automation_clip(track, id, start, linked)

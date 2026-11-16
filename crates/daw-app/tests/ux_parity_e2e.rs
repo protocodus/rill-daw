@@ -101,6 +101,7 @@ fn selected_automation_clips_support_edit_menu_and_keyboard_duplicate_ghost_inde
             },
         )
         .unwrap();
+    project.track_mut(lane).unwrap().collapsed = false;
     let first = project.create_automation_clip(lane, 0.0, 4.0).unwrap();
     let path = app.directory.path().join("auto-clip-commands.rill");
     project.save(&path).unwrap();
@@ -140,7 +141,9 @@ fn selected_automation_clips_support_edit_menu_and_keyboard_duplicate_ghost_inde
     assert!(!clips(&ghosted)[2]["link_group"].is_null());
     assert_eq!(ghosted["selected_clip"], third);
 
-    let detached = menu(&mut app, "Edit", "Make independent");
+    menu(&mut app, "Edit", "Make independent");
+
+    let detached = app.click("Apply and disconnect");
     assert!(clips(&detached)[2]["link_group"].is_null());
     assert_eq!(detached["selected_clip"], third);
 
@@ -200,6 +203,11 @@ fn midi_editor_mouse_nudge_scale_transpose_and_note_context_menu_and_audio_edito
     app.click("Melody");
     menu(&mut app, "Window", "Clip Editor");
     menu(&mut app, "Edit", "Select all notes");
+    app.click("Scale guide C · Major");
+    app.click("Major");
+    if app.click("Natural minor")["native_menu"]["open"] == true {
+        app.key("Escape");
+    }
 
     let up_scale = {
         app.click("Notes");
@@ -300,6 +308,53 @@ fn midi_editor_mouse_nudge_scale_transpose_and_note_context_menu_and_audio_edito
     app.command(
         json!({"command":"pointer", "phase":"click", "x":cx, "y":cy, "button":"secondary"}),
     );
+    let opened = app.command(json!({"command":"inspect","paint":true}));
+    let mut previous = None;
+    for command in ["Split here", "Select clip time", "Clear time selection"] {
+        let row = opened["menu_label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["text"] == command)
+            .unwrap();
+        let left = row["min"][0].as_f64().unwrap();
+        let (_, y) = center(row);
+        if let Some((previous_left, previous_y)) = previous {
+            assert!(
+                f64::abs(left - previous_left) <= 1.0,
+                "Context command labels align"
+            );
+            assert!(
+                (25.0..=30.0).contains(&(y - previous_y)),
+                "Compact command row at {y}, previous {previous_y}"
+            );
+        }
+        previous = Some((left, y));
+        // Inspect actual glyph strokes inside the leading column of each row.
+        assert!(
+            opened["painted_paths"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|path| {
+                    path["points"].as_array().unwrap().iter().all(|point| {
+                        let x = point[0].as_f64().unwrap();
+                        x >= left - 24.0
+                            && x < left
+                            && (point[1].as_f64().unwrap() - y).abs() <= 8.0
+                    })
+                }),
+            "Missing action icon before {command:?}"
+        );
+    }
+    let areas = opened["native_menu"]["foreground_areas"]
+        .as_array()
+        .unwrap();
+    assert!(!areas.is_empty());
+    for rect in areas {
+        let height = rect[3].as_f64().unwrap() - rect[1].as_f64().unwrap();
+        assert!(height <= opened["viewport"][1].as_f64().unwrap() * 0.5 + 1.0);
+    }
     let reversed = app.click("Reverse");
     assert_eq!(
         reversed["project"]["tracks"][1]["clips"][0]["content"]["Audio"]["reverse"],

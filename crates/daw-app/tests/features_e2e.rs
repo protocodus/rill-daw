@@ -365,14 +365,14 @@ fn properties_assign_folder_membership_and_compact_tracks_without_losing_channel
     app.click("Top level");
     let state = click_front(&mut app, "New folder");
     assert_eq!(state["project"]["tracks"][0]["parent_folder"], folder);
-    let state = app.click("Compact track");
+    let state = app.click("Collapse track");
     assert_eq!(state["project"]["tracks"][0]["collapsed"], true);
     app.key("Escape");
-    let state = app.click("New folder");
+    let state = app.click_track_disclosure(folder.as_u64().unwrap());
     assert_eq!(state["project"]["tracks"][1]["collapsed"], true, "{state}");
     assert!(!visible(&state, "New instrument"));
     assert_eq!(state["project"]["tracks"].as_array().unwrap().len(), 2);
-    let state = app.click("New folder");
+    let state = app.click_track_disclosure(folder.as_u64().unwrap());
     assert!(visible(&state, "New instrument"));
     assert_eq!(state["project"]["tracks"][1]["collapsed"], false);
     app.quit();
@@ -861,14 +861,22 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
             .iter()
             .find(|header| header["track"] == *track)
             .unwrap();
-        let rect = if section == "name" {
+        let rect = if matches!(section, "name" | "channel_menu") {
             &header["name"]
         } else {
             &header["sections"][section]
         };
         let x = (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5;
         let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
-        app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}))
+        if section == "channel_menu" {
+            assert!(header["sections"]["details"].is_null());
+            app.command(
+                json!({"command":"pointer","button":"secondary","phase":"click","x":x,"y":y}),
+            );
+            app.click("Channel")
+        } else {
+            app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}))
+        }
     }
     /// One click edits the row's instrument; its context menu changes it.
     fn change_instrument(app: &mut Harness, track: &Value) -> Value {
@@ -937,17 +945,17 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
         original["project"]["tracks"][0]["clips"]
     );
 
-    // The compact row exposes its instrument through the channel-details
-    // button. It must target that row even while the second track is selected.
+    // The collapsed track's context menu still opens its channel while the
+    // other track is selected.
     app.key("Escape");
     menu(&mut app, "Window", "Properties");
     click_front(&mut app, "Track");
-    app.click("Compact track");
+    app.click("Collapse track");
     app.key("Escape");
     let state = click_header(&mut app, &second, "name");
     assert_eq!(state["selected_track"], second);
     let before_replacement = state["project"].clone();
-    let state = click_header(&mut app, &first, "details");
+    let state = click_header(&mut app, &first, "channel_menu");
     assert_only_popup(&state, "properties");
     assert_eq!(state["selected_track"], first);
     // Properties has one tab row; the channel's instrument opens from Window.
@@ -980,7 +988,7 @@ fn midi_header_instrument_picker_targets_its_track_and_replaces_without_adding_t
     let state = menu(&mut app, "Edit", "Redo");
     assert_eq!(state["project"], replaced["project"]);
     menu(&mut app, "Window", "Arranger");
-    click_header(&mut app, &first, "details");
+    click_header(&mut app, &first, "channel_menu");
     menu(&mut app, "Window", "Instrument");
     assert!(visible(&app.inspect(), "Rill Fixture B"));
     app.quit();

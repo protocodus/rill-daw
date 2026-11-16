@@ -5,11 +5,11 @@ use std::ops::RangeInclusive;
 pub struct NumberStepperResponse {
     /// Retains the numeric field's focus/drag response; changed includes a step.
     pub response: Response,
-    /// A successful step or keypad Apply starts a separate editing gesture.
+    /// A successful step or exact value Apply starts a separate editing gesture.
     pub stepped: bool,
 }
 
-/// Keep the caller's numeric editor intact and append bounded steps and a keypad.
+/// Keep the caller's numeric editor intact and append bounded steps. Right-click the field for exact entry.
 /// Steps preserve fractional values. Showing an existing out-of-range value, or
 /// clicking a disabled boundary button, never changes it. The caller continues
 /// to own validation, edit transactions and numeric formatting.
@@ -24,7 +24,7 @@ pub fn number_stepper(
     number_stepper_impl(ui, value, step, range, name, false, field)
 }
 
-/// The same control for counts such as bars. Keypad drafts must be whole
+/// The same control for counts such as bars. Exact-entry drafts must be whole
 /// numbers; Apply never silently rounds a fraction into a different value.
 pub fn number_stepper_integer(
     ui: &mut Ui,
@@ -46,35 +46,44 @@ fn number_stepper_impl(
     whole_numbers: bool,
     field: impl FnOnce(&mut Ui, &mut f64) -> Response,
 ) -> NumberStepperResponse {
-    let (mut stepper, keypad) =
-        number_stepper_controls(ui, value, step, range.clone(), name, field);
+    let mut stepper = number_stepper_controls(ui, value, step, range.clone(), name, field);
+    stepper.response = stepper
+        .response
+        .on_hover_text("Right-click for exact value entry");
     let contents = |ui: &mut Ui| {
-        crate::value_entry::numeric_value_entry(
-            ui,
-            stepper.response.id,
-            *value,
-            range,
-            name,
-            whole_numbers,
-        )
+        crate::widgets::context_menu_contents(ui, |ui| {
+            crate::value_entry::numeric_value_entry(
+                ui,
+                stepper.response.id,
+                *value,
+                range,
+                name,
+                whole_numbers,
+            )
+        })
     };
     let popup = if egui::containers::menu::is_in_menu(ui) {
-        // Native popup memory holds one root popup. A second root would
-        // replace Range and stop painting this field on the next frame.
-        // A submenu retains its caller and inherits the menu close chain.
-        let mut config = egui::containers::menu::MenuConfig::new();
-        config.close_behavior = if keypad.clicked() {
-            // Its provisional sizing area can cover the opening button.
-            egui::PopupCloseBehavior::IgnoreClicks
-        } else {
-            egui::PopupCloseBehavior::CloseOnClickOutside
-        };
-        egui::containers::menu::SubMenu::default()
-            .config(config)
-            .show(ui, &keypad, contents)
+        use egui::containers::menu::{MenuConfig, MenuState, SubMenu};
+        // Preserve the parent menu while editing one of its fields. Only an
+        // explicit right-click opens the submenu, so hovering still permits dragging.
+        let submenu = SubMenu::id_from_widget_id(stepper.response.id);
+        let requested = stepper.response.secondary_clicked();
+        let open = MenuState::from_ui(ui, |state, _| {
+            if requested {
+                state.open_item = Some(submenu);
+            }
+            state.open_item == Some(submenu)
+        });
+        open.then(|| {
+            SubMenu::default()
+                .config(
+                    MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+                )
+                .show(ui, &stepper.response, contents)
+        })
+        .flatten()
     } else {
-        egui::Popup::menu(&keypad)
-            .id(stepper.response.id.with("numeric_keypad"))
+        egui::Popup::context_menu(&stepper.response)
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
             .show(contents)
     };
@@ -90,8 +99,7 @@ fn number_stepper_impl(
 }
 
 /// Reuse the numeric row when its owner stages several fields in one popup.
-/// The owner decides where to show the keypad and how returning from it affects
-/// that draft; the second response is the unchanged, mouse-accessible 123 action.
+/// Staged forms provide their own apply action.
 pub(crate) fn number_stepper_controls(
     ui: &mut Ui,
     value: &mut f64,
@@ -99,7 +107,7 @@ pub(crate) fn number_stepper_controls(
     range: RangeInclusive<f64>,
     name: &str,
     field: impl FnOnce(&mut Ui, &mut f64) -> Response,
-) -> (NumberStepperResponse, Response) {
+) -> NumberStepperResponse {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = crate::tokens::SPACE_XS;
         // DragValue removes its prefix/suffix in text mode. Retain the measured
@@ -115,9 +123,8 @@ pub(crate) fn number_stepper_controls(
         {
             ui.spacing_mut().interact_size.x = original_width.max(width);
         }
-        let mut response = field(ui, value).on_hover_text(format!(
-            "Drag to adjust {name}; use −/+ to step or 123 to enter a value"
-        ));
+        let mut response =
+            field(ui, value).on_hover_text(format!("Drag to adjust {name} or click to type"));
         ui.spacing_mut().interact_size.x = original_width;
         if !response.has_focus() || previous.is_none() {
             ui.data_mut(|data| data.insert_temp(width_id, (response.id, response.rect.width())));
@@ -163,26 +170,7 @@ pub(crate) fn number_stepper_controls(
                 response.mark_changed();
             }
         }
-        let keypad = ui
-            .add(
-                crate::quiet_button_widget("123")
-                    .small()
-                    .min_size(egui::vec2(
-                        crate::tokens::CONTROL_HEIGHT,
-                        crate::layout::control_height(ui),
-                    )),
-            )
-            .on_hover_text(format!(
-                "Open a numeric keypad to enter {name} with the mouse"
-            ));
-        keypad.widget_info(|| {
-            egui::WidgetInfo::labeled(
-                egui::WidgetType::Button,
-                ui.is_enabled(),
-                format!("Enter {name} using mouse"),
-            )
-        });
-        (NumberStepperResponse { response, stepped }, keypad)
+        NumberStepperResponse { response, stepped }
     })
     .inner
 }

@@ -73,6 +73,7 @@ fn fixture(app: &mut Harness) -> (Value, u64, u64) {
             },
         )
         .unwrap();
+    project.track_mut(automation).unwrap().collapsed = false;
     project
         .create_automation_clip(automation, 4.0, 4.0)
         .unwrap();
@@ -332,7 +333,7 @@ fn rename_by_double_click(app: &mut Harness, at: (f64, f64), name: &str) -> Valu
     let editing = pointer(app, "double_click", at, "primary");
     assert_eq!(
         editing["view"], "Arrangement",
-        "double-click never opens an editor"
+        "double-clicking a title opens inline naming"
     );
     assert!(
         editing["visible_labels"]
@@ -348,14 +349,25 @@ fn rename_by_double_click(app: &mut Harness, at: (f64, f64), name: &str) -> Valu
 }
 
 #[test]
-fn double_click_renames_every_clip_kind_and_edit_actions_apply_to_patterns() {
+fn double_click_on_titles_renames_midi_and_automation_and_edit_actions_apply_to_patterns() {
     let mut app = Harness::new();
     let (opened, midi, lane) = fixture(&mut app);
-    let named =
-        rename_by_double_click(&mut app, (x_at(&opened, 1.0), row_y(&opened, midi)), "Riff");
+    let named = rename_by_double_click(
+        &mut app,
+        inside(&opened["timeline"]["clips"][0]["title_rect"], 0.5, 0.5),
+        "Riff",
+    );
     assert_eq!(track(&named, midi)["clips"][0]["name"], "Riff");
     let body = inside(pattern_rect(&named, 0), 0.5, 0.7);
-    let named = rename_by_double_click(&mut app, body, "Swell");
+    let named = rename_by_double_click(
+        &mut app,
+        inside(
+            &named["timeline"]["automation"][0]["clips"][0]["title_rect"],
+            0.5,
+            0.5,
+        ),
+        "Swell",
+    );
     assert_eq!(patterns(&named, lane)[0]["name"], "Swell");
     assert_eq!(track(&named, midi)["clips"].as_array().unwrap().len(), 1);
 
@@ -405,8 +417,15 @@ fn renaming_a_ghost_pattern_renames_its_linked_copies() {
     pointer(&mut app, "click", body, "secondary");
     let ghost = app.click("Ghost copy");
     assert_eq!(patterns(&ghost, lane).len(), 2);
-    let renamed =
-        rename_by_double_click(&mut app, inside(pattern_rect(&ghost, 1), 0.5, 0.7), "Echo");
+    let renamed = rename_by_double_click(
+        &mut app,
+        inside(
+            &ghost["timeline"]["automation"][0]["clips"][1]["title_rect"],
+            0.5,
+            0.5,
+        ),
+        "Echo",
+    );
     let clips = patterns(&renamed, lane);
     assert_eq!(clips[0]["name"], "Echo");
     assert_eq!(clips[1]["name"], "Echo");
@@ -450,5 +469,75 @@ fn a_patterns_edit_automation_selects_it_for_drawing_in_place() {
     assert_eq!(editing["timeline"]["tool"], "Pencil");
     assert_eq!(editing["view"], "Arrangement");
     assert_eq!(editing["project"], opened["project"]);
+    app.quit();
+}
+
+#[test]
+fn opening_an_automation_clip_edits_its_own_source_curve() {
+    let mut app = Harness::new();
+    let (before, _, lane) = fixture(&mut app);
+    let body = inside(pattern_rect(&before, 0), 0.5, 0.8);
+    let opened = pointer(&mut app, "double_click", body, "primary");
+    let clip = &patterns(&before, lane)[0];
+    assert_eq!(opened["popups"]["automation"], true);
+    assert_eq!(opened["automation_editor"]["clip"], clip["id"]);
+    assert_eq!(opened["selected_clip"], clip["id"]);
+    assert_eq!(opened["project"], before["project"]);
+    let editor = &opened["automation_editor"];
+    let x = editor["plot"]["min"][0].as_f64().unwrap()
+        + (1.0 - editor["start_beat"].as_f64().unwrap())
+            * editor["pixels_per_beat"].as_f64().unwrap();
+    let (_, y) = inside(&editor["plot"], 0.5, 0.7);
+    let edited = pointer(&mut app, "click", (x, y), "primary");
+    assert_eq!(
+        track(&edited, lane)["automation"]["points"],
+        track(&before, lane)["automation"]["points"]
+    );
+    let points = patterns(&edited, lane)[0]["points"].as_array().unwrap();
+    assert_eq!(points.len(), clip["points"].as_array().unwrap().len() + 1);
+    assert_eq!(points[1]["beat"], 1.0);
+    let back = app.click("Back");
+    assert_eq!(back["popups"]["automation"], false);
+    assert_eq!(back["selected_clip"], clip["id"]);
+    app.click("Edit");
+    assert_eq!(app.click("Undo")["project"], before["project"]);
+    app.quit();
+}
+
+#[test]
+fn a_short_clip_keeps_distinct_title_and_body_targets() {
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    let midi = project.add_midi_track("Keys");
+    let clip = Clip::midi("Cue", 2.0, 0.25, vec![]);
+    let id = clip.id;
+    project.track_mut(midi).unwrap().clips.push(clip);
+    let path = app.directory.path().join("short-clip.rill");
+    project.save(&path).unwrap();
+    let before = app.command(json!({"command":"open","path":path}));
+    let layout = &before["timeline"]["clips"][0];
+    let width =
+        layout["rect"]["max"][0].as_f64().unwrap() - layout["rect"]["min"][0].as_f64().unwrap();
+    assert!(width <= 20.0);
+    let boundary = layout["title_rect"]["max"][1].as_f64().unwrap();
+    let x = inside(&layout["rect"], 0.5, 0.5).0;
+    pointer(&mut app, "click", (x, boundary - 1.0), "primary");
+    let crossed = pointer(&mut app, "click", (x, boundary + 1.0), "primary");
+    assert_eq!(crossed["view"], "Arrangement");
+    assert!(
+        !crossed["visible_labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| label == "Apply name")
+    );
+    let body = inside(&layout["content_rect"], 0.5, 0.75);
+    let editing = pointer(&mut app, "double_click", body, "primary");
+    assert_eq!(editing["view"], "Clip");
+    assert_eq!(editing["selected_clip"], id);
+    let returned = app.click("Back");
+    let title = inside(&returned["timeline"]["clips"][0]["title_rect"], 0.5, 0.5);
+    let named = rename_by_double_click(&mut app, title, "Short cue");
+    assert_eq!(track(&named, midi)["clips"][0]["name"], "Short cue");
     app.quit();
 }

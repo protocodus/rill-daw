@@ -640,3 +640,26 @@ fn timeline_click_resize_move_draw_snap_and_seek_have_independent_history() {
     assert_range(&recalled, 8.5, 10.0, true);
     app.quit();
 }
+
+#[test]
+fn loop_context_commands_use_the_clicked_grid_position_and_undo_independently() {
+    let mut app = Harness::new();
+    app.sixteenth_snap();
+    for (beat, label, start, end) in [
+        (2.12, "Start loop here", 2.0, 16.0),
+        (4.11, "End loop here", 2.0, 4.0),
+        (6.12, "Start loop here", 6.0, 6.25),
+    ] {
+        let before = app.inspect();
+        let (x, y) = lane_point(&before, beat);
+        let menu = app
+            .command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
+        assert_eq!(menu["project"], before["project"]);
+        let after = app.click(label);
+        assert_range(&after, start, end, true);
+        assert_eq!(after["timeline"]["cursor"], before["timeline"]["cursor"]);
+        assert_eq!(edit(&mut app, "Undo")["project"], before["project"]);
+        assert_eq!(edit(&mut app, "Redo")["project"], after["project"]);
+    }
+    app.quit();
+}

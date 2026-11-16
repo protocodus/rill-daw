@@ -247,10 +247,15 @@ fn mixer_arranger_navigation_reveals_distant_tracks_inside_collapsed_folders_wit
         app.click("Setup");
         app.key("Escape");
         let restored = app.inspect();
-        assert_eq!(
-            channel(&restored, target)["name"],
-            channel(&panned, target)["name"]
-        );
+        let restored_name = &channel(&restored, target)["name"];
+        let panned_name = &channel(&panned, target)["name"];
+        for edge in ["min", "max"] {
+            assert_eq!(restored_name[edge][0], panned_name[edge][0]);
+        }
+        assert!(!inside_x(
+            restored_name,
+            &restored["mixer"]["reorder_viewport"]
+        ));
         unchanged(&restored, &initial);
         app.quit();
     }

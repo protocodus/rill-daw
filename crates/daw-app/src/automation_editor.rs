@@ -6,6 +6,7 @@ use eframe::egui;
 #[derive(Clone, Default)]
 struct EditorState {
     track: Option<u64>,
+    clip: Option<u64>,
     point: Option<u64>,
     viewport: TimelineViewport,
     fitted: bool,
@@ -40,9 +41,11 @@ impl DawApp {
         let mut state = ctx
             .data_mut(|data| data.get_temp::<EditorState>(key))
             .unwrap_or_default();
-        if state.track != self.selected_track {
+        let clip = self.automation_editor_clip;
+        if state.track != self.selected_track || state.clip != clip {
             state = EditorState {
                 track: self.selected_track,
+                clip,
                 ..Default::default()
             };
             if let Some(lane) = self
@@ -50,7 +53,15 @@ impl DawApp {
                 .and_then(|id| self.project.track(id))
                 .and_then(|t| t.automation.as_ref())
             {
-                state.point = lane.points.first().map(|p| p.id);
+                state.point = match clip {
+                    Some(id) => lane
+                        .clips
+                        .iter()
+                        .find(|clip| clip.id == id)
+                        .and_then(|clip| clip.points.first()),
+                    None => lane.points.first(),
+                }
+                .map(|point| point.id);
             }
         }
         let mut open = true;
@@ -74,10 +85,22 @@ impl DawApp {
         let Some(track) = self.project.track(id) else {
             return;
         };
-        let Some(lane) = track.automation.clone() else {
+        let Some(lane) = track.automation.as_ref() else {
             return;
         };
-        let track_name = track.name.clone();
+        let clip_id = state.clip;
+        let (lane, name) = if let Some(clip_id) = clip_id {
+            let Some(clip) = lane.clips.iter().find(|clip| clip.id == clip_id) else {
+                self.close_popup();
+                return;
+            };
+            (
+                clip.source_lane(lane.target),
+                format!("{} · {}", clip.name, track.name),
+            )
+        } else {
+            (lane.clone(), track.name.clone())
+        };
         let scope = daw_tools::ToolScope::Automation {
             track_id: lane.target.track,
             lane_id: id,
@@ -86,10 +109,13 @@ impl DawApp {
         daw_ui::action_row(
             ui,
             |ui| {
-                open_ai = daw_ui::contextual_ai_button(ui, &scope.label(&self.project)).clicked();
+                if clip_id.is_none() {
+                    open_ai =
+                        daw_ui::contextual_ai_button(ui, &scope.label(&self.project)).clicked();
+                }
             },
             |ui| {
-                daw_ui::text::truncated(ui, daw_ui::text::TextRole::Subtitle, &track_name);
+                daw_ui::text::truncated(ui, daw_ui::text::TextRole::Subtitle, &name);
             },
         );
         if open_ai {
@@ -115,15 +141,19 @@ impl DawApp {
             daw_ui::choice(ui, "automation_interpolation", &mut interpolation, &modes)
                 .on_hover_text("Choose how values change between automation points: held steps, straight lines, smooth transitions or adjustable splines");
             ui.separator();
-            daw_ui::checkbox(ui, &mut enabled, "Enabled").on_hover_text(
+            if clip_id.is_none() {
+                daw_ui::checkbox(ui, &mut enabled, "Enabled").on_hover_text(
                 "Enable or bypass this automation lane during playback; its points are preserved",
             );
-            daw_ui::automation_badge(ui, automation_state);
-            ui.separator();
+                daw_ui::automation_badge(ui, automation_state);
+                ui.separator();
+            }
             // View and lane actions trail; the gesture caption fills the
             // space between, so no separate hint band takes plot height.
             daw_ui::toolbar_trailing(ui, AUTOMATION_TRAILING_WIDTH, |ui| {
-                fit_song = daw_ui::curve_fit_song_button(ui).clicked();
+                if clip_id.is_none() {
+                    fit_song = daw_ui::curve_fit_song_button(ui).clicked();
+                }
                 fit |= daw_ui::curve_fit_points_button(ui).clicked();
                 if let Some(caption) = daw_ui::editor_status_caption(
                     ui,
@@ -137,10 +167,15 @@ impl DawApp {
         });
         if interpolation != lane.interpolation || enabled == track.mute {
             self.begin_edit();
-            let track = self.project.track_mut(id).unwrap();
-            track.mute = !enabled;
-            track.automation.as_mut().unwrap().interpolation = interpolation;
-            self.changed();
+            let result = self.project.edit_automation_pattern(id, clip_id, |source| {
+                source.interpolation = interpolation;
+                Ok(())
+            });
+            if result.is_ok() {
+                self.project.track_mut(id).unwrap().mute = !enabled;
+                self.changed();
+            }
+            self.message(result, "");
         }
         let points: Vec<_> = lane
             .points
@@ -167,7 +202,7 @@ impl DawApp {
             .collect();
         let response = daw_ui::curve_timeline_editor_with_fit(
             ui,
-            egui::Id::new(("automation_curve", id)),
+            egui::Id::new(("automation_curve", id, clip_id)),
             &points,
             &segments,
             lane.override_value
@@ -328,7 +363,7 @@ impl DawApp {
         let rect = |rect: egui::Rect| serde_json::json!({"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]});
         ui.ctx().data_mut(|data| {
             data.insert_temp(egui::Id::new("automation_editor_diagnostics"), serde_json::json!({
-            "plot":rect(response.plot_rect), "start_beat":state.viewport.start_beat,
+            "clip":clip_id, "plot":rect(response.plot_rect), "start_beat":state.viewport.start_beat,
             "pixels_per_beat":state.viewport.pixels_per_beat,
             "end_beat":state.viewport.beat_at(response.plot_rect,response.plot_rect.right()),
             "point_beat_rect":point_beat_rect.map(rect), "point_beat":displayed_beat,
@@ -344,7 +379,9 @@ impl DawApp {
         });
         if let Some((point, curve)) = segment_edit {
             self.begin_edit();
-            let result = self.project.set_automation_point_curve(id, point, curve);
+            let result = self
+                .project
+                .edit_automation_pattern(id, clip_id, |lane| lane.set_point_curve(point, curve));
             if result.is_ok() {
                 self.edit_label = Some("Automation slope".into());
                 self.changed();
@@ -356,15 +393,19 @@ impl DawApp {
             let result = match edit {
                 CurveEdit::Add { x, value } => self
                     .project
-                    .upsert_automation_point(id, x, value)
+                    .edit_automation_pattern(id, clip_id, |lane| lane.upsert_point(x, value))
                     .map(|point| state.point = Some(point)),
                 CurveEdit::Move {
                     id: point,
                     x,
                     value,
-                } => self.project.move_automation_point(id, point, x, value),
+                } => self
+                    .project
+                    .edit_automation_pattern(id, clip_id, |lane| lane.move_point(point, x, value)),
                 CurveEdit::Bend { id: point, curve } => {
-                    self.project.set_automation_point_curve(id, point, curve)
+                    self.project.edit_automation_pattern(id, clip_id, |lane| {
+                        lane.set_point_curve(point, curve)
+                    })
                 }
                 CurveEdit::Delete { id: point } => {
                     let selected = if delete_selection {
@@ -372,17 +413,18 @@ impl DawApp {
                     } else {
                         vec![point]
                     };
-                    selected
-                        .into_iter()
-                        .try_for_each(|point| {
-                            self.project.remove_automation_point(id, point).map(|_| ())
+                    self.project
+                        .edit_automation_pattern(id, clip_id, |lane| {
+                            selected
+                                .into_iter()
+                                .try_for_each(|point| lane.remove_point(point).map(|_| ()))
                         })
                         .map(|_| state.point = None)
                 }
                 CurveEdit::Interpolation { id: point, mode } => {
                     self.project.set_automation_point_interpolation(
                         id,
-                        None,
+                        clip_id,
                         point,
                         match mode {
                             daw_ui::CurveInterpolation::Step => Interpolation::Step,

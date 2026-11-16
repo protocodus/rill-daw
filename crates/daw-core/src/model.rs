@@ -176,6 +176,9 @@ pub struct Track {
     pub name: String,
     pub kind: TrackKind,
     pub color: [u8; 3],
+    /// Optional identity glyph. Older songs use the icon associated with their track kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<TrackIcon>,
     pub gain: f32,
     /// Linear input/trim gain before inserts; `gain` remains the output fader.
     #[serde(default = "unity_gain")]
@@ -238,6 +241,19 @@ pub enum TrackKind {
     Bus,
     Folder,
     Automation,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TrackIcon {
+    Note,
+    Microphone,
+    Drum,
+    Percussion,
+    Instrument,
+    Waveform,
+    Effect,
+    Star,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -802,6 +818,7 @@ impl Track {
             name: name.into(),
             kind,
             color: crate::track_colors::DEFAULT_TRACK_COLOR,
+            icon: None,
             gain: if matches!(kind, TrackKind::Bus | TrackKind::Folder) {
                 1.0
             } else {
@@ -825,7 +842,7 @@ impl Track {
             sends: Vec::new(),
             output_bus: None,
             parent_folder: None,
-            collapsed: false,
+            collapsed: kind == TrackKind::Automation,
             automation: None,
             audio_input: (kind == TrackKind::Audio).then(crate::AudioInputChannels::default),
             midi_input: (kind == TrackKind::Midi).then_some(crate::MidiInputChannel::All),

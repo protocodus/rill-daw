@@ -8,6 +8,8 @@ use std::hash::Hash;
 pub const TRACK_HEADER_WIDTH: f32 = 233.0 + 55.0;
 pub const TRACK_HEADER_HEIGHT: f32 = 144.0;
 pub const TRACK_HEADER_COMPACT_HEIGHT: f32 = 89.0;
+/// A deliberately collapsed row keeps just its identity and disclosure.
+pub const TRACK_HEADER_COLLAPSED_HEIGHT: f32 = tokens::COMPACT_HEIGHT;
 /// A folder row shows only its identity line: name, Mute, Solo and actions.
 pub const TRACK_HEADER_FOLDER_HEIGHT: f32 = tokens::CONTROL_HEIGHT + tokens::SPACE_SM;
 
@@ -21,7 +23,7 @@ pub struct TrackHeaderLayout {
     pub identity: Rect,
     pub icon: Rect,
     pub name: Rect,
-    pub reorder: Rect,
+    pub reorder: Option<Rect>,
     pub disclosure: Option<Rect>,
     pub bus_badge: Option<Rect>,
     pub record_arm: Option<Rect>,
@@ -33,16 +35,27 @@ pub struct TrackHeaderLayout {
     pub device: Option<Rect>,
     pub details: Option<Rect>,
     pub compact: bool,
+    collapsed: bool,
 }
 
 impl TrackHeaderLayout {
     pub fn new(rect: Rect) -> Self {
+        Self::layout(rect, false)
+    }
+
+    pub fn collapsed(rect: Rect) -> Self {
+        Self::layout(rect, true)
+    }
+
+    fn layout(rect: Rect, collapsed: bool) -> Self {
         let rect = if rect.is_finite() && rect.is_positive() {
             rect
         } else {
             Rect::from_min_size(egui::Pos2::ZERO, Vec2::ZERO)
         };
-        let vertical_padding = if rect.height() >= TRACK_HEADER_COMPACT_HEIGHT {
+        let vertical_padding = if collapsed {
+            0.0
+        } else if rect.height() >= TRACK_HEADER_COMPACT_HEIGHT {
             tokens::SPACE_SM
         } else if rect.height() >= tokens::CONTROL_HEIGHT * 2.0 {
             tokens::SPACE_XS
@@ -63,20 +76,31 @@ impl TrackHeaderLayout {
         );
         // Keep the normal grip easy to see without stealing the minimum
         // legible title width from the compact header's action slots.
-        let reorder = end_slot(
+        let reorder = (!collapsed && identity.width() >= tokens::SPACE_XL * 2.0).then(|| {
+            end_slot(
+                identity,
+                if rect.width() >= 223.0 {
+                    tokens::COMPACT_HEIGHT
+                } else {
+                    tokens::SPACE_MD
+                },
+            )
+        });
+        let disclosure = start_slot(
             identity,
-            if rect.width() >= 223.0 {
+            if rect.width() >= 168.0 {
                 tokens::COMPACT_HEIGHT
             } else {
                 tokens::SPACE_MD
             },
         );
-        let icon = start_slot(identity, tokens::SPACE_MD);
-        let name_left = (icon.right() + tokens::SPACE_SM).min(reorder.left());
-        let name_right = (reorder.left() - tokens::SPACE_SM).max(name_left);
+        let icon_left = (disclosure.right() + tokens::SPACE_XS).min(identity.right());
+        let icon = start_slot(identity.with_min_x(icon_left), tokens::SPACE_MD);
+        let end = reorder.map_or(identity.right(), |grip| grip.left() - tokens::SPACE_SM);
+        let name_left = (icon.right() + tokens::SPACE_SM).min(identity.right());
         let name = Rect::from_min_max(
             egui::pos2(name_left, identity.top()),
-            egui::pos2(name_right, identity.bottom()),
+            egui::pos2(end.max(name_left), identity.bottom()),
         );
         let (meter_width, meter_gap) = if rect.width() >= 233.0 {
             (tokens::SPACE_LG, tokens::SPACE_SM)
@@ -95,7 +119,8 @@ impl TrackHeaderLayout {
             } else {
                 tokens::SPACE_XS
             };
-        let body_fits = body_right - left >= 179.0
+        let body_fits = !collapsed
+            && body_right - left >= 179.0
             && rect.height() >= 56.0
             && mix_top + mix_height <= rect.bottom() - vertical_padding;
         let mix = body_fits.then(|| {
@@ -115,16 +140,17 @@ impl TrackHeaderLayout {
             routing.translate(egui::vec2(0.0, tokens::COMPACT_HEIGHT + tokens::SPACE_XS))
         });
         // Without a body the identity line is the whole row: center it.
-        let (identity, icon, name, reorder) = if mix.is_none() {
+        let (identity, disclosure, icon, name, reorder) = if mix.is_none() {
             let shift = egui::vec2(0.0, rect.center().y - identity.center().y);
             (
                 identity.translate(shift),
+                disclosure.translate(shift),
                 icon.translate(shift),
                 name.translate(shift),
-                reorder.translate(shift),
+                reorder.map(|rect| rect.translate(shift)),
             )
         } else {
-            (identity, icon, name, reorder)
+            (identity, disclosure, icon, name, reorder)
         };
         let meter = mix.map(|mix| {
             Rect::from_min_max(
@@ -139,7 +165,7 @@ impl TrackHeaderLayout {
             icon,
             name,
             reorder,
-            disclosure: None,
+            disclosure: disclosure.is_positive().then_some(disclosure),
             bus_badge: None,
             record_arm: None,
             effects: None,
@@ -150,6 +176,7 @@ impl TrackHeaderLayout {
             device,
             details: None,
             compact: !expanded,
+            collapsed,
         };
         if !expanded && identity.height() >= tokens::SPACE_MD {
             layout.details = layout.reserve_name_end(tokens::COMPACT_HEIGHT);
@@ -165,7 +192,7 @@ impl TrackHeaderLayout {
         self
     }
 
-    /// Channels keep their effects one click away at every row height.
+    /// Expanded channels reserve an effects button when their identity can fit it.
     pub fn with_effects(mut self) -> Self {
         if self.identity.height() >= tokens::COMPACT_HEIGHT {
             self.effects = self.reserve_name_end(tokens::COMPACT_HEIGHT);
@@ -186,37 +213,19 @@ impl TrackHeaderLayout {
         self
     }
 
-    pub fn with_folder_disclosure(mut self) -> Self {
-        if self.name.width() >= tokens::SPACE_LG + tokens::SPACE_MD + tokens::SPACE_XS {
-            self.disclosure = Some(self.icon);
-            self.icon = self
-                .icon
-                .translate(egui::vec2(tokens::SPACE_MD + tokens::SPACE_XS, 0.0));
-            self.name.min.x = self.icon.right() + tokens::SPACE_SM;
-        }
-        self
-    }
-
     /// Hierarchy affects identity only. A shared right-hand indentation limit
     /// prevents deeply nested folder titles from appearing to the right of
     /// their children when their different action slots start to constrain text.
     pub fn with_depth(mut self, depth: usize) -> Self {
-        let possible_actions = self.reorder.width()
+        let possible_actions = self.reorder.map_or(0.0, |rect| rect.width())
             + tokens::SPACE_SM
             + tokens::COMPACT_HEIGHT
             + tokens::SPACE_SM
             + tokens::SPACE_XL
             + tokens::SPACE_SM;
-        // The related disclosure/icon pair uses a five-point gap; the title
-        // keeps eight. Its extra slot is narrower than one hierarchy step,
-        // so a child title remains visibly indented beyond its folder title.
-        let folder_name_start = self.identity.left()
-            + tokens::SPACE_MD
-            + tokens::SPACE_XS
-            + tokens::SPACE_MD
-            + tokens::SPACE_SM;
+        // All kinds reserve the same disclosure, icon and title prefix.
         let common_limit =
-            (self.identity.right() - possible_actions - tokens::SPACE_LG).max(folder_name_start);
+            (self.identity.right() - possible_actions - tokens::SPACE_LG).max(self.name.left());
         let name_limit = (self.name.right() - tokens::SPACE_LG).min(common_limit);
         let shift =
             (depth.min(32) as f32 * tokens::SPACE_LG).min((name_limit - self.name.left()).max(0.0));
@@ -242,7 +251,7 @@ impl TrackHeaderLayout {
     }
 
     fn reserve_name_end(&mut self, width: f32) -> Option<Rect> {
-        if self.name.width() < width + tokens::SPACE_SM + tokens::SPACE_LG {
+        if self.collapsed || self.name.width() < width + tokens::SPACE_SM + tokens::SPACE_LG {
             return None;
         }
         let slot = end_slot(self.name, width);
@@ -263,8 +272,55 @@ pub struct TrackHeaderIdentity<'a> {
     pub name: &'a str,
     pub icon: Icon,
     pub tint: Color32,
-    pub folder: bool,
-    pub collapsed: bool,
+}
+
+/// Add editable name, color and icon rows to a track properties form.
+pub fn track_identity_fields<T: Copy + PartialEq>(
+    ui: &mut Ui,
+    name: &mut String,
+    color: &mut [u8; 3],
+    icon: &mut Option<T>,
+    choices: &[(T, &str, Icon)],
+    default_icon: Icon,
+    focus_name: bool,
+) -> bool {
+    let label = crate::form_label(ui, "Name");
+    let field = crate::form_text_field(ui, name, "Track name").labelled_by(label.id);
+    if focus_name {
+        field.request_focus();
+        crate::widgets::select_field_text(ui, field.id, name);
+    }
+    let mut changed = field.changed();
+    ui.end_row();
+
+    let label = crate::form_label(ui, "Color");
+    changed |= crate::color_edit(ui, color).labelled_by(label.id).changed();
+    ui.end_row();
+
+    let label = crate::form_label(ui, "Icon");
+    let selected = choices.iter().find(|(value, _, _)| Some(*value) == *icon);
+    let (caption, glyph) = selected.map_or(("Track type", default_icon), |(_, label, glyph)| {
+        (*label, *glyph)
+    });
+    crate::control_row(ui, |ui| {
+        crate::form_select("track_icon", caption)
+            .show_ui(ui, |ui| {
+                changed |= crate::selectable_value(ui, icon, None, "Track type").changed();
+                for &(value, label, _) in choices {
+                    changed |= crate::selectable_value(ui, icon, Some(value), label).changed();
+                }
+            })
+            .response
+            .labelled_by(label.id);
+        let (preview, _) = ui.allocate_exact_size(Vec2::splat(tokens::SPACE_LG), Sense::hover());
+        glyph.paint(
+            ui.painter(),
+            preview,
+            theme::readable_track_color(ui.ctx(), *color),
+        );
+    });
+    ui.end_row();
+    changed
 }
 
 /// Identity stays a single legible line. The host reuses these bounds for name
@@ -275,18 +331,6 @@ pub fn paint_track_header_identity(
     identity: TrackHeaderIdentity<'_>,
 ) -> Rect {
     let painter = painter.with_clip_rect(painter.clip_rect().intersect(layout.identity));
-    if let Some(disclosure) = layout.disclosure.filter(|_| identity.folder) {
-        (if identity.collapsed {
-            Icon::ChevronRight
-        } else {
-            Icon::ChevronDown
-        })
-        .paint(
-            &painter,
-            centered_icon(disclosure, tokens::SPACE_MD),
-            theme::palette(painter.ctx()).muted,
-        );
-    }
     identity.icon.paint(
         &painter,
         centered_icon(layout.icon, tokens::SPACE_MD),
@@ -294,6 +338,26 @@ pub fn paint_track_header_identity(
     );
     text::paint_row(&painter, layout.name, text::TextRole::Label, identity.name);
     layout.name
+}
+
+/// Independent button for the row's disclosure. Its pointer and keyboard
+/// targets remain separate from track identity editing and reordering.
+pub fn track_header_disclosure_at(
+    ui: &mut Ui,
+    rect: Rect,
+    id: impl Hash,
+    collapsed: bool,
+    label: &str,
+) -> Response {
+    let glyph = if collapsed {
+        Icon::ChevronRight
+    } else {
+        Icon::ChevronDown
+    };
+    let tint = theme::palette(ui.ctx()).text;
+    track_header_action_at(ui, rect, id, glyph, label, tint)
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text(label)
 }
 
 /// A bounded section row with a stable label column and a readable destination.

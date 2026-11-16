@@ -116,7 +116,7 @@ pub fn native_context_menu_ui(ui: &mut egui::Ui, items: &[NativeMenuItem]) -> Op
                 ui.separator();
             }
             NativeMenuItem::Submenu { label, items } => {
-                ui.menu_button(label, |ui| {
+                crate::menu_button(ui, label, |ui| {
                     if let Some(id) = native_context_menu_ui(ui, items) {
                         selected = Some(id);
                     }

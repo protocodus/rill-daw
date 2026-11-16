@@ -154,6 +154,7 @@ fn clicks_drags_and_double_clicks_extend_only_the_selected_stretched_ghost_bound
     undo_redo(&mut app, &before, &dragged);
 
     app.click("Select");
+    enter(&mut app, "click", 7.0, 66, None);
     let before = app.inspect();
     let doubled = enter(&mut app, "double_click", 9.0, 68, None);
     near(&note(&doubled, selected, 68, 8.25)["length"], 1.5);
@@ -189,7 +190,7 @@ fn clicks_drags_and_double_clicks_extend_only_the_selected_stretched_ghost_bound
 }
 
 #[test]
-fn mouse_length_choices_use_the_meter_and_apply_to_all_note_entry_tools() {
+fn mouse_length_choices_use_the_meter_for_pencil_and_multidraw() {
     let (mut app, _, selected) = open(false, 3);
     let baseline = app.inspect();
     let drawing = app.click("Length last");
@@ -214,7 +215,7 @@ fn mouse_length_choices_use_the_meter_and_apply_to_all_note_entry_tools() {
     choose_length(&mut app, "1/8 note");
     app.click("Select");
     let state = enter(&mut app, "double_click", 8.0, 62, None);
-    near(&note(&state, selected, 62, 8.0)["length"], 0.5);
+    near(&note(&state, selected, 62, 8.0)["length"], 0.25);
 
     choose_length(&mut app, "1/2 note");
     app.click("Multi-draw");

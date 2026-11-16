@@ -53,10 +53,7 @@ fn roots_are_indexed_only_on_request_and_cached_tree_is_searchable_after_restart
     std::fs::write(drums.join("Readme.txt"), "not audio").unwrap();
     let initial = library(&mut app);
     assert_eq!(initial["library"]["indexed"], 0);
-    app.click("Folders…");
-    app.click("Sample folder path");
-    app.command(json!({"command":"text","text":root}));
-    let added = app.click("Add folder");
+    let added = app.add_sample_folder(&root);
     assert_eq!(
         added["library"]["indexed"], 0,
         "adding a root must not scan"
@@ -68,7 +65,6 @@ fn roots_are_indexed_only_on_request_and_cached_tree_is_searchable_after_restart
             .join("config/sample-index.json")
             .exists()
     );
-    app.click("Done");
     app.click("Scan folders");
     let scanned = common::wait_until(&mut app, |state| {
         state["library"]["indexed"] == 2 && state["library"]["scanning"] == false
@@ -189,11 +185,7 @@ fn click_rightmost(app: &mut Harness, label: &str) -> Value {
     app.command(json!({"command":"pointer","phase":"click","x":(rect["min"][0].as_f64().unwrap()+rect["max"][0].as_f64().unwrap())/2.0,"y":(rect["min"][1].as_f64().unwrap()+rect["max"][1].as_f64().unwrap())/2.0}))
 }
 fn configure_root(app: &mut Harness, root: &Path) {
-    app.click("Folders…");
-    app.click("Sample folder path");
-    app.command(json!({"command":"text","text":root}));
-    app.click("Add folder");
-    app.click("Done");
+    app.add_sample_folder(root);
     app.click("Scan folders");
     common::wait_until(app, |state| {
         state["library"]["indexed"].as_u64().unwrap_or(0) > 0
@@ -239,14 +231,8 @@ fn global_external_favorites_edit_search_and_survive_root_removal_and_restart() 
             && state["library"]["favorite_busy"] == false
     });
     app.click("Edit tag…");
-    click_rightmost(&mut app, "Keyboard");
-    app.click("Caps");
-    app.click("P");
-    app.click("Caps");
-    for key in ["u", "n", "c", "h", "y"] {
-        app.click(key);
-    }
-    app.click("Done");
+    app.click("Optional label");
+    app.command(json!({"command":"text","text":"Punchy"}));
     app.command(json!({"command":"click","label":"Star","occurrence":1}));
     app.click("Drum");
     // Edit the actual native color picker beside its visible label.
@@ -283,7 +269,7 @@ fn global_external_favorites_edit_search_and_survive_root_removal_and_restart() 
     app.click("Clear search");
     app.click("Folders…");
     app.click("Remove folder");
-    app.click("Done");
+    app.key("Escape");
     let only = app.click("Favorites");
     assert_eq!(only["library"]["total"], 1);
     assert_eq!(only["library"]["favorites"][0], favorite);
@@ -468,7 +454,7 @@ fn folder_scope_keeps_sources_stable_and_search_can_expand_without_rescanning() 
     let scoped = app.click("Drums");
     assert_eq!(
         scoped["library"]["scope"],
-        format!("folder:{}", drums.display())
+        format!("folder:{}", drums.canonicalize().unwrap().display())
     );
     assert_eq!(
         scoped["library"]["total"], 2,
@@ -593,7 +579,7 @@ fn palette_expansion_preserves_scope_query_selection_and_selected_leaf_context()
     assert!(visible(&palette, "Preview"));
     assert!(visible(&palette, "In Project Samples"));
     let bounds = &palette["sample_player"]["palette"]["bounds"];
-    for label in ["Details…", "Keyboard", "1 sample"] {
+    for label in ["Details…", "Clear search", "1 sample"] {
         let rect = palette["label_rects"]
             .as_array()
             .unwrap()
@@ -629,5 +615,96 @@ fn palette_expansion_preserves_scope_query_selection_and_selected_leaf_context()
     );
     assert!(ordinary["library"]["target"].is_null());
     assert!(visible(&ordinary, "In Project Samples"));
+    app.quit();
+}
+
+#[test]
+fn sample_folders_fit_their_contents_and_keep_only_independent_roots() {
+    let mut app = Harness::new();
+    app.command(json!({"command":"viewport","width":1800,"height":1200}));
+    library(&mut app);
+    let parent = app.directory.path().join("Drums");
+    let child = parent.join("Kicks");
+    let sibling = app.directory.path().join("Drums-2");
+    std::fs::create_dir_all(&child).unwrap();
+    std::fs::create_dir(&sibling).unwrap();
+    app.command(json!({"command":"file_dialog","kind":"sample_folder","path":null}));
+    assert_eq!(app.click("Add folder…")["library"]["roots"], json!([]));
+    app.add_sample_folder(&child);
+    let manager = app.click("Folders…");
+    let window = manager["window_rects"].as_array().unwrap().last().unwrap();
+    assert!(window["max"][1].as_f64().unwrap() - window["min"][1].as_f64().unwrap() < 220.0);
+    for removed in ["Sample folder path", "Keyboard", "Browse folder…"] {
+        assert!(!visible(&manager, removed));
+    }
+    app.add_sample_folder(&sibling);
+    app.add_sample_folder(&parent);
+    let parent = parent.canonicalize().unwrap();
+    let sibling = sibling.canonicalize().unwrap();
+    for folder in [&child, &parent] {
+        let unchanged = app.add_sample_folder(folder);
+        assert_eq!(unchanged["library"]["roots"], json!([sibling, parent]));
+    }
+    app.key("Escape");
+    let state = app.inspect();
+    let root = state["library"]["sources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == format!("folder:{}", parent.display()))
+        .unwrap();
+    let x = root["rect"]["min"][0].as_f64().unwrap() + 10.0;
+    let y =
+        (root["rect"]["min"][1].as_f64().unwrap() + root["rect"]["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
+    let removed = app.click("Remove folder");
+    assert_eq!(removed["library"]["roots"], json!([sibling]));
+    assert!(child.exists());
+    let mut app = app.restart();
+    assert_eq!(library(&mut app)["library"]["roots"], json!([sibling]));
+    app.quit();
+}
+
+#[test]
+fn both_browser_sidebars_resize_by_mouse_and_remember_their_widths() {
+    let mut app = Harness::new();
+    app.command(json!({"command":"viewport","width":1500,"height":950}));
+    let initial = library(&mut app);
+    for samples in [true, false] {
+        if !samples {
+            app.click("Instruments");
+        }
+        let edges = |state: &Value| {
+            if samples {
+                let panes = &state["library"]["panes"];
+                [
+                    panes[0]["max"][0].as_f64().unwrap(),
+                    panes[2]["min"][0].as_f64().unwrap(),
+                    panes[0]["min"][1].as_f64().unwrap(),
+                ]
+            } else {
+                let library = &state["library"];
+                [
+                    library["sidebar"]["max"][0].as_f64().unwrap(),
+                    library["details"]["min"][0].as_f64().unwrap(),
+                    library["sidebar"]["min"][1].as_f64().unwrap(),
+                ]
+            }
+        };
+        let [left, right, top] = edges(&app.inspect());
+        let gap = f64::from(daw_ui::tokens::SPACE_MD) * 0.5;
+        for (x, delta) in [(left + gap, 95.0), (right - gap, -72.0)] {
+            app.command(json!({"command":"pointer","phase":"drag","x":x,"y":top + 55.0,"to_x":x + delta,"to_y":top + 55.0}));
+        }
+        let resized = edges(&app.inspect());
+        assert!(
+            (resized[0] - left - 95.0).abs() < 2.0 && (resized[1] - right + 72.0).abs() < 2.0,
+            "{resized:?}, {left}, {right}"
+        );
+        app.click(if samples { "Effects" } else { "Samples" });
+        let reopened = app.click(if samples { "Samples" } else { "Instruments" });
+        assert_eq!(edges(&reopened), resized);
+        assert_eq!(reopened["project"], initial["project"]);
+    }
     app.quit();
 }

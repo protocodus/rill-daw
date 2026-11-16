@@ -249,6 +249,22 @@ pub fn beat_grid_level(beat: f64, meter: &crate::MeterMap) -> GridLevel {
     }
 }
 
+/// Spacing in beats between neighboring lines in the musical editors.
+pub fn visible_beat_grid_step(snap: f64, pixels_per_beat: f32, beats_per_bar: u8) -> f64 {
+    let minimum = f64::from(tokens::SPACE_SM / pixels_per_beat.max(0.001));
+    let mut step = if snap == crate::SNAP_GRID {
+        crate::grid_step(pixels_per_beat, beats_per_bar)
+    } else if snap > 0.0 {
+        snap.min(1.0)
+    } else {
+        1.0
+    };
+    while step < minimum {
+        step *= 2.0;
+    }
+    step
+}
+
 /// The three-level vertical grid shared by the piano roll, the audio editor
 /// and the automation curve. Lines are one physical pixel on pixel centers;
 /// subdivisions follow `snap` and are skipped when they would be crowded.
@@ -264,17 +280,7 @@ pub fn paint_beat_grid(
     }
     let colors = theme::palette(painter.ctx());
     let beat_color = colors.grid_minor.lerp_to_gamma(colors.grid_bar, 0.5);
-    let minimum = f64::from(tokens::SPACE_SM / view.pixels_per_beat);
-    let mut step = if snap == crate::SNAP_GRID {
-        crate::grid_step(view.pixels_per_beat, meter.initial())
-    } else if snap > 0.0 {
-        snap.min(1.0)
-    } else {
-        1.0
-    };
-    while step < minimum {
-        step *= 2.0;
-    }
+    let step = visible_beat_grid_step(snap, view.pixels_per_beat, meter.initial());
     let ppp = painter.pixels_per_point();
     let stroke = 1.0 / ppp;
     let first = (view.start_beat / step).floor() as i64;

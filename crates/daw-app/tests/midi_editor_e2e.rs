@@ -6,8 +6,13 @@ use serde_json::{Value, json};
 
 #[test]
 fn double_click_places_notes_exactly_at_pointer_in_select_and_cursor_tools() {
-    let mut app = open(Vec::new());
-    for (tool, beat, pitch) in [("Q", 1.13, 64), ("P", 4.63, 67)] {
+    let reference = Note::new(60, 0.0, 1.375, 80);
+    let mut app = open(vec![reference.clone()]);
+    app.click("Snap grid");
+    app.click("1/8");
+    app.click("Length last");
+    app.click("1 bar");
+    for (tool, beat, pitch, length) in [("Q", 2.13, 64, 0.5), ("P", 4.63, 67, 1.375)] {
         let before = app.key(tool);
         let at = point(&before, beat, pitch);
         let state = pointer(&mut app, "double_click", at, None);
@@ -18,6 +23,54 @@ fn double_click_places_notes_exactly_at_pointer_in_select_and_cursor_tools() {
         assert!(
             (created["start"].as_f64().unwrap() - beat).abs() < 1e-5,
             "{created}"
+        );
+        close_enough(created["length"].as_f64().unwrap(), length);
+        if tool == "Q" {
+            pointer(
+                &mut app,
+                "click",
+                center(&note_rect(&state, reference.id)),
+                None,
+            );
+        }
+    }
+    app.quit();
+}
+
+#[test]
+fn dragging_off_grid_note_edges_snaps_the_endpoint_and_keeps_its_audition_voice() {
+    let target = Note::new(62, 1.18, 1.40, 73);
+    let neighbor = Note::new(66, 0.0, 6.0, 112);
+    let mut app = open_instrument(vec![target.clone(), neighbor.clone()], true);
+    app.click("Snap grid");
+    app.click("1/8");
+    app.click("Select");
+    for (start_edge, movement, start, end) in [(false, 0.50, 1.18, 3.0), (true, 0.55, 1.5, 3.0)] {
+        let before = app.inspect();
+        let rect = note_rect(&before, target.id);
+        let x = if start_edge {
+            rect["min"][0].as_f64().unwrap() + 2.0
+        } else {
+            rect["max"][0].as_f64().unwrap() - 2.0
+        };
+        let pressed = pointer(&mut app, "down", (x, center(&rect).1), None);
+        let voice = json!([before["selected_track"], target.pitch, target.velocity]);
+        assert_eq!(pressed["audition_request"], voice);
+        let to = (
+            x + movement * before["midi_editor"]["pixels_per_beat"].as_f64().unwrap(),
+            center(&note_rect(&before, neighbor.id)).1,
+        );
+        let dragging = pointer(&mut app, "move", to, None);
+        assert_eq!(dragging["audition_request"], voice);
+        let after = pointer(&mut app, "up", to, None);
+        assert!(after["audition_request"].is_null());
+        let edited = notes(&after);
+        let resized = edited.iter().find(|note| note["id"] == target.id).unwrap();
+        close_enough(resized["start"].as_f64().unwrap(), start);
+        close_enough(resized["length"].as_f64().unwrap() + start, end);
+        assert_eq!(
+            edited.iter().find(|note| note["id"] == neighbor.id),
+            notes(&before).iter().find(|note| note["id"] == neighbor.id)
         );
     }
     app.quit();
@@ -623,9 +676,9 @@ fn pitch_and_selection_controls_are_disclosed_without_changing_notes() {
     assert!(visible(&pitch, "Major triad"));
     assert_eq!(app.key("Escape")["view"], "Clip");
     app.command(json!({"command":"key","key":"A","cmd":true}));
-    app.click("Notes");
-    let selected = scroll_open_menu_to_bottom(&mut app);
+    let selected = app.click("Notes");
     assert!(visible(&selected, "Glue selected"));
+    let selected = scroll_open_menu_to_bottom(&mut app);
     assert_eq!(
         selected["visible_labels"]
             .as_array()

@@ -112,6 +112,48 @@ pub(crate) fn visible_tracks_with_expanded(
     out
 }
 
+/// Hidden rows that contribute timing marks to each visible collapsed folder.
+/// Automation follows the owning channel, as it does in the expanded tree.
+pub(crate) fn collapsed_folder_members(
+    project: &Project,
+    visible: &[(usize, usize)],
+    revealed: &HashSet<u64>,
+) -> HashMap<u64, Vec<usize>> {
+    let mut folders: HashMap<_, Vec<usize>> = visible
+        .iter()
+        .map(|(index, _)| &project.tracks[*index])
+        .filter(|t| t.kind == TrackKind::Folder && t.collapsed && !revealed.contains(&t.id))
+        .map(|t| (t.id, Vec::new()))
+        .collect();
+    if folders.is_empty() {
+        return folders;
+    }
+
+    let mut children: HashMap<u64, Vec<usize>> = HashMap::new();
+    for (index, track) in project.tracks.iter().enumerate() {
+        if let Some(owner) = track
+            .automation
+            .as_ref()
+            .map(|lane| lane.target.track)
+            .or(track.parent_folder)
+        {
+            children.entry(owner).or_default().push(index);
+        }
+    }
+    for (id, members) in &mut folders {
+        let mut pending = vec![*id];
+        while let Some(owner) = pending.pop() {
+            if let Some(rows) = children.remove(&owner) {
+                for index in rows {
+                    members.push(index);
+                    pending.push(project.tracks[index].id);
+                }
+            }
+        }
+    }
+    folders
+}
+
 /// Cheap hover validation; the core validates the complete operation on drop.
 pub(crate) fn track_drop_allowed(project: &Project, intent: TrackDropIntent) -> bool {
     if intent.source == intent.target || project.track(intent.source).is_none() {

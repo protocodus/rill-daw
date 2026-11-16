@@ -1,4 +1,5 @@
-use crate::app::DawApp;
+use crate::{app::DawApp, ghost_edit::GhostChoice};
+use anyhow::Context;
 use daw_core::{AudioData, Clip, TrackKind};
 use eframe::egui;
 use std::{
@@ -257,10 +258,8 @@ impl DawApp {
         {
             self.flush_pending_edit();
             if kind == TrackKind::Midi {
-                self.begin_edit();
-                match self.project.join_midi_clips(track, &ids) {
-                    Ok(id) => self.finish_join(track, id),
-                    Err(error) => self.message(Err(error), ""),
+                if let Err(error) = self.submit_midi_join(track, ids) {
+                    self.message(Err(error), "");
                 }
             } else {
                 let project = self.project.clone();
@@ -378,7 +377,7 @@ impl DawApp {
             drop(result);
             return;
         }
-        let result = result.and_then(|mut source| {
+        let result = result.and_then(|source| {
             anyhow::ensure!(
                 job.revision == self.revision
                     && job.tempo == self.project.tempo
@@ -388,40 +387,86 @@ impl DawApp {
                         .is_some_and(|track| track.clips == job.clips),
                 "Project changed; join the clips again"
             );
-            self.begin_edit();
-            let id = self.project.replace_audio_clips_with_joined(
-                job.track,
-                &job.ids,
-                source.path.to_string_lossy().into_owned(),
-            )?;
-            source.committed = true;
-            self.finish_join(job.track, id);
-            let used = self
-                .waveforms
-                .values()
-                .map(|audio| audio.samples.len() * size_of::<f32>())
-                .sum::<usize>();
-            if let Some(waveform) = source.waveform.take().filter(|audio| {
-                audio.samples.len() * size_of::<f32>()
-                    <= crate::project_io::WAVEFORM_CACHE_BYTES.saturating_sub(used)
-            }) {
-                self.waveforms
-                    .insert(source.path.to_string_lossy().into_owned(), waveform);
-            }
-            Ok(())
+            self.commit_join_selection(job.track, std::mem::take(&mut job.ids), Some(source))
         });
-        // Large outputs use the ordinary metadata/streamed-waveform pipeline;
-        // absence of a resident PCM preview is no longer a warning condition.
-        self.message(result, "Clips joined");
+        if let Err(error) = result {
+            self.message(Err(error), "");
+        }
     }
 
-    fn finish_join(&mut self, track: u64, clip: u64) {
-        self.close_popups();
-        self.selected_track = Some(track);
-        self.selected_clip = Some(clip);
-        self.last_editor_clip = None;
-        self.edit_label = Some("Join clips".into());
-        self.changed();
+    pub(crate) fn submit_midi_join(&mut self, track: u64, ids: Vec<u64>) -> anyhow::Result<()> {
+        self.commit_join_selection(track, ids, None)
+    }
+
+    fn commit_join_selection(
+        &mut self,
+        track: u64,
+        ids: Vec<u64>,
+        mut render: Option<JoinedSource>,
+    ) -> anyhow::Result<()> {
+        let targets: Vec<_> = ids.iter().map(|id| (track, *id)).collect();
+        let mut apply = move |app: &mut DawApp, choice: GhostChoice, peers: &[(u64, u64)]| {
+            let id = match &render {
+                Some(source) => app.project.replace_audio_clips_with_joined(
+                    track,
+                    &ids,
+                    source.path.to_string_lossy().into_owned(),
+                )?,
+                None => app.project.join_midi_clips(track, &ids)?,
+            };
+            if matches!(choice, GhostChoice::Propagate) && !peers.is_empty() {
+                let joined = app
+                    .project
+                    .clip_mut(track, id)
+                    .context("Joined clip disappeared")?;
+                joined.link_group = Some(daw_core::new_id());
+                let template = joined.clone();
+                for &(owner, peer) in peers {
+                    let clip = app
+                        .project
+                        .clip_mut(owner, peer)
+                        .context("Ghost clip disappeared")?;
+                    *clip = Clip {
+                        id: peer,
+                        start: clip.start,
+                        muted: clip.muted,
+                        ..template.clone()
+                    };
+                }
+                app.project.synchronize_linked_clip(track, id)?;
+            }
+            app.project.validate()?;
+            if let Some(source) = render.as_mut() {
+                source.committed = true;
+                let used = app
+                    .waveforms
+                    .values()
+                    .map(|audio| audio.samples.len() * size_of::<f32>())
+                    .sum::<usize>();
+                if let Some(waveform) = source.waveform.take().filter(|audio| {
+                    audio.samples.len() * size_of::<f32>()
+                        <= crate::project_io::WAVEFORM_CACHE_BYTES.saturating_sub(used)
+                }) {
+                    app.waveforms
+                        .insert(source.path.to_string_lossy().into_owned(), waveform);
+                }
+            }
+            app.close_popups();
+            app.selected_track = Some(track);
+            app.selected_clip = Some(id);
+            app.last_editor_clip = None;
+            app.message(Ok(()), "Clips joined");
+            Ok(())
+        };
+        if self.ghost_peers(&targets).is_empty() {
+            self.begin_edit();
+            apply(self, GhostChoice::Disconnect, &[])?;
+            self.edit_label = Some("Join clips".into());
+            self.changed();
+        } else {
+            self.queue_ghost_change(&targets, "Join clips", apply);
+        }
+        Ok(())
     }
 }
 

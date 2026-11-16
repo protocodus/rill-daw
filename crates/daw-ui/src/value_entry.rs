@@ -4,7 +4,7 @@ use crate::{text, tokens};
 use egui::{Context, Id, Key, Modifiers, Rect, Ui};
 use std::{hash::Hash, ops::RangeInclusive};
 
-/// The value entry popover keeps one width for its field, keypad and feedback.
+/// The value entry popover keeps one width for its field and feedback.
 const ENTRY_WIDTH: f32 = tokens::SEARCH_CHOICE_WIDTH;
 
 #[derive(Clone)]
@@ -15,7 +15,6 @@ struct ValueDraft {
     last_frame: u64,
     field: Rect,
     focus_pending: bool,
-    keypad_visible: bool,
 }
 
 fn draft_id(ui: &Ui, id_salt: impl Hash) -> Id {
@@ -98,7 +97,6 @@ pub fn value_entry_rect(ctx: &Context) -> Option<Rect> {
 /// Draw inside a control's existing context menu. A changed finite value is
 /// returned only after Apply value (or Enter while the field owns focus).
 /// Cancel/Escape and outside dismissal leave the caller's parameter untouched.
-/// The visible 123 action opens the same mouse keypad used by timing fields.
 pub fn value_entry(
     ui: &mut Ui,
     id_salt: impl Hash,
@@ -109,8 +107,7 @@ pub fn value_entry(
     value_entry_named(ui, id_salt, current, range, unit, "Value")
 }
 
-/// Exact entry identified by its channel and parameter, with a visible keypad
-/// action. The name changes presentation only; draft identity stays stable.
+/// Exact entry identified by its channel and parameter.
 pub fn value_entry_named(
     ui: &mut Ui,
     id_salt: impl Hash,
@@ -118,21 +115,6 @@ pub fn value_entry_named(
     range: RangeInclusive<f64>,
     unit: &str,
     name: &str,
-) -> Option<f64> {
-    value_entry_with_footer(ui, id_salt, current, range, unit, name, 0.0)
-}
-
-/// Reserve the caller's trailing menu actions when limiting the keypad's height.
-/// Only the keys scroll; the exact field, Apply/Cancel and caller actions remain
-/// visible, including when an automation menu has additional controls.
-pub fn value_entry_with_footer(
-    ui: &mut Ui,
-    id_salt: impl Hash,
-    current: f64,
-    range: RangeInclusive<f64>,
-    unit: &str,
-    name: &str,
-    trailing_height: f32,
 ) -> Option<f64> {
     value_entry_contents(
         ui,
@@ -142,25 +124,10 @@ pub fn value_entry_with_footer(
         ValueEntryOptions {
             unit,
             name,
-            keypad: false,
             whole_numbers: false,
             concise: true,
-            trailing_height,
         },
     )
-}
-
-/// Exact numeric entry with a visible mouse keypad. Like [`value_entry`], this
-/// keeps a private draft and returns a changed value only after Apply. The
-/// caller's field name supplies context without guessing or changing its units.
-pub fn mouse_value_entry(
-    ui: &mut Ui,
-    id_salt: impl Hash,
-    current: f64,
-    range: RangeInclusive<f64>,
-    name: &str,
-) -> Option<f64> {
-    numeric_value_entry(ui, id_salt, current, range, name, false)
 }
 
 pub(crate) fn numeric_value_entry(
@@ -179,10 +146,8 @@ pub(crate) fn numeric_value_entry(
         ValueEntryOptions {
             unit: "",
             name,
-            keypad: true,
             whole_numbers,
             concise: false,
-            trailing_height: 0.0,
         },
     )
 }
@@ -190,10 +155,8 @@ pub(crate) fn numeric_value_entry(
 struct ValueEntryOptions<'a> {
     unit: &'a str,
     name: &'a str,
-    keypad: bool,
     whole_numbers: bool,
     concise: bool,
-    trailing_height: f32,
 }
 
 fn value_entry_contents(
@@ -206,14 +169,11 @@ fn value_entry_contents(
     let ValueEntryOptions {
         unit,
         name,
-        keypad,
         whole_numbers,
         concise,
-        trailing_height,
     } = options;
     ui.set_min_width(ENTRY_WIDTH);
     ui.set_max_width(ENTRY_WIDTH);
-    let top = ui.cursor().top();
     let id = draft_id(ui, id_salt);
     let frame = ui.ctx().cumulative_frame_nr();
     let previous = ui.data_mut(|data| {
@@ -244,7 +204,6 @@ fn value_entry_contents(
             last_frame: frame,
             field: Rect::NOTHING,
             focus_pending: true,
-            keypad_visible: keypad,
         }
     } else {
         previous.expect("an existing draft is present")
@@ -278,48 +237,18 @@ fn value_entry_contents(
         ),
     );
     let response = ui
-        .horizontal(|ui| {
-            let toggle_width = if keypad {
-                0.0
-            } else {
-                ui.painter()
-                    .layout_no_wrap(
-                        "123".into(),
-                        egui::FontId::proportional(tokens::FONT_BUTTON),
-                        ui.visuals().text_color(),
-                    )
-                    .size()
-                    .x
-                    + 2.0 * tokens::BUTTON_PADDING_X
-                    + ui.spacing().item_spacing.x
-            };
-            let input_width = (ui.available_width() - toggle_width).max(tokens::CONTROL_HEIGHT);
-            let response = ui.add(
-                egui::TextEdit::singleline(&mut draft.text)
-                    .id(input_id)
-                    .desired_width(input_width)
-                    .char_limit(128)
-                    .margin(egui::vec2(
-                        tokens::BUTTON_PADDING_X,
-                        tokens::BUTTON_PADDING_Y,
-                    ))
-                    .vertical_align(egui::Align::Center)
-                    .min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT)),
-            );
-            if !keypad
-                && crate::button(ui, "123")
-                    .on_hover_text(if draft.keypad_visible {
-                        "Hide mouse keypad"
-                    } else {
-                        "Show mouse keypad"
-                    })
-                    .clicked()
-            {
-                draft.keypad_visible = !draft.keypad_visible;
-            }
-            response
-        })
-        .inner
+        .add(
+            egui::TextEdit::singleline(&mut draft.text)
+                .id(input_id)
+                .desired_width(ui.available_width())
+                .char_limit(128)
+                .margin(egui::vec2(
+                    tokens::BUTTON_PADDING_X,
+                    tokens::BUTTON_PADDING_Y,
+                ))
+                .vertical_align(egui::Align::Center)
+                .min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT)),
+        )
         .labelled_by(label.id)
         .on_hover_text(format!("Stored value: {}", exact_value_text(current)));
     draft.field = response.rect;
@@ -330,38 +259,10 @@ fn value_entry_contents(
     // the initial selection during that invisible pass.
     if draft.focus_pending && ui.is_enabled() {
         response.request_focus();
-        let mut state = egui::TextEdit::load_state(ui.ctx(), input_id).unwrap_or_default();
-        state
-            .cursor
-            .set_char_range(Some(egui::text::CCursorRange::two(
-                egui::text::CCursor::default(),
-                egui::text::CCursor::new(draft.text.chars().count()),
-            )));
-        state.store(ui.ctx(), input_id);
+        crate::widgets::select_field_text(ui, input_id, &draft.text);
         draft.focus_pending = false;
     }
     ui.data_mut(|data| data.insert_temp(Id::new("exact_value_input_rect"), (frame, response.rect)));
-    if draft.keypad_visible {
-        let spacing = ui.spacing().item_spacing.y;
-        let footer_height = ui.text_style_height(&egui::TextStyle::Body) * 2.0
-            + tokens::CONTROL_HEIGHT
-            + 3.0 * spacing;
-        let frame_margin = egui::Frame::popup(ui.style()).total_margin().sum().y;
-        let maximum = (ui.ctx().content_rect().height()
-            - (ui.cursor().top() - top)
-            - footer_height
-            - trailing_height
-            - frame_margin
-            - 2.0 * tokens::SPACE_SM)
-            .max(tokens::CONTROL_HEIGHT);
-        let edited = egui::ScrollArea::vertical()
-            .id_salt(id.with("keypad"))
-            .max_height(maximum)
-            .min_scrolled_height(tokens::CONTROL_HEIGHT)
-            .auto_shrink([false, true])
-            .show(ui, |ui| numeric_keypad(ui, input_id, &mut draft.text));
-        draft.edited |= edited.inner;
-    }
     // The concise display can round just beyond a range endpoint. Until an
     // actual edit, validate the exact stored value represented by that text.
     let parsed = if draft.edited {
@@ -372,8 +273,6 @@ fn value_entry_contents(
     .filter(|value| value.is_finite());
     let in_range = parsed.filter(|value| range_valid && (minimum..=maximum).contains(value));
     let valid = in_range.filter(|value| !whole_numbers || value.fract() == 0.0);
-    // Reserve feedback height for the keypad so Clear/invalid drafts never
-    // move Apply or Cancel out from under the pointer.
     let feedback = if parsed.is_none() {
         "Enter a finite number."
     } else if in_range.is_none() {
@@ -383,17 +282,7 @@ fn value_entry_contents(
     } else {
         ""
     };
-    if draft.keypad_visible {
-        let feedback_height = ui.text_style_height(&egui::TextStyle::Body) * 2.0;
-        ui.allocate_ui_with_layout(
-            egui::vec2(ENTRY_WIDTH, feedback_height),
-            egui::Layout::top_down(egui::Align::Min),
-            |ui| {
-                ui.set_min_height(feedback_height);
-                text::note(ui, if feedback.is_empty() { " " } else { feedback });
-            },
-        );
-    } else if !feedback.is_empty() {
+    if !feedback.is_empty() {
         text::note(ui, feedback);
     }
     let (apply, cancel) = crate::dialog_actions(
@@ -425,156 +314,9 @@ fn value_entry_contents(
     None
 }
 
-#[derive(Clone, Copy)]
-enum NumericKey {
-    Insert(char),
-    Sign,
-    Backspace,
-    Clear,
-}
-
-/// Pointer keys edit the same selection/caret as native text entry. They never
-/// emit keyboard events or apply an intermediate numeric value to the owner.
-fn numeric_keypad(ui: &mut Ui, input: Id, draft: &mut String) -> bool {
-    let mut pressed = None;
-    // The parent already leaves a 13 pt field-to-keypad gap. Keep the first
-    // key at the scroll origin so a one-row viewport exposes its full target.
-    ui.scope(|ui| {
-        ui.spacing_mut().item_spacing = egui::vec2(tokens::SPACE_SM, tokens::SPACE_SM);
-        let key_width =
-            ((ui.available_width() - 2.0 * tokens::SPACE_SM) / 3.0).max(tokens::CONTROL_HEIGHT);
-        for row in ["789", "456", "123", "±0."] {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = tokens::SPACE_SM;
-                for character in row.chars() {
-                    if ui
-                        .add_sized(
-                            egui::vec2(key_width, tokens::CONTROL_HEIGHT),
-                            crate::button_widget(character.to_string()),
-                        )
-                        .clicked()
-                    {
-                        pressed = Some(if character == '±' {
-                            NumericKey::Sign
-                        } else {
-                            NumericKey::Insert(character)
-                        });
-                    }
-                }
-            });
-        }
-        ui.horizontal(|ui| {
-            if crate::button(ui, "Backspace").clicked() {
-                pressed = Some(NumericKey::Backspace);
-            }
-            if crate::button(ui, "Clear").clicked() {
-                pressed = Some(NumericKey::Clear);
-            }
-        });
-    });
-    let Some(pressed) = pressed else {
-        return false;
-    };
-    let mut edit = egui::TextEdit::load_state(ui.ctx(), input).unwrap_or_default();
-    let count = draft.chars().count();
-    let range = edit
-        .cursor
-        .char_range()
-        .map(|range| range.as_sorted_char_range())
-        .unwrap_or(count..count);
-    let cursor = edit_numeric_draft(draft, range, pressed);
-    edit.cursor
-        .set_char_range(Some(egui::text::CCursorRange::one(
-            egui::text::CCursor::new(cursor),
-        )));
-    edit.store(ui.ctx(), input);
-    ui.ctx().memory_mut(|memory| memory.request_focus(input));
-    true
-}
-
-fn edit_numeric_draft(draft: &mut String, range: std::ops::Range<usize>, key: NumericKey) -> usize {
-    let count = draft.chars().count();
-    let mut start = range.start.min(count);
-    let end = range.end.min(count);
-    let inserted = match key {
-        NumericKey::Sign => {
-            if draft.starts_with('-') {
-                draft.remove(0);
-                return end.saturating_sub(1);
-            }
-            if count < 128 {
-                draft.insert(0, '-');
-                return end + 1;
-            }
-            return end;
-        }
-        NumericKey::Clear => {
-            draft.clear();
-            return 0;
-        }
-        NumericKey::Backspace => {
-            if start == end {
-                start = start.saturating_sub(1);
-            }
-            String::new()
-        }
-        NumericKey::Insert(character) => character.to_string(),
-    };
-    // Native text input may contain Unicode even though keypad keys are ASCII.
-    // Keep editing safe and use the same 128-character limit as the text field.
-    if count - (end - start) + inserted.chars().count() > 128 {
-        return end;
-    }
-    let start_byte = draft
-        .char_indices()
-        .nth(start)
-        .map_or(draft.len(), |(index, _)| index);
-    let end_byte = draft
-        .char_indices()
-        .nth(end)
-        .map_or(draft.len(), |(index, _)| index);
-    draft.replace_range(start_byte..end_byte, &inserted);
-    start + inserted.chars().count()
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{NumericKey, edit_numeric_draft, exact_value_text};
-
-    #[test]
-    fn numeric_pointer_keys_respect_selection_caret_sign_and_unicode() {
-        let mut draft = "120.12345678901234".to_owned();
-        let length = draft.chars().count();
-        assert_eq!(
-            edit_numeric_draft(&mut draft, 0..length, NumericKey::Insert('7')),
-            1
-        );
-        assert_eq!(draft, "7");
-        assert_eq!(
-            edit_numeric_draft(&mut draft, 1..1, NumericKey::Insert('.')),
-            2
-        );
-        assert_eq!(
-            edit_numeric_draft(&mut draft, 2..2, NumericKey::Insert('5')),
-            3
-        );
-        assert_eq!(edit_numeric_draft(&mut draft, 3..3, NumericKey::Sign), 4);
-        assert_eq!(draft, "-7.5");
-        assert_eq!(edit_numeric_draft(&mut draft, 4..4, NumericKey::Sign), 3);
-        assert_eq!(
-            edit_numeric_draft(&mut draft, 3..3, NumericKey::Backspace),
-            2
-        );
-        assert_eq!(draft, "7.");
-        draft = "1π2".into();
-        assert_eq!(
-            edit_numeric_draft(&mut draft, 1..2, NumericKey::Backspace),
-            1
-        );
-        assert_eq!(draft, "12");
-        assert_eq!(edit_numeric_draft(&mut draft, 2..2, NumericKey::Clear), 0);
-        assert!(draft.is_empty());
-    }
+    use super::exact_value_text;
 
     #[test]
     fn opening_precise_and_scientific_values_round_trips_without_rounding() {

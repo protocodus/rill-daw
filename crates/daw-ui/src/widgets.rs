@@ -192,6 +192,9 @@ pub fn small_button(ui: &mut Ui, label: impl Into<WidgetText>) -> Response {
 // Compact actions save horizontal space while retaining normal label padding
 // and target height. Keep the widget in the parent Ui so wrapping stays native.
 fn compact_button(ui: &mut Ui, button: crate::IconButton) -> Response {
+    if in_context_menu(ui) {
+        return ui.add(button);
+    }
     let padding = ui.spacing().button_padding;
     let toolbar = crate::layout::compact_toolbar(ui);
     ui.spacing_mut().button_padding = egui::vec2(
@@ -256,7 +259,7 @@ pub fn shortcut_text(spec: &str) -> String {
     }
 }
 
-/// A text-only menu row with an optional right-aligned, muted shortcut column.
+/// A menu row with an optional right-aligned, muted shortcut column.
 /// The row reserves room for its shortcut, so the menu widens instead of
 /// letting the label and shortcut overlap.
 pub fn menu_item(ui: &mut Ui, label: impl Into<WidgetText>, shortcut: Option<&str>) -> Response {
@@ -280,10 +283,22 @@ pub fn menu_item(ui: &mut Ui, label: impl Into<WidgetText>, shortcut: Option<&st
         )
         .size()
         .x;
-    let width = 2.0 * tokens::BUTTON_PADDING_X + label_width + tokens::SPACE_XL + shortcut.size().x;
-    let response = ui.add(button_widget(label).min_size(egui::vec2(width, tokens::CONTROL_HEIGHT)));
+    let context = in_context_menu(ui);
+    let padding = if context {
+        tokens::SPACE_SM
+    } else {
+        tokens::BUTTON_PADDING_X
+    };
+    let gutter = if context {
+        tokens::TOOLBAR_ICON_SIZE + ui.spacing().item_spacing.x
+    } else {
+        0.0
+    };
+    let width = 2.0 * padding + gutter + label_width + tokens::SPACE_XL + shortcut.size().x;
+    let response =
+        ui.add(button_widget(label).min_size(egui::vec2(width, ui.spacing().interact_size.y)));
     let position = egui::pos2(
-        response.rect.right() - tokens::BUTTON_PADDING_X - shortcut.size().x,
+        response.rect.right() - padding - shortcut.size().x,
         response.rect.center().y - shortcut.size().y * 0.5,
     );
     ui.painter().galley(position, shortcut, muted);
@@ -307,11 +322,21 @@ pub fn menu_button<R>(
     add_contents: impl FnOnce(&mut Ui) -> R,
 ) -> InnerResponse<Option<R>> {
     let label = label.into();
-    if let Some(icon) = crate::Icon::for_label(label.text()) {
-        // Submenu buttons use ordinary padding even inside raw native menus.
-        // Capture that effective inset before the native helper restores its
-        // caller's style, so the painted icon stays in its allocated atom.
-        let icon_padding = if egui::containers::menu::is_in_menu(ui) {
+    let context = in_context_menu(ui);
+    let icon = if context {
+        crate::Icon::for_context_label(label.text())
+    } else {
+        crate::Icon::for_label(label.text())
+    };
+    if context || icon.is_some() {
+        let size = if context {
+            tokens::TOOLBAR_ICON_SIZE
+        } else {
+            tokens::ICON_SIZE
+        };
+        let padding = if context {
+            tokens::SPACE_SM
+        } else if egui::containers::menu::is_in_menu(ui) {
             tokens::BUTTON_PADDING_X
         } else {
             ui.spacing().button_padding.x
@@ -319,23 +344,25 @@ pub fn menu_button<R>(
         let response = native_menu_button(
             ui,
             (
-                egui::Atom::custom(egui::Id::new("rill-menu-icon"), egui::Vec2::splat(18.0)),
+                egui::Atom::custom(egui::Id::new("rill-menu-icon"), egui::Vec2::splat(size)),
                 label,
             ),
             add_contents,
         );
-        let rect = egui::Rect::from_center_size(
-            egui::pos2(
-                response.response.rect.left() + icon_padding + 9.0,
-                response.response.rect.center().y,
-            ),
-            egui::Vec2::splat(18.0),
-        );
-        icon.paint(
-            ui.painter(),
-            rect,
-            ui.style().interact(&response.response).text_color(),
-        );
+        if let Some(icon) = icon {
+            let rect = egui::Rect::from_center_size(
+                egui::pos2(
+                    response.response.rect.left() + padding + size * 0.5,
+                    response.response.rect.center().y,
+                ),
+                egui::Vec2::splat(size),
+            );
+            icon.paint(
+                ui.painter(),
+                rect,
+                ui.style().interact(&response.response).text_color(),
+            );
+        }
         response
     } else {
         native_menu_button(ui, label, add_contents)
@@ -352,7 +379,66 @@ pub fn command_menu_button<R>(
     native_menu_button(ui, label.into(), contents)
 }
 
-/// Bound a command list to the viewport, including its frame and outer spacing.
+/// Maximum scrolling body height for a menu in this window. Allow three full
+/// rows on short displays, and keep the frame on screen even below that size.
+pub(crate) fn menu_body_height(ctx: &egui::Context, style: &egui::Style) -> f32 {
+    let height = ctx.content_rect().height();
+    let frame = Frame::popup(style).total_margin().sum().y;
+    let three_rows = if context_menu_active(ctx) {
+        3.0 * tokens::CONTEXT_ROW_HEIGHT + 2.0 * tokens::CONTEXT_ROW_GAP
+    } else {
+        3.0 * tokens::CONTROL_HEIGHT + 2.0 * tokens::SPACE_XS
+    };
+    (height * 0.5 - frame)
+        .max(three_rows)
+        .min((height - frame).max(0.0))
+}
+
+/// A secondary-click command list with native placement and mouse scrolling.
+pub fn context_menu<R>(
+    response: &Response,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> Option<InnerResponse<R>> {
+    show_menu(egui::Popup::context_menu(response), contents)
+}
+
+/// Show a bounded command list using the caller's popup anchor and behavior.
+pub fn show_menu<R>(
+    popup: egui::Popup<'_>,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> Option<InnerResponse<R>> {
+    if matches!(popup.get_anchor(), egui::PopupAnchor::PointerFixed) {
+        popup.show(|ui| context_menu_contents(ui, contents))
+    } else {
+        popup.show(|ui| command_menu_contents(ui, contents))
+    }
+}
+
+fn context_menu_active(ctx: &egui::Context) -> bool {
+    ctx.data(|data| {
+        data.get_temp::<bool>(egui::Id::new("rill_context_menu_contents"))
+            .unwrap_or(false)
+    })
+}
+
+pub(crate) fn in_context_menu(ui: &Ui) -> bool {
+    egui::containers::menu::is_in_menu(ui) && context_menu_active(ui.ctx())
+}
+
+/// Nested native submenus draw synchronously in separate layers. Scope the style
+/// to this call so those layers share it and subsequent menus retain their own style.
+pub(crate) fn context_menu_contents<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> R {
+    if context_menu_active(ui.ctx()) {
+        return command_menu_contents(ui, contents);
+    }
+    let id = egui::Id::new("rill_context_menu_contents");
+    ui.ctx().data_mut(|data| data.insert_temp(id, true));
+    let result = command_menu_contents(ui, contents);
+    ui.ctx().data_mut(|data| data.remove::<bool>(id));
+    result
+}
+
+/// Bound a command list to half the window, including its popup frame.
 pub fn command_menu_contents<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R) -> R {
     // Legacy callers may explicitly bound contents inside a shared menu.
     // Each popup owns one scroll pane; nested submenus have their own layer.
@@ -363,14 +449,17 @@ pub fn command_menu_contents<R>(ui: &mut Ui, contents: impl FnOnce(&mut Ui) -> R
     // Native menu styling replaces theme padding with (2, 0). Keep the frame
     // compact, but give each command and selection its own readable inset.
     menu_item_spacing(ui.style_mut());
+    if in_context_menu(ui) {
+        let spacing = ui.spacing_mut();
+        spacing.interact_size.y = tokens::CONTEXT_ROW_HEIGHT;
+        spacing.item_spacing = egui::vec2(tokens::SPACE_XS, tokens::CONTEXT_ROW_GAP);
+        spacing.button_padding = egui::vec2(tokens::SPACE_SM, tokens::TOOLBAR_BUTTON_PADDING_Y);
+    }
     // Popup chooses its position from the previous frame's size. A capacity
     // derived from that moving position feeds back into placement, making a
     // submenu shrink after a wheel gesture has already reached its end. Keep
     // the capacity stable and let the native popup constrain the whole frame.
-    let max_height = (ui.ctx().content_rect().height()
-        - ui.spacing().menu_margin.sum().y
-        - 2.0 * tokens::SPACE_SM)
-        .max(tokens::CONTROL_HEIGHT);
+    let max_height = menu_body_height(ui.ctx(), ui.style());
     let frame = ui.ctx().cumulative_frame_nr();
     let pass = ui.ctx().cumulative_pass_nr();
     let seen_id = ui.id().with("command_menu_seen");
@@ -500,19 +589,28 @@ fn semantic_picker<R>(
     let nested = egui::containers::menu::is_in_menu(ui);
     let quiet = quiet || nested;
     let label = label.into();
-    let icon = match role {
-        MenuRole::View => Some(crate::Icon::View),
-        MenuRole::Action if !compact => crate::Icon::for_label(label.text()),
-        MenuRole::Action => None,
-        _ => None,
+    let context = in_context_menu(ui);
+    let icon = if context {
+        crate::Icon::for_context_label(label.text())
+    } else {
+        match role {
+            MenuRole::View => Some(crate::Icon::View),
+            MenuRole::Action if !compact => crate::Icon::for_label(label.text()),
+            MenuRole::Action => None,
+            _ => None,
+        }
     };
     let icon_id = egui::Id::new("rill-menu-role-icon");
     let disclosure_id = egui::Id::new("rill-menu-disclosure");
     let mut atoms = egui::Atoms::new(label);
-    if icon.is_some() {
+    if context || icon.is_some() {
         atoms.push_left(egui::Atom::custom(
             icon_id,
-            egui::Vec2::splat(crate::layout::button_icon_size(ui)),
+            egui::Vec2::splat(if context {
+                tokens::TOOLBAR_ICON_SIZE
+            } else {
+                crate::layout::button_icon_size(ui)
+            }),
         ));
     }
     atoms.push_right(egui::Atom::custom(disclosure_id, egui::Vec2::splat(13.0)));
@@ -526,12 +624,12 @@ fn semantic_picker<R>(
         ui.spacing_mut().icon_spacing = tokens::ICON_LABEL_GAP;
     }
     ui.spacing_mut().button_padding = egui::vec2(
-        horizontal_padding.unwrap_or(if toolbar || compact {
+        horizontal_padding.unwrap_or(if context || toolbar || compact {
             tokens::SPACE_SM
         } else {
             tokens::BUTTON_PADDING_X
         }),
-        if toolbar {
+        if toolbar || context {
             tokens::TOOLBAR_BUTTON_PADDING_Y
         } else {
             tokens::BUTTON_PADDING_Y
@@ -606,7 +704,7 @@ fn semantic_picker<R>(
         .frame(has_frame)
         .min_size(egui::vec2(
             0.0,
-            if nested {
+            if nested && !context {
                 tokens::CONTROL_HEIGHT
             } else {
                 ui.spacing().interact_size.y
@@ -731,8 +829,10 @@ fn native_menu_button<'a, R>(
         ui.visuals_mut().widgets.inactive = ui.visuals().widgets.open;
     }
     let padding = ui.spacing().button_padding;
-    ui.spacing_mut().button_padding =
-        egui::vec2(tokens::BUTTON_PADDING_X, tokens::BUTTON_PADDING_Y);
+    if !in_context_menu(ui) {
+        ui.spacing_mut().button_padding =
+            egui::vec2(tokens::BUTTON_PADDING_X, tokens::BUTTON_PADDING_Y);
+    }
     let response = ui.add(submenu.button);
     ui.spacing_mut().button_padding = padding;
     ui.visuals_mut().widgets.inactive = inactive;
@@ -1758,7 +1858,7 @@ impl Widget for Number<'_> {
             // Restore pointer state immediately below so ordinary caret clicks,
             // dragging and other widgets retain their native behavior.
             if let Some(text) = ui.data(|data| data.get_temp::<String>(id)) {
-                select_number_text(ui, id, &text);
+                select_field_text(ui, id, &text);
             }
             Some(ui.input_mut(|input| std::mem::take(&mut input.pointer)))
         } else {
@@ -1805,14 +1905,14 @@ impl Widget for Number<'_> {
             && (response.double_clicked() || response.triple_clicked())
             && let Some(text) = ui.data(|data| data.get_temp::<String>(response.id))
         {
-            select_number_text(ui, response.id, &text);
+            select_field_text(ui, response.id, &text);
             ui.ctx().request_repaint();
         }
         response
     }
 }
 
-fn select_number_text(ui: &Ui, id: egui::Id, text: &str) {
+pub(crate) fn select_field_text(ui: &Ui, id: egui::Id, text: &str) {
     let mut state = egui::TextEdit::load_state(ui.ctx(), id).unwrap_or_default();
     state
         .cursor
@@ -2021,6 +2121,9 @@ pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Win
     );
     let title = ctx.fonts_mut(|fonts| fonts.layout_job(job));
     egui::Window::new(title)
+        // Start with egui's shrink-to-content scroll area, then give it finite
+        // layout bounds so long forms wrap and scroll inside the window.
+        .auto_sized()
         .frame(
             panel(ctx)
                 .inner_margin(tokens::WINDOW_MARGIN)
@@ -2029,7 +2132,7 @@ pub fn popup<'a>(title: impl Into<WidgetText>, ctx: &egui::Context) -> egui::Win
         )
         .default_width(tokens::POPUP_WIDTH_SM)
         // The height budget a body may grow into; callers may lower it.
-        .default_height(body_size.y)
+        .default_height(body_size.y.min(tokens::POPUP_BODY_MAX_DEFAULT_HEIGHT))
         .pivot(egui::Align2::CENTER_CENTER)
         .default_pos(available.center())
         .max_size(body_size)

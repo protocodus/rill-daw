@@ -555,8 +555,8 @@ fn join_identifies_linked_instances_by_visible_one_based_beat_ranges() {
             .any(|label| label == "Select at least two clips")
     );
     app.command(json!({"command":"click","label":"Shared phrase","occurrence":2}));
-    let state = app.click("Join");
-    let joined = document(&state);
+    assert_eq!(document(&app.click("Join")), project);
+    let joined = document(&app.click("Apply and disconnect"));
     let clips = &joined.track(track).unwrap().clips;
     assert_eq!(clips.len(), 2);
     assert!(clips.iter().any(|clip| clip.id == second));
@@ -564,6 +564,118 @@ fn join_identifies_linked_instances_by_visible_one_based_beat_ranges() {
         clips
             .iter()
             .any(|clip| clip.length == 12.0 && clip.link_group.is_none())
+    );
+    app.quit();
+}
+
+#[test]
+fn joining_a_ghost_offers_cancel_propagation_disconnection_and_peer_deletion() {
+    for choice in [
+        "Propagate change",
+        "Apply and disconnect",
+        "Apply and delete all copies",
+    ] {
+        let mut app = Harness::new();
+        let mut project = Project::new();
+        let track = project.add_midi_track("Phrase");
+        let first = Clip::midi(
+            "Linked phrase",
+            0.0,
+            2.0,
+            vec![Note::new(60, 0.0, 1.0, 100)],
+        );
+        let first_id = first.id;
+        project.track_mut(track).unwrap().clips.push(first);
+        let ghost = project.clone_clip(track, first_id).unwrap();
+        project.clip_mut(track, ghost).unwrap().start = 8.0;
+        project.track_mut(track).unwrap().clips.push(Clip::midi(
+            "Tail",
+            2.0,
+            1.0,
+            vec![Note::new(67, 0.0, 1.0, 100)],
+        ));
+        open(&mut app, &mut project, "Tail");
+        join_dialog(&mut app);
+        let pending = app.click("Join");
+        assert_eq!(document(&pending), project);
+        let cancelled = app.click("Cancel");
+        assert_eq!(document(&cancelled), project);
+        assert_eq!(cancelled["popups"]["join"], true);
+        app.click("Join");
+        let result = document(&app.click(choice));
+        let joined = result
+            .track(track)
+            .unwrap()
+            .clips
+            .iter()
+            .find(|clip| clip.name == "Joined MIDI" && clip.start == 0.0)
+            .unwrap();
+        match choice {
+            "Propagate change" => {
+                let peer = result.clip(track, ghost).unwrap();
+                assert_eq!(peer.start, 8.0);
+                assert_eq!(peer.length, joined.length);
+                assert_eq!(peer.content, joined.content);
+                assert!(joined.link_group.is_some());
+                assert_eq!(peer.link_group, joined.link_group);
+            }
+            "Apply and disconnect" => {
+                assert!(joined.link_group.is_none());
+                assert_eq!(result.clip(track, ghost), project.clip(track, ghost));
+            }
+            _ => {
+                assert!(joined.link_group.is_none());
+                assert!(result.clip(track, ghost).is_none());
+            }
+        }
+        assert_eq!(
+            document(&app.command(json!({"command":"key","key":"Z","cmd":true}))),
+            project
+        );
+        app.quit();
+    }
+}
+
+#[test]
+fn cancelling_a_rendered_linked_audio_join_discards_its_file_before_retry() {
+    let mut app = Harness::new();
+    let wav = app.directory.path().join("source.wav");
+    AudioData {
+        sample_rate: 8000,
+        channels: 1,
+        samples: vec![0.2; 8000],
+    }
+    .write_wav(&wav)
+    .unwrap();
+    let mut original = Project::new();
+    let track = original.add_audio_track("Linked audio");
+    let source = Clip::audio("Source", 0.0, 1.0, wav.to_string_lossy());
+    let id = source.id;
+    original.track_mut(track).unwrap().clips =
+        vec![source, Clip::audio("Tail", 1.0, 1.0, wav.to_string_lossy())];
+    let ghost = original.clone_clip(track, id).unwrap();
+    original.clip_mut(track, ghost).unwrap().start = 8.0;
+    open(&mut app, &mut original, "Tail");
+    join_dialog(&mut app);
+    app.click("Join");
+    let pending = wait_join(&mut app);
+    let renders = std::path::PathBuf::from(pending["scratch_dir"].as_str().unwrap()).join("joins");
+    assert_eq!(std::fs::read_dir(&renders).unwrap().count(), 1);
+    assert_eq!(document(&pending), original);
+    assert_eq!(document(&app.click("Cancel")), original);
+    assert_eq!(std::fs::read_dir(&renders).unwrap().count(), 0);
+    app.click("Join");
+    wait_join(&mut app);
+    let joined = document(&app.click("Propagate change"));
+    let head = &joined.track(track).unwrap().clips[0];
+    let peer = joined.clip(track, ghost).unwrap();
+    assert_eq!((head.length, peer.length), (2.0, 2.0));
+    assert_eq!(head.content, peer.content);
+    assert!(head.link_group.is_some());
+    assert_eq!(head.link_group, peer.link_group);
+    assert_eq!(
+        document(&app.command(json!({"command":"key","key":"Z","cmd":true}))),
+        original
     );
     app.quit();
 }

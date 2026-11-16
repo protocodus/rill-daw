@@ -143,11 +143,7 @@ fn audio_formats_preview_and_probe_on_demand_without_importing_media() {
         std::fs::copy(fixtures.join(name), library.join(name)).unwrap();
     }
     browser(&mut app);
-    app.click("Folders…");
-    app.click("Sample folder path");
-    app.command(json!({"command":"text","text":library}));
-    app.click("Add folder");
-    app.click("Done");
+    app.add_sample_folder(&library);
     app.click("Scan folders");
     common::wait_until(&mut app, |state| {
         state["library"]["indexed"] == names.len() && state["library"]["scanning"] == false

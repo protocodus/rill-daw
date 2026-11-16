@@ -219,12 +219,6 @@ pub fn clip_timing_fields(
     edit
 }
 
-#[derive(Clone, Copy, Hash)]
-enum PositionField {
-    Bar,
-    Beat,
-}
-
 #[derive(Clone)]
 struct PositionDraft {
     original: f64,
@@ -233,7 +227,6 @@ struct PositionDraft {
     beat: f64,
     initial_bar: f64,
     initial_beat: f64,
-    keypad: Option<PositionField>,
     last_frame: u64,
 }
 
@@ -254,7 +247,6 @@ impl PositionDraft {
             beat,
             initial_bar: bar,
             initial_beat: beat,
-            keypad: None,
             last_frame: frame,
         }
     }
@@ -318,8 +310,7 @@ fn position_beat_display(beat: f64, meter: u8) -> String {
 }
 
 /// A visible bar/beat alternative to scalar timing fields. The menu stages
-/// both values and commits one zero-based beat only on Apply position. Its
-/// numeric keypads provide the same operation without typing. Untouched values
+/// both values and commits one zero-based beat only on Apply position. Untouched values
 /// remain exact, including positions between sixteenths and beyond display
 /// precision; merely opening, closing or changing meter never retimes them.
 pub fn musical_position_entry(
@@ -347,61 +338,18 @@ pub fn musical_position_entry(
             let bar_meter = draft.bar_meter();
             // The final beat may contain any fraction below the next bar.
             let beat_limit = f64::from_bits((f64::from(bar_meter) + 1.0).to_bits() - 1);
-            if let Some(field) = draft.keypad {
-                let (value, field_range, name, whole_numbers) = match field {
-                    PositionField::Bar => (
-                        &mut draft.bar, 1.0..=maximum_bar.max(1.0), "Start bar", true,
-                    ),
-                    PositionField::Beat => (
-                        &mut draft.beat, 1.0..=beat_limit, "Beat in bar", false,
-                    ),
-                };
-                // A native submenu forwards its Apply/Cancel close to the
-                // entire menu chain. Keep this edit step in the same popup,
-                // with a close boundary that returns to the staged position.
-                let entry = ui.scope_builder(
-                    egui::UiBuilder::new().id_salt(("keypad", field)).closable(),
-                    |ui| {
-                        // egui clears focus before drawing an Escape frame.
-                        // This edit step owns Escape even after its text field
-                        // loses focus, so dismiss only the keypad draft.
-                        if ui.is_enabled() && ui.input_mut(|input| {
-                            input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)
-                        }) {
-                            crate::value_entry::clear_value_entry(ui, id.with(field));
-                            ui.close();
-                            None
-                        } else {
-                            crate::value_entry::numeric_value_entry(
-                                ui, id.with(field), *value, field_range, name, whole_numbers,
-                            )
-                        }
-                    },
-                );
-                if let Some(next) = entry.inner {
-                    *value = next;
-                }
-                if entry.response.should_close() {
-                    draft.keypad = None;
-                }
-                ui.data_mut(|data| data.insert_temp(id, draft));
-                return;
-            }
             crate::text::label(ui, "Start position");
             crate::form_grid(ui, id.with("fields"), |ui| {
                 crate::form_label(ui, "Bar");
-                let (_, keypad) = crate::number_stepper::number_stepper_controls(ui, &mut draft.bar, 1.0,
+                crate::number_stepper::number_stepper_controls(ui, &mut draft.bar, 1.0,
                     1.0..=maximum_bar.max(1.0), "start bar", |ui, value| {
                         ui.add(crate::number(value).speed(1.0)
                             .clamp_existing_to_range(false).update_while_editing(false)
                             .custom_formatter(|value, _| crate::exact_value_text(value)))
                     });
-                if keypad.clicked() {
-                    draft.keypad = Some(PositionField::Bar);
-                }
                 ui.end_row();
                 crate::form_label(ui, "Beat in bar");
-                let (_, keypad) = crate::number_stepper::number_stepper_controls(ui, &mut draft.beat, 1.0,
+                crate::number_stepper::number_stepper_controls(ui, &mut draft.beat, 1.0,
                     1.0..=beat_limit, "beat in bar", |ui, value| {
                         let number_id = ui.next_auto_id();
                         let context = ui.ctx().clone();
@@ -419,9 +367,6 @@ pub fn musical_position_entry(
                                 }
                             }))
                     });
-                if keypad.clicked() {
-                    draft.keypad = Some(PositionField::Beat);
-                }
                 ui.end_row();
             });
             let candidate = draft.position(&range);
@@ -545,6 +490,9 @@ mod position_entry_tests {
     }
 }
 
+/// Maximum length of a newly entered project or item name.
+pub const NAME_MAX_CHARS: usize = 128;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InlineNameAction {
     Editing,
@@ -557,7 +505,7 @@ pub struct InlineNameResponse {
     pub action: InlineNameAction,
 }
 
-/// Full surface width for a name field's requested text width and its three actions.
+/// Full surface width for a name field and its two actions.
 /// Native TextEdit adds its margins outside `desired_width`; measure the action
 /// labels and icons before anchoring the row near a viewport edge.
 pub fn inline_name_editor_width(ctx: &egui::Context, text_width: f32) -> f32 {
@@ -566,7 +514,7 @@ pub fn inline_name_editor_width(ctx: &egui::Context, text_width: f32) -> f32 {
     let color = style.visuals.text_color();
     let density = ctx.pixels_per_point();
     let actions = ctx.fonts_mut(|fonts| {
-        ["Keyboard", "Apply name", "Cancel"]
+        ["Apply name", "Cancel"]
             .into_iter()
             .map(|label| {
                 let text = fonts
@@ -585,13 +533,13 @@ pub fn inline_name_editor_width(ctx: &egui::Context, text_width: f32) -> f32 {
     text_width
         + 2.0 * crate::tokens::BUTTON_PADDING_X
         + actions
-        + 3.0 * style.spacing.item_spacing.x
+        + 2.0 * style.spacing.item_spacing.x
         + crate::card(ctx).total_margin().sum().x
 }
 
-/// Measured opaque editor bounds, including the optional pointer keyboard.
+/// Measured bounds of the editor surface.
 /// Anchored hosts reserve this complete surface before placing it at an edge.
-pub fn inline_name_editor_size(ctx: &egui::Context, text_width: f32, keyboard: bool) -> egui::Vec2 {
+pub fn inline_name_editor_size(ctx: &egui::Context, text_width: f32) -> egui::Vec2 {
     let margin = crate::card(ctx).total_margin().sum();
     let style = ctx.style();
     let font = egui::TextStyle::Button.resolve(&style);
@@ -599,19 +547,7 @@ pub fn inline_name_editor_size(ctx: &egui::Context, text_width: f32, keyboard: b
         ctx.fonts_mut(|fonts| fonts.row_height(&font)) + 2.0 * crate::tokens::BUTTON_PADDING_Y;
     let row = (row.max(crate::tokens::CONTROL_HEIGHT) * ctx.pixels_per_point()).ceil()
         / ctx.pixels_per_point();
-    egui::vec2(
-        inline_name_editor_width(ctx, text_width).max(if keyboard {
-            crate::name_keyboard_width(ctx) + margin.x
-        } else {
-            0.0
-        }),
-        row + margin.y
-            + if keyboard {
-                crate::name_keyboard_height(ctx)
-            } else {
-                0.0
-            },
-    )
+    egui::vec2(inline_name_editor_width(ctx, text_width), row + margin.y)
 }
 
 /// Single-line naming in the existing item context. The caller owns its draft,
@@ -624,9 +560,9 @@ pub fn inline_name_editor(
     width: f32,
     initial_focus: bool,
 ) -> InlineNameResponse {
-    let size = inline_name_editor_size(ui.ctx(), width, crate::name_keyboard_open(ui.ctx(), id));
+    let size = inline_name_editor_size(ui.ctx(), width);
     // Register the complete surface before its children: gaps consume pointer
-    // input without stealing the field, action buttons, or keyboard targets.
+    // input without stealing the field or its action buttons.
     ui.interact(
         egui::Rect::from_min_size(ui.next_widget_position(), size),
         id.with("surface"),
@@ -653,7 +589,7 @@ fn inline_name_editor_contents(
             let output = egui::TextEdit::singleline(value)
                 .id(id)
                 .hint_text(hint)
-                .char_limit(crate::NAME_MAX_CHARS)
+                .char_limit(NAME_MAX_CHARS)
                 .desired_width(width.max(crate::tokens::SPACE_XL))
                 .margin(egui::vec2(
                     crate::tokens::BUTTON_PADDING_X,
@@ -661,22 +597,15 @@ fn inline_name_editor_contents(
                 ))
                 .min_size(egui::vec2(0.0, crate::tokens::CONTROL_HEIGHT))
                 .show(ui);
-            let keyboard =
-                crate::small_button(ui, "Keyboard").on_hover_text("Enter this name with the mouse");
-            if keyboard.clicked() {
-                let open = crate::name_keyboard_open(ui.ctx(), id);
-                crate::set_name_keyboard_open(ui.ctx(), id, !open);
-            }
-            let keyboard_pressed = keyboard.clicked() || keyboard.is_pointer_button_down_on();
             let apply = crate::small_button(ui, "Apply name").clicked();
             let cancel = crate::small_button(ui, "Cancel");
             // Text input can lose focus on pointer-down, before a button's
             // release click. Cancel must win over that ordinary blur commit.
             let cancel = cancel.clicked() || cancel.is_pointer_button_down_on();
-            (output, apply, cancel, keyboard_pressed)
+            (output, apply, cancel)
         })
         .inner;
-    let (mut output, apply, cancel_clicked, keyboard_pressed) = row;
+    let (mut output, apply, cancel_clicked) = row;
     if initial_focus {
         output.response.request_focus();
         output.state.clear_undoer();
@@ -689,17 +618,10 @@ fn inline_name_editor_contents(
             )));
         output.state.store(ui.ctx(), id);
     }
-    crate::name_keyboard(ui, id, value);
     let enter = ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
     let action = if cancel || cancel_clicked {
         InlineNameAction::Cancel
-    } else if apply
-        || enter
-        || (!initial_focus
-            && output.response.lost_focus()
-            && !keyboard_pressed
-            && !crate::name_keyboard_open(ui.ctx(), id))
-    {
+    } else if apply || enter || (!initial_focus && output.response.lost_focus()) {
         InlineNameAction::Commit
     } else {
         InlineNameAction::Editing

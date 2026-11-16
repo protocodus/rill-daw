@@ -17,7 +17,7 @@ fn header_sections_stay_separate_across_normal_compact_and_nested_geometry() {
                 let layout = match kind {
                     0 => layout.with_record_arm(),
                     1 => layout.with_bus_badge(),
-                    _ => layout.with_folder_disclosure(),
+                    _ => layout.with_effects(),
                 };
                 let sections = [
                     Some(layout.identity),
@@ -42,7 +42,7 @@ fn header_sections_stay_separate_across_normal_compact_and_nested_geometry() {
                 let identity_parts = [
                     Some(layout.name),
                     Some(layout.icon),
-                    Some(layout.reorder),
+                    layout.reorder,
                     layout.details,
                     layout.record_arm,
                     layout.bus_badge,
@@ -109,7 +109,6 @@ fn expanded_headers_separate_identity_processing_and_connections_without_growing
 fn nested_identity_indents_without_moving_channel_controls_or_hiding_the_title() {
     let bounds = row(287.0, 144.0).translate(egui::vec2(13.0, 0.0));
     let parent = TrackHeaderLayout::new(bounds)
-        .with_folder_disclosure()
         .without_channel_sections()
         .with_depth(1);
     let child = TrackHeaderLayout::new(bounds)
@@ -140,7 +139,6 @@ fn nested_identity_indents_without_moving_channel_controls_or_hiding_the_title()
                 assert!(nested.identity.contains_rect(nested.name));
                 assert!(nested.icon.right() < nested.name.left());
                 let folder = TrackHeaderLayout::new(row(width, height))
-                    .with_folder_disclosure()
                     .without_channel_sections()
                     .with_depth(depth);
                 let descendant = initial.with_depth(depth.saturating_add(1));
@@ -204,8 +202,6 @@ fn frame(
                             name: "A long channel name that must never cover its controls",
                             icon: Icon::Instrument,
                             tint: theme::palette(ui.ctx()).accent,
-                            folder: false,
-                            collapsed: false,
                         },
                     );
                     let before = ui.next_widget_position();
@@ -314,5 +310,114 @@ fn connection_and_details_controls_keep_keyboard_mouse_and_disabled_semantics() 
                 }
             }
         }
+    }
+}
+
+#[test]
+fn collapsed_headers_keep_only_the_disclosure_color_icon_and_name() {
+    for width in [112.0, 168.0, 223.0, 288.0] {
+        for depth in [0, 2, 16] {
+            let rect = row(width, daw_ui::TRACK_HEADER_COLLAPSED_HEIGHT);
+            let layout = TrackHeaderLayout::collapsed(rect)
+                .with_record_arm()
+                .with_effects()
+                .with_bus_badge()
+                .with_state_toggles()
+                .without_channel_sections()
+                .with_depth(depth);
+            let disclosure = layout.disclosure.unwrap();
+            assert_eq!(disclosure.height(), rect.height());
+            assert!(disclosure.right() < layout.icon.left());
+            assert!(layout.icon.right() < layout.name.left());
+            assert!(layout.name.width() >= daw_ui::tokens::SPACE_LG);
+            assert_eq!(layout.name.center().y, rect.center().y);
+            for rect in [
+                layout.reorder,
+                layout.mix,
+                layout.routing,
+                layout.device,
+                layout.meter,
+                layout.bus_badge,
+                layout.details,
+                layout.record_arm,
+                layout.state_toggles,
+                layout.effects,
+            ] {
+                assert!(rect.is_none());
+            }
+        }
+    }
+}
+
+#[test]
+fn disclosure_has_an_independent_keyboard_and_pointer_target() {
+    let ctx = Context::default();
+    let draw = |events, collapsed| {
+        let mut clicked = None;
+        let output = ctx.run(
+            RawInput {
+                screen_rect: Some(row(600.0, 400.0)),
+                events,
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let layout = if collapsed {
+                        TrackHeaderLayout::collapsed(row(
+                            288.0,
+                            daw_ui::TRACK_HEADER_COLLAPSED_HEIGHT,
+                        ))
+                    } else {
+                        TrackHeaderLayout::new(row(288.0, daw_ui::TRACK_HEADER_HEIGHT))
+                    };
+                    clicked = Some(daw_ui::track_header_disclosure_at(
+                        ui,
+                        layout.disclosure.unwrap(),
+                        "row_disclosure",
+                        collapsed,
+                        if collapsed {
+                            "Expand track"
+                        } else {
+                            "Collapse track"
+                        },
+                    ));
+                });
+            },
+        );
+        (clicked.unwrap(), output)
+    };
+    for collapsed in [false, true] {
+        let (button, _) = draw(vec![], collapsed);
+        button.request_focus();
+        let key = |pressed| Event::Key {
+            key: egui::Key::Enter,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: Modifiers::NONE,
+        };
+        let (active, output) = draw(vec![key(true)], collapsed);
+        assert!(active.clicked());
+        assert_eq!(
+            output.platform_output.events[0]
+                .widget_info()
+                .label
+                .as_deref(),
+            Some(if collapsed {
+                "Expand track"
+            } else {
+                "Collapse track"
+            })
+        );
+        draw(vec![key(false)], collapsed);
+        let pos = button.rect.center();
+        let pointer = |pressed| Event::PointerButton {
+            pos,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        };
+        draw(vec![Event::PointerMoved(pos), pointer(true)], collapsed);
+        assert!(draw(vec![pointer(false)], collapsed).0.clicked());
     }
 }

@@ -18,12 +18,21 @@ const RULER: f32 = daw_ui::tokens::TIMELINE_RULER_HEIGHT + daw_ui::tokens::TIMEL
 const VELOCITY: f32 = daw_ui::tokens::VELOCITY_LANE_HEIGHT;
 const MIN_NOTE: f64 = daw_core::MIN_MIDI_NOTE_LENGTH;
 
+/// The clicked edge in clip-local beats, with the voice held for its drag.
+#[derive(Clone, Copy)]
+struct ResizeEdge {
+    start: bool,
+    beat: f64,
+    pitch: u8,
+    velocity: u8,
+}
+
 #[derive(Clone)]
 enum Gesture {
     Notes {
         originals: Vec<Note>,
         origin: Pos2,
-        edge: i8,
+        resize: Option<ResizeEdge>,
         duplicate: bool,
         dragged: bool,
         modifier_pressed: bool,
@@ -145,6 +154,7 @@ pub(crate) struct MidiEditorState {
     note_name_owner: Option<(u64, u64)>,
     piano_tracks: HashSet<u64>,
     last_length: f64,
+    last_clicked_note: Option<(u64, f64)>,
     draw_length: daw_ui::DrawNoteLength,
     velocity: u8,
     gesture: Option<Gesture>,
@@ -190,6 +200,7 @@ impl Default for MidiEditorState {
             note_name_owner: None,
             piano_tracks: HashSet::new(),
             last_length: 0.25,
+            last_clicked_note: None,
             draw_length: Default::default(),
             velocity: 100,
             gesture: None,
@@ -2570,41 +2581,6 @@ impl DawApp {
                 Some((identity, pos, now))
             };
         }
-        state.audition = None;
-        state.audition_from_keys = false;
-        state.audition_from_keyboard = false;
-        if down
-            && owns_pointer
-            && !navigation.navigating
-            && let Some(pos) = pointer
-            // During playback, edits sound through the running timeline. An
-            // extra preview voice would double/retrigger an already held note.
-            && row_contains(pos)
-            && (keys.contains(pos)
-                || !self.playing() && plot.contains(pos) && self.tool != Tool::Cursor)
-        {
-            let (pitch, velocity) = note_hit
-                .as_ref()
-                .map_or((pitch_at(pos), state.velocity), |(note, _)| {
-                    (note.pitch, note.velocity)
-                });
-            state.audition = self.selected_track.map(|track| (track, pitch, velocity));
-            state.audition_from_keys = keys.contains(pos);
-        }
-        let keyboard_audition = ui.is_enabled()
-            && state.keyboard_focus
-            && state.transform.is_none()
-            && state.generate.is_none()
-            && !ui.ctx().wants_keyboard_input()
-            && !egui::Popup::is_any_open(ui.ctx())
-            && ui.input(|input| input.focused && input.key_down(egui::Key::Enter));
-        if keyboard_audition && let Some(pitch) = state.keyboard_pitch {
-            state.audition = self
-                .selected_track
-                .map(|track| (track, pitch, state.velocity));
-            state.audition_from_keys = true;
-            state.audition_from_keyboard = true;
-        }
         if !navigation.navigating
             && owns_pointer
             && let Some(pos) = press_position
@@ -2647,6 +2623,7 @@ impl DawApp {
                 }
             } else if plot.contains(pos) && row_contains(pos) {
                 if let Some((note, rect)) = &note_hit {
+                    state.last_clicked_note = Some((note.id, note.length));
                     if self.tool == Tool::Cursor {
                         self.seek(clip_start + beat_at(pos));
                     }
@@ -2684,7 +2661,13 @@ impl DawApp {
                                     .cloned()
                                     .collect(),
                                 origin: pos,
-                                edge,
+                                resize: (edge != 0).then_some(ResizeEdge {
+                                    start: edge < 0,
+                                    beat: note.start - clip_offset
+                                        + if edge < 0 { 0.0 } else { note.length },
+                                    pitch: note.pitch,
+                                    velocity: note.velocity,
+                                }),
                                 duplicate: press_copy && edge == 0,
                                 dragged: false,
                                 modifier_pressed: press_copy,
@@ -2743,6 +2726,50 @@ impl DawApp {
                 self.seek(clip_start + beat_at(pos));
             }
         }
+        state.audition = None;
+        state.audition_from_keys = false;
+        state.audition_from_keyboard = false;
+        let held_note = match &state.gesture {
+            Some(Gesture::Notes {
+                resize: Some(edge), ..
+            }) => Some((edge.pitch, edge.velocity)),
+            Some(Gesture::Draw { pressed_pitch, .. }) => Some((*pressed_pitch, state.velocity)),
+            _ => None,
+        };
+        if down
+            && owns_pointer
+            && !navigation.navigating
+            && let Some(pos) = pointer
+            // During playback, edits sound through the running timeline. An
+            // extra preview voice would double/retrigger an already held note.
+            && (held_note.is_none() && row_contains(pos) && keys.contains(pos)
+                || !self.playing() && self.tool != Tool::Cursor
+                    && (held_note.is_some() || plot.contains(pos) && row_contains(pos)))
+        {
+            let (pitch, velocity) = held_note
+                .or_else(|| {
+                    note_hit
+                        .as_ref()
+                        .map(|(note, _)| (note.pitch, note.velocity))
+                })
+                .unwrap_or_else(|| (pitch_at(pos), state.velocity));
+            state.audition = self.selected_track.map(|track| (track, pitch, velocity));
+            state.audition_from_keys = held_note.is_none() && keys.contains(pos);
+        }
+        let keyboard_audition = ui.is_enabled()
+            && state.keyboard_focus
+            && state.transform.is_none()
+            && state.generate.is_none()
+            && !ui.ctx().wants_keyboard_input()
+            && !egui::Popup::is_any_open(ui.ctx())
+            && ui.input(|input| input.focused && input.key_down(egui::Key::Enter));
+        if keyboard_audition && let Some(pitch) = state.keyboard_pitch {
+            state.audition = self
+                .selected_track
+                .map(|track| (track, pitch, state.velocity));
+            state.audition_from_keys = true;
+            state.audition_from_keyboard = true;
+        }
         if !navigation.navigating
             && owns_pointer
             && let Some(pos) = pointer
@@ -2761,10 +2788,29 @@ impl DawApp {
                     }
                 } else if matches!(self.tool, Tool::Select | Tool::Cursor) {
                     let start = view.beat_at(plot, pos.x).max(0.0);
+                    let length = state.last_clicked_note.map_or_else(
+                        || {
+                            if snap > 0.0 {
+                                snap
+                            } else {
+                                daw_ui::visible_beat_grid_step(
+                                    self.snap,
+                                    view.pixels_per_beat,
+                                    clip_meter.initial(),
+                                )
+                            }
+                        },
+                        |(id, clicked_length)| {
+                            notes
+                                .iter()
+                                .find(|note| note.id == id)
+                                .map_or(clicked_length, |note| note.length)
+                        },
+                    );
                     actions.push(NoteEdit::Add(vec![Note::new(
                         pitch_at(pos),
                         clip_offset + start,
-                        drawing_length,
+                        length,
                         state.velocity,
                     )]));
                 }
@@ -2780,17 +2826,30 @@ impl DawApp {
                     Gesture::Notes {
                         originals,
                         origin,
-                        edge,
+                        resize,
                         duplicate,
                         dragged,
                         modifier_pressed,
                         ..
                     } if dragged || pos.distance(origin) > 2.0 => {
                         let raw_delta = (pos.x - origin.x) as f64 / view.pixels_per_beat as f64;
-                        let delta = if edge != 0 && modifiers.shift {
-                            raw_delta
-                        } else {
-                            snap_beat(raw_delta)
+                        let delta = match resize {
+                            // Snap the grabbed edge in the visible clip's beat space.
+                            // All selected notes keep their timing relative to that edge.
+                            Some(edge) if !modifiers.shift && snap > 0.0 && raw_delta != 0.0 => {
+                                let beat = edge.beat + raw_delta;
+                                let end = if self.snap != daw_ui::SNAP_GRID
+                                    && snap == f64::from(clip_meter.initial())
+                                    && !clip_meter.is_uniform()
+                                {
+                                    clip_meter.nearest_bar_line(beat)
+                                } else {
+                                    snap_beat(beat)
+                                };
+                                end - edge.beat
+                            }
+                            Some(_) => raw_delta,
+                            None => snap_beat(raw_delta),
                         };
                         let originals = if duplicate {
                             let copied: Vec<_> = originals
@@ -2804,7 +2863,7 @@ impl DawApp {
                             state.gesture = Some(Gesture::Notes {
                                 originals: copied.clone(),
                                 origin,
-                                edge,
+                                resize,
                                 duplicate: false,
                                 dragged: true,
                                 modifier_pressed,
@@ -2825,7 +2884,13 @@ impl DawApp {
                             *deselect_on_click = None;
                             *dragged = true;
                         }
-                        if edge == 0 {
+                        if let Some(edge) = resize {
+                            actions.push(NoteEdit::Source(Box::new(NoteEdit::Resize(
+                                originals,
+                                delta * source_rate,
+                                edge.start,
+                            ))));
+                        } else {
                             let row_delta = rows.clamp_move(
                                 originals.iter().map(|note| note.pitch),
                                 ((pos.y - origin.y) / view.row_height).round() as i16,
@@ -2842,12 +2907,6 @@ impl DawApp {
                                 moved,
                                 delta * source_rate,
                                 0,
-                            ))));
-                        } else {
-                            actions.push(NoteEdit::Source(Box::new(NoteEdit::Resize(
-                                originals,
-                                delta * source_rate,
-                                edge < 0,
                             ))));
                         }
                     }

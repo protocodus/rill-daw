@@ -371,6 +371,89 @@ fn recorded_c3_d3_takes_comp_in_four_sections_with_exact_export_and_spline_cross
 }
 
 #[test]
+fn collapsed_recording_track_and_closed_folder_show_the_live_capture_span() {
+    for folder_closed in [false, true] {
+        let mut app = Harness::with_virtual_audio(None, None);
+        let mut song = Project::new();
+        song.tempo = 120.0;
+        let folder = song.add_folder("Voices");
+        let track = song.add_audio_track("Capture");
+        song.set_parent_folder(track, Some(folder)).unwrap();
+        load(&mut app, &song, "live-capture.rill");
+        app.command(json!({"command":"system_theme","dark":true}));
+        app.click("Capture");
+        arm(&mut app, "Mono 1");
+        app.click_track_disclosure(track);
+        if folder_closed {
+            app.click_track_disclosure(folder);
+        }
+
+        let owner = if folder_closed { folder } else { track };
+        let red = json!(daw_ui::theme::DARK.recording.to_array());
+        let red_at = |state: &Value, beat: f64| {
+            let timeline = &state["timeline"];
+            let rows = timeline["tracks"].as_array().unwrap();
+            assert_eq!(rows.iter().any(|row| row["track"] == track), !folder_closed);
+            let row = &rows.iter().find(|row| row["track"] == owner).unwrap()["header"];
+            let row_y = (row["min"][1].as_f64().unwrap() + row["max"][1].as_f64().unwrap()) * 0.5;
+            let x = timeline["canvas"]["min"][0].as_f64().unwrap()
+                + (beat - timeline["start_beat"].as_f64().unwrap())
+                    * timeline["pixels_per_beat"].as_f64().unwrap();
+            state["painted_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|shape| {
+                    let rect = &shape["rect"];
+                    let top = rect["min"][1].as_f64().unwrap();
+                    let bottom = rect["max"][1].as_f64().unwrap();
+                    shape["fill"] == red
+                        && (3.0..=7.0).contains(&(bottom - top))
+                        && (top..=bottom).contains(&row_y)
+                        && (rect["min"][0].as_f64().unwrap()..=rect["max"][0].as_f64().unwrap())
+                            .contains(&x)
+                })
+        };
+        let inspect_paint =
+            |app: &mut Harness| app.command(json!({"command":"inspect","paint":true}));
+        assert!(!red_at(&inspect_paint(&mut app), 0.5));
+        begin(&mut app);
+        // At 120 BPM, each 12,000 stereo frames advances half a beat.
+        let half_beat = vec![0.25; 24_000];
+        for (inside, ahead) in [(0.25, 0.75), (0.75, 1.25)] {
+            pump(&mut app, 2, &half_beat);
+            let live = inspect_paint(&mut app);
+            assert_eq!(live["recording"]["phase"], "recording");
+            assert!(project(&live).track(track).unwrap().clips.is_empty());
+            assert!(
+                red_at(&live, inside),
+                "Missing live region at beat {inside}, folder closed {folder_closed}"
+            );
+            assert!(
+                !red_at(&live, ahead),
+                "Live region extends beyond the captured audio"
+            );
+        }
+
+        let stopped = project(&stop(&mut app));
+        assert!(!red_at(&inspect_paint(&mut app), 0.5));
+        let captured = stopped.track(track).unwrap();
+        assert!(captured.collapsed);
+        assert_eq!(captured.parent_folder, Some(folder));
+        assert_eq!(stopped.track(folder).unwrap().collapsed, folder_closed);
+        assert!(stopped.track(folder).unwrap().clips.is_empty());
+        assert_eq!(captured.clips.len(), 1);
+        assert_eq!(captured.clips[0].start, 0.0);
+        assert_eq!(captured.clips[0].length, 1.0);
+        assert_eq!(
+            recording_audio(&captured.clips[0]).samples,
+            vec![0.25; 24_000]
+        );
+        app.quit();
+    }
+}
+
+#[test]
 fn mono_input_recording_keeps_exact_raw_samples_beyond_empty_project_end_and_is_undoable() {
     let mut app = fixture(false, false);
     arm(&mut app, "Mono 2");

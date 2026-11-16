@@ -29,7 +29,7 @@ The waveform is a bounded display preview; normalization scans every source samp
 
 ## MIDI
 
-The piano roll uses **Select (Q)**, **Pencil (W)**, **Cut (E)**, **Duplicate (R)**, **Glue (T)**, **Erase (Z)**, **Multi-draw (U)**, and **Cursor (P)**. Pencil creates a note with a click or sets its length by dragging. Select moves note bodies and resizes either edge. Shift-click adds or removes a note from the selection; Cmd/Ctrl+A selects all visible notes, Delete removes the selection, and Cmd/Ctrl+D duplicates it. An empty note selection never deletes or duplicates the containing clip. Double-clicking empty space creates a note; double-clicking an existing note deletes it in Select, Pencil, or Multi-draw mode.
+The piano roll uses **Select (Q)**, **Pencil (W)**, **Cut (E)**, **Duplicate (R)**, **Glue (T)**, **Erase (Z)**, **Multi-draw (U)**, and **Cursor (P)**. Pencil creates a note with a click or sets its length by dragging. Select moves note bodies and resizes either edge. The grabbed edge snaps to the grid, and the note preview holds its original pitch while you resize it. Shift-click adds or removes a note from the selection; Cmd/Ctrl+A selects all visible notes, Delete removes the selection, and Cmd/Ctrl+D duplicates it. An empty note selection never deletes or duplicates the containing clip. Double-click empty space in Select or Cursor to create a note with the duration of the last note you clicked. The first such note uses one grid step. Double-click an existing note to delete it in Select, Pencil or Multi-draw mode.
 
 **Notes** opens selection operations without leaving the editor:
 

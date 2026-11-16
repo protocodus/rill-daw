@@ -503,9 +503,12 @@ fn output_header_picker_excludes_feedback_and_remains_available_on_compact_track
     let selected = click_header_section(&mut app, &bus_b, "name");
     assert_eq!(selected["selected_track"], bus_b);
     menu(&mut app, "Window", "Properties");
-    app.click("Compact track");
-    app.key("Escape");
-    let state = click_header_section(&mut app, &bus_b, "details");
+    app.click("Collapse track");
+    let collapsed = app.key("Escape");
+    let row = track_header(&collapsed, &bus_b);
+    assert!(row["sections"]["details"].is_null());
+    click_at(&mut app, &row["name"], "secondary");
+    let state = app.click("Channel");
     assert_eq!(state["selected_track"], bus_b);
     assert_eq!(state["popups"]["properties"], true);
     let state = menu(&mut app, "Window", "Routing");

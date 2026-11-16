@@ -234,6 +234,17 @@ pub struct AutomationClip {
 }
 
 impl AutomationClip {
+    /// The editable source curve uses clip-local beats, shared with any ghosts.
+    pub fn source_lane(&self, target: AutomationTarget) -> AutomationLane {
+        AutomationLane {
+            target,
+            points: self.points.clone(),
+            interpolation: self.interpolation,
+            override_value: None,
+            clips: Vec::new(),
+        }
+    }
+
     pub fn end(&self) -> f64 {
         self.start + self.length
     }

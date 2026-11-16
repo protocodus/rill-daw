@@ -1,6 +1,9 @@
 //! Retained takes and range comping. Import work is bounded and performed away
 //! from the UI; the complete batch is published as one undoable transaction.
-use crate::app::{DawApp, PopupKind, WorkspaceView};
+use crate::{
+    app::{DawApp, PopupKind, WorkspaceView},
+    ghost_edit::GhostChoice,
+};
 use anyhow::{Context, Result, ensure};
 use daw_core::{AudioData, Clip, ClipContent, Project, new_id};
 use eframe::egui;
@@ -207,41 +210,90 @@ impl DawApp {
             return;
         }
         let result = result.and_then(|imported| {
-            let mut project = self.project.clone();
-            let group = match pending.anchor.take_group() {
-                Some(group) => group,
-                None => project.group_audio_takes(pending.track, &[pending.anchor.id])?,
-            };
+            self.submit_audio_takes(
+                pending.track,
+                vec![pending.anchor.id],
+                imported,
+                "Add audio takes",
+            )
+        });
+        if let Err(error) = result {
+            self.message(Err(error), "");
+        }
+    }
+
+    pub(crate) fn group_existing_audio_takes(&mut self, track: u64, ids: Vec<u64>) -> Result<()> {
+        self.submit_audio_takes(track, ids, Vec::new(), "Group audio takes")
+    }
+
+    fn submit_audio_takes(
+        &mut self,
+        track: u64,
+        mut ids: Vec<u64>,
+        imported: ImportedTakes,
+        label: &'static str,
+    ) -> Result<()> {
+        let existing = self
+            .project
+            .clip(track, ids[0])
+            .context("Take clip not found")?
+            .take_group();
+        let targets: Vec<_> = ids
+            .iter()
+            .filter(|_| existing.is_none())
+            .map(|id| (track, *id))
+            .collect();
+        let apply = move |app: &mut DawApp, choice: GhostChoice, peers: &[(u64, u64)]| {
+            let mut project = app.project.clone();
             let first = imported.first().map(|(clip, _)| clip.id);
             for (clip, _) in &imported {
+                ids.push(clip.id);
                 project
-                    .track_mut(pending.track)
+                    .track_mut(track)
                     .context("Take channel disappeared")?
                     .clips
                     .push(clip.clone());
-                project.add_audio_take(pending.track, group, clip.id)?;
             }
+            let group = if let Some(group) = existing {
+                for (clip, _) in &imported {
+                    project.add_audio_take(track, group, clip.id)?;
+                }
+                group
+            } else {
+                let peers = if matches!(choice, GhostChoice::Propagate) {
+                    peers
+                } else {
+                    &[]
+                };
+                project.group_audio_takes_with_ghosts(track, &ids, peers)?
+            };
             project.validate()?;
-            self.begin_edit();
-            self.project = project;
-            self.selected_clip = self
-                .project
-                .audio_take_regions(pending.track, group)
+            app.selected_track = Some(track);
+            app.selected_clip = project
+                .audio_take_regions(track, group)
                 .first()
                 .map(|clip| clip.id);
+            app.project = project;
             for (clip, audio) in imported {
                 if let ClipContent::Audio { path, .. } = clip.content
                     && let Some(audio) = audio
                 {
-                    self.waveforms.insert(path, audio);
+                    app.waveforms.insert(path, audio);
                 }
             }
-            self.audio_takes_ui.source = first;
-            self.edit_label = Some("Add audio takes".into());
-            self.changed();
+            app.audio_takes_ui.source = first;
             Ok(())
-        });
-        self.message(result, "Audio takes ready");
+        };
+        if self.ghost_peers(&targets).is_empty() {
+            self.begin_edit();
+            apply(self, GhostChoice::Disconnect, &[])?;
+            self.edit_label = Some(label.into());
+            self.changed();
+            self.status = "Audio takes ready".into();
+        } else {
+            self.queue_ghost_change(&targets, label, apply);
+        }
+        Ok(())
     }
 
     fn commit_take_project(&mut self, project: Project, label: &str) {
@@ -262,25 +314,59 @@ impl DawApp {
         self.changed();
     }
 
-    fn use_audio_take(&mut self, track: u64, group: u64, source: u64, range: Option<(f64, f64)>) {
-        let mut project = self.project.clone();
-        let crossfade = self.audio_takes_ui.crossfade_ms / 1000.0 * project.tempo / 60.0;
-        match project.select_audio_take(track, group, source, range, crossfade) {
-            Ok(clip) => {
-                self.commit_take_project(
-                    project,
-                    if range.is_some() {
-                        "Comp audio selection"
-                    } else {
-                        "Choose audio take"
-                    },
-                );
-                self.close_popup();
-                self.selected_track = Some(track);
-                self.selected_clip = Some(clip);
-                self.view = WorkspaceView::Clip;
+    pub(crate) fn use_audio_take(
+        &mut self,
+        track: u64,
+        group: u64,
+        source: u64,
+        range: Option<(f64, f64)>,
+        crossfade: f64,
+    ) {
+        let targets: Vec<_> = self
+            .project
+            .audio_take_regions(track, group)
+            .iter()
+            .filter(|clip| range.is_none_or(|(start, end)| clip.start < end && clip.end() > start))
+            .map(|c| (track, c.id))
+            .collect();
+        let label = if range.is_some() {
+            "Comp audio selection"
+        } else {
+            "Choose audio take"
+        };
+        let original_targets = targets.clone();
+        let apply = move |app: &mut DawApp, choice: GhostChoice, peers: &[(u64, u64)]| {
+            let mut project = app.project.clone();
+            if choice != GhostChoice::Propagate && !peers.is_empty() {
+                for &(owner, id) in &original_targets {
+                    project.make_clip_independent(owner, id)?;
+                }
             }
-            Err(error) => self.message(Err(error), ""),
+            let peers = if matches!(choice, GhostChoice::Propagate) {
+                peers
+            } else {
+                &[]
+            };
+            let clip = project
+                .select_audio_take_with_ghosts(track, group, source, range, crossfade, peers)?;
+            app.project = project;
+            app.close_popup();
+            app.selected_track = Some(track);
+            app.selected_clip = Some(clip);
+            app.view = WorkspaceView::Clip;
+            Ok(())
+        };
+        if self.ghost_peers(&targets).is_empty() {
+            self.begin_edit();
+            match apply(self, GhostChoice::Disconnect, &[]) {
+                Ok(()) => {
+                    self.edit_label = Some(label.into());
+                    self.changed();
+                }
+                Err(error) => self.message(Err(error), ""),
+            }
+        } else {
+            self.queue_ghost_change(&targets, label, apply);
         }
     }
 
@@ -415,10 +501,8 @@ impl DawApp {
                     if ui.add_enabled(!busy && ids.len() > 1, daw_ui::button_widget("Group overlapping clips"))
                         .on_hover_text("Collect overlapping clips on this track as alternate takes for one comp")
                         .on_disabled_hover_text(if busy { "Wait for the current take import to finish" } else { "This track needs at least two overlapping audio clips" }).clicked() {
-                        let mut project = self.project.clone();
-                        match project.group_audio_takes(track_id, &ids) {
-                            Ok(_) => self.commit_take_project(project, "Group audio takes"),
-                            Err(error) => self.message(Err(error), ""),
+                        if let Err(error) = self.group_existing_audio_takes(track_id, ids) {
+                            self.message(Err(error), "");
                         }
                     }
                 }
@@ -532,7 +616,7 @@ impl DawApp {
                     if daw_ui::primary_button(ui, if self.audio_takes_ui.range.is_some() { "Use selection" } else { "Use whole take" })
                         .on_hover_text("Replace this part of the comp with the selected take; keep the alternatives available")
                         .on_disabled_hover_text(if busy { "Wait for the current take import to finish" } else if group.is_none() { "Add or group alternate takes first" } else { "Select a take with audio covering the chosen time range" }).clicked() {
-                        self.use_audio_take(track_id, group.unwrap(), selected.as_ref().unwrap().id, self.audio_takes_ui.range);
+                        self.use_audio_take(track_id, group.unwrap(), selected.as_ref().unwrap().id, self.audio_takes_ui.range, self.audio_takes_ui.crossfade_ms / 1000.0 * self.project.tempo / 60.0);
                     }
                 });
                 if ui.add_enabled(!busy && selected.is_some(), daw_ui::button_widget("Layer as overdub")).on_hover_text("Copy this take to a separate audio track, aligned in time and routed to the same bus. Both tracks will play.").on_disabled_hover_text(if busy { "Wait for the current take import to finish" } else { "Select a take first" }).clicked() {

@@ -364,6 +364,19 @@ pub fn apply(ctx: &egui::Context) {
             .insert(TextStyle::Monospace, FontId::monospace(tokens::FONT_BODY));
         ctx.set_style_of(theme, style);
     }
+    // Native combo boxes read their scroll budget from the active style.
+    // Keep their usual compact list on large displays and adapt on resize.
+    let combo_height = egui::style::Spacing::default().combo_height;
+    ctx.on_begin_pass(
+        "menu height",
+        std::sync::Arc::new(move |ctx| {
+            let style = ctx.style();
+            let height = crate::widgets::menu_body_height(ctx, &style).min(combo_height);
+            if style.spacing.combo_height != height {
+                ctx.style_mut(|style| style.spacing.combo_height = height);
+            }
+        }),
+    );
     set_appearance(ctx, Appearance::System);
 }
 

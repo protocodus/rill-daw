@@ -540,7 +540,17 @@ fn folder_header_toggles_child_visibility_without_removing_clips() {
     harness.app.project.add_audio_track("Outside");
     let output = harness.settle_full();
     assert!(has_text(&output, "Test instrument"));
-    let header = text_position(&output, "Group", 0.0) + Vec2::new(20.0, 5.0);
+    let timeline = harness
+        .ctx
+        .data(|data| data.get_temp::<serde_json::Value>(egui::Id::new("timeline_diagnostics")))
+        .unwrap();
+    let row = timeline["tracks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["track"] == folder)
+        .unwrap();
+    let header = rect_from_diagnostics(&row["disclosure"]).center();
     harness.full_pointer(header, PointerButton::Primary, true);
     harness.full_pointer(header, PointerButton::Primary, false);
     let output = harness.settle_full();
@@ -548,7 +558,6 @@ fn folder_header_toggles_child_visibility_without_removing_clips() {
     assert!(!has_text(&output, "Test instrument"));
     assert!(has_text(&output, "Outside"));
     assert_eq!(harness.app.project.track(child).unwrap().clips.len(), 1);
-    let header = text_position(&output, "Group", 0.0) + Vec2::new(20.0, 5.0);
     harness.full_pointer(header, PointerButton::Primary, true);
     harness.full_pointer(header, PointerButton::Primary, false);
     let output = harness.settle_full();
@@ -607,7 +616,7 @@ fn duplicating_the_final_note_extends_the_clip_and_renders_both_notes() {
 }
 
 #[test]
-fn double_clicking_a_clip_starts_renaming_it_without_changing_the_project() {
+fn double_clicking_a_clip_body_opens_the_editor_without_changing_the_project() {
     let mut harness = Harness::new(0.0);
     let before = harness.app.project.clone();
     let output = harness.settle_full();
@@ -618,8 +627,8 @@ fn double_clicking_a_clip_starts_renaming_it_without_changing_the_project() {
         harness.full_pointer(clip, PointerButton::Primary, false);
     }
     harness.settle_full();
-    assert_eq!(harness.app.view, WorkspaceView::Arrangement);
-    assert!(harness.app.rename_active(&harness.ctx));
+    assert_eq!(harness.app.view, WorkspaceView::Clip);
+    assert!(!harness.app.rename_active(&harness.ctx));
     assert_eq!(harness.app.project, before);
 }
 
@@ -677,7 +686,7 @@ fn properties_follows_selection_and_never_leaves_an_unavailable_clip_page() {
     let output = harness.menu("Window", "Properties");
     assert!(has_text(&output, "Beat 5.00"));
     assert!(has_text(&output, "Duration"));
-    assert!(!has_text(&output, "Compact track"));
+    assert!(!has_text(&output, "Collapse track"));
 
     let track_tab = output
         .shapes
@@ -695,7 +704,7 @@ fn properties_follows_selection_and_never_leaves_an_unavailable_clip_page() {
         .unwrap();
     harness.full_click(track_tab);
     let output = harness.settle_full();
-    assert!(has_text(&output, "Compact track"));
+    assert!(has_text(&output, "Collapse track"));
     assert!(!has_text(&output, "Duration"));
 
     let folder = harness.app.project.add_folder("Folder");
@@ -712,7 +721,7 @@ fn properties_follows_selection_and_never_leaves_an_unavailable_clip_page() {
     harness.app.selected_clip = clip;
     let output = harness.settle_full();
     assert!(has_text(&output, "Beat 5.00"));
-    assert!(!has_text(&output, "Compact track"));
+    assert!(!has_text(&output, "Collapse track"));
 }
 
 #[test]

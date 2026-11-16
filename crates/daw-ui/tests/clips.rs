@@ -2,6 +2,63 @@ use daw_ui::{Icon, clip_label, clip_title, text::TextRole, theme};
 use egui::{Context, RawInput, Rect, Shape};
 
 #[test]
+fn collapsed_intervals_keep_gaps_and_mark_tiny_clips_and_base_points() {
+    for scale in [1.0, 1.25, 2.0] {
+        let ctx = Context::default();
+        ctx.set_pixels_per_point(scale);
+        let lane = Rect::from_min_max(egui::pos2(20.0, 30.0), egui::pos2(220.0, 50.0));
+        let visible = Rect::from_min_max(egui::pos2(30.0, 30.0), egui::pos2(200.0, 48.0));
+        let color = egui::Color32::from_rgb(70, 120, 180);
+        let mut marks = Vec::new();
+        let output = ctx.run(RawInput::default(), |ctx| {
+            let painter = ctx
+                .layer_painter(egui::LayerId::background())
+                .with_clip_rect(visible);
+            let view = daw_ui::TimelineViewport {
+                start_beat: 2.0,
+                pixels_per_beat: 20.0,
+                ..Default::default()
+            };
+            let span =
+                |start, end| daw_ui::collapsed_track_span(&painter, lane, view, start, end, color);
+            assert_eq!(span(0.0, 1.0), None);
+            assert_eq!(span(12.0, 13.0), None);
+            assert_eq!(span(8.0, 7.0), None);
+            marks = [(1.0, 4.0), (6.0, 6.001), (8.0, 8.0), (10.0, 15.0)]
+                .map(|(start, end)| span(start, end).unwrap())
+                .to_vec();
+        });
+        assert_eq!(marks[0].left(), visible.left());
+        assert_eq!(marks[0].right(), 60.0);
+        assert_eq!(marks[3].left(), 180.0);
+        assert_eq!(marks[3].right(), visible.right());
+        for (mark, expected_x) in [(marks[1], 100.0), (marks[2], 140.0)] {
+            assert!((mark.center().x - expected_x).abs() <= 1.0 / scale);
+            assert!((mark.width() - daw_ui::tokens::SPACE_XS).abs() <= 1.0 / scale);
+        }
+        let actual: Vec<_> = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                Shape::Rect(shape) if shape.fill == color => Some(shape.rect),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(actual, marks);
+        for rect in &actual {
+            assert!(visible.contains_rect(*rect));
+            assert!((rect.center().y - lane.center().y).abs() <= 1.0 / scale);
+            assert!((rect.height() - daw_ui::tokens::SPACE_XS).abs() <= 1.0 / scale);
+        }
+        assert!(
+            actual
+                .windows(2)
+                .all(|pair| pair[0].right() < pair[1].left())
+        );
+    }
+}
+
+#[test]
 fn unnamed_clips_recover_the_title_space_and_keep_a_thin_restorable_border() {
     for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
         for scale in [1.0, 1.25, 2.0] {
@@ -38,7 +95,8 @@ fn unnamed_clips_recover_the_title_space_and_keep_a_thin_restorable_border() {
                                 "Ordinary body double-click stays outside rename area"
                             );
                             assert!(
-                                blank.name_hit.width() >= 280.0 && blank.name_hit.height() >= 12.0
+                                blank.name_hit.width() >= 280.0
+                                    && blank.name_hit.height() == blank.title.height()
                             );
                             let title = clip_title(
                                 ui.painter(),

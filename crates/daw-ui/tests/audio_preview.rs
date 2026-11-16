@@ -1,15 +1,9 @@
-use daw_ui::{
-    AudioPreviewBackdrop, AudioPreviewBackdropGeometry, AudioPreviewState,
-    paint_audio_preview_backdrop, theme,
-};
+use daw_ui::{AudioPreview, AudioPreviewGeometry, AudioPreviewState, paint_audio_preview, theme};
 use egui::{Color32, Context, FullOutput, Id, LayerId, Order, RawInput, Rect, Shape, pos2, vec2};
 
-fn paint(
-    ctx: &Context,
-    data: AudioPreviewBackdrop<'_>,
-) -> (FullOutput, AudioPreviewBackdropGeometry, Rect) {
+fn paint(ctx: &Context, data: AudioPreview<'_>) -> (FullOutput, AudioPreviewGeometry, Rect) {
     let clip = Rect::from_min_size(pos2(20.0, 20.0), vec2(260.0, 340.0));
-    let mut geometry = AudioPreviewBackdropGeometry::default();
+    let mut geometry = AudioPreviewGeometry::default();
     let output = ctx.run(
         RawInput {
             screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1100.0, 720.0))),
@@ -19,35 +13,14 @@ fn paint(
             let painter = ctx
                 .layer_painter(LayerId::new(Order::Background, Id::new("preview")))
                 .with_clip_rect(clip);
-            geometry = paint_audio_preview_backdrop(
-                &painter,
-                clip.expand(20.0),
-                data,
-                theme::palette(ctx).bg,
-            );
+            geometry = paint_audio_preview(&painter, clip, data);
         },
     );
     (output, geometry, clip)
 }
 
-fn luminance(color: Color32) -> f32 {
-    let linear = |value: u8| {
-        let value = f32::from(value) / 255.0;
-        if value <= 0.04045 {
-            value / 12.92
-        } else {
-            ((value + 0.055) / 1.055).powf(2.4)
-        }
-    };
-    0.2126 * linear(color.r()) + 0.7152 * linear(color.g()) + 0.0722 * linear(color.b())
-}
-fn contrast(a: Color32, b: Color32) -> f32 {
-    let (a, b) = (luminance(a), luminance(b));
-    (a.max(b) + 0.05) / (a.min(b) + 0.05)
-}
-
 #[test]
-fn real_analysis_stays_bounded_quiet_and_legible_in_both_themes() {
+fn real_analysis_uses_bounded_full_color_plots_in_both_themes() {
     let peaks: Vec<_> = (0..100_000)
         .map(|i| {
             let amplitude = (i % 101) as f32 / 100.0;
@@ -60,7 +33,7 @@ fn real_analysis_stays_bounded_quiet_and_legible_in_both_themes() {
         theme::set_appearance(&ctx, appearance);
         let (output, geometry, clip) = paint(
             &ctx,
-            AudioPreviewBackdrop {
+            AudioPreview {
                 waveform: &peaks,
                 spectrum: &bands,
                 state: AudioPreviewState::Ready,
@@ -72,9 +45,8 @@ fn real_analysis_stays_bounded_quiet_and_legible_in_both_themes() {
         assert!(waveform.bottom() < spectrum.top());
         let palette = theme::palette(&ctx);
         let check_color = |color: Color32| {
-            assert_eq!(color.a(), 255, "Preblended marks must not compound opacity");
-            assert!(contrast(palette.text, color) >= 4.5);
-            assert!(contrast(palette.muted, color) >= 4.5);
+            assert_eq!(color.a(), 255);
+            assert!(color == palette.action || color == palette.muted);
         };
         let mut vertices = 0;
         for clipped in &output.shapes {
@@ -116,34 +88,34 @@ fn pending_missing_and_invalid_data_never_draw_placeholder_audio() {
     ] {
         let (output, geometry, _) = paint(
             &ctx,
-            AudioPreviewBackdrop {
+            AudioPreview {
                 waveform: &[[-0.5, 0.5]],
                 spectrum: &[0.8],
                 state,
             },
         );
-        assert_eq!(geometry, AudioPreviewBackdropGeometry::default());
+        assert_eq!(geometry, AudioPreviewGeometry::default());
         assert!(output.shapes.is_empty());
     }
     for data in [
-        AudioPreviewBackdrop {
+        AudioPreview {
             state: AudioPreviewState::Ready,
             ..Default::default()
         },
-        AudioPreviewBackdrop {
+        AudioPreview {
             waveform: &[[f32::NAN, 0.5]],
             spectrum: &[f32::INFINITY],
             state: AudioPreviewState::Ready,
         },
     ] {
         let (output, geometry, _) = paint(&ctx, data);
-        assert_eq!(geometry, AudioPreviewBackdropGeometry::default());
+        assert_eq!(geometry, AudioPreviewGeometry::default());
         assert!(output.shapes.is_empty());
     }
 }
 
 #[test]
-fn backdrop_never_changes_foreground_layout_widget_ids_or_focus() {
+fn painting_never_changes_foreground_layout_widget_ids_or_focus() {
     let ctx = Context::default();
     theme::apply(&ctx);
     let focus = Id::new("metadata-field");
@@ -152,15 +124,14 @@ fn backdrop_never_changes_foreground_layout_widget_ids_or_focus() {
             ui.memory_mut(|memory| memory.request_focus(focus));
             let cursor = ui.cursor();
             let next_id = ui.next_auto_id();
-            let geometry = paint_audio_preview_backdrop(
+            let geometry = paint_audio_preview(
                 ui.painter(),
                 ui.max_rect(),
-                AudioPreviewBackdrop {
+                AudioPreview {
                     waveform: &[[-0.5, 0.5]; 32],
                     spectrum: &[0.5; 48],
                     state: AudioPreviewState::Ready,
                 },
-                theme::palette(ctx).panel,
             );
             assert!(geometry.waveform.is_some() && geometry.spectrum.is_some());
             assert_eq!(ui.cursor(), cursor);

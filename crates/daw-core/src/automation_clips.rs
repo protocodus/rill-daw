@@ -4,6 +4,14 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 
+fn scale_pattern(clip: &mut AutomationClip, factor: f64) {
+    clip.length *= factor;
+    clip.offset *= factor;
+    for point in &mut clip.points {
+        point.beat *= factor;
+    }
+}
+
 impl Project {
     pub fn create_automation_clip(&mut self, track: u64, start: f64, length: f64) -> Result<u64> {
         ensure!(
@@ -179,11 +187,8 @@ impl Project {
             .position(|clip| clip.id == original.id)
             .context("Automation clip not found")?;
         let mut stretched = original.clone();
+        scale_pattern(&mut stretched, factor);
         stretched.length = length;
-        stretched.offset = original.offset * factor;
-        for point in &mut stretched.points {
-            point.beat *= factor;
-        }
         if factor != 1.0 {
             stretched.link_group = None;
         }
@@ -192,6 +197,42 @@ impl Project {
             lane.clips[index] = previous;
             return Err(error);
         }
+        Ok(())
+    }
+
+    /// Stretch every placement of a linked source by the same factor while
+    /// keeping each occurrence at its own song position and retaining point IDs.
+    pub fn stretch_linked_automation_clips(
+        &mut self,
+        track: u64,
+        id: u64,
+        length: f64,
+    ) -> Result<()> {
+        let lane = self
+            .automation_lane_mut(track)
+            .context("Automation track not found")?;
+        let target = lane
+            .clips
+            .iter()
+            .find(|clip| clip.id == id)
+            .context("Automation clip not found")?;
+        let group = target
+            .link_group
+            .context("Automation clip is independent")?;
+        let factor = length / target.length;
+        let mut updated = lane.clone();
+        for clip in updated
+            .clips
+            .iter_mut()
+            .filter(|c| c.link_group == Some(group))
+        {
+            scale_pattern(clip, factor);
+            if clip.id == id {
+                clip.length = length;
+            }
+        }
+        updated.validate()?;
+        *lane = updated;
         Ok(())
     }
 
@@ -267,13 +308,7 @@ impl Project {
             .find(|clip| clip.id == id)
             .context("Automation clip not found")?
             .clone();
-        let mut source = AutomationLane {
-            override_value: None,
-            target: lane.target,
-            points: original.points.clone(),
-            interpolation: original.interpolation,
-            clips: Vec::new(),
-        };
+        let mut source = original.source_lane(lane.target);
         let result = edit(&mut source)?;
         source.validate()?;
         if source.points == original.points && source.interpolation == original.interpolation {

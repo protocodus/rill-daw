@@ -128,7 +128,7 @@ pub(crate) fn segment_bend_at(
             result.add = response.interact_pointer_pos();
         }
         if interactive {
-            response.context_menu(|ui| {
+            crate::context_menu(&response, |ui| {
                 for (label, shape) in [("Log", -1.0), ("Linear", 0.0), ("Exp", 1.0)] {
                     if crate::button(ui, label).clicked() {
                         result.interacted = true;

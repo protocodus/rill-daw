@@ -181,7 +181,7 @@ pub fn timeline_flags(
             ui.data_mut(|data| data.insert_temp(tracker_id, tracker));
         }
         if enabled {
-            response.context_menu(|ui| menu(ui, flag));
+            crate::context_menu(&response, |ui| menu(ui, flag));
         }
         rects.push((flag.kind, flag.key, rect));
     }

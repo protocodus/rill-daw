@@ -180,20 +180,8 @@ fn assert_footer_stable(state: &Value, expected: &[Value], width: u32, height: u
     }
 }
 
-fn keypad_click(app: &mut Harness, label: &str) -> Value {
-    let state = app.inspect();
-    let rect = state["label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .rev()
-        .find(|rect| rect["text"] == label)
-        .unwrap_or_else(|| panic!("Missing keypad key {label}: {}", state["visible_labels"]));
-    click_rect(app, rect)
-}
-
 #[test]
-fn generator_length_mouse_keypad_rejects_fractional_drafts_before_applying_whole_bars() {
+fn generator_length_exact_entry_rejects_fractional_drafts_before_applying_whole_bars() {
     for dark in [false, true] {
         let (mut app, _, id) = fixture(0.0, 0.0, 1.0, false);
         app.command(json!({"command":"system_theme","dark":dark}));
@@ -202,23 +190,10 @@ fn generator_length_mouse_keypad_rejects_fractional_drafts_before_applying_whole
         let ready = app.click("Generate…");
         let initial_length = generator(&ready)["length_bars"].clone();
         let length_field = &generator(&ready)["controls"]["length_bars"];
-        let (_, field_y) = center(length_field);
-        let keypad = ready["label_rects"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter(|rect| {
-                rect["text"] == "123"
-                    && (center(rect).1 - field_y).abs() < 1.0
-                    && rect["min"][0].as_f64().unwrap() >= length_field["max"][0].as_f64().unwrap()
-            })
-            .min_by(|a, b| center(a).0.total_cmp(&center(b).0))
-            .expect("Length has a visible mouse keypad action");
-        click_rect(&mut app, keypad);
-        for label in ["Clear", "2", ".", "5"] {
-            keypad_click(&mut app, label);
-        }
-        let invalid = keypad_click(&mut app, "Apply value");
+        let (x, y) = center(length_field);
+        app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
+        app.command(json!({"command":"text","text":"2.5"}));
+        let invalid = app.click("Apply value");
         assert!(
             invalid["visible_labels"]
                 .as_array()
@@ -229,10 +204,10 @@ fn generator_length_mouse_keypad_rejects_fractional_drafts_before_applying_whole
         assert_eq!(generator(&invalid)["length_bars"], initial_length);
         assert_eq!(invalid["project"], original["project"]);
         assert_eq!(invalid["history"], original["history"]);
-        for label in ["Clear", "2"] {
-            keypad_click(&mut app, label);
-        }
-        let applied = keypad_click(&mut app, "Apply value");
+        app.click("Cancel");
+        app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
+        app.command(json!({"command":"text","text":"2"}));
+        let applied = app.click("Apply value");
         assert_eq!(generator(&applied)["length_bars"], 2);
         assert_eq!(applied["project"], original["project"]);
         assert_eq!(applied["history"], original["history"]);

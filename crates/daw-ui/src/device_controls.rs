@@ -230,7 +230,7 @@ impl<'a> LabeledKnob<'a> {
         let (mut reset, mut type_value, mut automate) = (false, false, false);
         let automated = self.automation.is_some();
         let sources = self.mod_sources;
-        response.context_menu(|ui| {
+        crate::context_menu(&response, |ui| {
             if self.default.is_some() && crate::menu_item(ui, "Reset", None).clicked() {
                 reset = true;
                 ui.close();
@@ -735,7 +735,7 @@ pub fn value_menu(
 ) -> (Response, Option<usize>) {
     let response = value_link(ui, text, false, max_width);
     let mut picked = None;
-    egui::Popup::menu(&response).show(|ui| {
+    crate::show_menu(egui::Popup::menu(&response), |ui| {
         for (index, option) in options.iter().enumerate() {
             if crate::selectable(ui, index == selected, *option).clicked() {
                 picked = Some(index);
@@ -1271,7 +1271,7 @@ pub fn envelope_editor(
         if handle.double_clicked() {
             edits.push(EnvelopeEdit { param, value: 0.0 });
         }
-        handle.context_menu(|ui| {
+        crate::context_menu(&handle, |ui| {
             if crate::menu_item(ui, "Reset curve", None).clicked() {
                 edits.push(EnvelopeEdit { param, value: 0.0 });
                 ui.close();

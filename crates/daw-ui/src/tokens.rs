@@ -23,6 +23,8 @@ pub const CONTROL_HEIGHT: f32 = 34.0;
 /// A centered control line with room for readable slider scale captions.
 pub const PARAMETER_ROW_HEIGHT: f32 = 55.0;
 pub const COMPACT_HEIGHT: f32 = 21.0;
+pub const CONTEXT_ROW_HEIGHT: f32 = COMPACT_HEIGHT + SPACE_XS;
+pub const CONTEXT_ROW_GAP: f32 = 2.0;
 pub const SELECT_WIDTH: f32 = 144.0;
 pub const SEARCH_CHOICE_WIDTH: f32 = 233.0;
 pub const RADIUS: u8 = 5;
@@ -94,6 +96,8 @@ pub const FORM_FIELD_WIDTH: f32 = SEARCH_CHOICE_WIDTH;
 pub const FORM_WIDTH: f32 = FORM_LABEL_WIDTH + SPACE_LG + FORM_FIELD_WIDTH;
 pub const POPUP_WIDTH_SM: f32 = 377.0;
 pub const POPUP_WIDTH_MD: f32 = 610.0;
+/// Standard dialog body height budget on large displays.
+pub const POPUP_BODY_MAX_DEFAULT_HEIGHT: f32 = 610.0;
 pub const POPUP_WIDTH_LG: f32 = 987.0;
 pub const MIXER_STRIP_WIDTH: f32 = 144.0;
 /// Caption gutter beside a vertical fader for its dB scale.

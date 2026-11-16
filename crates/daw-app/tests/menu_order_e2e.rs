@@ -63,7 +63,8 @@ fn edit_track_and_window_menus_follow_workflow_with_a_shortcut_column() {
     let path = app.directory.path().join("menus.daw.json");
     project.save(&path).unwrap();
     app.command(json!({"command":"open","path":path}));
-    app.command(json!({"command":"viewport","width":1600,"height":1200}));
+    // Compare all labels and shortcut columns in the same layout snapshot.
+    app.command(json!({"command":"viewport","width":1600,"height":2400}));
     app.click("Menu phrase");
 
     app.click("Edit");

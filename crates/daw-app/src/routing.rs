@@ -54,6 +54,7 @@ impl DawApp {
         let mut edit_effect = None;
         let mut automate_effect = None;
         let mut add_effect = false;
+        let mut insert_anchor = None;
         widgets::popup(format!("Effects of {track_name}"), ctx)
             .id(egui::Id::new("effects"))
             .open(&mut open)
@@ -94,6 +95,12 @@ impl DawApp {
                         ui.push_id(slot.id, |ui| {
                             let model =
                                 crate::library::effect_model(&self.vst_catalog, &slot.effect);
+                            let controls = widgets::EffectSlotControls {
+                                index,
+                                count,
+                                enabled: slot.enabled,
+                                has_parameters: !matches!(slot.effect, Effect::Builtin { .. }),
+                            };
                             let row = widgets::effect_slot(
                                 ui,
                                 (track_id, slot.id),
@@ -101,52 +108,26 @@ impl DawApp {
                                 &slot.name,
                                 &model,
                                 &mut slot.enabled,
-                                |ui| {
-                                    if widgets::small_button(ui, "Open editor")
-                                        .on_hover_text("Open native effect editor")
-                                        .clicked()
-                                    {
-                                        edit_effect = Some(slot.id);
-                                    }
-                                    // Built-in effects automate from their own
-                                    // panel's controls; plug-ins need the list.
-                                    if !matches!(slot.effect, daw_core::Effect::Builtin { .. })
-                                        && widgets::small_button(ui, "Parameters…")
-                                            .on_hover_text(
-                                                "Edit or automate this plug-in's parameters",
-                                            )
-                                            .clicked()
-                                    {
-                                        automate_effect = Some(slot.id);
-                                    }
-                                    widgets::action_menu(ui, "More", |ui| {
-                                        if ui
-                                            .add_enabled(index > 0, widgets::button_widget("Up"))
-                                            .clicked()
-                                        {
-                                            move_up = Some(index);
-                                            ui.close();
-                                        }
-                                        if ui
-                                            .add_enabled(
-                                                index + 1 < count,
-                                                widgets::button_widget("Down"),
-                                            )
-                                            .clicked()
-                                        {
-                                            move_down = Some(index);
-                                            ui.close();
-                                        }
-                                        ui.separator();
-                                        if widgets::button(ui, "Remove insert").clicked() {
-                                            remove = Some(index);
-                                            ui.close();
-                                        }
-                                    })
-                                    .response
-                                    .on_hover_text("Insert actions");
-                                },
+                                |ui| controls.action_row(ui),
                             );
+                            use widgets::EffectSlotAction;
+                            match controls.context_menu(ui, &row.response).or(row.inner.1) {
+                                Some(EffectSlotAction::OpenEditor) => edit_effect = Some(slot.id),
+                                Some(EffectSlotAction::Parameters) => {
+                                    automate_effect = Some(slot.id)
+                                }
+                                Some(EffectSlotAction::Insert(side)) => {
+                                    insert_anchor = Some((slot.id, side))
+                                }
+                                Some(EffectSlotAction::ToggleEnabled) => {
+                                    slot.enabled = !slot.enabled;
+                                    changed = true;
+                                }
+                                Some(EffectSlotAction::MoveUp) => move_up = Some(index),
+                                Some(EffectSlotAction::MoveDown) => move_down = Some(index),
+                                Some(EffectSlotAction::Remove) => remove = Some(index),
+                                None => {}
+                            }
                             let location = match &slot.effect {
                                 Effect::Vst3 { path, .. } => path.as_str(),
                                 Effect::Builtin { .. } => "Built-in device",
@@ -204,8 +185,11 @@ impl DawApp {
         if !open {
             self.effects_open = false;
         }
-        if add_effect {
-            self.open_effect_library(track_id, false);
+        if add_effect || insert_anchor.is_some() {
+            self.open_effect_chooser(crate::library::LibraryTarget::Insert {
+                track: track_id,
+                anchor: insert_anchor,
+            });
         }
         if let Some(effect) = edit_effect {
             self.open_effect_editor(track_id, effect);

@@ -658,3 +658,94 @@ fn take_toolbar_leads_with_commands_and_rows_read_in_bars() {
     );
     app.quit();
 }
+
+#[test]
+fn linked_take_import_keeps_comp_sources_shared_and_switches_both_audible_takes() {
+    let (mut app, alternate) = fixture(false);
+    let mut original = project(&app.inspect());
+    let track = original.tracks[0].id;
+    let anchor = original.tracks[0].clips[0].id;
+    let ghost = original.clone_clip(track, anchor).unwrap();
+    let path = app.directory.path().join("linked-takes.daw.json");
+    original.save(&path).unwrap();
+    let state = app.command(json!({"command":"open","path":path}));
+    let original = project(&state);
+    app.click("Original");
+    app.click("Window");
+    app.click("Clip Editor");
+    takes(&mut app);
+    app.command(json!({"command":"audio_take_files","paths":[alternate]}));
+    app.click("Add takes…");
+    let pending = wait(&mut app, |state| {
+        state["visible_labels"]
+            .as_array()
+            .is_some_and(|labels| labels.iter().any(|label| label == "Propagate change"))
+    });
+    assert_eq!(project(&pending), original);
+    let linked = project(&app.click("Propagate change"));
+    let first = linked.clip(track, anchor).unwrap().take_group().unwrap();
+    let other = linked.clip(track, ghost).unwrap().take_group().unwrap();
+    assert_ne!(first, other);
+    for group in [first, other] {
+        assert_eq!(linked.audio_take_sources(track, group).len(), 2);
+    }
+    let main = linked.audio_take_regions(track, first)[0];
+    let peer = linked.audio_take_regions(track, other)[0];
+    assert!(main.link_group.is_some());
+    assert_eq!(main.link_group, peer.link_group);
+    assert_eq!(peer.start, 8.0);
+    let pending = app.click("Use whole take");
+    assert_eq!(project(&pending), linked);
+    let switched = project(&app.click("Propagate change"));
+    let main = switched.audio_take_regions(track, first)[0];
+    let peer = switched.audio_take_regions(track, other)[0];
+    assert_eq!(main.name, "Alternative");
+    assert_eq!(peer.name, main.name);
+    assert!(main.link_group.is_some());
+    assert_eq!(main.link_group, peer.link_group);
+    assert_eq!(
+        project(&app.command(json!({"command":"key","key":"Z","cmd":true}))),
+        linked
+    );
+    let state = app.inspect();
+    let alternative = linked
+        .audio_take_sources(track, first)
+        .into_iter()
+        .find(|clip| clip.name == "Alternative")
+        .unwrap()
+        .id;
+    let partial = app.command(json!({"command":"song_tool","name":"apply_edits","arguments":{
+        "session_id":state["song_session"]["id"], "expected_revision":state["song_session"]["revision"],
+        "label":"Comp a passage", "edits":[{"op":"select_audio_take","track":track,"group":first,"source":alternative,"range":[2.0,4.0],"crossfade_beats":0.0}]
+    }}));
+    assert_eq!(
+        partial["tool_result"]["error"]["code"],
+        "confirmation_required"
+    );
+    assert_eq!(project(&partial), linked);
+    let edited = project(&app.click("Propagate change"));
+    let regions: Vec<_> = [first, other]
+        .into_iter()
+        .map(|g| {
+            edited
+                .audio_take_regions(track, g)
+                .into_iter()
+                .find(|c| c.name == "Alternative")
+                .unwrap()
+        })
+        .collect();
+    assert_eq!((regions[0].start, regions[1].start), (2.0, 10.0));
+    assert_eq!((regions[0].length, regions[1].length), (2.0, 2.0));
+    assert!(regions[0].link_group.is_some());
+    assert_eq!(regions[0].link_group, regions[1].link_group);
+    assert_eq!(
+        project(&app.command(json!({"command":"key","key":"Z","cmd":true}))),
+        linked
+    );
+
+    assert_eq!(
+        project(&app.command(json!({"command":"key","key":"Z","cmd":true}))),
+        original
+    );
+    app.quit();
+}

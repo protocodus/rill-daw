@@ -53,7 +53,6 @@ fn audio_and_midi_clips_keep_titles_and_previews_separate_in_both_appearances() 
         ],
     ));
     let compact = project.add_midi_track("Compact surface");
-    project.track_mut(compact).unwrap().collapsed = true;
     project.track_mut(compact).unwrap().clips.push(Clip::midi(
         "Compact clip",
         0.0,

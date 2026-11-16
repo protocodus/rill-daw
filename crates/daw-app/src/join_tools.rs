@@ -130,6 +130,17 @@ impl DawApp {
                 .track(args.track_id)
                 .ok_or_else(|| ToolError::new("not_found", "Track not found"))?
                 .kind;
+            let targets: Vec<_> = args
+                .clip_ids
+                .iter()
+                .map(|id| (args.track_id, *id))
+                .collect();
+            if !self.ghost_peers(&targets).is_empty() {
+                return Err(ToolError::new(
+                    "confirmation_required",
+                    "Use Edit → Join clips… to choose how to handle ghost copies",
+                ));
+            }
             let mut candidate = self.project.clone();
             if kind == TrackKind::Midi {
                 let id = candidate

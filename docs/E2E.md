@@ -15,7 +15,7 @@ and Auto-play switching/stopping in both the full browser and Player palette.
 `sample_browser_async_e2e` covers captured loading, cancellation, failure and successful
 return, ordinary browsing that stays open after loading, focus-scoped preview keys,
 double-click audition and selected-source metadata Retry without rescanning.
-`sample_visual_e2e` checks selected-source background waveform and spectrum analysis,
+`sample_visual_e2e` checks selected-source waveform and spectrum rendering in a dedicated inspector plot,
 selection changes, inspector bounds and failure isolation without song or transport edits.
 `project_sample_import_e2e` covers the Add to Project Samples button and collection
 drop target, managed copies and source reuse, one Undo/Redo, portable reopening
@@ -162,7 +162,7 @@ and history. Audio editor coverage checks the same direct-tool convention.
 
 The [ten-agent composition study](USABILITY_2026-11-05.md) adds focused running-app
 regressions. `clip_position_entry_e2e` places clips by bar and fractional beat
-using mouse keypads, including non-4/4 meter, precise no-ops, validation and Undo.
+using steppers and typed entry, including non-4/4 meter, precise no-ops, validation and Undo.
 `piano_pitch_hint_e2e` checks actual painted pitch text beside the pointer in
 dense and folded rows, click-through drawing, bounds and stable toolbar geometry.
 `automation_gain_units_e2e` covers target-specific dB units, silence, overrides,
@@ -181,8 +181,8 @@ input corrections. These regressions exercise the production app without a
 desktop or physical audio device:
 
 - `number_stepper_e2e`: visible mouse steps, fractional values, bounds and separate Undo entries.
-- `numeric_keypad_e2e`: exact mouse entry for tempo, clip duration and nested loop bounds; full precision, invalid drafts, cancellation, separate Undo and existing keyboard/drag/step behavior.
-- `parameter_mouse_entry_e2e`: the exact-value menu's **123** toggle and mouse digits for channel gain, pan, sends and normalized plug-in parameters; retained drafts, units, automation curves, cancellation, Undo and bounded short-window actions. The plug-in fixture supplies metadata and IPC, without a DSP claim.
+- `numeric_entry_e2e` covers exact entry for tempo, clip duration and nested loop bounds, including full precision, invalid drafts, cancellation, separate Undo, dragging and steps.
+- `parameter_mouse_entry_e2e` opens the exact-value field for channel gain, pan, sends and normalized plug-in parameters. It checks typing, units, automation curves, cancellation, Undo and short-window actions.
 - `mixer_stability_e2e`: original-coordinate clicks after output failure/recovery, export completion and added sends; unchanged fader/pan/mute/solo geometry, reachable routing lanes and a previously scrolled short window. Ordinary clamping at a scroll boundary remains in effect.
 - `mixer_send_choice_e2e`: empty-strip destination choices target the clicked channel while preserving selection; opening/cancelling changes no project or history, eligible destinations exclude feedback, and bus/send creation is one Undo. Both themes, a short viewport and existing-summary Routing remain covered.
 - `midi_toolbar_stability_e2e`: stable note-tool controls at three widths in both themes, transforms, and hover pitch names.
@@ -209,14 +209,14 @@ successful-export receipts, exact paths, bounded history and document resets.
 - `selection_click_e2e`: plain-click release selects one group member, direct dragging moves the group, and context/modifier/pan/cancel paths preserve selection and history semantics. Initially unfocused native-style delivery and same-frame press/release still select and double-click open audio/MIDI clips; actual focus-loss events cancel pending selection.
 - `mixer_gain_precision_e2e`: concise captions, full-precision entry, untouched focus/blur/cancel, fractional and out-of-range gains, automation, Undo and recall.
 - `master_meter_e2e`: output peaks match consumed stereo PCM through buses, sends and mute; brief transients survive the next silent callback and pause clears readings. It uses the production render worker and a deterministic virtual output, without physical audio hardware.
-- `mouse_naming_e2e`: pointer-only project, clip and track names, personalized Save/WAV/MIDI defaults, Unicode preservation, name limits, persistent Caps and cancellation.
+- `document_naming_e2e` covers typed project, clip and track names, personalized Save/WAV/MIDI defaults, Unicode preservation, name limits and cancellation.
 - `output_error_e2e`: fatal output-device failures retain backend details, stay distinct from plug-in/render failures, appear once per failed stream, offer Audio setup, reject recording on a failed stream, and recover through Stop/Play or explicit Play retry with a fresh stream. The direct retry also preserves cursor, project, history and selection after unchanged Setup Apply. Recoverable backend dropouts retain the playing stream and PCM, update one nonfatal warning, respect dismissal and paused state, and can warn again on a fresh stream.
 - `timing_discovery_e2e`: Loop playback over arrangement, quarter-beat endpoint steps with separate Undo, fractional clock/bar conversions, bounded loop-strip labels and unchanged project/history when inspecting timing.
 - `eraser_scope_e2e`: the Erase tool removes only the pointed clip after Cut selects both halves; untouched clips and Undo selection remain intact, while context Delete still removes the selection.
 - `properties_stability_e2e`: audio/MIDI Properties retain the Stretch row from its initial 100.0%; selecting Stretch and repeatedly stepping duration at the same pointer coordinates preserves field geometry at 800×600 and 1440×1000, with one Undo per step.
 
 ```sh
-cargo test --locked -p daw-app --test zoom_controls_e2e --test selection_click_e2e --test mixer_gain_precision_e2e --test master_meter_e2e --test mouse_naming_e2e --test timing_discovery_e2e --test output_error_e2e --test eraser_scope_e2e --test properties_stability_e2e -- --test-threads=1
+cargo test --locked -p daw-app --test zoom_controls_e2e --test selection_click_e2e --test mixer_gain_precision_e2e --test master_meter_e2e --test document_naming_e2e --test timing_discovery_e2e --test output_error_e2e --test eraser_scope_e2e --test properties_stability_e2e -- --test-threads=1
 cargo test --locked -p daw-engine output_meter_tests -- --test-threads=1
 cargo test --locked -p daw-engine output_failure_tests -- --test-threads=1
 ```
@@ -378,7 +378,7 @@ cargo test --locked -p daw-app --test automation_curves_e2e --test automation_in
 `mixer_readability_e2e` checks channel separation, destination color markers,
 bus input counts, insert summaries and mouse access to output/send routing.
 `effect_chain_layout_e2e` covers bounded effect names, status, pinned insertion,
-bypass/reordering with Undo, and calibrated fader interaction. `studio_windows_e2e`
+before/after placement and append through the chooser, card context actions, cancel, Undo/Redo, and calibrated fader interaction. `studio_windows_e2e`
 opens and closes on-demand utilities in both appearances and at narrow/wide
 sizes, preserving the song while keeping the wrapped transport accessible.
 `control_roles_e2e` also checks whole-family tool wrapping and mouse selection.
@@ -443,7 +443,7 @@ The runner executes scenarios one at a time, including in CI and containers. Eac
 
 By default the tests launch Cargo's application binary. Set `RILL_E2E_BINARY` to an absolute executable path to test a packaged build instead. CI runs all subprocess scenarios again against the executable extracted from each native distribution before uploading the archive.
 
-The audio scenario creates five tracks through the Track menu, drops generated WAV files with different lengths and sample rates onto their rows, exports the complete arrangement, and checks duration including the release tail, finite samples, nonzero stereo content, a distinct audible frequency from each of the five sources, 48 kHz / 32-bit floating-point format, recovered session contents, and successful process exit. Another scenario drops multiple files into empty arrangement space and checks that new tracks appear. Launch-and-quit and File → Quit scenarios verify display-free startup and shutdown. Further scenarios cover track creation and Undo/Redo, instrument/library selection, effect insertion/bypass/reordering and bus routing, mixer mute/solo, folder membership/collapse, and Setup Apply/Cancel persistence. The Add MIDI track scenario verifies automatic assignment-chooser opening and its four-beat pattern; choosing an instrument preserves that pattern. The `mixer_e2e` target drags arranger volume/pan controls, checks channel/destination labels against Mixer, verifies that folders do not consume channel numbers, exercises mute/solo and Undo/Redo, saves/reopens the session, and verifies that the exported stereo balance and level reflect those edits. All subprocess scenarios share `crates/daw-app/tests/common/mod.rs`.
+The audio scenario creates five tracks through the Track menu, drops generated WAV files with different lengths and sample rates onto their rows, exports the complete arrangement, and checks duration including the release tail, finite samples, nonzero stereo content, a distinct audible frequency from each of the five sources, 48 kHz / 32-bit floating-point format, recovered session contents, and successful process exit. Another scenario drops multiple files into empty arrangement space and checks that new tracks appear. Launch-and-quit and File → Quit scenarios verify display-free startup and shutdown. Further scenarios cover track creation and Undo/Redo, instrument/library selection, effect insertion/bypass/reordering and bus routing, mixer mute/solo, folder membership/collapse, and Setup Apply/Cancel persistence. The Add MIDI track scenario verifies automatic assignment-chooser opening and its one-bar starter pattern in the default meter; choosing an instrument preserves that pattern. The `mixer_e2e` target drags arranger volume/pan controls, checks channel/destination labels against Mixer, verifies that folders do not consume channel numbers, exercises mute/solo and Undo/Redo, saves/reopens the session, and verifies that the exported stereo balance and level reflect those edits. All subprocess scenarios share `crates/daw-app/tests/common/mod.rs`.
 
 Header-picker scenarios change the output bus directly from the sequencer, return to Master, cancel, undo/redo, and verify the saved route in exported audio. They check that self-routing and transitive feedback destinations are absent and that compact rows retain access through their channel-controls button. MIDI scenarios open the instrument chooser from an unselected track's header, assign and replace its VST, and verify that other tracks, existing patterns, and track count remain unchanged.
 
@@ -743,8 +743,12 @@ beyond it, including one-step Undo and trimmed/stretched ghost source timing.
 `midi_generation_memory_e2e` checks per-clip session choices after apply/cancel,
 independent visual Grid scale, restored editor view, **Next range**, and bounds.
 `novice_clip_e2e` covers editable Properties Start/Duration with move/trim and
-Undo, Add pattern from the toolbar and context menu, empty-lane guidance, and
-sparse Arrangement Fit row sizing.
+Undo, Add pattern from the toolbar, empty-lane guidance, and sparse Arrangement
+Fit row sizing. `track_insert_e2e` opens a track’s context menu from its header
+and from empty lane space, inserts a sample or clip, checks the resulting beat
+and destination, and undoes the edit. The audio case also cancels the picker. `track_color_picker_e2e`
+double-clicks track names and icons to edit track, folder and automation
+identity, including Undo, Redo and saving and reopening the song.
 
 `novice_library_e2e` distinguishes absent VST3 inventory from filtered results,
 opens Plug-in folders and restores its caller, clears filters, and verifies
@@ -1264,7 +1268,7 @@ installed plug-in or network connection.
 (destination, ring, dB value, Pre/Post share one center line), checks that a
 small drag from −12 dB remains below unity, and compares the live dB readout
 with the project after pointer adjustment. It exercises the direct value button, named
-source/destination editor, mouse keypad, fractional precision, Cancel,
+source/destination editor, typed fractional values, Cancel,
 untouched Apply and Undo. Pan entry hides binary float display noise without
 changing the stored value. Automated send edits retain the existing normalized
 linear mapping over 0–16× and override without rewriting the curve; Resume and
@@ -1278,7 +1282,7 @@ song-span identity, the **Local** MIDI ruler and local-to-song cursor mapping,
 accurate audio/MIDI time-basis hints, stable Properties placement and retained
 canvas space. Navigation and inspection must preserve the project and history.
 `expert_mixer_navigation_e2e` opens Properties directly on the right-clicked
-audio or MIDI occurrence, edits its start with mouse digits, and checks Cancel
+audio or MIDI occurrence, enters an exact start value, and checks Cancel
 and Undo. At 1440×1000 in both appearances, it requires main output and one send
 route to remain visible through an export notice without moving fader, pan or
 mute/solo controls. Further scenarios check numbered bus creation, existing-name
@@ -1389,6 +1393,14 @@ the navigation.
 cargo test --locked -p daw-app --test empty_workspace_e2e --test novice_clip_e2e -- --test-threads=1
 ```
 
+`cpu_load_e2e` opens the CPU popup on actual system readings while idle. Controlled readings verify the visible warning for a saturated core, total overload, and recovery.
+
+`arranger_density_e2e` clicks the chevron on each track kind and checks the
+painted clip bars, automation marks and empty gaps in channel colors, including
+a closed folder. It saves and reopens the song and expands the rows again.
+`arranger_automation_e2e` checks collapsed and expanded lane geometry, pattern
+positions, rendered audio and the saved disclosure state.
+
 The feedback interaction suites run without a desktop or audio device:
 
 ```sh
@@ -1458,7 +1470,7 @@ centered project name with duration and the AI button at the right edge.
 `command_menu_spacing_e2e` checks compact 5-point menu-bar vertical insets and
 menu row gaps in both themes at 1×, 1.25× and 2× scale. It clicks the resized
 menu geometry and verifies that every top-level menu stays inside a short
-viewport, scrolls with the mouse and keeps the final Window action reachable.
+viewport at half its height, scrolls with the mouse and keeps the final Window action reachable. `ux_parity_e2e` checks context-menu row spacing, label alignment and actual action-icon strokes in the waveform editor.
 
 `library_resize_e2e` opens the instrument-assignment browser and drags its bottom
 edge vertically in both directions in large and compact viewports. It verifies

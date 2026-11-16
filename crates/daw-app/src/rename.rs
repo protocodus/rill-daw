@@ -26,7 +26,6 @@ fn state_id() -> egui::Id {
 pub(crate) fn reset(ctx: &egui::Context) {
     ctx.data_mut(|data| data.remove::<RenameDraft>(state_id()));
     ctx.memory_mut(|memory| memory.surrender_focus(state_id().with("field")));
-    daw_ui::set_name_keyboard_open(ctx, state_id().with("field"), false);
 }
 
 fn rect(value: &serde_json::Value) -> Option<egui::Rect> {
@@ -254,7 +253,7 @@ impl DawApp {
             })
         });
         if let Some((target, text)) = target {
-            self.start_name_draft(ctx, target, text, false);
+            self.start_name_draft(ctx, target, text);
         }
     }
 
@@ -264,20 +263,13 @@ impl DawApp {
         };
         self.selected_track = Some(track);
         self.selected_clip = None;
-        self.start_name_draft(ctx, RenameTarget::Track(track), name, false);
+        self.start_name_draft(ctx, RenameTarget::Track(track), name);
     }
 
-    fn start_name_draft(
-        &mut self,
-        ctx: &egui::Context,
-        target: RenameTarget,
-        text: String,
-        keyboard: bool,
-    ) {
+    fn start_name_draft(&mut self, ctx: &egui::Context, target: RenameTarget, text: String) {
         // Restore a utility's caller without dismissing the Clip Editor or
         // Mixer workspace whose item is being named.
         self.close_utility_popups();
-        daw_ui::set_name_keyboard_open(ctx, state_id().with("field"), keyboard);
         let document = crate::spectrogram::waveform_generation(ctx);
         ctx.data_mut(|data| {
             data.insert_temp(
@@ -295,33 +287,12 @@ impl DawApp {
 
     pub(crate) fn start_marker_rename(&mut self, ctx: &egui::Context, id: u64) {
         if let Some(name) = self.project.marker(id).map(|marker| marker.name.clone()) {
-            self.start_name_draft(ctx, RenameTarget::Marker(id), name, false);
+            self.start_name_draft(ctx, RenameTarget::Marker(id), name);
         }
     }
 
     pub(crate) fn start_project_rename(&mut self, ctx: &egui::Context) {
-        self.start_name_draft(ctx, RenameTarget::Project, self.project.name.clone(), false);
-    }
-
-    /// Properties can open the same draft with mouse text entry already visible.
-    pub(crate) fn start_item_name_keyboard(&mut self, ctx: &egui::Context, clip: bool) {
-        let target = if clip {
-            self.selected_track
-                .zip(self.selected_clip)
-                .and_then(|(track, clip)| {
-                    self.clip_name(track, clip)
-                        .map(|name| (RenameTarget::Clip(track, clip), name.clone()))
-                })
-        } else {
-            self.selected_track.and_then(|track| {
-                self.project
-                    .track(track)
-                    .map(|item| (RenameTarget::Track(track), item.name.clone()))
-            })
-        };
-        if let Some((target, text)) = target {
-            self.start_name_draft(ctx, target, text, true);
-        }
+        self.start_name_draft(ctx, RenameTarget::Project, self.project.name.clone());
     }
 
     pub(crate) fn rename_overlay(&mut self, ctx: &egui::Context) {
@@ -425,8 +396,7 @@ impl DawApp {
             .width()
             .clamp(MIN_WIDTH, daw_ui::tokens::POPUP_WIDTH_SM)
             .min((content.width() - trailing_width).max(MIN_WIDTH));
-        let keyboard_open = daw_ui::name_keyboard_open(ctx, state_id().with("field"));
-        let editor_size = daw_ui::inline_name_editor_size(ctx, width, keyboard_open);
+        let editor_size = daw_ui::inline_name_editor_size(ctx, width);
         let position = egui::pos2(
             anchor.left().clamp(
                 content.left(),

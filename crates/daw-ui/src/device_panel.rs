@@ -542,16 +542,16 @@ impl<'a> DevicePanel<'a> {
             let mut state = bar
                 .data(|data| data.get_temp::<PresetBrowserState>(browser_id))
                 .unwrap_or_default();
-            egui::Popup::menu(&button)
+            let popup = egui::Popup::menu(&button)
                 .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-                .id(browser_id.with("popup"))
-                .show(|ui| {
-                    if let Some(action) =
-                        preset_browser(ui, presets.entries, presets.current, &mut state)
-                    {
-                        output.preset = Some(action);
-                    }
-                });
+                .id(browser_id.with("popup"));
+            if let Some(action) = crate::show_menu(popup, |ui| {
+                preset_browser(ui, presets.entries, presets.current, &mut state)
+            })
+            .and_then(|popup| popup.inner)
+            {
+                output.preset = Some(action);
+            }
             bar.data_mut(|data| data.insert_temp(browser_id, state));
         }
         frame.body(ui, |ui| {

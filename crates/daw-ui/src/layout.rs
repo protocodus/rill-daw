@@ -494,55 +494,136 @@ pub fn bounded_columns<R>(
     })
 }
 
-/// A flexible center pane between optional fixed-width side panes, such as a
-/// library's navigation and detail panes. A side width of zero hides that
-/// pane. Each pane owns its scrolling within the shared bounded height.
-pub fn bounded_panes<R>(
-    ui: &mut Ui,
-    id: impl Hash,
-    height: f32,
-    [left, right]: [f32; 2],
-    mut contents: impl FnMut(usize, &mut Ui) -> R,
-) -> InnerResponse<[Option<R>; 3]> {
-    ui.push_id(id, |ui| {
-        let height = if height.is_finite() {
-            height.max(0.0).min(ui.available_height().max(0.0))
-        } else {
-            0.0
-        };
+/// Sidebars keep their chosen widths across browser visits. When the window
+/// narrows, fit both sides around the catalog without losing those preferences.
+pub struct BrowserPanes {
+    id: egui::Id,
+    sides: [f32; 2],
+    minimums: [f32; 2],
+    budget: f32,
+    pub center_width: f32,
+}
+
+impl BrowserPanes {
+    pub fn new(ui: &Ui, id: egui::Id, defaults: [f32; 2], center_min: f32) -> Self {
+        let width = ui.available_width().max(0.0);
+        let visible = defaults.map(|w| w > 0.0);
+        let gaps = visible.iter().filter(|side| **side).count() as f32 * tokens::SPACE_MD;
+        let usable = (width - gaps).max(0.0);
+        let mut minimums = [
+            tokens::SELECT_WIDTH,
+            tokens::SELECT_WIDTH + tokens::SPACE_XL,
+        ];
+        for i in 0..2 {
+            if !visible[i] {
+                minimums[i] = 0.0;
+            }
+        }
+        let min_sum = minimums.iter().sum::<f32>();
+        let budget = (usable - center_min).max(0.0);
+        let scale = (budget / min_sum.max(1.0)).min(1.0);
+        minimums = minimums.map(|v| v * scale);
+        let mut extra = [0.0; 2];
+        for i in 0..2 {
+            if visible[i] {
+                let preferred = ui
+                    .data(|d| d.get_temp::<f32>(id.with(i)))
+                    .unwrap_or(defaults[i]);
+                extra[i] = (preferred - minimums[i]).max(0.0);
+            }
+        }
+        let extra_scale = ((budget - minimums.iter().sum::<f32>()).max(0.0)
+            / extra.iter().sum::<f32>().max(1.0))
+        .min(1.0);
+        let sides = std::array::from_fn(|i| minimums[i] + extra[i] * extra_scale);
+        Self {
+            id,
+            sides,
+            minimums,
+            budget,
+            center_width: usable - sides.iter().sum::<f32>(),
+        }
+    }
+
+    pub fn show(
+        self,
+        ui: &mut Ui,
+        height: f32,
+        mut contents: impl FnMut(usize, &mut Ui),
+    ) -> [egui::Rect; 3] {
+        let height = height.max(0.0).min(ui.available_height().max(0.0));
         let (rect, _) = ui.allocate_exact_size(
-            egui::vec2(ui.available_width().max(0.0), height),
+            egui::vec2(ui.available_width(), height),
             egui::Sense::hover(),
         );
-        let gap = tokens::SPACE_LG;
-        let left = left.max(0.0);
-        let right = right.max(0.0);
-        let center_left = rect.left() + if left > 0.0 { left + gap } else { 0.0 };
-        let center_right = rect.right() - if right > 0.0 { right + gap } else { 0.0 };
-        let panes = [
-            (left > 0.0).then(|| egui::Rect::from_min_size(rect.min, egui::vec2(left, height))),
-            Some(egui::Rect::from_x_y_ranges(
-                center_left..=center_right.max(center_left),
-                rect.y_range(),
-            )),
-            (right > 0.0).then(|| {
-                egui::Rect::from_x_y_ranges(rect.right() - right..=rect.right(), rect.y_range())
-            }),
+        let mut edges = [rect.left(), rect.right()];
+        for i in 0..2 {
+            let width = self.sides[i];
+            if width <= 0.0 {
+                continue;
+            }
+            let sign = if i == 0 { 1.0 } else { -1.0 };
+            let edge = edges[i] + sign * width;
+            let gap = tokens::SPACE_MD;
+            edges[i] = edge + sign * gap;
+            let handle = egui::Rect::from_center_size(
+                egui::pos2(edge + sign * gap * 0.5, rect.center().y),
+                egui::vec2(gap, height),
+            );
+            // Express both handles as a left-to-right coordinate for the shared drag control.
+            let mut at = sign * width;
+            let min = sign * self.minimums[i];
+            let max = sign * (self.budget - self.sides[1 - i]).max(self.minimums[i]);
+            let response = crate::resize_value_at(
+                ui,
+                self.id.with(("divider", i)),
+                handle,
+                &mut at,
+                min.min(max)..=min.max(max),
+                crate::ResizeAxis::Horizontal,
+                "Drag to resize sidebar",
+            );
+            let color = if response.hovered() || response.dragged() {
+                theme::palette(ui.ctx()).accent
+            } else {
+                theme::palette(ui.ctx()).line
+            };
+            ui.painter().vline(
+                handle.center().x,
+                handle.y_range(),
+                egui::Stroke::new(tokens::SPACE_XS, color),
+            );
+            if response.changed() {
+                ui.data_mut(|d| {
+                    d.insert_temp(self.id.with(i), sign * at);
+                    if self.sides[1 - i] > 0.0 {
+                        d.insert_temp(self.id.with(1 - i), self.sides[1 - i]);
+                    }
+                });
+            }
+        }
+        let spans = [
+            rect.left()..=rect.left() + self.sides[0],
+            edges[0]..=edges[1].max(edges[0]),
+            rect.right() - self.sides[1]..=rect.right(),
         ];
-        std::array::from_fn(|index| {
-            panes[index].map(|pane| {
-                let mut child = ui.new_child(
-                    egui::UiBuilder::new()
-                        .id_salt(index)
-                        .max_rect(pane)
-                        .layout(egui::Layout::top_down(egui::Align::Min)),
-                );
-                child.set_clip_rect(ui.clip_rect().intersect(pane));
-                child.set_width(pane.width());
-                contents(index, &mut child)
-            })
-        })
-    })
+        let panes = spans.map(|x| egui::Rect::from_x_y_ranges(x, rect.y_range()));
+        for (index, pane) in panes.into_iter().enumerate() {
+            if !pane.is_positive() {
+                continue;
+            }
+            let mut child = ui.new_child(
+                egui::UiBuilder::new()
+                    .id_salt(self.id.with(index))
+                    .max_rect(pane)
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+            );
+            child.set_clip_rect(ui.clip_rect().intersect(pane));
+            child.set_width(pane.width());
+            contents(index, &mut child);
+        }
+        panes
+    }
 }
 
 pub struct WorkspaceHeaderResponse<R> {

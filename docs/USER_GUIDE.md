@@ -46,6 +46,10 @@ the arranger remain available; the starting actions disappear once a track exist
 
 See the [audio editor coverage and shortcuts](AUDIO_EDITOR.md) for common workflows, verification, and remaining advanced tools.
 
+## CPU load
+
+The menu-bar **CPU** meter shows total system usage. Click it to see the percentage for each logical core. A warning icon and **Overload** appear when total usage or any core reaches 95% in a one-second sample. The popup highlights each affected meter. The warning clears when usage drops below the threshold.
+
 ## AI assistant and MCP
 
 Choose **Window → Setup → AI**, select OpenAI or Anthropic, enter your model and
@@ -108,7 +112,7 @@ See [AI architecture, tool inventory, and verification](AI_TOOLS.md).
 
 ## Working with the editors
 
-The **File**, **Edit**, **Track**, and **Window** menus hold application commands. Transport and contextual editing tools stay beside the canvas. Use **Track → Add audio track / Add MIDI track / Add bus / Add folder** to build the session and **File → Import…** to import media. **Add MIDI track** creates a four-beat pattern at the cursor and immediately opens the instrument chooser. Choose an instrument to replace R1 Mini and return to your caller; closing the chooser keeps R1 Mini.
+The **File**, **Edit**, **Track**, and **Window** menus hold application commands. Transport and contextual editing tools stay beside the canvas. Use **Track → Add audio track / Add MIDI track / Add bus / Add folder** to build the session and **File → Import…** to import media. **Add MIDI track** creates a pattern at the cursor that matches the loop length (up to one bar) and immediately opens the instrument chooser. Choose an instrument to replace R1 Mini and return to your caller; closing the chooser keeps R1 Mini.
 
 **File → Import audio…** always creates a new audio track and clip at the cursor.
 WAV, AIFF/AIFF-C, FLAC, MP3, Ogg/Vorbis, AAC, M4A (AAC/ALAC) and CAF
@@ -166,13 +170,13 @@ controls leave the music and selection unchanged.
 
 In the piano roll, **Generate…** opens Chord, Arpeggio and Melody modes. Start bar and Length initially cover the completely visible bars; edit either field to change the highlighted range. Choices and range are remembered per clip for the app session, including after Cancel; **Next range** advances by the current length while retaining settings. Violet notes preview the result alongside existing notes. **New variation** rerolls random patterns, **Fit preview** reveals their full extent, and **Add notes** commits the exact preview and keeps the generator open. Use **Next range** to continue, then **Done** to close it. Before adding notes, **Cancel** discards only the preview; closing the generator after an addition keeps the committed notes. Parameter controls scroll independently so the range and confirmation buttons remain reachable.
 
-Arrangement track headers separate the title, icon and color from the mix controls. Volume and pan sit beside **M**ute and **S**olo; **Routing** and **Instrument** or **Input** each have their own row. Stereo output meters occupy a dedicated column. Drag a volume or pan rail, or click its value for exact entry. Pan shows **C** at center and **L/R** percentages elsewhere. Cancel, Escape or clicking outside the value popup discards the draft; displaying a rounded caption never changes stored precision. −60 dB silences the channel.
+Double-click a track name or icon in Arrangement to open Track Properties. Type to replace the selected name, click **Color** to pick a tint, or choose an **Icon**. **Track type** restores the default icon. A folder’s chevron opens and closes its children. Volume and pan sit beside **M**ute and **S**olo; **Routing** and **Instrument** or **Input** each have their own row. Stereo output meters occupy a dedicated column. Drag a volume or pan rail, or click its value for exact entry. Pan shows **C** at center and **L/R** percentages elsewhere. Cancel, Escape or clicking outside the value popup discards the draft; displaying a rounded caption never changes stored precision. −60 dB silences the channel.
 
 **View → Track density** offers **Compact**, **Standard** and **Detailed**. Compact is the default: 64-point rows keep volume, pan, M/S, arm and metering available while showing more of the song. Standard adds room for volume/pan rails; Detailed exposes routing and source controls directly. The sliders icon beside a compact track's title opens its complete Channel view. The density preference is remembered across projects and restarts without changing the song or Undo history. Fit and manual row resizing remain temporary view changes.
 
 In Detailed headers, click **Routing** to choose Master or an eligible output bus. **Instrument** chooses or replaces the MIDI track's VST; **Input** opens audio recording and monitoring settings. The default label width is 288 points. Very short rows use readable value controls instead of miniature rails. Folders and automation tracks have no audio meter or gain/pan controls; folder mute/solo acts on descendants.
 
-Clip names are optional. Use the clip's context menu **Rename…**, clear its name and choose **Apply name** to hide the title band. A thin top border remains while the waveform or notes gain the space. Double-click a clip of any kind, or use **Rename…** from the context menu, to name it. **Edit notes** / **Edit audio** in the context menu, or **Window → Clip Editor**, opens Clip Editor. Clearing/restoring a name supports Undo/Redo and saved projects; linked copies share the name.
+Clip names are optional. Use the clip's context menu **Rename…**, clear its name and choose **Apply name** to hide the title band. A thin top border remains while the waveform or notes gain the space. Double-click the clip’s title strip to rename it, including the thin strip on an unnamed clip. Double-click its body to edit the notes, audio, or automation points. The context menu also offers the corresponding edit action. Clearing/restoring a name supports Undo/Redo and saved projects; linked copies share the name.
 
 Gain captions show one decimal place; hover or open the value editor to see its
 full precision. Simply viewing or cancelling an edit preserves the stored value.
@@ -180,7 +184,7 @@ The Master strip meters its processed signal before device clipping, dry input
 monitoring and metronome. Live bars fall to silence when paused/stopped; peak
 holds remain available until reset. The transport device meter is separate.
 
-In Arrangement, **Add pattern** creates a MIDI pattern at the cursor on the selected MIDI track, or creates a track when needed. New clips take the length of the last selected clip (four beats to begin with). Empty MIDI lanes also show a double-click hint and offer **Add pattern** in their context menu; double-clicking an automation lane creates an automation pattern the same way. Double-clicking below the tracks creates a new MIDI track with its first clip at the clicked, snapped position. **Add track…** below the last track, and **Add track** in a track's context menu, add instrument, MIDI, audio, bus or folder tracks (automation tracks come from right-clicking a control and choosing **Automate**); from a track's menu the new track follows that track. Select **Window → Clip Editor**, or the clip's **Edit notes** / **Edit audio**, to open it; double-click always creates a clip on empty lane space or renames an existing one. Drag a clip to move it; drag its edges to trim its length. **Properties → Clip** provides editable **Start**, **Duration** and **Source offset** in beats. Visible **−/+** buttons step each value by one beat; drag the number for fine adjustment or click to type. Start is one-based, and each step supports Undo. Tempo has matching buttons that step by one BPM. While trimming an arrangement clip, a pointer readout shows its current end and duration in seconds and beats. Use **Edit → Split at cursor / Duplicate**, or the clip's context menu. Right-click a track header for properties, collapse/expand, or deletion; use **Window → Effects / Routing** for its signal path. Arrangement **Fit** keeps sparse track rows at a readable maximum of 144 points while fitting the song horizontally.
+In Arrangement, **Add pattern** creates a MIDI pattern at the cursor on the selected MIDI track, or creates a track when needed. On an existing track, new clips inherit the last selected clip’s length. A new instrument track starts with a pattern the length of the loop, up to one bar in the meter at its insertion point. Right-click an audio track and choose **Insert sample…** to pick an audio file. On a MIDI or automation track, choose **Insert clip**. A right-click on empty lane space uses that spot on the grid. A right-click on the track header inserts at the snapped playhead. Double-clicking empty MIDI or automation lane space also creates a clip. Double-clicking below the tracks creates a new MIDI track with its first clip at the clicked, snapped position. **Add track…** below the last track, and **Add track** in a track's context menu, add instrument, MIDI, audio, bus or folder tracks (automation tracks come from right-clicking a control and choosing **Automate**); from a track's menu the new track follows that track. Select **Window → Clip Editor**, or the clip's **Edit notes** / **Edit audio**, to open it. Drag a clip to move it; drag its edges to trim its length. **Properties → Clip** provides editable **Start**, **Duration** and **Source offset** in beats. Visible **−/+** buttons step each value by one beat; drag the number for fine adjustment or click to type. Start is one-based, and each step supports Undo. Tempo has matching buttons that step by one BPM. While trimming an arrangement clip, a pointer readout shows its current end and duration in seconds and beats. Use **Edit → Split at cursor / Duplicate**, or the clip's context menu. Right-click a track header for properties, collapse/expand, or deletion; use **Window → Effects / Routing** for its signal path. Arrangement **Fit** keeps sparse track rows at a readable maximum of 144 points while fitting the song horizontally.
 
 Right-click an audio or MIDI clip and choose **Properties** to edit that clip's
 timing directly above Arrangement. In Clip Editor, **Properties** stays at the
@@ -192,9 +196,8 @@ when that phrase repeats later in the song. Audio's ruler shows song positions.
 Clip Properties also shows **Starts at**, **Ends at** and **Elapsed** in clock time
 and bars/beats, so you can check a clip's exact timing without converting units.
 Beside **Start**, click the **Bar · Beat** position to enter a bar and beat
-directly. For example, Bar 5, Beat 1 places the clip after four bars. Each field
-has a **123** mouse keypad, and **Apply position** commits the move in one Undo
-step. The beat field accepts fractional beats and follows the song's meter.
+directly. For example, Bar 5, Beat 1 places the clip after four bars. Type in either field, drag it, or use its −/+ buttons. **Apply position** commits
+the move in one Undo step. The beat field accepts fractional beats and follows the song's meter.
 
 | Shortcut | Action |
 | --- | --- |
@@ -221,7 +224,7 @@ The piano roll shows every tool directly: **Select**, **Pencil**, **Multi-draw**
 With **Pencil**, press at the note's starting time and pitch, then drag to choose
 its length. The starting pitch stays fixed while drawing.
 
-The select tool supports dragging a rectangle around notes. Drag note bodies to change time/pitch, and either edge to change length. **Length** chooses the initial drawing duration from **Last note**, fixed note values, or **1 bar**; Last note starts at 1/16 and remembers the last drawn or selected length. Double-click empty space to create a note or a note to delete it. Drawing past the marked **Clip end** extends the clip with the new note in one Undo step. The velocity lane supports individual and swept edits; selected chord/scale stacks fit within one octave. See [editor controls](EDITORS.md). The duplicate tool places a copy after a note; group duplication preserves the group's spacing. The cut tool splits at the snapped pointer position. Glue joins compatible notes from their earliest start to latest end, including gaps; use the tool on two notes or **Glue selected** on a selection. Expressive notes remain independent during automatic containment cleanup so channel, attributes and per-note data cannot be discarded by a coarse pitch match. Leaving Clip Editor clears note selection so arrangement edit commands act on the clip.
+The select tool supports dragging a rectangle around notes. Drag note bodies to change time/pitch, and either edge to change length. **Length** chooses the initial drawing duration from **Last note**, fixed note values, or **1 bar**; Last note starts at 1/16 and remembers the last drawn or selected length. In Select or Cursor, double-click empty space to create a note as long as the last one you clicked. Before you click a note, the new note spans one grid step. Double-click a note with Select to delete it. Drawing past the marked **Clip end** extends the clip with the new note in one Undo step. The velocity lane supports individual and swept edits; selected chord/scale stacks fit within one octave. See [editor controls](EDITORS.md). The duplicate tool places a copy after a note; group duplication preserves the group's spacing. The cut tool splits at the snapped pointer position. Glue joins compatible notes from their earliest start to latest end, including gaps; use the tool on two notes or **Glue selected** on a selection. Expressive notes remain independent during automatic containment cleanup so channel, attributes and per-note data cannot be discarded by a coarse pitch match. Leaving Clip Editor clears note selection so arrangement edit commands act on the clip.
 
 Select notes with the mouse or **Edit → Select all notes**, then open **Notes** for Humanize, Quantize, lengths, flips and Legato. These actions are available with every tool:
 
@@ -262,7 +265,7 @@ clip** uses exact audio/MIDI/automation clip bounds without changing workspace.
 Select one note and choose **Notes → Expression…**. The popup edits **Attack
 velocity** and **Release velocity** at 16-bit precision, and **Note pitch** at
 1/512 semitone resolution. Original MIDI 1.0 attack precision remains intact
-when editing another property. Mouse steppers and **123** support exact entry.
+when editing another property. Use the steppers to adjust a value or right-click its field to type an exact value.
 
 Per-note **Pressure**, **Pitch bend**, **Registered controller** and **Assignable
 controller** entries use **After note** time in audible beats, an exact 32-bit
@@ -320,12 +323,12 @@ empty song.
 Clip Properties always shows **Stretch**, starting at **100.0%**, so its timing
 controls stay in place when a duration edit changes between Trim and Stretch.
 
-Choose **123** beside tempo, clip timing or loop boundaries to enter an exact
-number using the mouse. The pad supports digits, decimal point, sign, Backspace
-and Clear. **Apply value** makes one undoable edit; Cancel leaves the value
-unchanged. Generate's Start bar and Length pads accept whole bars only.
+Click a tempo, clip timing or loop boundary field to type a number, or drag
+it to adjust the value. Right-click the field to see its exact value and allowed
+range. **Apply value** commits one edit. Generate's Start bar and Length
+accept whole bars.
 
-Stretch changes duration without replacing the source. Audio keeps its pitch; MIDI note positions and lengths scale in playback and the editor. Stretching one ghost changes only that occurrence's timing. Source-rate factors range from 0.25× to 4×, and each drag remains one Undo step. In Properties, selecting **Stretch** makes the Duration field and **123** keypad show the supported range for that occurrence. For an unstretched four-beat clip it is 1–16 beats; trimmed or already-stretched clips use their current source window. Values outside the range stay as a draft until corrected. Preparing stretched audio happens in the background; the current sound continues until its replacement is ready. Extreme stretches can introduce artifacts, especially in transients and complex material.
+Stretch changes duration without replacing the source. Audio keeps its pitch; MIDI note positions and lengths scale in playback and the editor. Stretching one ghost changes only that occurrence's timing. Source-rate factors range from 0.25× to 4×, and each drag remains one Undo step. In Properties, select **Stretch** and right-click Duration to see the supported range for that occurrence. For an unstretched four-beat clip it is 1–16 beats; trimmed or already-stretched clips use their current source window. Values outside the range stay as a draft until corrected. Preparing stretched audio happens in the background; the current sound continues until its replacement is ready. Extreme stretches can introduce artifacts, especially in transients and complex material.
 
 ### Warp markers and audio quantize
 
@@ -362,7 +365,11 @@ subtle shaded envelope over the waveform. The lower incoming corner reveals an
 overlap's crossfade diamond; drag its duration or double-click to shape its curve.
 Each drag remains one Undo step.
 
-**Duplicate** creates an independent copy; in the MIDI editor with notes selected, it duplicates those notes instead. **Make independent** detaches the selected clip with its current name and edits intact. Deleting the original leaves the remaining ghosts connected. Splitting keeps linked parts in the group; joining produces an independent clip. Links survive undo/redo and portable project save/reopen.
+Right-click a track header to **Collapse all automation tracks** or **Expand all automation tracks** belonging to that channel. A folder applies the action to its channels, and the **Tracks** menu applies it to the whole arrangement. Collapsing a lane changes only its display. Its automation keeps playing.
+
+Edits that break a ghost link open **Linked copies** before changing the song. **Cancel** keeps the song as it is. **Propagate change** applies the edit across linked occurrences. **Apply and disconnect** edits just the selection. **Apply and delete all copies** keeps the edited selection and removes its other linked occurrences. One Undo restores the whole operation. Stretching an automation pattern rescales its point times, so it asks for this choice. Audio and MIDI occurrence stretching already preserves the link.
+
+**Duplicate** creates an independent copy; in the MIDI editor with notes selected, it duplicates those notes instead. **Make independent** detaches the selected clip with its current name and edits intact. Deleting the original leaves the remaining ghosts connected. Splitting keeps linked parts in the group. Links survive undo/redo and portable project save/reopen.
 
 Audio clips on one track are exclusive: the active clip with the latest start wins. If starts match, the later entry in the track wins; an earlier clip resumes when a shorter overlapping clip ends. Splitting creates a new start and can therefore change overlap priority. Overlaps switch immediately unless you enable **Edit → Crossfade…** (also in the clip context menu). Set its duration, choose Linear or Smooth, or drag the two spline handles. The complementary gain curves appear over the overlap in Arrangement. Crossfades are limited to the available overlap and next clip takeover; they apply at clip entry, not when an older clip resumes.
 
@@ -370,7 +377,7 @@ Use **Edit → Join clips…** or the clip context menu to choose clips on one t
 
 Select a clip or a group of clips, then choose **Range → Loop playback over selection** to repeat playback of that phrase. This sets playback bounds; use **Edit → Repeat to loop end** to create independent copies through a later loop endpoint. A time selection made with **Cursor** includes its leading and trailing rests. The action sets the range and enables looping together, without moving the playback cursor; one Undo restores the previous range and loop state. A clip's context menu offers one playback action: **Loop playback over clip** for a single clip, or **Loop playback over selection** for a selected group or time range. Right-clicking another clip loops that clip without changing your selection. Beside it, **Duplicate after** creates one independent copy and **Repeat to loop end** creates copies through the loop endpoint. When the endpoint is too early, the disabled repeat action explains **Extend the loop beyond the phrase**. In Clip Editor, **Range → Loop playback over clip** repeats the open clip.
 
-The transport's **Loop** toggle switches repetition on or off. **Range → Loop playback over arrangement** sets and enables a loop from the beginning through the last clip, preserving the selection and playback cursor. **Range** also opens **Start beat** and **End beat** for exact adjustment; use their **−/+** buttons for quarter-beat steps, drag the values, or double-click to type. Beats start at 1, and the end is exclusive: Start 1 / End 5 repeats the first four beats. The read-only **Starts at**, **Ends at** and **Elapsed** rows show clock time and bars/beats. The ruler's loop strip shows the same positions and times when space allows; hover it for the complete summary.
+Right-click the loop strip and choose **Start loop here** or **End loop here** to set that boundary at the clicked grid position. The transport's **Loop** toggle switches repetition on or off. **Range → Loop playback over arrangement** sets and enables a loop from the beginning through the last clip, preserving the selection and playback cursor. **Range** also opens **Start beat** and **End beat** for exact adjustment; use their **−/+** buttons for quarter-beat steps, drag the values, or double-click to type. Beats start at 1, and the end is exclusive: Start 1 / End 5 repeats the first four beats. The read-only **Starts at**, **Ends at** and **Elapsed** rows show clock time and bars/beats. The ruler's loop strip shows the same positions and times when space allows; hover it for the complete summary.
 
 Drag either visible endpoint of the strip to adjust the loop directly. The drag follows **Snap**; turn Snap off for free adjustment. A pointer hint shows the endpoint and duration while dragging. Each completed drag is one Undo step. Only actual endpoints have handles, so a loop extending beyond the view must be brought into view before dragging its hidden end. Range changes are disabled while recording and saved with the project.
 
@@ -485,7 +492,7 @@ Routing gives each send a text-free level ring and a clickable value beside
 **Level**. Drag up or right to increase the send, down or left to
 decrease it; Shift makes adjustments finer. The taper gives quieter sends more
 useful travel while retaining the 0–16× gain range. Click the value for named
-exact entry and **123** mouse digits. The value readout follows the dial.
+exact entry. The value readout follows the dial.
 
 Selected clips and mixer channels have a subtle glow in their track color. Hover or select a mixer channel to trace its output and sends: continuous U-shaped arrows blend from that channel’s color to each destination’s color. Mixer reserves space for its output and first send route plus an ordinary notice; shorter windows and additional send lanes still scroll. Notices and added sends keep the existing fader, pan, and mute/solo controls in place.
 
@@ -501,7 +508,7 @@ Dropping before or after a track
 places it in that track's folder. Hold near a pane edge to scroll during a drag;
 Escape cancels. Each completed move supports Undo/Redo and saves with the song.
 
-Click the effects button beside a track's name in Arrangement: it opens the track's only effect, the effects list when there are several, or the device browser when there are none. In Mixer, click an insert row or the instrument row to open that device. You can also select a track and choose **Window → Effects**, or use **Channel → Effects** in Mixer. **+ Insert** opens the device browser; drag a slot handle to reorder it. **Open editor** opens the native effect controls and parameter automation. **Create send track** in the browser creates a return bus with the selected effect and a send from the source. Set the plugin wet/dry control as appropriate. To create a shared effect return:
+Click the effects button beside a track's name in Arrangement: it opens the track's only effect, the effects list when there are several, or the device browser when there are none. In Mixer, click an insert row or the instrument row to open that device. You can also select a track and choose **Window → Effects**, or use **Channel → Effects** in Mixer. **Insert before…** and **Insert after…** open the device browser at that slot. **+ Insert** appends to the chain. Drag a slot handle to reorder it, or right-click the card to insert, reorder, bypass or remove an effect. **Open editor** opens the native effect controls and parameter automation. **Create send track** in the browser creates a return bus with the selected effect and a send from the source. Set the plugin wet/dry control as appropriate. To create a shared effect return:
 
 1. Choose **Add bus** in Mixer or **Track → Add bus**, then rename it in **Window → Properties**.
 2. Open **Window → Effects** and add a VST3 effect to that bus; use 100% wet when appropriate.
@@ -525,10 +532,15 @@ picker, while the name and grip retain track selection and reordering.
 The default header is 288 points wide. **View → Track density** chooses Compact
 (64-point default), Standard (89) or Detailed (144); resize the header gutter or
 track's lower edge for temporary custom sizing.
-Compact tracks keep mix controls and expose the full channel through the small
-channel-controls button; they do not squeeze routing and instrument names into
-the title. Resizing the header or rows is view state and leaves the song and
-its history intact.
+The Compact density keeps mix controls and a channel-controls button. To collapse
+one track, click the chevron beside its icon. The 21-point header keeps the color
+strip, chevron, icon and name. Click the chevron again to restore the controls.
+An audio, MIDI or bus header also offers **Channel** in its right-click menu.
+A folder's chevron hides or shows its children. Each track's collapsed state is saved with the song.
+
+On a collapsed audio, MIDI or automation track, colored bars show where clips
+start and end. Double-click a bar to open its editor. A closed folder shows its
+children's activity in the folder color. Expand it to open a child's clip.
 
 ## Automation
 
@@ -537,8 +549,7 @@ Routing also opens it directly from the send's value button. The menu identifies
 the channel and parameter, plus the destination for a send, and shows a readable
 current value and allowed range. Hover the field for its full stored value.
 Opening the editor or choosing Apply without editing does not round the stored
-number or create an automation override. Choose **123** beside the
-field to enter digits with the mouse, then choose **Apply value** to
+number or create an automation override. Type in the field, then choose **Apply value** to
 commit or **Cancel** to keep the original. This also works in compact track
 headers. Volume entry uses dB (−60 dB means silence), pan uses −100% left through
 0% center to 100% right, and send levels use a linear multiplier. Properties also
@@ -557,17 +568,21 @@ The plug-in parameter browser keeps the parameter name and editable number
 outside the dial. Small dials use simple rings; larger dials retain a detailed
 scale and position index. Drag vertically or horizontally to adjust it; Shift makes
 dragging finer. Right-click the knob for exact entry with **Apply value** and
-**Cancel**, or open **123** there for mouse-only digit entry. Its value is
+**Cancel**. Its value is
 explicitly a normalized percentage, because plug-in
 unit names alone do not provide a physical-unit conversion. Stepped parameters
 use their declared steps when edited, and automation state remains visible.
 
-Right-click any control (volume, pan, a send, input gain, or a knob, menu or switch on a device panel) and choose **Automate**. Rill adds an automation track for that parameter, creates a one-bar clip at the playhead's bar and takes you to it in Arrangement, ready to draw. Lane and clip are one Undo step. Every automatable control carries a small corner indicator: a faint ring while it has no automation, orange when automated, coral red when overridden and gray when bypassed. Right-click an automated control for **Edit automation**, or choose **Window → Automation**, to open its editor. Double-clicking an empty part of the lane creates a clip there.
+Right-click any control (volume, pan, a send, input gain, or a knob, menu or switch on a device panel) and choose **Automate**. Rill adds an automation track for that parameter, creates a one-bar clip at the playhead's bar and takes you to it in Arrangement. Lane and clip are one Undo step. Every automatable control carries a small corner indicator: a faint ring while it has no automation, orange when automated, coral red when overridden and gray when bypassed. Right-click an automated control for **Edit automation**, or choose **Window → Automation**, to open its editor. Double-clicking an empty part of the lane creates a clip there.
+
+New automation tracks start collapsed. Colored bars show automation clips, and
+short marks show individual lane points. Click the chevron to see and edit the
+curve in place, or double-click a clip’s bar to open its Automation editor.
 
 With **Pencil**, click to add points and drag to move them; other tools select, move, trim, stretch, split and copy automation patterns like audio and MIDI clips. Use **Beat**, **Value**, or **Delete point** for precise edits. New lanes start with straight **Linear** segments. Drag a line up or down, or drag its midpoint diamond, to bend only that segment toward a logarithmic or exponential shape. This works in Arrangement lanes, automation patterns and the focused editor. Select its starting point or diamond for **Log**, **Linear**, **Exp**, or precise **Slope** controls. Both endpoints and neighboring segments stay fixed, with no overshoot. Clicking a line still adds a point; each drag is one undoable edit. Existing Step, Smooth and Spline projects keep their saved shapes.
 
 Input-gain, volume and send-gain points show **Gain** in dB, matching the graph. Click the
-readout for exact entry or the **123** mouse keypad; **Silence** sets zero gain.
+readout for exact entry. **Silence** sets zero gain.
 Manual gain overrides use the same units. **Fit** frames the existing points;
 **Fit song** shows the whole arrangement so you can place an ending fade even
 when a new lane has points only in the first bar.
@@ -606,15 +621,15 @@ The picture shows what you will hear over time: every repeat as a bar (left abov
 
 ## Sample browser
 
-Open **Window → Device browser → Samples**. The browser separates **Sources**, a searchable results list, and the selected sample’s preview and actions. Choose **All samples**, global **Favorites**, **Project samples**, or a folder in Sources. Selecting a folder includes its descendants; the separate chevron expands its subfolders.
+Open **Window → Device browser → Samples**. The browser separates **Sources**, a searchable results list, and the selected sample’s preview and actions. Drag either divider to resize a sidebar. Choose **All samples**, global **Favorites**, **Project samples**, or a folder in Sources. Selecting a folder includes its descendants; the separate chevron expands its subfolders.
 
-Use **Folders…** to add or remove sample roots, then click **Scan folders**. Scanning is always explicit: opening the browser, searching, changing sources and restarting Rill reuse the saved index. **Cancel scan** keeps the last completed results available. Scan again after changing files or folders; partial-scan details remain available beside the source controls.
+**Add folder…** opens the system folder picker. In **Folders…**, add another root or remove one. A parent folder covers its descendants. Adding a parent replaces any listed children. Click **Scan folders** to index the roots. Scanning is always explicit: opening the browser, searching, changing sources and restarting Rill reuse the saved index. **Cancel scan** keeps the last completed results available. Scan again after changing files or folders; partial-scan details remain available beside the source controls.
 
 **Search samples** matches names, folder paths and favorite tags, case-insensitively. Combine words in any order. Search applies to the selected source and stays in place when you change sources. **Clear search** keeps the source; **Search all samples** broadens a search without erasing it. Source navigation stays visible during searching. Results show each sample’s name, location, known length and favorite star. File details are read only for selected samples, never by decoding the entire library.
 
-Select a sample, then use **Preview** or **Stop preview** in its inspector. **Auto-play** previews each selection automatically; it is saved across restarts and starts off. Double-click and Enter audition a result, without importing it. When Results owns keyboard focus, Up/Down selects another sample and Space toggles preview. Preview does not edit the song or move its transport. Optional **Keyboard** popups support mouse-only text entry in search and tag editing.
+Select a sample, then use **Preview** or **Stop preview** in its inspector. **Auto-play** previews each selection automatically; it is saved across restarts and starts off. Double-click and Enter audition a result, without importing it. When Results owns keyboard focus, Up/Down selects another sample and Space toggles preview. Preview does not edit the song or move its transport. Click the search or tag field to type.
 
-The inspector shows length, format/codec, sample rate, channels, available bit depth and file size. A subtle waveform and frequency profile appear behind the selected sample’s metadata after background analysis; changing selection cancels obsolete analysis. Preview and the main use action stay visible while the details scroll. Missing or corrupt files stay selected with a readable error; metadata Retry only inspects that sample, without rescanning its folder.
+The inspector shows length, format/codec, sample rate, channels, available bit depth and file size. The waveform and spectrum appear below the metadata after background analysis; changing selection cancels obsolete analysis. Preview and the main use action stay visible while the details scroll. Missing or corrupt files stay selected with a readable error; metadata Retry only inspects that sample, without rescanning its folder.
 
 **Add to Project Samples** copies the selected recording into managed project media without creating a track. You can also drag a result onto **Project samples** in Sources, even while browsing another collection. The operation preserves the original, creates one Undo step, and travels in the saved project. **In Project Samples** indicates known membership. Choose the Project samples source to find **Bounce…**, which opens the shared bounce dialog.
 
@@ -653,7 +668,7 @@ The cards below the pads belong to the selected pad. **Playback** sets what of t
 Rill hosts **VST3** and **CLAP** plug-ins on macOS, Linux and Windows, **LV2** plug-ins on Linux, and **Audio Units** (AU) on macOS. Each library card carries a format badge (VST3, CLAP, LV2 or AU), device details name the format, and typing a format name in the library search filters by it. Rill looks in each format's standard folders and in the `VST3_PATH`, `CLAP_PATH` and `LV2_PATH` variables, plus folders you add. LV2 needs the system lilv library (`liblilv-0-0` on Debian/Ubuntu, `lilv` elsewhere); without it LV2 bundles are listed with an error and other formats are unaffected. On macOS Rill also lists every installed Audio Unit instrument, effect and MIDI-controlled effect from the system registry (Setup → Plug-ins says “plus installed Audio Units”); there is no AU folder to add, and an AU's install path shows `/System/Library/Frameworks/AudioToolbox.framework`. AUv3 extensions appear once their app has been opened. CLAP and AU editors open like VST3 editors; an AU without its own editor shows Apple's generic controls. MIDI-controlled AU effects work as effects but receive no MIDI from an insert. LV2 plug-ins have no embedded editor in Rill: **Open editor** reports that, and **Parameters…** lists their controls for editing and automation.
 
 
-Open **Window → Setup → Plug-ins**, add folders, and apply the settings; Rill rescans them. Choose **Track → Add instrument…**, type a name or developer, then use the primary button, Enter, or double-click a result. Rill creates a MIDI track and four-beat clip and opens its instrument panel. **Track → Add MIDI track** opens the chooser after creating its empty pattern. Double-click the clip to write notes. To replace an existing MIDI track's sound, choose **Choose instrument…** in its arrangement or Clip Editor header, or open **Window → Instrument → Choose instrument**; replacing the instrument preserves its notes and returns to the caller. **Window → Device browser** opens the same full workspace with **Back**. It starts on Instruments when choosing a sound and Effects when adding an insert or send.
+Open **Window → Setup → Plug-ins**, add folders, and apply the settings; Rill rescans them. Choose **Track → Add instrument…**, type a name or developer, then use the primary button, Enter, or double-click a result. Rill creates a MIDI track with a loop-length clip capped at one bar and opens its instrument panel. **Track → Add MIDI track** opens the chooser after creating its empty pattern. Double-click the clip to write notes. To replace an existing MIDI track's sound, choose **Choose instrument…** in its arrangement or Clip Editor header, or open **Window → Instrument → Choose instrument**; replacing the instrument preserves its notes and returns to the caller. **Window → Device browser** opens the same full workspace with **Back**. It starts on Instruments when choosing a sound and Effects when adding an insert or send.
 
 The bottom action names what will happen: **Add instrument track**, **Set instrument** for a newly created track, **Replace instrument**, **Add to effect chain**, or **Create send track**. Its destination stays fixed while you browse. Master accepts inserts, but cannot be a send source. **Back** or Escape cancels the chooser without loading a device; a new MIDI track and pattern created before opening it remain available.
 

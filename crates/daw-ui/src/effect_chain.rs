@@ -26,8 +26,123 @@ pub fn effect_chain_header(ui: &mut Ui, count: usize, active: usize) -> Response
     .inner
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EffectInsertSide {
+    Before,
+    After,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EffectSlotAction {
+    OpenEditor,
+    Parameters,
+    Insert(EffectInsertSide),
+    ToggleEnabled,
+    MoveUp,
+    MoveDown,
+    Remove,
+}
+
+/// The on-card controls and its secondary-click menu share the same commands.
+pub struct EffectSlotControls {
+    pub index: usize,
+    pub count: usize,
+    pub enabled: bool,
+    pub has_parameters: bool,
+}
+
+impl EffectSlotControls {
+    pub fn action_row(&self, ui: &mut Ui) -> Option<EffectSlotAction> {
+        let mut action = self.primary_actions(ui);
+        crate::action_menu(ui, "More", |ui| {
+            if let Some(selected) = self.reorder_actions(ui) {
+                action = Some(selected);
+                ui.close();
+            }
+        })
+        .response
+        .on_hover_text("Insert actions");
+        action
+    }
+
+    pub fn context_menu(&self, ui: &mut Ui, card: &Response) -> Option<EffectSlotAction> {
+        crate::selection_item_context_menu(ui, card.id.with("slot_context"), card.rect, |ui| {
+            let primary = self.primary_actions(ui);
+            let toggle = crate::button(
+                ui,
+                if self.enabled {
+                    "Bypass insert"
+                } else {
+                    "Enable insert"
+                },
+            )
+            .clicked();
+            ui.separator();
+            let reorder = self.reorder_actions(ui);
+            let selected = primary
+                .or(toggle.then_some(EffectSlotAction::ToggleEnabled))
+                .or(reorder);
+            if selected.is_some() {
+                ui.close();
+            }
+            selected
+        })
+        .and_then(|popup| popup.inner)
+    }
+
+    fn primary_actions(&self, ui: &mut Ui) -> Option<EffectSlotAction> {
+        let mut choice = None;
+        for (label, hint, action) in [
+            (
+                "Open editor",
+                "Open the effect editor",
+                EffectSlotAction::OpenEditor,
+            ),
+            (
+                "Parameters…",
+                "Edit or automate this plug-in's parameters",
+                EffectSlotAction::Parameters,
+            ),
+            (
+                "Insert before…",
+                "Choose an effect to process before this insert",
+                EffectSlotAction::Insert(EffectInsertSide::Before),
+            ),
+            (
+                "Insert after…",
+                "Choose an effect to process after this insert",
+                EffectSlotAction::Insert(EffectInsertSide::After),
+            ),
+        ] {
+            // Built-ins expose automation directly on their panel controls.
+            if (action != EffectSlotAction::Parameters || self.has_parameters)
+                && crate::small_button(ui, label).on_hover_text(hint).clicked()
+            {
+                choice = Some(action);
+            }
+        }
+        choice
+    }
+
+    fn reorder_actions(&self, ui: &mut Ui) -> Option<EffectSlotAction> {
+        let up = ui.add_enabled(self.index > 0, crate::button_widget("Up"));
+        let down = ui.add_enabled(self.index + 1 < self.count, crate::button_widget("Down"));
+        ui.separator();
+        let remove = crate::button(ui, "Remove insert");
+        if up.clicked() {
+            Some(EffectSlotAction::MoveUp)
+        } else if down.clicked() {
+            Some(EffectSlotAction::MoveDown)
+        } else if remove.clicked() {
+            Some(EffectSlotAction::Remove)
+        } else {
+            None
+        }
+    }
+}
+
 /// One insert: an identity row (reorder handle, enable switch with the name,
-/// the plug-in model on a second line) and a non-wrapping action row.
+/// the plug-in model on a second line) and an action row that wraps on narrow displays.
 /// Bypass reads the same everywhere: muted name, gray rail and a tooltip.
 pub fn effect_slot<T: Send + Sync + 'static, R>(
     ui: &mut Ui,
@@ -59,7 +174,7 @@ pub fn effect_slot<T: Send + Sync + 'static, R>(
             })
             .inner;
         text::truncated(ui, text::TextRole::Note, model).on_hover_text(model);
-        let actions = ui.horizontal(actions).inner;
+        let actions = crate::control_row_wrapped(ui, actions).inner;
         (switch, actions)
     });
     let colors = theme::palette(ui.ctx());

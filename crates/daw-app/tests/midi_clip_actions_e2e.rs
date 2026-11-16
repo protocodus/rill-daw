@@ -410,6 +410,7 @@ fn loop_this_clip_context_uses_exact_audio_midi_and_automation_pattern_bounds() 
             },
         )
         .unwrap();
+    project.track_mut(lane).unwrap().collapsed = false;
     let pattern = project.create_automation_clip(lane, 7.375, 1.625).unwrap();
     let path = app.directory.path().join("loop-actions.rill");
     project.save(&path).unwrap();

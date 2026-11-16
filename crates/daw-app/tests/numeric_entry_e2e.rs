@@ -1,4 +1,4 @@
-//! Exact mouse-only numeric drafts exercise the running app and its history.
+//! Numeric fields support direct editing, mouse gestures and optional staged exact input.
 mod common;
 
 use common::Harness;
@@ -13,14 +13,14 @@ fn fixture(width: u32, dark: bool) -> Harness {
     app.command(json!({"command":"system_theme", "dark":dark}));
     let mut project = Project::new();
     project.tempo = PRECISE_TEMPO;
-    let track = project.add_midi_track("Keypad instrument");
+    let track = project.add_midi_track("Timing instrument");
     project.track_mut(track).unwrap().clips.push(Clip::midi(
-        "Keypad phrase",
+        "Timing phrase",
         1.25,
         4.25,
         vec![Note::new(60, 0.0, 1.25, 90)],
     ));
-    let path = app.directory.path().join("keypad.rill");
+    let path = app.directory.path().join("timing.rill");
     project.save(&path).unwrap();
     app.command(json!({"command":"open", "path":path}));
     app
@@ -92,9 +92,10 @@ fn click_rect(app: &mut Harness, rect: &Value) -> Value {
     app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}))
 }
 
-fn open_keypad(app: &mut Harness, name: &str) -> Value {
+fn open_exact(app: &mut Harness, name: &str) -> Value {
     let state = app.inspect();
-    click_rect(app, &action(&state, name, "123"))
+    let (x, y) = center(&field(&state, name));
+    app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}))
 }
 
 fn unchanged(state: &Value, before: &Value) {
@@ -103,57 +104,9 @@ fn unchanged(state: &Value, before: &Value) {
     }
 }
 
-#[test]
-fn nested_properties_keypad_keeps_its_footer_stable_in_short_fractional_density_viewports() {
-    let mut app = fixture(800, false);
-    app.click("Keypad phrase");
-    for dark in [false, true] {
-        for (width, height) in [(800, 600), (1440, 1000)] {
-            for density in [1.0, 1.25, 2.0] {
-                app.command(json!({"command":"viewport", "width":width, "height":height, "pixels_per_point":density}));
-                app.command(json!({"command":"system_theme", "dark":dark}));
-                app.click("Window");
-                let before = app.click("Properties");
-                let opened = open_keypad(&mut app, "Duration");
-                for text in ["7", "0", "Backspace", "Clear", "Apply value", "Cancel"] {
-                    let bounds = label(&opened, text);
-                    assert!(
-                        bounds["min"][0].as_f64().unwrap() >= 0.0,
-                        "{text}: {bounds}"
-                    );
-                    assert!(
-                        bounds["max"][0].as_f64().unwrap() <= f64::from(width),
-                        "{text}: {bounds}"
-                    );
-                    assert!(
-                        bounds["min"][1].as_f64().unwrap() >= 0.0,
-                        "{text}: {bounds}"
-                    );
-                    assert!(
-                        bounds["max"][1].as_f64().unwrap() <= f64::from(height),
-                        "{text}: {bounds}"
-                    );
-                }
-                let apply = center(&label(&opened, "Apply value"));
-                let cleared = app.click("Clear");
-                assert_eq!(center(&label(&cleared, "Apply value")), apply);
-                unchanged(&cleared, &before);
-                unchanged(&app.click("Cancel"), &before);
-                app.key("Escape");
-            }
-        }
-    }
-    app.quit();
-}
-
-fn enter_mouse(app: &mut Harness, number: &str, before: &Value) -> Value {
-    unchanged(&app.click("Clear"), before);
-    let mut state = app.inspect();
-    for digit in number.chars() {
-        state = app.click(&digit.to_string());
-        unchanged(&state, before);
-    }
-    state
+fn type_draft(app: &mut Harness, number: &str, before: &Value) {
+    let state = app.command(json!({"command":"text","text":number}));
+    unchanged(&state, before);
 }
 
 fn undo_count(state: &Value) -> usize {
@@ -170,38 +123,28 @@ fn clip(state: &Value) -> &Value {
 }
 
 #[test]
-fn tempo_keypad_preserves_precision_and_commits_once_in_both_themes_and_widths() {
+fn tempo_field_preserves_precision_and_commits_once_in_both_themes_and_widths() {
     for dark in [false, true] {
         for width in [800, 1440] {
             let mut app = fixture(width, dark);
             let before = app.inspect();
             let original_steps = ["−", "+"].map(|symbol| action(&before, "Tempo", symbol));
-            let opened = open_keypad(&mut app, "Tempo");
+            let opened = open_exact(&mut app, "Tempo");
             unchanged(&opened, &before);
             label(&opened, &daw_ui::exact_value_text(PRECISE_TEMPO));
             for (symbol, original) in ["−", "+"].into_iter().zip(original_steps) {
                 assert_eq!(center(&action(&opened, "Tempo", symbol)), center(&original));
             }
-            for text in [
-                "7",
-                "0",
-                ".",
-                "±",
-                "Backspace",
-                "Clear",
-                "Apply value",
-                "Cancel",
-            ] {
-                let bounds = label(&opened, text);
-                assert!(bounds["min"][0].as_f64().unwrap() >= 0.0);
-                assert!(bounds["max"][0].as_f64().unwrap() <= f64::from(width));
-                assert!(bounds["max"][1].as_f64().unwrap() <= 900.0);
+            for text in ["123", "Backspace", "Clear", "±"] {
+                assert!(
+                    !opened["visible_labels"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|label| label == text)
+                );
             }
-            let apply_position = center(&label(&opened, "Apply value"));
-            let cleared = app.click("Clear");
-            unchanged(&cleared, &before);
-            assert_eq!(center(&label(&cleared, "Apply value")), apply_position);
-            enter_mouse(&mut app, "137.625", &before);
+            type_draft(&mut app, "137.625", &before);
             let applied = app.click("Apply value");
             assert_eq!(applied["project"]["tempo"], 137.625);
             assert_eq!(undo_count(&applied), undo_count(&before) + 1);
@@ -209,7 +152,7 @@ fn tempo_keypad_preserves_precision_and_commits_once_in_both_themes_and_widths()
 
             // Opening and applying the unrounded original must be a no-op.
             let restored = app.inspect();
-            open_keypad(&mut app, "Tempo");
+            open_exact(&mut app, "Tempo");
             unchanged(&app.click("Apply value"), &restored);
             app.quit();
         }
@@ -217,69 +160,46 @@ fn tempo_keypad_preserves_precision_and_commits_once_in_both_themes_and_widths()
 }
 
 #[test]
-fn invalid_cancelled_and_dismissed_keypad_drafts_never_clamp_or_create_history() {
+fn invalid_cancelled_and_dismissed_exact_drafts_leave_history_untouched() {
     let mut app = fixture(800, false);
     let before = app.inspect();
-    open_keypad(&mut app, "Tempo");
-    for number in ["999", "0", "12..5"] {
-        let invalid = enter_mouse(&mut app, number, &before);
-        let applied = click_rect(&mut app, &label(&invalid, "Apply value"));
-        unchanged(&applied, &before);
-        label(&applied, "Clear");
-    }
-    enter_mouse(&mut app, "72.5", &before);
-    unchanged(&app.click("±"), &before);
-    unchanged(&app.click("Apply value"), &before);
-    unchanged(&app.click("±"), &before);
-    unchanged(&app.click("Backspace"), &before);
-    let corrected = app.click("6");
-    unchanged(&corrected, &before);
-    label(&corrected, "72.6");
-    unchanged(&app.click("Cancel"), &before);
-
-    open_keypad(&mut app, "Tempo");
-    enter_mouse(&mut app, "84", &before);
-    let dismissed = app.command(json!({"command":"pointer", "phase":"click", "x":790, "y":880}));
-    unchanged(&dismissed, &before);
-    let reopened = open_keypad(&mut app, "Tempo");
-    label(&reopened, &daw_ui::exact_value_text(PRECISE_TEMPO));
-    unchanged(&app.click("Cancel"), &before);
-    // Native text entry remains available in the same draft, but non-finite
-    // input must never escape the Apply validation used by mouse keys.
-    for text in ["NaN", "inf", "1e999"] {
-        open_keypad(&mut app, "Tempo");
-        let invalid = app.command(json!({"command":"text", "text":text}));
-        unchanged(&invalid, &before);
-        unchanged(
-            &click_rect(&mut app, &label(&invalid, "Apply value")),
-            &before,
-        );
+    for number in ["999", "0", "12..5", "NaN", "inf", "1e999"] {
+        open_exact(&mut app, "Tempo");
+        type_draft(&mut app, number, &before);
+        unchanged(&app.click("Apply value"), &before);
         unchanged(&app.click("Cancel"), &before);
     }
+    open_exact(&mut app, "Tempo");
+    type_draft(&mut app, "84", &before);
+    let dismissed = app.command(json!({"command":"pointer","phase":"click","x":790,"y":880}));
+    unchanged(&dismissed, &before);
+    let reopened = open_exact(&mut app, "Tempo");
+    label(&reopened, &daw_ui::exact_value_text(PRECISE_TEMPO));
+    unchanged(&app.click("Cancel"), &before);
     app.quit();
 }
 
 #[test]
-fn clip_duration_and_nested_loop_keypads_commit_exact_values_with_independent_undo() {
+fn clip_duration_and_nested_loop_entries_commit_exact_values_with_independent_undo() {
     for (width, dark) in [(800, true), (1440, false)] {
         let mut app = fixture(width, dark);
-        app.click("Keypad phrase");
+        app.click("Timing phrase");
         app.click("Window");
         let before = app.click("Properties");
-        open_keypad(&mut app, "Duration");
-        enter_mouse(&mut app, "9.125", &before);
+        open_exact(&mut app, "Duration");
+        type_draft(&mut app, "9.125", &before);
         let duration = app.click("Apply value");
         assert_eq!(clip(&duration)["length"], 9.125);
         assert_eq!(clip(&duration)["source_rate"], 1.0);
         assert_eq!(clip(&duration)["content"], clip(&before)["content"]);
         assert_eq!(undo_count(&duration), undo_count(&before) + 1);
         // Undo and Range use the ordinary app menus while Properties remains
-        // the visible caller; keypad Apply must not replace its navigation.
+        // the visible caller; exact entry must not replace its navigation.
         assert_eq!(undo(&mut app)["project"], before["project"]);
         app.click("Range");
         let before_loop = app.inspect();
-        open_keypad(&mut app, "End beat ");
-        enter_mouse(&mut app, "57.25", &before_loop);
+        open_exact(&mut app, "End beat ");
+        type_draft(&mut app, "57.25", &before_loop);
         let looped = app.click("Apply value");
         assert_eq!(looped["project"]["loop_end"], 56.25);
         assert_eq!(undo_count(&looped), undo_count(&before_loop) + 1);
@@ -290,8 +210,8 @@ fn clip_duration_and_nested_loop_keypads_commit_exact_values_with_independent_un
         assert_eq!(undo(&mut app)["project"], before_loop["project"]);
         app.click("Range");
         let before_cancel = app.inspect();
-        open_keypad(&mut app, "Start beat ");
-        enter_mouse(&mut app, "999", &before_cancel);
+        open_exact(&mut app, "Start beat ");
+        type_draft(&mut app, "999", &before_cancel);
         let invalid = app.inspect();
         unchanged(
             &click_rect(&mut app, &label(&invalid, "Apply value")),
@@ -303,10 +223,10 @@ fn clip_duration_and_nested_loop_keypads_commit_exact_values_with_independent_un
 }
 
 #[test]
-fn existing_step_drag_and_keyboard_entry_still_work_after_keypad_cancel() {
+fn step_drag_and_inline_typing_remain_available_after_dismissal() {
     let mut app = fixture(1440, true);
     let before = app.inspect();
-    open_keypad(&mut app, "Tempo");
+    open_exact(&mut app, "Tempo");
     app.click("Cancel");
     let stepped = click_rect(&mut app, &action(&before, "Tempo", "+"));
     assert_eq!(stepped["project"]["tempo"], PRECISE_TEMPO + 1.0);

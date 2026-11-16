@@ -242,17 +242,9 @@ fn open_send(app: &mut Harness) -> Value {
     opened
 }
 
-fn mouse_draft(app: &mut Harness, baseline: &Value, digits: &str) -> Value {
-    let mut state = app.inspect();
-    if !visible(&state, "Clear") {
-        state = app.click("123");
-        unchanged(&state, baseline);
-    }
-    unchanged(&app.click("Clear"), baseline);
-    for digit in digits.chars() {
-        state = app.click(&digit.to_string());
-        unchanged(&state, baseline);
-    }
+fn type_draft(app: &mut Harness, baseline: &Value, digits: &str) -> Value {
+    let state = app.command(json!({"command":"text","text":digits}));
+    unchanged(&state, baseline);
     state
 }
 
@@ -345,7 +337,7 @@ fn send_ring_stays_centered_and_tab_reaches_its_adjacent_exact_value() {
 }
 
 #[test]
-fn send_exact_button_formats_without_rounding_and_mouse_keypad_preserves_precision() {
+fn send_exact_button_formats_without_rounding_and_typed_drafts_preserve_precision() {
     let mut app = Harness::new();
     let (source, bus, _) = fixture(&mut app, 0.173_456_79, false);
     app.command(json!({"command":"viewport", "width":1100, "height":850}));
@@ -363,10 +355,10 @@ fn send_exact_button_formats_without_rounding_and_mouse_keypad_preserves_precisi
     );
 
     open_send(&mut app);
-    mouse_draft(&mut app, &baseline, "0.375123");
+    type_draft(&mut app, &baseline, "0.375123");
     unchanged(&app.click("Cancel"), &baseline);
     open_send(&mut app);
-    mouse_draft(&mut app, &baseline, "0.375123");
+    type_draft(&mut app, &baseline, "0.375123");
     let applied = app.click("Apply value");
     assert_eq!(
         gain(&applied, source, bus) as f32,
@@ -379,7 +371,7 @@ fn send_exact_button_formats_without_rounding_and_mouse_keypad_preserves_precisi
     for value in ["0", "6", "24.08"] {
         open_send(&mut app);
         let before_draft = app.inspect();
-        mouse_draft(&mut app, &before_draft, value);
+        type_draft(&mut app, &before_draft, value);
         let applied = app.click("Apply value");
         assert_eq!(
             gain(&applied, source, bus) as f32,
@@ -475,7 +467,7 @@ fn automated_send_exact_entry_and_small_drag_override_without_rewriting_the_curv
     label(&opened, "Override automation");
     unchanged(&app.click("Apply value"), &restored);
     open_send(&mut app);
-    mouse_draft(&mut app, &restored, "0.375123");
+    type_draft(&mut app, &restored, "0.375123");
     let applied = app.click("Apply value");
     let expected = daw_ui::channel_gain_from_db(0.375_123);
     assert_eq!(gain(&applied, source, bus) as f32, expected);

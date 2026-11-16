@@ -38,6 +38,58 @@ fn label(output: &FullOutput, name: &str) -> Rect {
 }
 
 #[test]
+fn command_and_choice_menus_keep_three_rows_on_short_displays() {
+    for combo in [false, true] {
+        let ctx = Context::default();
+        theme::apply(&ctx);
+        let frame = |height, events| {
+            let mut opener = Rect::NOTHING;
+            let mut menu = None;
+            let mut rows = Vec::new();
+            let mut raw = input(events);
+            raw.screen_rect.as_mut().unwrap().max.y = height;
+            let _ = ctx.run(raw, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let contents = |ui: &mut Ui| {
+                        menu = Some(ui.layer_id().id);
+                        for i in 0..20 {
+                            rows.push(controls::selectable(ui, false, format!("Item {i}")).rect);
+                        }
+                    };
+                    opener = if combo {
+                        controls::select("options", "Options").show_ui(ui, contents)
+                    } else {
+                        controls::command_menu_button(ui, "Options", contents)
+                    }
+                    .response
+                    .rect;
+                });
+            });
+            (
+                opener,
+                menu.and_then(|id| ctx.memory(|m| m.area_rect(id))),
+                rows,
+            )
+        };
+        let opener = frame(600.0, vec![]).0.center();
+        frame(600.0, click(opener, true));
+        frame(600.0, click(opener, false));
+        for height in [600.0, 340.0, 180.0] {
+            for _ in 0..3 {
+                frame(height, vec![]);
+            }
+            let (_, menu, rows) = frame(height, vec![]);
+            let menu = menu.unwrap();
+            let frame_height = egui::Frame::popup(&ctx.style()).total_margin().sum().y;
+            let three_rows = rows[2].bottom() - rows[0].top();
+            assert!(menu.height() + 1.0 >= three_rows + frame_height);
+            assert!(menu.height() <= (height * 0.5).max(three_rows + frame_height) + 1.0);
+            assert!(menu.top() >= 0.0 && menu.bottom() <= height + 1.0);
+        }
+    }
+}
+
+#[test]
 fn choice_text_has_its_own_padding_inside_a_compact_menu_frame() {
     for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
         for scale in [1.0, 1.25, 2.0] {

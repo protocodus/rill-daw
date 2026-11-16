@@ -27,11 +27,7 @@ fn index(app: &mut Harness, root: &Path, count: usize) -> Value {
     app.click("Window");
     app.click("Device browser");
     app.click("Samples");
-    app.click("Folders…");
-    app.click("Sample folder path");
-    app.command(json!({"command":"text","text":root}));
-    app.click("Add folder");
-    app.click("Done");
+    app.add_sample_folder(root);
     app.click("Scan folders");
     common::wait_until(app, |state| {
         state["library"]["indexed"] == count && state["library"]["scanning"] == false
@@ -89,10 +85,15 @@ fn contains(outer: &Value, inner: &Value) -> bool {
 }
 
 #[test]
-fn selected_audio_paints_actual_waveform_and_spectrum_behind_metadata_only() {
+fn selected_audio_paints_opaque_waveform_and_spectrum_between_details_and_actions() {
     let mut app = Harness::with_virtual_audio(None, None);
-    app.command(json!({"command":"viewport","width":1100,"height":720}));
-    let root = app.directory.path().join("Visual library");
+    app.command(json!({"command":"viewport","width":1400,"height":1000}));
+    let root = app
+        .directory
+        .path()
+        .canonicalize()
+        .unwrap()
+        .join("Visual library");
     std::fs::create_dir(&root).unwrap();
     let low = root.join("Low tone.wav");
     let high = root.join("High tone.wav");
@@ -127,6 +128,29 @@ fn selected_audio_paints_actual_waveform_and_spectrum_behind_metadata_only() {
             "visuals belong to the right inspector, not result rows"
         );
     }
+    let labels = first["label_rects"].as_array().unwrap();
+    let find = |name: &str| labels.iter().find(|row| row["text"] == name).unwrap();
+    assert!(
+        find("File details…")["max"][1].as_f64().unwrap()
+            <= visual["bounds"]["min"][1].as_f64().unwrap()
+    );
+    assert!(
+        visual["bounds"]["max"][1].as_f64().unwrap()
+            <= find("Add to Project Samples")["min"][1].as_f64().unwrap()
+    );
+    let row = &first["library"]["samples"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["path"] == low.to_string_lossy().as_ref())
+        .unwrap()["rect"];
+    let x = (row["min"][0].as_f64().unwrap() + row["max"][0].as_f64().unwrap()) * 0.5;
+    let y = (row["min"][1].as_f64().unwrap() + row["max"][1].as_f64().unwrap()) * 0.5;
+    app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}));
+    assert_eq!(
+        app.click("Copy path")["clipboard_text"],
+        low.to_string_lossy().as_ref()
+    );
     // Inspect the actual submitted paint as well as the service result.
     let painted = app.command(json!({"command":"inspect","paint":true}));
     assert!(
@@ -149,7 +173,7 @@ fn selected_audio_paints_actual_waveform_and_spectrum_behind_metadata_only() {
             }),
         "the inspector submits the analyzed geometry"
     );
-    // Backdrop painting must not steal metadata controls or source selection.
+    // Analysis painting must not steal metadata controls or source selection.
     app.click("File details…");
     let copied = app.click("Copy path");
     assert_eq!(copied["clipboard_text"], low.to_string_lossy().as_ref());
@@ -178,7 +202,12 @@ fn selected_audio_paints_actual_waveform_and_spectrum_behind_metadata_only() {
 fn failed_visual_analysis_is_local_retryable_and_does_not_publish_sample_edits() {
     let mut app = Harness::with_virtual_audio(None, None);
     app.command(json!({"command":"viewport","width":1280,"height":900}));
-    let root = app.directory.path().join("Repair library");
+    let root = app
+        .directory
+        .path()
+        .canonicalize()
+        .unwrap()
+        .join("Repair library");
     std::fs::create_dir(&root).unwrap();
     let source = root.join("Repair.wav");
     std::fs::write(&source, b"broken audio").unwrap();

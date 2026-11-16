@@ -144,7 +144,17 @@ fn start_drag(
     placement: &str,
 ) -> (Value, Value, (f64, f64)) {
     let before = app.inspect();
-    let from = point(&item(&before, view, source)[view.source()], 0.5, 0.5);
+    let source_header = item(&before, view, source);
+    let grip = &source_header[view.source()];
+    let from = point(
+        if grip.is_null() {
+            &source_header["name"]
+        } else {
+            grip
+        },
+        0.5,
+        0.5,
+    );
     let fraction = match placement {
         "Before" => 0.15,
         "After" => 0.85,
@@ -410,7 +420,7 @@ fn folder_drag_moves_hidden_descendants_and_reparenting_rejects_cycles() {
     assert_eq!(tracks(&after), tracks(&before));
     undo_redo(&mut app, &before, &after);
     menu(&mut app, "Edit", "Undo");
-    let expanded = app.click("Ensemble");
+    let expanded = app.click_track_disclosure(folder);
     assert!(
         !expanded["project"]["tracks"]
             .as_array()
@@ -497,7 +507,12 @@ fn compact_track_titles_and_mixer_dragging_scroll_to_offscreen_destinations() {
     for view in [View::Arrangement, View::Mixer] {
         let mut app = Harness::new();
         let mut project = Project::new();
-        let order: Vec<_> = (1..=10)
+        let count = if matches!(view, View::Arrangement) {
+            28
+        } else {
+            10
+        };
+        let order: Vec<_> = (1..=count)
             .map(|index| {
                 let id = project.add_audio_track(format!("Channel {index:02}"));
                 project.track_mut(id).unwrap().collapsed = true;
@@ -533,7 +548,7 @@ fn compact_track_titles_and_mixer_dragging_scroll_to_offscreen_destinations() {
         pointer(&mut app, "move", edge);
         let mut scrolled = app.inspect();
         let axis = usize::from(matches!(view, View::Arrangement));
-        let bound = viewport["max"][axis].as_f64().unwrap() - 4.0;
+        let bound = viewport["max"][axis].as_f64().unwrap() - 1.0;
         let mut destination = None;
         for _ in 0..140 {
             document_unchanged(&before, &scrolled);
@@ -664,7 +679,7 @@ fn arranger_context_moves_whole_folders_and_keeps_child_shifts_within_their_pare
     assert_eq!(tracks(&after), content);
     undo_redo(&mut app, &before, &after);
 
-    app.click("Ensemble");
+    app.click_track_disclosure(folder);
     let expanded = app.click("Fit");
     let content = tracks(&expanded);
     // The first child cannot leave its folder by moving past its first sibling.

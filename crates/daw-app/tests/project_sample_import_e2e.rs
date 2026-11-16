@@ -40,11 +40,7 @@ fn index_folder(app: &mut Harness, root: &Path, count: usize) -> Value {
     app.click("Window");
     app.click("Device browser");
     app.click("Samples");
-    app.click("Folders…");
-    app.click("Sample folder path");
-    app.command(json!({"command":"text", "text":root}));
-    app.click("Add folder");
-    app.click("Done");
+    app.add_sample_folder(root);
     app.click("Scan folders");
     common::wait_until(app, |state| {
         state["library"]["indexed"] == count && state["library"]["scanning"] == false
@@ -111,7 +107,12 @@ fn drag_into_project_samples(app: &mut Harness, source: &Path) -> Value {
 fn add_to_project_samples_is_managed_idempotent_undoable_and_portable() {
     let mut app = Harness::new();
     seed_song(&mut app);
-    let root = app.directory.path().join("External library");
+    let root = app
+        .directory
+        .path()
+        .canonicalize()
+        .unwrap()
+        .join("External library");
     std::fs::create_dir_all(&root).unwrap();
     let source = root.join("Copper hit.wav");
     tone(&source);
@@ -192,7 +193,12 @@ fn add_to_project_samples_is_managed_idempotent_undoable_and_portable() {
 fn dragging_a_library_sample_to_the_project_header_adds_once_without_tracks() {
     let mut app = Harness::new();
     seed_song(&mut app);
-    let root = app.directory.path().join("Draggable library");
+    let root = app
+        .directory
+        .path()
+        .canonicalize()
+        .unwrap()
+        .join("Draggable library");
     std::fs::create_dir_all(&root).unwrap();
     let source = root.join("Wood tick.wav");
     tone(&source);
@@ -222,7 +228,12 @@ fn dragging_a_library_sample_to_the_project_header_adds_once_without_tracks() {
 fn an_unreadable_library_source_does_not_add_an_empty_sample_or_undo_step() {
     let mut app = Harness::new();
     seed_song(&mut app);
-    let root = app.directory.path().join("Invalid library");
+    let root = app
+        .directory
+        .path()
+        .canonicalize()
+        .unwrap()
+        .join("Invalid library");
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("Broken.flac"), b"This is not a FLAC stream").unwrap();
     index_folder(&mut app, &root, 1);

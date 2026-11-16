@@ -603,7 +603,7 @@ impl DawApp {
                             ui.spacing_mut().item_spacing.y = spacing;
                             let name = daw_ui::mixer_folded_output_name(ui, &track.name, inner_width, color(track.color));
                             if name.clicked() { channel_target = Some(track.id); }
-                            name.context_menu(|ui| {
+                            daw_ui::context_menu(&name, |ui| {
                                 let (previous,next)=shift_targets[&track.id];
                                 let actions = daw_ui::track_reorder_menu(ui,daw_ui::TrackReorderAxis::Horizontal,
                                     reorder_enabled&&previous.is_some(),reorder_enabled&&next.is_some());
@@ -691,7 +691,7 @@ impl DawApp {
                             &track.name, content_width, color(track.color), track.id, reorder_enabled);
                         let name = daw_ui::hover_text(name, format!("Open channel · {} · {} · Right-click for channel and selection actions · Shift-click to add/remove", track.name, if reorder_enabled { "Drag to reorder" } else { "Signal flow order; choose Song order to drag" }));
                         let name = if reorder_enabled { daw_ui::track_reorder_source(ui, &name, track.id) } else { name };
-                        name.context_menu(|ui| {
+                        daw_ui::context_menu(&name, |ui| {
                             let (previous, next) = shift_targets[&track.id];
                             let actions = daw_ui::track_reorder_menu(ui, daw_ui::TrackReorderAxis::Horizontal,
                                 reorder_enabled && previous.is_some(), reorder_enabled && next.is_some());
@@ -833,7 +833,7 @@ impl DawApp {
                         if effects.clicked() {
                             self.selected_track = Some(track.id); popup = Some(PopupKind::Effects);
                         }
-                        effects.context_menu(|ui| {
+                        daw_ui::context_menu(&effects, |ui| {
                             if daw_ui::button(ui, "+ Insert").clicked() { insert_target = Some(track.id); ui.close(); }
                         });
                         let insert_summary = ui.allocate_ui_with_layout(Vec2::new(content_width, device_height), egui::Layout::top_down(egui::Align::Min), |ui| {
@@ -1050,7 +1050,7 @@ impl DawApp {
                         ui.spacing_mut().item_spacing.y = spacing;
                         let name = daw_ui::mixer_name_plate(ui, daw_ui::MixerNamePlateKind::Master, "Master", content_width, palette(ui.ctx()).raised);
                         if name.clicked() { channel_target = Some(master_id); }
-                        name.context_menu(|ui| {
+                        daw_ui::context_menu(&name, |ui| {
                             if daw_ui::button(ui, "Open channel").clicked() { channel_target = Some(master_id); ui.close(); }
                             if daw_ui::button(ui, "Effects").clicked() { self.selected_track = Some(master_id); popup = Some(PopupKind::Effects); ui.close(); }
                             if daw_ui::button(ui, "Analyze").clicked() { analysis_target = Some(daw_engine::SignalMonitorTarget::Master); ui.close(); }
@@ -1098,7 +1098,7 @@ impl DawApp {
                         let analyze = processing.analyze;
                         if analyze.clicked() { analysis_target = Some(daw_engine::SignalMonitorTarget::Master); }
                         if effects.clicked() { self.selected_track = Some(master_id); popup = Some(PopupKind::Effects); }
-                        effects.context_menu(|ui| { if daw_ui::button(ui, "+ Insert").clicked() { insert_target = Some(master_id); ui.close(); } });
+                        daw_ui::context_menu(&effects, |ui| { if daw_ui::button(ui, "+ Insert").clicked() { insert_target = Some(master_id); ui.close(); } });
                         let insert_summary = ui.allocate_ui_with_layout(Vec2::new(content_width, device_height), egui::Layout::top_down(egui::Align::Min), |ui| {
                             ui.set_min_size(Vec2::new(content_width, device_height));
                             if master_track.inserts.is_empty() {

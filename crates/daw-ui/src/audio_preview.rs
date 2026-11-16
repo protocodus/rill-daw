@@ -1,9 +1,6 @@
-//! Quiet, read-only audio analysis behind foreground content. The caller owns
+//! Waveform and spectrum in a dedicated sample preview area. The caller owns
 //! analysis, caching, source identity, and status; painting never reads audio.
-use crate::{
-    color_math::{contrast_luminance, luminance},
-    theme, tokens,
-};
+use crate::{theme, tokens};
 use egui::{Color32, Mesh, Painter, Pos2, Rect, Shape, Stroke, pos2};
 
 /// Only completed analysis may be drawn. Pending or failed analysis has no
@@ -18,7 +15,7 @@ pub enum AudioPreviewState {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct AudioPreviewBackdrop<'a> {
+pub struct AudioPreview<'a> {
     /// Uniform time bins covering the analyzed source, in full-scale amplitude.
     pub waveform: &'a [[f32; 2]],
     /// Actual spectral levels normalized to 0..1 at uniformly spaced log-Hz
@@ -29,25 +26,19 @@ pub struct AudioPreviewBackdrop<'a> {
 
 /// Bounds of the analysis actually painted, useful to a host's diagnostics.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct AudioPreviewBackdropGeometry {
+pub struct AudioPreviewGeometry {
     pub waveform: Option<Rect>,
     pub spectrum: Option<Rect>,
 }
 
-/// Paint before metadata into the same bounded surface. This allocates no
-/// layout or interaction, changes no focus, and stays inside the painter clip.
-/// `background` is the actual opaque surface beneath the foreground metadata.
-/// Colors are preblended so overlapping strokes cannot accumulate opacity;
-/// ordinary and muted theme text retain at least their original contrast,
-/// capped at the 4.5:1 text contrast target.
-pub fn paint_audio_preview_backdrop(
+/// Paint the selected sample into its own rectangle, clipped to the viewport.
+pub fn paint_audio_preview(
     painter: &Painter,
     rect: Rect,
-    data: AudioPreviewBackdrop<'_>,
-    background: Color32,
-) -> AudioPreviewBackdropGeometry {
-    let mut geometry = AudioPreviewBackdropGeometry::default();
-    let rect = rect.intersect(painter.clip_rect());
+    data: AudioPreview<'_>,
+) -> AudioPreviewGeometry {
+    let mut geometry = AudioPreviewGeometry::default();
+    let clip = rect.intersect(painter.clip_rect());
     if data.state != AudioPreviewState::Ready || !rect.is_finite() || !rect.is_positive() {
         return geometry;
     }
@@ -56,18 +47,12 @@ pub fn paint_audio_preview_backdrop(
     if inner.width() < tokens::CONTROL_HEIGHT || height < tokens::SPACE_LG {
         return geometry;
     }
-    let painter = painter.with_clip_rect(rect);
+    let painter = painter.with_clip_rect(clip);
     let palette = theme::palette(painter.ctx());
-    let light = luminance(background) > 0.179;
-    let strength = if light { 0.10 } else { 0.16 };
-    let waveform_color = quiet_color(palette, background, palette.action, strength);
-    let waveform_fill = quiet_color(palette, background, palette.action, strength * 0.5);
-    let spectrum_color = quiet_color(palette, background, palette.muted, strength);
-    let spectrum_fill = quiet_color(palette, background, palette.muted, strength * 0.5);
     let waveform_rect = Rect::from_min_max(inner.min, pos2(inner.right(), inner.top() + height));
     let spectrum_rect = Rect::from_min_max(pos2(inner.left(), inner.bottom() - height), inner.max);
     // One point per logical column, with a fixed upper bound, is enough for a
-    // quiet backdrop. Aggregation preserves extrema rather than skipping hits.
+    // detailed preview. Aggregation preserves extrema rather than skipping hits.
     let max_columns = inner.width().ceil().clamp(2.0, 512.0) as usize;
     if !data.waveform.is_empty()
         && data
@@ -94,9 +79,9 @@ pub fn paint_audio_preview_backdrop(
             upper.push(pos2(x, y(high)));
             lower.push(pos2(x, y(low)));
         }
-        fill_between(&painter, &upper, &lower, waveform_fill);
-        painter.add(Shape::line(upper, Stroke::new(1.0, waveform_color)));
-        painter.add(Shape::line(lower, Stroke::new(1.0, waveform_color)));
+        fill_between(&painter, &upper, &lower, palette.action);
+        painter.add(Shape::line(upper, Stroke::new(1.0, palette.action)));
+        painter.add(Shape::line(lower, Stroke::new(1.0, palette.action)));
         geometry.waveform = Some(waveform_rect);
     }
     if !data.spectrum.is_empty() && data.spectrum.iter().all(|level| level.is_finite()) {
@@ -118,8 +103,8 @@ pub fn paint_audio_preview_backdrop(
             ));
             baseline.push(pos2(x, spectrum_rect.bottom()));
         }
-        fill_between(&painter, &trace, &baseline, spectrum_fill);
-        painter.add(Shape::line(trace, Stroke::new(1.0, spectrum_color)));
+        fill_between(&painter, &trace, &baseline, palette.muted);
+        painter.add(Shape::line(trace, Stroke::new(1.0, palette.muted)));
         geometry.spectrum = Some(spectrum_rect);
     }
     geometry
@@ -143,35 +128,4 @@ fn fill_between(painter: &Painter, upper: &[Pos2], lower: &[Pos2], color: Color3
         }
     }
     painter.add(Shape::mesh(mesh));
-}
-
-fn quiet_color(
-    palette: theme::Palette,
-    background: Color32,
-    tint: Color32,
-    mut strength: f32,
-) -> Color32 {
-    let background_luminance = luminance(background);
-    let foreground = [luminance(palette.text), luminance(palette.muted)];
-    let targets = foreground.map(|level| contrast_luminance(level, background_luminance).min(4.5));
-    for _ in 0..16 {
-        let mix = |back: u8, front: u8| {
-            (f32::from(back) + (f32::from(front) - f32::from(back)) * strength).round() as u8
-        };
-        let color = Color32::from_rgb(
-            mix(background.r(), tint.r()),
-            mix(background.g(), tint.g()),
-            mix(background.b(), tint.b()),
-        );
-        let level = luminance(color);
-        if foreground
-            .iter()
-            .zip(targets)
-            .all(|(text, target)| contrast_luminance(*text, level) >= target)
-        {
-            return color;
-        }
-        strength *= 0.8;
-    }
-    background
 }

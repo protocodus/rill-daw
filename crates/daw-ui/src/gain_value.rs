@@ -17,7 +17,7 @@ pub fn gain_axis_label(gain: f32) -> String {
     }
 }
 
-/// A concise dB readout opening the shared exact-value editor and mouse keypad.
+/// A concise dB readout opening the shared exact-value editor.
 /// The stored linear value changes only after an explicit edit is committed;
 /// inspecting or dismissing a rounded display never round-trips that value.
 pub fn gain_value_button(
@@ -59,25 +59,18 @@ pub fn gain_value_button_named(
         let mut silence = false;
         let popup = egui::Popup::menu(&response)
             .id(response.id.with("exact_gain_popup"))
-            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-            .show(|ui| {
-                let next = crate::value_entry::value_entry_with_footer(
-                    ui,
-                    response.id,
-                    current,
-                    -60.0..=maximum_db,
-                    "dB",
-                    name,
-                    crate::tokens::CONTROL_HEIGHT + crate::tokens::SPACE_SM * 2.0,
-                );
-                ui.separator();
-                if crate::button(ui, "Silence").clicked() {
-                    silence = true;
-                    crate::value_entry::clear_value_entry(ui, response.id);
-                    ui.close();
-                }
-                next
-            });
+            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
+        let popup = crate::show_menu(popup, |ui| {
+            let next =
+                crate::value_entry_named(ui, response.id, current, -60.0..=maximum_db, "dB", name);
+            ui.separator();
+            if crate::button(ui, "Silence").clicked() {
+                silence = true;
+                crate::value_entry::clear_value_entry(ui, response.id);
+                ui.close();
+            }
+            next
+        });
         let next = if silence {
             Some(0.0)
         } else {

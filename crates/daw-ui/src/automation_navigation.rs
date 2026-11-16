@@ -49,15 +49,14 @@ pub fn automation_channel_menu_named<R>(
             },
         ),
     );
-    let inner = egui::Popup::menu(&response)
-        .show(|ui| {
-            if let Some(state) = state {
-                crate::automation_badge(ui, state);
-                ui.separator();
-            }
-            contents(ui)
-        })
-        .map(|shown| shown.inner);
+    let inner = crate::show_menu(egui::Popup::menu(&response), |ui| {
+        if let Some(state) = state {
+            crate::automation_badge(ui, state);
+            ui.separator();
+        }
+        contents(ui)
+    })
+    .map(|shown| shown.inner);
     egui::InnerResponse::new(inner, response)
 }
 
@@ -125,7 +124,9 @@ pub fn automatable_parameter_context(
         "Right-click to create automation for this control",
     );
     let mut action = None;
-    context_menu(response).show(|ui| action = automatable_menu_contents(ui, control, None));
+    crate::show_menu(context_menu(response), |ui| {
+        action = automatable_menu_contents(ui, control, None)
+    });
     action
 }
 
@@ -188,8 +189,7 @@ pub fn automatable_parameter_value_context_named(
 }
 
 /// A visible, single-click value button opening the same exact editor and
-/// automation actions as a parameter's context menu. The shared 123 action
-/// beside its field makes the mouse keypad discoverable immediately.
+/// automation actions as a parameter's context menu.
 #[allow(clippy::too_many_arguments)] // Keep parameter ownership, units and context identical to the context-menu API.
 pub fn automatable_parameter_value_button(
     ui: &mut Ui,
@@ -203,8 +203,7 @@ pub fn automatable_parameter_value_button(
     name: &str,
 ) -> (Option<AutomationNavigation>, Option<f64>) {
     ui.push_id(id_salt, |ui| {
-        let response = crate::button(ui, label)
-            .on_hover_text(format!("Edit {name} · Exact value and mouse keypad"));
+        let response = crate::button(ui, label).on_hover_text(format!("Edit {name} · Exact value"));
         if let Some((_, state)) = automation {
             crate::paint_automation_control(ui, &response, state);
         } else {
@@ -242,37 +241,15 @@ fn parameter_value_popup(
 ) -> (Option<AutomationNavigation>, Option<f64>) {
     let mut action = None;
     let mut value = None;
-    popup
-        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-        .show(|ui| {
-            let spacing = ui.spacing().item_spacing.y;
-            let action_height = crate::tokens::CONTROL_HEIGHT + spacing;
-            let trailing_height = crate::tokens::SPACE_SM * 2.0
-                + automation.map_or(action_height, |(_, state)| {
-                    ui.text_style_height(&egui::TextStyle::Body)
-                        + spacing
-                        + action_height
-                            * if state == AutomationState::Bypassed {
-                                1.0
-                            } else {
-                                2.0
-                            }
-                });
-            value = crate::value_entry::value_entry_with_footer(
-                ui,
-                id,
-                current,
-                range,
-                unit,
-                name,
-                trailing_height,
-            );
-            ui.separator();
-            action = automatable_menu_contents(ui, control, automation);
-            if action.is_some() {
-                crate::value_entry::clear_value_entry(ui, id);
-            }
-        });
+    let popup = popup.close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
+    crate::show_menu(popup, |ui| {
+        value = crate::value_entry_named(ui, id, current, range, unit, name);
+        ui.separator();
+        action = automatable_menu_contents(ui, control, automation);
+        if action.is_some() {
+            crate::value_entry::clear_value_entry(ui, id);
+        }
+    });
     (action, value)
 }
 
@@ -323,6 +300,30 @@ pub fn automation_parameter_context(
         ),
     );
     let mut action = None;
-    context_menu(response).show(|ui| action = automation_menu_contents(ui, lane, state));
+    crate::show_menu(context_menu(response), |ui| {
+        action = automation_menu_contents(ui, lane, state)
+    });
+    action
+}
+
+/// Batch height controls shared by a track's context menu and the Tracks menu.
+pub fn automation_track_height_actions(
+    ui: &mut Ui,
+    can_collapse: bool,
+    can_expand: bool,
+) -> Option<bool> {
+    let mut action = None;
+    for (collapse, enabled, label) in [
+        (true, can_collapse, "Collapse all automation tracks"),
+        (false, can_expand, "Expand all automation tracks"),
+    ] {
+        if ui
+            .add_enabled(enabled, crate::button_widget(label))
+            .clicked()
+        {
+            action = Some(collapse);
+            ui.close();
+        }
+    }
     action
 }

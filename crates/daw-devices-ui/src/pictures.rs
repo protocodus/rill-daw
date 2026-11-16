@@ -189,7 +189,7 @@ pub(crate) fn dynamics(
             edits.push(default);
         }
         if let Some(handle) = &plot.handle {
-            handle.context_menu(|ui| {
+            daw_ui::context_menu(handle, |ui| {
                 if daw_ui::menu_item(ui, format!("Reset {}", level.name), None).clicked() {
                     edits.push(default);
                     ui.close();
@@ -472,7 +472,7 @@ pub(crate) fn modulation(
             edits.push(reset(center));
         }
         if let Some(handle) = plot.nodes.first() {
-            handle.context_menu(|ui| {
+            daw_ui::context_menu(handle, |ui| {
                 if daw_ui::menu_item(ui, "Reset Center", None).clicked() {
                     edits.push(reset(center));
                     ui.close();
@@ -809,7 +809,7 @@ pub(crate) fn space(ui: &mut Ui, height: f32, host: &mut dyn DeviceHost, state: 
         edits.push(defaults(index));
     }
     for (index, hit) in output.handles.iter().enumerate() {
-        hit.context_menu(|ui| {
+        daw_ui::context_menu(hit, |ui| {
             if daw_ui::menu_item(ui, "Reset", None).clicked() {
                 edits.push(defaults(index));
                 ui.close();

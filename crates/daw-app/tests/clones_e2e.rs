@@ -203,7 +203,8 @@ fn midi_linked_clones_share_notes_and_name_but_duplicate_and_unlink_are_independ
     }
     assert_eq!(clip(&renamed, independent_id)["name"], "Phrase");
     select(&mut app, first_id);
-    let detached = menu(&mut app, "Edit", "Make independent");
+    menu(&mut app, "Edit", "Make independent");
+    let detached = app.click("Apply and disconnect");
     assert!(clip(&detached, first_id)["link_group"].is_null());
     assert_ne!(
         notes(&detached, first_id)[0]["id"],
@@ -420,6 +421,7 @@ fn audio_clones_share_processing_and_render_identically_after_portable_recall() 
     assert_eq!(export(&mut app, "recalled.wav").samples, rendered.samples);
     select(&mut app, clone_id);
     menu(&mut app, "Edit", "Make independent");
+    app.click("Apply and disconnect");
     menu(&mut app, "Window", "Clip Editor");
     let independent = menu(&mut app, "Process", "Reverse");
     assert_eq!(audio(&independent, original_id)["reverse"], true);

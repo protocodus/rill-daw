@@ -240,7 +240,7 @@ impl DawApp {
             let beat = beat_at(position.x).max(0.0);
             response.ctx.data_mut(|data| data.insert_temp(id, beat));
         }
-        response.context_menu(|ui| {
+        daw_ui::context_menu(response, |ui| {
             let beat = ui
                 .data(|data| data.get_temp::<f64>(id))
                 .unwrap_or(self.cursor);

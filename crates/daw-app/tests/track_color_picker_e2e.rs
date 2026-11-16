@@ -172,6 +172,10 @@ fn assert_arranger_paint(state: &Value, id: u64) {
         .iter()
         .filter(|clip| clip["track"] == id)
     {
+        if let Some(mark) = clip.get("overview").filter(|rect| rect.is_object()) {
+            assert!(shapes.iter().any(|shape| shape["rect"] == *mark && shape["fill"] == json!(color.to_array())), "Collapsed clips repaint from their channel color");
+            continue;
+        }
         let rect = bounds(&clip["rect"]);
         let selected = state["selected_clip"] == clip["id"];
         let stroke = color
@@ -384,5 +388,89 @@ fn compact_and_folder_color_strips_do_not_select_tracks_or_collapse_folders() {
             assert_mixer_paint(&mut app, id);
         }
     }
+    app.quit();
+}
+
+#[test]
+fn track_name_and_icon_open_editable_identity_with_undo_and_recall() {
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    let midi = project.add_midi_track("Keys");
+    let lane = project
+        .add_automation_track(
+            "Level",
+            daw_core::AutomationTarget {
+                track: midi,
+                parameter: daw_core::AutomationParameter::TrackGain,
+            },
+        )
+        .unwrap();
+    let folder = project.add_folder("Group");
+    let path = app.directory.path().join("identities.rill");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open","path":path}));
+
+    for (id, part) in [(midi, "icon"), (lane, "name"), (folder, "icon")] {
+        let before = app.inspect();
+        let row = before["timeline"]["tracks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["track"] == id)
+            .unwrap();
+        let open = pointer(&mut app, &row[part], "double_click");
+        assert_eq!(open["popups"]["properties"], true, "{part} on {id}");
+        assert_eq!(open["inspector_page"], "Track");
+        assert_eq!(open["project"], before["project"]);
+        assert_eq!(open["history"], before["history"]);
+        assert_eq!(open["selected_track"], id);
+        let name = format!("Identity {part} {id}");
+        let named = app.command(json!({"command":"text","text":name}));
+        assert_eq!(track(&named, id)["name"], name);
+
+        app.click("Track type");
+        let changed = app.click("Microphone");
+        assert_eq!(track(&changed, id)["icon"], "microphone");
+        app.click("Edit");
+        let undone = app.click("Undo");
+        assert_eq!(track(&undone, id)["icon"], Value::Null);
+        assert_eq!(track(&undone, id)["name"], name);
+        app.click("Edit");
+        let redone = app.click("Redo");
+        assert_eq!(track(&redone, id)["icon"], "microphone");
+
+        // The Color swatch shares the field column with the icon choice.
+        let labels = redone["label_rects"].as_array().unwrap();
+        let color_label = labels
+            .iter()
+            .rev()
+            .find(|label| label["text"] == "Color")
+            .unwrap();
+        let choice = labels
+            .iter()
+            .rev()
+            .find(|label| label["text"] == "Microphone")
+            .unwrap();
+        let (_, y) = center(color_label);
+        let x = choice["min"][0].as_f64().unwrap();
+        let colors = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+        let red = format!("R {}", rgb(&before, id)[0]);
+        let control = colors["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|label| label["text"] == red)
+            .expect("red component");
+        pointer(&mut app, control, "double_click");
+        app.command(json!({"command":"key","key":"A","cmd":true}));
+        app.command(json!({"command":"text","text":"217"}));
+        let tinted = app.key("Enter");
+        assert_eq!(rgb(&tinted, id)[0], 217);
+        app.key("Escape");
+        app.click("Arranger");
+    }
+    let saved = app.command(json!({"command":"save","path":path}));
+    let reopened = app.command(json!({"command":"open","path":path}));
+    assert_eq!(reopened["project"], saved["project"]);
     app.quit();
 }

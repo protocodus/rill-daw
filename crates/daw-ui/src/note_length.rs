@@ -74,7 +74,7 @@ pub fn drawing_note_length(ui: &mut Ui, length: &mut DrawNoteLength) -> Response
             }
         });
     let mut response = response.on_hover_text(
-        "Initial length for new notes. Last note starts at 1/16 and remembers the last drawn or selected length. Drag a new note to choose its end.",
+        "Initial length for Pencil and Multi-draw. Last note starts at 1/16 and remembers the last drawn or selected length. Drag a new note to choose its end.",
     );
     if *length != before {
         response.mark_changed();

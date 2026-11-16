@@ -382,7 +382,7 @@ pub fn mixer_stereo_width(ui: &mut Ui, stereo_width: &mut f32, width: f32, name:
                 },
             );
             let mut exact = None;
-            response.context_menu(|ui| {
+            crate::context_menu(&response, |ui| {
                 if let Some(value) = crate::value_entry_named(
                     ui,
                     response.id.with("exact_width"),

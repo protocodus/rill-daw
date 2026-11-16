@@ -88,7 +88,7 @@ fn audio_source(app: &Harness) -> std::path::PathBuf {
     path
 }
 
-fn start_keypad(app: &mut Harness) -> Value {
+fn open_exact_start(app: &mut Harness) -> Value {
     let state = app.inspect();
     let start = state["label_rects"]
         .as_array()
@@ -100,18 +100,8 @@ fn start_keypad(app: &mut Harness) -> Value {
                 .is_some_and(|text| text.starts_with("Beat "))
         })
         .unwrap();
-    let keypad = state["label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|label| {
-            label["text"] == "123"
-                && (center(label).1 - center(start).1).abs() < 12.0
-                && edge(label, "min", 0) > edge(start, "max", 0)
-        })
-        .min_by(|a, b| center(a).0.total_cmp(&center(b).0))
-        .unwrap();
-    click_rect(app, keypad)
+    let (x, y) = center(start);
+    app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}))
 }
 
 fn clip_properties_workflow(audio: bool) {
@@ -183,9 +173,8 @@ fn clip_properties_workflow(audio: bool) {
             }
         ));
 
-        start_keypad(&mut app);
-        app.click("Clear");
-        let draft = app.click("9");
+        open_exact_start(&mut app);
+        let draft = app.command(json!({"command":"text","text":"9"}));
         unchanged(&draft, &properties);
         let cancelled = app.click("Cancel");
         unchanged(&cancelled, &properties);
@@ -196,15 +185,12 @@ fn clip_properties_workflow(audio: bool) {
         assert_eq!(returned["popups"]["properties"], false);
         assert_eq!(returned["selected_clip"], target);
 
-        // Reopen the same direct command and commit a mouse-only exact start.
+        // Reopen the same direct command and commit an exact start.
         app.command(json!({"command":"pointer", "phase":"click",
             "button":"secondary", "x":x, "y":y}));
         app.click("Properties");
-        start_keypad(&mut app);
-        app.click("Clear");
-        for digit in ["8", ".", "5"] {
-            app.click(digit);
-        }
+        open_exact_start(&mut app);
+        app.command(json!({"command":"text","text":"8.5"}));
         let edited = app.click("Apply value");
         let mut expected = before["project"].clone();
         expected["tracks"][index]["clips"][0]["start"] = json!(7.5);

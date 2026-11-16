@@ -117,9 +117,8 @@ fn unknown_plugins_are_separate_and_explain_missing_or_malformed_metadata() {
     assert!(!visible(&instruments, "Rill Fixture FX"));
     assert!(!visible(&instruments, "Rill Mystery"));
     assert!(!visible(&instruments, "Rill Broken"));
-    app.click("Effects");
-    app.click("Search effects");
-    let effects = app.command(json!({"command":"text","text":"Rill"}));
+    let effects = app.click("Effects");
+    assert_eq!(effects["library"]["query"], "Rill");
     assert!(
         visible(&effects, "Rill Fixture FX"),
         "{} {}",
@@ -127,14 +126,14 @@ fn unknown_plugins_are_separate_and_explain_missing_or_malformed_metadata() {
         effects["library"]
     );
     assert!(!visible(&effects, "Rill Fixture A"));
-    app.click("Unverified");
-    app.click("Search unverified devices");
-    let unknown = app.command(json!({"command":"text","text":"Rill"}));
+    let unknown = app.click("Unverified");
+    assert_eq!(unknown["library"]["query"], "Rill");
     assert!(visible(&unknown, "Rill Mystery"));
     assert!(visible(&unknown, "Rill Broken"));
     assert!(!visible(&unknown, "Rill Fixture A"));
     front(&mut app, "Rill Mystery");
-    let details = app.inspect();
+    app.click("More");
+    let details = app.click("Inspect device");
     let labels = details["visible_labels"]
         .as_array()
         .unwrap()
@@ -147,8 +146,9 @@ fn unknown_plugins_are_separate_and_explain_missing_or_malformed_metadata() {
     assert!(labels.contains("Capture preview"));
     assert!(details["project"]["tracks"].as_array().unwrap().is_empty());
     app.click("Close");
-    front(&mut app, "Rill Broken");
-    let details = app.inspect();
+    app.click("Rill Broken");
+    app.click("More");
+    let details = app.click("Inspect device");
     let labels = details["visible_labels"]
         .as_array()
         .unwrap()
@@ -247,16 +247,6 @@ fn mixer_opens_each_insert_and_device_names_survive_undo_and_save() {
     );
     menu(&mut app, "Window", "Mixer");
     app.click("MIDI · Warm piano");
-    front(&mut app, "Keyboard…");
-    common::wait_visible(&mut app, "Clear");
-    app.click("Clear");
-    for letter in ["p", "a", "d"] {
-        front(&mut app, letter);
-    }
-    let mouse_named = app.inspect();
-    assert_eq!(
-        mouse_named["project"]["tracks"][0]["instrument_name"],
-        "pad"
-    );
+    assert!(!visible(&app.inspect(), "Keyboard…"));
     app.quit();
 }

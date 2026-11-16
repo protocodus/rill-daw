@@ -950,19 +950,8 @@ impl DawApp {
                     }).response.labelled_by(label.id);
                     ui.end_row();
                     let label = daw_ui::form_label(ui, "Name");
-                    let field = daw_ui::parameter_row(ui, |ui| {
-                        let field = daw_ui::text_field(ui, &mut self.export_name, "Sample name", 190.0).labelled_by(label.id);
-                        if daw_ui::small_button(ui, "Keyboard").on_hover_text("Enter the sample name with the mouse").clicked() {
-                            daw_ui::set_name_keyboard_open(ui.ctx(), field.id, !daw_ui::name_keyboard_open(ui.ctx(), field.id));
-                        }
-                        field
-                    }).inner;
+                    daw_ui::text_field(ui, &mut self.export_name, "Sample name", 190.0).labelled_by(label.id);
                     ui.end_row();
-                    if daw_ui::name_keyboard_open(ui.ctx(), field.id) {
-                        ui.label("");
-                        ui.vertical(|ui| daw_ui::name_keyboard(ui, field.id, &mut self.export_name));
-                        ui.end_row();
-                    }
                     let label = daw_ui::form_label(ui, "What");
                     ui.horizontal(|ui| {
                         for (what, name) in [(ExportWhat::Mix, "Mix"), (ExportWhat::Stems, "Stems")] {

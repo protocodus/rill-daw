@@ -45,8 +45,7 @@ impl GenerationBarRangeResponse {
 /// One-based start and duration in whole bars, as two rows of the caller's
 /// `form_grid`, so their fields share the column of every other setting.
 /// Zero length represents a viewport with no complete bars, awaiting a range
-/// edit. Native fields retain dragging and typing; visible steps and the
-/// shared value keypad also allow precise entry using only the mouse.
+/// edit. Each field supports dragging, typing, and one-bar steps.
 pub fn generation_bar_range(
     ui: &mut Ui,
     start_bar: &mut u32,

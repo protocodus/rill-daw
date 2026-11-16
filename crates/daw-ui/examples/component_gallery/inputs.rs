@@ -115,7 +115,7 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                             "Drag the dial or click its value. Shift adjusts finely.",
                         );
                         ui.add_space(controls::tokens::SPACE_SM);
-                        mouse_naming(ui, state);
+                        inline_naming(ui, state);
                     },
                 );
                 ui.add(
@@ -247,9 +247,9 @@ pub fn show(ui: &mut Ui, state: &mut State) {
     });
 }
 
-fn mouse_naming(ui: &mut Ui, state: &mut State) {
-    text::subtitle(ui, "Mouse naming");
-    let field = egui::Id::new("gallery_mouse_name");
+fn inline_naming(ui: &mut Ui, state: &mut State) {
+    text::subtitle(ui, "Inline naming");
+    let field = egui::Id::new("gallery_inline_name");
     if let Some(draft) = &mut state.naming_draft {
         let response = controls::inline_name_editor(
             ui,
@@ -270,9 +270,8 @@ fn mouse_naming(ui: &mut Ui, state: &mut State) {
             controls::InlineNameAction::Cancel => state.naming_draft = None,
             controls::InlineNameAction::Editing => {}
         }
-    } else if controls::button(ui, "Name with mouse…").clicked() {
+    } else if controls::button(ui, "Rename…").clicked() {
         state.naming_draft = Some(state.name.clone());
         state.naming_focus = true;
-        controls::set_name_keyboard_open(ui.ctx(), field, true);
     }
 }

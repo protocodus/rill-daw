@@ -418,8 +418,27 @@ impl Harness {
         response["state"].clone()
     }
 
+    pub fn add_sample_folder(&mut self, folder: &std::path::Path) -> Value {
+        self.command(json!({"command":"file_dialog","kind":"sample_folder","path":folder}));
+        self.click("Add folder…")
+    }
+
     pub fn click(&mut self, label: &str) -> Value {
         self.command(json!({"command": "click", "label": label}))
+    }
+
+    pub fn click_track_disclosure(&mut self, track: u64) -> Value {
+        let state = self.inspect();
+        let row = state["timeline"]["tracks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["track"] == track)
+            .expect("visible track with a disclosure");
+        let rect = &row["disclosure"];
+        let x = (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5;
+        let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
+        self.command(json!({"command":"pointer","phase":"click","x":x,"y":y}))
     }
 
     /// Select an arranger density through its visible mouse controls. Layout

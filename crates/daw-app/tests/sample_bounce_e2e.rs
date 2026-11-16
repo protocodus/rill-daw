@@ -294,12 +294,7 @@ fn loaded_sample_exports_through_the_same_dialog_without_reapplying_track_gain()
             .iter()
             .any(|label| label == "Loaded sample")
     );
-    app.click("Keyboard");
-    app.click("Clear");
-    for key in ["h", "i", "t"] {
-        app.click(key);
-    }
-    app.click("Keyboard");
+    rename(&mut app, "Original recording", "hit");
     let named = app.inspect();
     assert_eq!(named["file_dialog_defaults"]["wav"], "hit.wav");
     let output = app.directory.path().join("Reusable recording.wav");

@@ -89,6 +89,75 @@ impl Project {
         Ok(group)
     }
 
+    /// Build equivalent alternate-take collections at other ghost occurrences.
+    /// Each collection retains independent sources, while its audible comp keeps
+    /// sharing source edits with the comps in the other collections.
+    pub fn group_audio_takes_with_ghosts(
+        &mut self,
+        track: u64,
+        ids: &[u64],
+        peers: &[(u64, u64)],
+    ) -> Result<u64> {
+        if peers.is_empty() {
+            return self.group_audio_takes(track, ids);
+        }
+        let sources = ids
+            .iter()
+            .map(|id| {
+                self.clip(track, *id)
+                    .cloned()
+                    .context("Take clip not found")
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let mut candidate = self.clone();
+        let group = candidate.group_audio_takes(track, ids)?;
+        let main = candidate.audio_take_regions(track, group)[0].id;
+        let mut comps = vec![(track, main)];
+        for &(owner, id) in peers {
+            let peer = candidate
+                .clip(owner, id)
+                .cloned()
+                .context("Ghost clip disappeared")?;
+            let reference = sources
+                .iter()
+                .position(|clip| clip.link_group.is_some() && clip.link_group == peer.link_group)
+                .context("Ghost has no matching source")?;
+            let mut local = Vec::with_capacity(sources.len());
+            for (index, source) in sources.iter().enumerate() {
+                if index == reference {
+                    local.push(id);
+                } else {
+                    let mut copy = source.clone();
+                    copy.refresh_identity();
+                    copy.start += peer.start - sources[reference].start;
+                    ensure!(
+                        copy.start >= 0.0 && copy.end() <= crate::MAX_BEAT,
+                        "The alternate take would exceed the timeline at a ghost copy"
+                    );
+                    local.push(copy.id);
+                    candidate
+                        .track_mut(owner)
+                        .context("Ghost track disappeared")?
+                        .clips
+                        .push(copy);
+                }
+            }
+            let collection = candidate.group_audio_takes(owner, &local)?;
+            comps.push((owner, candidate.audio_take_regions(owner, collection)[0].id));
+        }
+        let link = new_id();
+        for (owner, clip) in comps {
+            candidate
+                .clip_mut(owner, clip)
+                .context("Audible take disappeared")?
+                .link_group = Some(link);
+        }
+        candidate.synchronize_linked_clip(track, main)?;
+        candidate.validate()?;
+        *self = candidate;
+        Ok(group)
+    }
+
     /// Retain another imported or existing clip without replacing the current comp.
     pub fn add_audio_take(&mut self, track: u64, group: u64, clip: u64) -> Result<()> {
         self.validate()?;
@@ -267,6 +336,121 @@ impl Project {
         clips.extend(regions);
         self.commit_take_clips(track, clips)?;
         Ok(selected_id)
+    }
+
+    /// Replace the same passage in each linked occurrence. A comp keeps a local
+    /// retained source for its new passage. Ordinary ghosts remain ordinary clips.
+    pub fn select_audio_take_with_ghosts(
+        &mut self,
+        track: u64,
+        group: u64,
+        source: u64,
+        range: Option<(f64, f64)>,
+        crossfade: f64,
+        peers: &[(u64, u64)],
+    ) -> Result<u64> {
+        if peers.is_empty() {
+            return self.select_audio_take(track, group, source, range, crossfade);
+        }
+        let old = self.audio_take_regions(track, group);
+        let mut candidate = self.clone();
+        let chosen = candidate.select_audio_take(track, group, source, range, crossfade)?;
+        let replacement = candidate
+            .clip(track, chosen)
+            .context("Chosen take disappeared")?
+            .clone();
+        let take = self
+            .clip(track, source)
+            .context("Source take disappeared")?;
+        let mut new_regions = vec![(track, chosen)];
+        for &(owner, id) in peers {
+            let original = self.clip(owner, id).context("Ghost clip disappeared")?;
+            let reference = old
+                .iter()
+                .find(|clip| {
+                    clip.link_group.is_some()
+                        && clip.link_group == original.link_group
+                        && range.is_none_or(|(a, b)| clip.start < b && clip.end() > a)
+                })
+                .context("Ghost has no matching comp region")?;
+            let shift = original.start - reference.start;
+            let mut copy = if let Some((start, end)) = range {
+                let a = start.max(reference.start);
+                let b = end.min(reference.end()).min(original.end() - shift);
+                if b <= a {
+                    continue;
+                }
+                candidate.delete_audio_range(
+                    owner,
+                    id,
+                    a + shift,
+                    (b + shift).min(original.end()),
+                )?;
+                replacement.audio_region(a, b)?
+            } else {
+                candidate.delete_clip(owner, id)?;
+                replacement.clone()
+            };
+            copy.id = if candidate.clip(owner, id).is_some() {
+                new_id()
+            } else {
+                id
+            };
+            copy.start += shift;
+            copy.muted = original.muted;
+            copy.audio_take = None;
+            if let Some(collection) = original.take_group() {
+                // Existing alternate collections usually already contain the
+                // same source, including its independently positioned window.
+                let mut local = take.clone();
+                local.refresh_identity();
+                local.start += shift;
+                let matched = candidate
+                    .audio_take_sources(owner, collection)
+                    .iter()
+                    .find(|clip| {
+                        clip.name == local.name
+                            && clip.content == local.content
+                            && clip.start == local.start
+                            && clip.offset == local.offset
+                            && clip.length == local.length
+                    })
+                    .map(|clip| clip.id);
+                let local_id = if let Some(id) = matched {
+                    id
+                } else {
+                    let id = local.id;
+                    candidate
+                        .track_mut(owner)
+                        .context("Ghost track disappeared")?
+                        .clips
+                        .push(local);
+                    candidate.add_audio_take(owner, collection, id)?;
+                    id
+                };
+                copy.audio_take = Some(AudioTakeMembership {
+                    group: collection,
+                    role: AudioTakeRole::Comp { source: local_id },
+                });
+            }
+            new_regions.push((owner, copy.id));
+            candidate
+                .track_mut(owner)
+                .context("Ghost track disappeared")?
+                .clips
+                .push(copy);
+        }
+        let link = new_id();
+        for (owner, id) in new_regions {
+            candidate
+                .clip_mut(owner, id)
+                .context("Comp region disappeared")?
+                .link_group = Some(link);
+        }
+        candidate.synchronize_linked_clip(track, chosen)?;
+        candidate.validate()?;
+        *self = candidate;
+        Ok(chosen)
     }
 
     /// Discard retained alternatives while keeping the current editable comp.

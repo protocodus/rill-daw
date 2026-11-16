@@ -170,10 +170,8 @@ fn native_pan_send_and_arranger_indicate_override_and_resume_from_visible_contro
         let (x, y) = center(numeric);
         let exact = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
         label(&exact, "Source → Room · Send level");
-        app.click("123");
-        app.click("Clear");
         // +6 dB; the lane stores the send gain normalized over 0..16.
-        app.click("6");
+        app.command(json!({"command":"text","text":"6"}));
         let changed = app.click("Apply value");
         assert!(
             (lane(&changed, send)["override_value"].as_f64().unwrap()

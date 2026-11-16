@@ -165,7 +165,25 @@ impl Settings {
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Self>(&bytes).ok())
             .filter(|settings| settings.validate().is_ok())
+            .map(|mut settings| {
+                // Earlier sessions could save both a folder and its descendants.
+                for root in std::mem::take(&mut settings.sample_roots) {
+                    settings.include_sample_root(root);
+                }
+                settings
+            })
             .unwrap_or_default()
+    }
+
+    /// Roots are canonical paths picked by the user. Compare path components
+    /// so siblings such as Drums and Drums-2 are independent.
+    pub fn include_sample_root(&mut self, path: PathBuf) -> bool {
+        if self.sample_roots.iter().any(|root| path.starts_with(root)) {
+            return false;
+        }
+        self.sample_roots.retain(|root| !root.starts_with(&path));
+        self.sample_roots.push(path);
+        true
     }
 
     pub fn validate(&self) -> anyhow::Result<()> {

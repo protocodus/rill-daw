@@ -5,11 +5,18 @@ use egui::{Painter, Pos2, Rect, Stroke, StrokeKind};
 /// location before treating a selection click as a double-click action.
 #[derive(Clone, Default)]
 pub struct ItemClickTracker {
-    previous: Option<(u64, Pos2, f64)>,
+    previous: Option<(egui::Id, Pos2, f64)>,
 }
 
 impl ItemClickTracker {
-    pub fn register(&mut self, id: u64, position: Pos2, now: f64, plain: bool) -> bool {
+    pub fn register(
+        &mut self,
+        id: impl std::hash::Hash,
+        position: Pos2,
+        now: f64,
+        plain: bool,
+    ) -> bool {
+        let id = egui::Id::new(id);
         let double = plain
             && self.previous.is_some_and(|(last, point, time)| {
                 last == id && point.distance(position) < 8.0 && now - time < 0.4

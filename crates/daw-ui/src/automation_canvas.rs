@@ -196,7 +196,7 @@ pub fn automation_canvas_with_segments_at(
             }
         }
         if editable {
-            point_response.clone().context_menu(|ui| {
+            crate::context_menu(&point_response, |ui| {
                 for (mode, label) in [
                     (CurveInterpolation::Linear, "Linear segment"),
                     (CurveInterpolation::Smooth, "Smooth segment"),
@@ -273,5 +273,5 @@ pub fn automation_pattern_header(
         pattern.linked,
     );
     ui.interact(rect.intersect(ui.clip_rect()), id, if editable { Sense::click_and_drag() } else { Sense::hover() })
-        .on_hover_text("Automation pattern · Click to select · Drag to move or its edges to trim · Pencil draws points · Right-click for Copy, Duplicate or Ghost copy")
+        .on_hover_text("Double-click the title to rename or the body to edit. Drag to move, drag an edge to trim, or use Pencil to draw points.")
 }

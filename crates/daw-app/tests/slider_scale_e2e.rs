@@ -334,11 +334,7 @@ fn arrangement_controls_keep_current_values_and_native_endpoint_mapping_without_
         app.set_track_density("Detailed");
         for compact in [false, true] {
             if compact {
-                app.click("Measured channel");
-                app.click("Window");
-                app.click("Properties");
-                app.click("Compact track");
-                app.key("Escape");
+                app.set_track_density("Standard");
             }
             let state = painted(&mut app);
             let channel = arrangement_channel(&state, id);

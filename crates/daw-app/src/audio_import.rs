@@ -552,14 +552,13 @@ impl DawApp {
         self.audio_import.last_error_status = Some(self.status.clone());
     }
 
-    pub(crate) fn import_audio_dialog(&mut self) {
+    pub(crate) fn import_audio_dialog(&mut self, target: Option<u64>, beat: f64) {
         if !self.import_picker_ready() {
             return;
         }
-        let beat = self.cursor;
         if let Some(path) = self.pick_document_path(crate::document_ui::DocumentDialog::ImportAudio)
         {
-            self.queue_audio_import(vec![path], None, beat);
+            self.queue_audio_import(vec![path], target, beat);
         }
     }
 

@@ -213,14 +213,14 @@ fn properties_controls_and_library_effect_mixer_navigation_work_in_both_themes_a
             let properties = window(&mut app, "Properties");
             accessible(
                 &properties,
-                &["Calm controls", "Compact track", "Top level"],
+                &["Calm controls", "Collapse track", "Top level"],
             );
             assert_eq!(
-                app.click("Compact track")["project"]["tracks"][0]["collapsed"],
+                app.click("Collapse track")["project"]["tracks"][0]["collapsed"],
                 true
             );
             assert_eq!(
-                app.click("Compact track")["project"]["tracks"][0]["collapsed"],
+                app.click("Collapse track")["project"]["tracks"][0]["collapsed"],
                 false
             );
             let channel = app.click("Channel");
@@ -246,15 +246,13 @@ fn properties_controls_and_library_effect_mixer_navigation_work_in_both_themes_a
             app.click("Instruments");
             app.click("Effects");
             accessible(
-                &common::reveal_library_filter(&mut app, "All developers"),
-                &["Search effects", "All developers", "Plug-in folders…"],
+                &app.inspect(),
+                &["Search effects", "All developers", "Manage plug-ins"],
             );
             app.click("Search effects");
             app.command(json!({"command":"text","text":"Rill Fixture FX"}));
             common::wait_library_device(&mut app, "Rill Fixture FX");
-            common::reveal_library_filter(&mut app, "All developers");
             app.click("All developers");
-            common::reveal_library_filter(&mut app, "000 Rill component tests");
             let filtered = app.click("000 Rill component tests");
             accessible(
                 &filtered,
@@ -359,7 +357,7 @@ fn long_library_catalog_scrolls_without_moving_search_or_device_actions() {
             .join("RillFixture.vst3/Contents/Resources/moduleinfo.json"),
         json!({
             "Name":"Component catalog", "Version":"1.0",
-            "Factory Info":{"Vendor":"000 Rill component catalog"},
+            "Factory Info":{"Vendor":"Rill component catalog"},
             "Classes":classes,
         })
         .to_string(),
@@ -385,13 +383,13 @@ fn long_library_catalog_scrolls_without_moving_search_or_device_actions() {
             app.click("Catalog item 000");
             app.command(json!({"command":"key","key":"A","cmd":true}));
             app.command(json!({"command":"text","text":"Catalog item"}));
-            let before = common::reveal_library_filter(&mut app, "All developers");
+            let before = app.inspect();
             accessible(
                 &before,
                 &[
                     "Catalog item",
                     "All developers",
-                    "Plug-in folders…",
+                    "Manage plug-ins",
                     "Add instrument track",
                     "More",
                 ],
@@ -432,7 +430,7 @@ fn long_library_catalog_scrolls_without_moving_search_or_device_actions() {
                 "Effects",
                 "Catalog item",
                 "All developers",
-                "Plug-in folders…",
+                "Manage plug-ins",
                 "Add instrument track",
             ] {
                 assert_eq!(

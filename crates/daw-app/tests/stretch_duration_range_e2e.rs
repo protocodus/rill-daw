@@ -122,20 +122,22 @@ fn unchanged(state: &Value, before: &Value) {
     }
 }
 
-fn enter_mouse(app: &mut Harness, text: &str, before: &Value) -> Value {
-    unchanged(&app.click("Clear"), before);
-    let mut state = app.inspect();
-    for digit in text.chars() {
-        state = app.click(&digit.to_string());
-        unchanged(&state, before);
-    }
-    state
+fn open_exact(app: &mut Harness, row: &str) -> Value {
+    let state = app.inspect();
+    let (x, y) = center(row_control(&state, row, None));
+    app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}))
+}
+
+fn enter(app: &mut Harness, text: &str, before: &Value) -> Value {
+    let draft = app.command(json!({"command":"text","text":text}));
+    unchanged(&draft, before);
+    draft
 }
 
 fn apply_duration(app: &mut Harness, value: &str) -> Value {
     let before = app.inspect();
-    control(app, "Duration", "123");
-    enter_mouse(app, value, &before);
+    open_exact(app, "Duration");
+    enter(app, value, &before);
     app.click("Apply value")
 }
 
@@ -157,14 +159,14 @@ fn invalid_stretch_stays_a_draft_and_both_exact_limits_commit_once() {
         let (mut app, id) = fixture(midi, 4.0, 1.0, false);
         let before = app.inspect();
         unchanged(&mode(&mut app, "Stretch"), &before);
-        control(&mut app, "Duration", "123");
-        let invalid = enter_mouse(&mut app, "56", &before);
+        open_exact(&mut app, "Duration");
+        let invalid = enter(&mut app, "56", &before);
         let rejected = click_rect(&mut app, label(&invalid, "Apply value"));
         unchanged(&rejected, &before);
         // The previous app closed the draft and emitted a backend error here.
         // Keep both the invalid number and its correction controls visible.
         label(&rejected, "56");
-        label(&rejected, "Clear");
+        label(&rejected, "Cancel");
         label(&rejected, "Range: 1 to 16");
         label(&rejected, "The value must be inside the range.");
         unchanged(&app.click("Cancel"), &before);
@@ -190,7 +192,7 @@ fn stretched_trimmed_ghost_uses_its_current_window_without_changing_its_peer() {
         let before = mode(&mut app, "Stretch");
         assert_eq!(clip(&before, id)["length"], 6.0);
         assert_eq!(clip(&before, id)["source_rate"], 0.5);
-        let opened = control(&mut app, "Duration", "123");
+        let opened = open_exact(&mut app, "Duration");
         label(&opened, "Range: 0.75 to 12");
         unchanged(&opened, &before);
         unchanged(&app.click("Apply value"), &before);
@@ -257,23 +259,24 @@ fn mode_switch_preserves_trim_and_stretch_respects_the_timeline_end() {
     assert_eq!(clip(&trimmed, id)["source_rate"], 1.0);
     one_edit(&trimmed, &before);
     unchanged(&mode(&mut app, "Stretch"), &trimmed);
-    let opened = control(&mut app, "Duration", "123");
+    let opened = open_exact(&mut app, "Duration");
     label(&opened, "Range: 14 to 224");
     unchanged(&app.click("Cancel"), &trimmed);
     assert_eq!(undo(&mut app)["project"], before["project"]);
 
     let state = app.inspect();
-    control(&mut app, "Start", "123");
+    open_exact(&mut app, "Start");
     // A displayed start of MAX_BEAT - 5 is zero-based MAX_BEAT - 6.
-    enter_mouse(&mut app, &(MAX_BEAT - 5.0).to_string(), &state);
+    enter(&mut app, &(MAX_BEAT - 5.0).to_string(), &state);
     let moved = app.click("Apply value");
     assert_eq!(clip(&moved, id)["start"], MAX_BEAT - 6.0);
-    let opened = control(&mut app, "Duration", "123");
+    let opened = open_exact(&mut app, "Duration");
     label(&opened, "Range: 1 to 6");
-    enter_mouse(&mut app, "16", &moved);
+    enter(&mut app, "16", &moved);
     unchanged(&app.click("Apply value"), &moved);
-    label(&app.inspect(), "Clear");
-    enter_mouse(&mut app, "6", &moved);
+    unchanged(&app.click("Cancel"), &moved);
+    open_exact(&mut app, "Duration");
+    enter(&mut app, "6", &moved);
     let applied = app.click("Apply value");
     assert_eq!(clip(&applied, id)["length"], 6.0);
     one_edit(&applied, &moved);
@@ -288,7 +291,7 @@ fn inspecting_precise_already_stretched_values_never_rounds_or_creates_history()
     let before = app.inspect();
     for to in ["Stretch", "Trim"] {
         unchanged(&mode(&mut app, to), &before);
-        let opened = control(&mut app, "Duration", "123");
+        let opened = open_exact(&mut app, "Duration");
         label(&opened, &precise.to_string());
         unchanged(&opened, &before);
         unchanged(&app.click("Apply value"), &before);

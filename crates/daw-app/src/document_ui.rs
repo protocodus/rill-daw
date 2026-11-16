@@ -10,6 +10,7 @@ pub(crate) enum DocumentDialog {
     Open,
     Import,
     ImportAudio,
+    SampleFolder,
     Export,
     ExportMidi,
     /// A folder that receives one file per stem.
@@ -75,6 +76,7 @@ impl DawApp {
             DocumentDialog::Open
                 | DocumentDialog::Import
                 | DocumentDialog::ImportAudio
+                | DocumentDialog::SampleFolder
                 | DocumentDialog::ExportStems
         ) {
             return None;
@@ -92,6 +94,7 @@ impl DawApp {
             DocumentDialog::Open
             | DocumentDialog::Import
             | DocumentDialog::ImportAudio
+            | DocumentDialog::SampleFolder
             | DocumentDialog::ExportStems => unreachable!(),
         };
         let name = if kind == DocumentDialog::Export && !self.export_name.trim().is_empty() {
@@ -200,6 +203,9 @@ impl DawApp {
                     rfd::FileDialog::new().add_filter("Rill project", &["rill"])
                 }
                 DocumentDialog::ExportStems => unreachable!("use pick_stem_folder"),
+                DocumentDialog::SampleFolder => {
+                    rfd::FileDialog::new().set_title("Add sample folder")
+                }
             };
             let dialog = if let Some(parent) = self.document_dialog_directory() {
                 dialog.set_directory(parent)
@@ -215,6 +221,7 @@ impl DawApp {
                 DocumentDialog::Open | DocumentDialog::Import | DocumentDialog::ImportAudio => {
                     dialog.pick_file_result()
                 }
+                DocumentDialog::SampleFolder => Ok(dialog.pick_folder()),
                 _ => dialog.save_file_result(),
             });
             let chosen = match chosen {
@@ -232,6 +239,9 @@ impl DawApp {
             };
             (chosen, None)
         };
+        if kind == DocumentDialog::SampleFolder {
+            return Some(chosen);
+        }
         if !matches!(
             kind,
             DocumentDialog::Open | DocumentDialog::Import | DocumentDialog::ImportAudio
@@ -725,6 +735,7 @@ fn normalize_document_path(
         DocumentDialog::Open
         | DocumentDialog::Import
         | DocumentDialog::ImportAudio
+        | DocumentDialog::SampleFolder
         | DocumentDialog::ExportStems => return path,
         DocumentDialog::Save => ("rill", &["rill"]),
         DocumentDialog::Export => (export_extension, &[export_extension]),

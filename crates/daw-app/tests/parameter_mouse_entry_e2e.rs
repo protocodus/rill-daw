@@ -1,4 +1,4 @@
-//! Native parameter drafts are editable using actual mouse clicks only.
+//! Parameter context menus accept typed exact values and explicit mouse actions.
 mod common;
 
 use common::Harness;
@@ -66,29 +66,6 @@ fn right_click(app: &mut Harness, rect: &Value) -> Value {
     app.command(json!({"command":"pointer", "phase":"click", "button":"secondary", "x":x, "y":y}))
 }
 
-fn toggle_keypad(app: &mut Harness, state: &Value, name: &str) -> Value {
-    let heading = label(state, name);
-    let left = heading["min"][0].as_f64().unwrap();
-    let top = heading["min"][1].as_f64().unwrap();
-    let toggle = state["label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .rev()
-        .find(|row| {
-            let (x, y) = center(row);
-            row["text"] == "123" && x >= left && x <= left + 240.0 && y > top && y < top + 130.0
-        })
-        .unwrap_or_else(|| {
-            panic!(
-                "Missing exact-entry keypad toggle: {}",
-                state["visible_labels"]
-            )
-        });
-    let (x, y) = center(toggle);
-    app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":y}))
-}
-
 fn open_control(app: &mut Harness, view: &str, id: u64, name: &str) -> Value {
     let before = app.inspect();
     let opened = right_click(app, &channel(&before, view, id)[name]);
@@ -102,34 +79,17 @@ fn open_control(app: &mut Harness, view: &str, id: u64, name: &str) -> Value {
         "{} · {parameter}",
         track(&before, id)["name"].as_str().unwrap()
     );
-    let opened = toggle_keypad(app, &opened, &title);
-    unchanged(&opened, &before);
-    for text in [
-        "7",
-        "0",
-        ".",
-        "±",
-        "Clear",
-        "Backspace",
-        "Apply value",
-        "Cancel",
-    ] {
+    for text in [&*title, "Apply value", "Cancel"] {
         label(&opened, text);
     }
+    assert!(!visible(&opened, "123") && !visible(&opened, "Backspace"));
     opened
 }
 
-fn enter_mouse(app: &mut Harness, before: &Value, number: &str) -> Value {
-    unchanged(&app.click("Clear"), before);
-    let mut state = app.inspect();
-    for digit in number.trim_start_matches('-').chars() {
-        state = app.click(&digit.to_string());
-        unchanged(&state, before);
-    }
-    if number.starts_with('-') {
-        state = app.click("±");
-        unchanged(&state, before);
-    }
+fn type_draft(app: &mut Harness, before: &Value, number: &str) -> Value {
+    app.command(json!({"command":"key","key":"A","cmd":true}));
+    let state = app.command(json!({"command":"text","text":number}));
+    unchanged(&state, before);
     state
 }
 
@@ -150,7 +110,6 @@ fn fixture(app: &mut Harness, compact: bool, automated: bool) -> (u64, u64, Opti
     let source = project.add_audio_track("Mouse channel");
     project.track_mut(source).unwrap().gain = 0.75;
     project.track_mut(source).unwrap().pan = 0.173456;
-    project.track_mut(source).unwrap().collapsed = compact;
     project.add_audio_track("Other channel");
     let bus = project.add_bus("Room");
     project.add_send(source, bus, 0.25, false).unwrap();
@@ -174,6 +133,9 @@ fn fixture(app: &mut Harness, compact: bool, automated: bool) -> (u64, u64, Opti
     let path = app.directory.path().join("mouse-parameters.rill");
     project.save(&path).unwrap();
     app.command(json!({"command":"open", "path":path}));
+    if compact {
+        app.set_track_density("Compact");
+    }
     (source, bus, lane)
 }
 
@@ -195,7 +157,7 @@ fn send_value_rect(state: &Value) -> &Value {
 }
 
 #[test]
-fn mixer_gain_pan_and_send_accept_precise_mouse_only_drafts() {
+fn mixer_gain_pan_and_send_accept_precise_typed_drafts() {
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
         let mut app = Harness::new();
         let (source, bus, _) = fixture(&mut app, false, false);
@@ -216,7 +178,7 @@ fn mixer_gain_pan_and_send_accept_precise_mouse_only_drafts() {
                     })
                 })
         );
-        enter_mouse(&mut app, &before, "-12.5");
+        type_draft(&mut app, &before, "-12.5");
         let gained = app.click("Apply value");
         near(
             track(&gained, source)["gain"].as_f64().unwrap(),
@@ -228,7 +190,7 @@ fn mixer_gain_pan_and_send_accept_precise_mouse_only_drafts() {
         let before = app.inspect();
         let opened = open_control(&mut app, "mixer", source, "pan");
         assert!(visible(&opened, "Range: -100 to 100 %"));
-        enter_mouse(&mut app, &before, "23.4567");
+        type_draft(&mut app, &before, "23.4567");
         let panned = app.click("Apply value");
         near(track(&panned, source)["pan"].as_f64().unwrap(), 0.234567);
         one_edit(&panned, &before);
@@ -239,8 +201,8 @@ fn mixer_gain_pan_and_send_accept_precise_mouse_only_drafts() {
         let opened = right_click(&mut app, send_value_rect(&before));
         // Send levels are entered in dB and stored as linear gain.
         assert!(visible(&opened, "Range: -60 to 24.08 dB"));
-        toggle_keypad(&mut app, &opened, "Mouse channel → Room · Send level");
-        enter_mouse(&mut app, &before, "-8.5");
+        label(&opened, "Mouse channel → Room · Send level");
+        type_draft(&mut app, &before, "-8.5");
         let sent = app.click("Apply value");
         let send = track(&sent, source)["sends"]
             .as_array()
@@ -256,18 +218,18 @@ fn mixer_gain_pan_and_send_accept_precise_mouse_only_drafts() {
 }
 
 #[test]
-fn compact_header_and_channel_properties_keep_the_same_mouse_entry() {
+fn compact_header_and_channel_properties_keep_the_same_exact_entry() {
     let mut app = Harness::new();
     let (source, _, _) = fixture(&mut app, true, false);
     app.command(json!({"command":"viewport", "width":1100, "height":720}));
     app.click("Other channel");
     let before = app.inspect();
     open_control(&mut app, "timeline", source, "pan");
-    enter_mouse(&mut app, &before, "-12.345");
+    type_draft(&mut app, &before, "-12.345");
     let panned = app.click("Apply value");
     near(track(&panned, source)["pan"].as_f64().unwrap(), -0.12345);
     assert_eq!(panned["selected_track"], before["selected_track"]);
-    assert_eq!(track(&panned, source)["collapsed"], true);
+    assert_eq!(track(&panned, source)["collapsed"], false);
     one_edit(&panned, &before);
     assert_eq!(undo(&mut app)["project"], before["project"]);
 
@@ -288,8 +250,8 @@ fn compact_header_and_channel_properties_keep_the_same_mouse_entry() {
         })
         .unwrap();
     let opened = right_click(&mut app, gain);
-    toggle_keypad(&mut app, &opened, "Mouse channel · Volume");
-    enter_mouse(&mut app, &before, "-9.875");
+    label(&opened, "Mouse channel · Volume");
+    type_draft(&mut app, &before, "-9.875");
     let gained = app.click("Apply value");
     near(
         track(&gained, source)["gain"].as_f64().unwrap(),
@@ -301,7 +263,7 @@ fn compact_header_and_channel_properties_keep_the_same_mouse_entry() {
 }
 
 #[test]
-fn automated_pan_mouse_drafts_reject_invalid_values_and_preserve_the_curve() {
+fn automated_pan_drafts_reject_invalid_values_and_preserve_the_curve() {
     for dark in [false, true] {
         let mut app = Harness::new();
         let (source, _, lane) = fixture(&mut app, true, true);
@@ -311,7 +273,7 @@ fn automated_pan_mouse_drafts_reject_invalid_values_and_preserve_the_curve() {
         let before = app.inspect();
         let curve = track(&before, lane)["automation"]["points"].clone();
         let opened = open_control(&mut app, "timeline", source, "pan");
-        for text in ["Clear", "Apply value", "Cancel", "Override automation"] {
+        for text in ["Apply value", "Cancel", "Override automation"] {
             let rect = label(&opened, text);
             assert!(rect["min"][0].as_f64().unwrap() >= 0.0);
             assert!(rect["max"][0].as_f64().unwrap() <= 800.0);
@@ -321,26 +283,20 @@ fn automated_pan_mouse_drafts_reject_invalid_values_and_preserve_the_curve() {
         unchanged(&app.click("Apply value"), &before);
         open_control(&mut app, "timeline", source, "pan");
         for number in ["101", "12..5"] {
-            enter_mouse(&mut app, &before, number);
+            type_draft(&mut app, &before, number);
             let rejected = app.click("Apply value");
             unchanged(&rejected, &before);
-            label(&rejected, "Clear");
+            app.click(number);
         }
-        enter_mouse(&mut app, &before, "25.125");
+        type_draft(&mut app, &before, "25.125");
         unchanged(&app.click("Cancel"), &before);
         open_control(&mut app, "timeline", source, "pan");
-        enter_mouse(&mut app, &before, "25.125");
+        type_draft(&mut app, &before, "25.125");
         let outside = app.command(json!({"command":"pointer", "phase":"click", "x":790, "y":590}));
         unchanged(&outside, &before);
         open_control(&mut app, "timeline", source, "pan");
-        let drafted = enter_mouse(&mut app, &before, "25.125");
-        let hidden = toggle_keypad(&mut app, &drafted, "Mouse channel · Pan");
-        unchanged(&hidden, &before);
-        assert!(!visible(&hidden, "Clear"));
-        assert!(visible(&hidden, "25.125"));
-        let reopened = toggle_keypad(&mut app, &hidden, "Mouse channel · Pan");
-        unchanged(&reopened, &before);
-        assert!(visible(&reopened, "25.125"));
+        let drafted = type_draft(&mut app, &before, "25.125");
+        assert!(visible(&drafted, "25.125"));
         let applied = app.click("Apply value");
         near(track(&applied, source)["pan"].as_f64().unwrap(), 0.25125);
         near(
@@ -436,21 +392,21 @@ fn plugin_parameter_fixture() -> (Harness, u64, tempfile::TempDir, tempfile::Tem
 }
 
 #[test]
-fn plugin_normalized_parameter_accepts_mouse_digits_without_claiming_physical_units() {
+fn plugin_normalized_parameter_accepts_typed_digits_without_claiming_physical_units() {
     let (mut app, _, _worker, _plugins) = plugin_parameter_fixture();
     let before = app.inspect();
     let dial = &before["native_editor"]["parameter_control"]["dial"];
     let opened = right_click(&mut app, dial);
     assert!(visible(&opened, "Range: 0 to 100 %"));
-    let title = opened["visible_labels"]
+    opened["visible_labels"]
         .as_array()
         .unwrap()
         .iter()
         .filter_map(Value::as_str)
         .find(|text| text.starts_with("Mouse synth · ") && text.ends_with(" · Filter Cutoff"))
         .expect("exact editor must identify the channel, device and parameter");
-    toggle_keypad(&mut app, &opened, title);
-    enter_mouse(&mut app, &before, "61.23456789");
+
+    type_draft(&mut app, &before, "61.23456789");
     let applied = app.click("Apply value");
     let actual = applied["native_editor"]["selected_value"].as_f64().unwrap();
     assert!((actual - 0.6123456789).abs() < 1e-12, "{actual}");
@@ -460,7 +416,7 @@ fn plugin_normalized_parameter_accepts_mouse_digits_without_claiming_physical_un
 }
 
 #[test]
-fn plugin_automation_footer_stays_reachable_below_a_keypad_in_a_short_window() {
+fn plugin_automation_footer_stays_reachable_in_a_short_window() {
     let (mut app, source, _worker, _plugins) = plugin_parameter_fixture();
     app.command(json!({"command":"viewport", "width":800, "height":600}));
     let before = app.inspect();
@@ -470,18 +426,15 @@ fn plugin_automation_footer_stays_reachable_below_a_keypad_in_a_short_window() {
         &before["native_editor"]["parameter_control"]["dial"],
     );
     unchanged(&opened, &before);
-    let title = opened["visible_labels"]
+    opened["visible_labels"]
         .as_array()
         .unwrap()
         .iter()
         .filter_map(Value::as_str)
         .find(|text| text.starts_with("Mouse synth · ") && text.ends_with(" · Filter Cutoff"))
         .expect("Exact entry must identify this plug-in parameter");
-    let expanded = toggle_keypad(&mut app, &opened, title);
-    unchanged(&expanded, &before);
-    assert!(visible(&expanded, "7"), "The keypad must be expanded");
     for text in ["Apply value", "Cancel", "Automate"] {
-        let bounds = label(&expanded, text);
+        let bounds = label(&opened, text);
         for (axis, maximum) in [(0, 800.0), (1, 600.0)] {
             assert!(
                 bounds["min"][axis].as_f64().unwrap() >= 0.0,
@@ -493,9 +446,9 @@ fn plugin_automation_footer_stays_reachable_below_a_keypad_in_a_short_window() {
             );
         }
     }
-    // Enter an actual mouse-only draft, then create automation without Apply.
+    // Enter a draft, then create automation without Apply.
     // The lane must start from the acknowledged value rather than this draft.
-    let drafted = enter_mouse(&mut app, &before, "12.5");
+    let drafted = type_draft(&mut app, &before, "12.5");
     unchanged(&drafted, &before);
     assert!(visible(&drafted, "12.5"));
     let created = app.click("Automate");

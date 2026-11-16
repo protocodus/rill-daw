@@ -30,7 +30,7 @@ fn drag(app: &mut Harness, track: u64, control: &str, target: f64) -> Value {
 }
 
 #[test]
-fn header_sliders_share_mixer_values_undo_and_render_while_compact_channels_keep_controls() {
+fn header_sliders_share_mixer_values_undo_and_render_and_expanding_restores_controls() {
     let mut app = Harness::new();
     let source = app.directory.path().join("tone.wav");
     AudioData {
@@ -125,9 +125,17 @@ fn header_sliders_share_mixer_values_undo_and_render_while_compact_channels_keep
     menu(&mut app, "Window", "Arranger");
     app.click("Audio");
     menu(&mut app, "Window", "Properties");
-    app.click("Compact track");
+    app.click("Collapse track");
     let compact = app.key("Escape");
-    assert_eq!(channel(&compact, audio)["compact"], true);
+    assert!(
+        !compact["timeline"]["channels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|channel| channel["track"] == audio)
+    );
+    let expanded = app.click_track_disclosure(audio);
+    assert_eq!(channel(&expanded, audio)["compact"], false);
     let repanned = drag(&mut app, audio, "pan", 0.75);
     assert!(repanned["project"]["tracks"][0]["pan"].as_f64().unwrap() > 0.2);
     let saved = app.directory.path().join("edited.rill");

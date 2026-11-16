@@ -100,7 +100,7 @@ pub fn timeline_loop_editor(
             Sense::hover()
         },
     );
-    if response.drag_started() {
+    if response.drag_started_by(egui::PointerButton::Primary) {
         let point = ui
             .input(|input| input.pointer.press_origin())
             .unwrap_or(lane.center());
@@ -128,7 +128,7 @@ pub fn timeline_loop_editor(
         });
     }
     if editable
-        && response.dragged()
+        && response.dragged_by(egui::PointerButton::Primary)
         && let Some(drag) = ui
             .ctx()
             .data(|data| data.get_temp::<LoopDrag>(id.with("drag")))
@@ -168,7 +168,51 @@ pub fn timeline_loop_editor(
         ui.ctx()
             .data_mut(|data| data.remove::<LoopDrag>(id.with("drag")));
     }
-    let started = response.drag_started() && editable;
+    let started = response.drag_started_by(egui::PointerButton::Primary) && editable;
+    let target_id = id.with("context_beat");
+    if response.secondary_clicked()
+        && let Some(point) = response.interact_pointer_pos()
+    {
+        ui.data_mut(|data| {
+            data.insert_temp(target_id, (snap(view.beat_at(lane, point.x)), minimum))
+        });
+    }
+    let mut menu_edit = false;
+    crate::context_menu(&response, |ui| {
+        let Some((beat, step)) = ui.data(|data| data.get_temp::<(f64, f64)>(target_id)) else {
+            return;
+        };
+        if ui
+            .add_enabled(
+                editable && beat < limit,
+                crate::button_widget("Start loop here"),
+            )
+            .clicked()
+        {
+            range.start = beat;
+            if range.end <= beat {
+                range.end = (beat + step).min(limit);
+            }
+            range.enabled = true;
+            menu_edit = true;
+            ui.close();
+        }
+        if ui
+            .add_enabled(
+                editable && beat > 0.0,
+                crate::button_widget("End loop here"),
+            )
+            .clicked()
+        {
+            range.end = beat;
+            if range.start >= beat {
+                range.start = (beat - step).max(0.0);
+            }
+            range.enabled = true;
+            menu_edit = true;
+            ui.close();
+        }
+    });
     let hint = "Click to set a boundary · Drag edges to resize, the band to move, or empty space for a new range · Shift bypasses snap";
     let hover = match label {
         Some(label) => {
@@ -253,7 +297,7 @@ pub fn timeline_loop_editor(
     });
     TimelineLoopResponse {
         changed: *range != before,
-        started,
+        started: started || menu_edit,
         lane,
         band: visible.is_positive().then_some(visible),
         handles,

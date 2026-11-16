@@ -112,7 +112,7 @@ pub fn sample_favorite_editor(ui: &mut Ui, favorite: &mut SampleFavorite) -> boo
             (ui.available_width() - 2.0 * tokens::BUTTON_PADDING_X).max(1.0),
         )
         .labelled_by(label.id);
-        if crate::name_keyboard_button(ui, response.id, &mut favorite.tag) || response.changed() {
+        if response.changed() {
             favorite.tag = favorite
                 .tag
                 .chars()
@@ -390,42 +390,21 @@ pub fn sample_regions(
     }
 }
 
-/// The same three-pane workspace at desktop and laptop widths. Fixed side
-/// panes never borrow width from a long name, path or destination caption.
+/// Folder tree, results, and sample inspector with draggable dividers.
 pub fn sample_browser_workspace(
     ui: &mut Ui,
     id: Id,
     height: f32,
     mut contents: impl FnMut(usize, &mut Ui),
-) {
-    let height = height.max(0.0).min(ui.available_height().max(0.0));
-    let (rect, _) =
-        ui.allocate_exact_size(egui::vec2(ui.available_width(), height), Sense::hover());
-    let gap = tokens::SPACE_MD;
-    let left = if rect.width() < 1100.0 { 190.0 } else { 196.0 };
-    let right = 280.0_f32.min((rect.width() - left - 2.0 * gap).max(0.0));
-    let center_left = (rect.left() + left + gap).min(rect.right());
-    let center_right = (rect.right() - right - gap).max(center_left);
-    let panes = [
-        egui::Rect::from_x_y_ranges(
-            rect.left()..=(rect.left() + left).min(rect.right()),
-            rect.y_range(),
-        ),
-        egui::Rect::from_x_y_ranges(center_left..=center_right, rect.y_range()),
-        egui::Rect::from_x_y_ranges(rect.right() - right..=rect.right(), rect.y_range()),
-    ];
-    for (index, pane) in panes.into_iter().enumerate() {
-        let mut child = ui.new_child(
-            egui::UiBuilder::new()
-                .id_salt(id.with(index))
-                .max_rect(pane)
-                .layout(egui::Layout::top_down(egui::Align::Min)),
-        );
-        child.set_clip_rect(ui.clip_rect().intersect(pane));
-        child.set_width(pane.width());
-        child.spacing_mut().item_spacing.y = tokens::SPACE_SM;
-        contents(index, &mut child);
-    }
+) -> [egui::Rect; 3] {
+    crate::BrowserPanes::new(ui, id, [196.0, 280.0], tokens::SEARCH_CHOICE_WIDTH).show(
+        ui,
+        height,
+        |index, ui| {
+            ui.spacing_mut().item_spacing.y = tokens::SPACE_SM;
+            contents(index, ui);
+        },
+    )
 }
 
 /// Search stays in one bounded row. The second line states the current scope
@@ -435,19 +414,14 @@ pub fn sample_search(ui: &mut Ui, query: &mut String, scope: &str, count: usize)
     crate::control_row(ui, |ui| {
         ui.spacing_mut().item_spacing.x = tokens::SPACE_SM;
         ui.spacing_mut().button_padding.x = tokens::SPACE_SM;
-        let keyboard_width = tokens::CONTROL_HEIGHT;
         let clear_width = if query.is_empty() {
             0.0
         } else {
             tokens::CONTROL_HEIGHT + tokens::SPACE_SM
         };
         // TextEdit's desired width excludes its horizontal content margins.
-        let field_width = (ui.available_width()
-            - keyboard_width
-            - clear_width
-            - tokens::SPACE_SM
-            - 2.0 * tokens::BUTTON_PADDING_X)
-            .max(1.0);
+        let field_width =
+            (ui.available_width() - clear_width - 2.0 * tokens::BUTTON_PADDING_X).max(1.0);
         let response = crate::text_field(ui, query, "Search samples", field_width);
         changed |= response.changed();
         if !query.is_empty()
@@ -462,7 +436,6 @@ pub fn sample_search(ui: &mut Ui, query: &mut String, scope: &str, count: usize)
             query.clear();
             changed = true;
         }
-        changed |= crate::name_keyboard_icon_button(ui, response.id, query);
     });
     crate::control_row(ui, |ui| {
         ui.spacing_mut().item_spacing.x = tokens::SPACE_SM;
@@ -920,6 +893,25 @@ fn result_row(
     if sample_favorite_button(&mut favorite_ui, row.favorite.as_ref()).clicked() {
         output.favorite_toggled = Some(row.id.clone());
     }
+    crate::context_menu(&response, |ui| {
+        if crate::button(ui, "Preview sample").clicked() {
+            output.preview = Some(row.id.clone());
+            ui.close();
+        }
+        let favorite = if row.favorite.is_some() {
+            "Remove from favorites"
+        } else {
+            "Add to favorites"
+        };
+        if crate::button(ui, favorite).clicked() {
+            output.favorite_toggled = Some(row.id.clone());
+            ui.close();
+        }
+        if crate::button(ui, "Copy path").clicked() {
+            ui.ctx().copy_text(row.path.clone());
+            ui.close();
+        }
+    });
     response.dnd_set_drag_payload(SampleDrop {
         path: row.path.clone().into(),
         name: row.source_name.clone(),

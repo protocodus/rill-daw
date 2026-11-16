@@ -69,6 +69,7 @@ fn fixture(surface: Surface, dark: bool, density: f64) -> (Harness, u64) {
             },
         )
         .unwrap();
+    project.track_mut(track).unwrap().collapsed = false;
     let points = |start| {
         vec![
             AutomationPoint::new(start, 0.2),

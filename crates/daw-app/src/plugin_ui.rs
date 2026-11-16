@@ -1084,45 +1084,41 @@ impl DawApp {
                 }
                 let response = ui.add_enabled(editing_enabled, knob);
                 let mut entered = None;
-                egui::Popup::context_menu(&response)
-                    .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-                    .show(|ui| {
-                        ui.add_enabled_ui(editing_enabled, |ui| {
-                            let footer_height = daw_ui::tokens::CONTROL_HEIGHT
-                                + ui.spacing().item_spacing.y
-                                + daw_ui::tokens::SPACE_SM * 2.0;
-                            entered = daw_ui::value_entry_with_footer(
-                                ui,
-                                (target.track, target.effect, parameter.id),
-                                percent,
-                                0.0..=100.0,
-                                "%",
-                                &format!(
-                                    "{} · {device_name} · {}",
-                                    self.project
-                                        .track(target.track)
-                                        .map(|track| track.name.as_str())
-                                        .unwrap_or("Channel"),
-                                    parameter.name
-                                ),
-                                footer_height,
-                            );
-                            ui.separator();
-                            if daw_ui::button(
-                                ui,
-                                if parameter.automated {
-                                    "Edit automation"
-                                } else {
-                                    "Automate"
-                                },
-                            )
-                            .clicked()
-                            {
-                                actions.automate = Some((parameter.id, parameter.value));
-                                ui.close();
-                            }
-                        });
+                let popup = egui::Popup::context_menu(&response)
+                    .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
+                daw_ui::show_menu(popup, |ui| {
+                    ui.add_enabled_ui(editing_enabled, |ui| {
+                        entered = daw_ui::value_entry_named(
+                            ui,
+                            (target.track, target.effect, parameter.id),
+                            percent,
+                            0.0..=100.0,
+                            "%",
+                            &format!(
+                                "{} · {device_name} · {}",
+                                self.project
+                                    .track(target.track)
+                                    .map(|track| track.name.as_str())
+                                    .unwrap_or("Channel"),
+                                parameter.name
+                            ),
+                        );
+                        ui.separator();
+                        if daw_ui::button(
+                            ui,
+                            if parameter.automated {
+                                "Edit automation"
+                            } else {
+                                "Automate"
+                            },
+                        )
+                        .clicked()
+                        {
+                            actions.automate = Some((parameter.id, parameter.value));
+                            ui.close();
+                        }
                     });
+                });
                 daw_ui::hover_text(
                     response.clone(),
                     "Normalized value, 0–100 % of the parameter's range\nRight-click for exact value entry and automation",
@@ -1397,51 +1393,14 @@ impl DawApp {
                         }
                         if !self.instrument_ui.parameters_open {
                             let label = daw_ui::text::label(ui, "Device name");
-                            let (keyboard, field) = daw_ui::action_row(
+                            let field = daw_ui::text_field(
                                 ui,
-                                |ui| {
-                                    daw_ui::small_button(ui, "Keyboard…")
-                                        .on_hover_text("Name this device with the mouse")
-                                        .clicked()
-                                },
-                                |ui| {
-                                    daw_ui::text_field(
-                                        ui,
-                                        &mut device_name,
-                                        "Device name",
-                                        ui.available_width(),
-                                    )
-                                    .labelled_by(label.id)
-                                },
+                                &mut device_name,
+                                "Device name",
+                                ui.available_width() - 2.0 * daw_ui::tokens::BUTTON_PADDING_X,
                             )
-                            .inner;
-                            let reveal_keyboard =
-                                keyboard && !daw_ui::name_keyboard_open(ui.ctx(), field.id);
-                            if keyboard {
-                                daw_ui::set_name_keyboard_open(
-                                    ui.ctx(),
-                                    field.id,
-                                    !daw_ui::name_keyboard_open(ui.ctx(), field.id),
-                                );
-                            }
-                            let keyboard_top = ui.next_widget_position();
-                            let keyboard_changed =
-                                daw_ui::name_keyboard(ui, field.id, &mut device_name);
-                            if reveal_keyboard {
-                                // Reveal the keyboard inside the scroll body;
-                                // opening it must not resize the dialog or footer.
-                                ui.scroll_to_rect(
-                                    egui::Rect::from_min_size(
-                                        keyboard_top,
-                                        egui::vec2(
-                                            ui.available_width(),
-                                            daw_ui::name_keyboard_height(ui.ctx()),
-                                        ),
-                                    ),
-                                    Some(egui::Align::BOTTOM),
-                                );
-                            }
-                            if field.changed() || keyboard_changed {
+                            .labelled_by(label.id);
+                            if field.changed() {
                                 self.begin_edit();
                                 let track = self.project.track_mut(track_id).unwrap();
                                 if let Some(effect) = target.effect {
@@ -1457,7 +1416,7 @@ impl DawApp {
                                 self.edit_label = Some("Rename device".into());
                                 self.changed();
                             }
-                            let saved_name = if field.changed() || keyboard_changed {
+                            let saved_name = if field.changed() {
                                 device_name.clone()
                             } else {
                                 stored_name.clone()

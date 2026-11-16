@@ -17,6 +17,7 @@ struct Channel {
     muted: bool,
     solo: bool,
     armed: bool,
+    collapsed: bool,
     route: usize,
     source: usize,
     peaks: [f32; 2],
@@ -33,6 +34,7 @@ impl Channel {
             muted: false,
             solo: false,
             armed: false,
+            collapsed: false,
             route: 0,
             source: 0,
             peaks: [0.42, 0.34],
@@ -129,8 +131,17 @@ pub fn show(ui: &mut Ui, state: &mut State) {
 }
 
 fn header(ui: &mut Ui, index: usize, channel: &mut Channel, size: egui::Vec2) {
-    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
-    let mut layout = controls::TrackHeaderLayout::new(rect);
+    let height = if channel.collapsed {
+        controls::TRACK_HEADER_COLLAPSED_HEIGHT
+    } else {
+        size.y
+    };
+    let (rect, _) = ui.allocate_exact_size(vec2(size.x, height), Sense::hover());
+    let mut layout = if channel.collapsed {
+        controls::TrackHeaderLayout::collapsed(rect)
+    } else {
+        controls::TrackHeaderLayout::new(rect)
+    };
     layout = match channel.kind {
         Kind::Bus => layout.with_bus_badge(),
         Kind::Audio | Kind::Midi => layout.with_record_arm(),
@@ -156,19 +167,37 @@ fn header(ui: &mut Ui, index: usize, channel: &mut Channel, size: egui::Vec2) {
                 Kind::Bus => Icon::Routing,
             },
             tint,
-            folder: false,
-            collapsed: layout.compact,
         },
     );
     if let Some(rect) = layout.bus_badge {
         controls::paint_bus_badge(&painter, rect, tint);
     }
-    controls::track_reorder_grip_at(
-        ui,
-        layout.reorder,
-        Id::new(("gallery_track_grip", index)),
-        index as u64,
-    );
+    if let Some(rect) = layout.disclosure {
+        let label = if channel.collapsed {
+            "Expand track"
+        } else {
+            "Collapse track"
+        };
+        if controls::track_header_disclosure_at(
+            ui,
+            rect,
+            ("gallery_disclosure", index),
+            channel.collapsed,
+            label,
+        )
+        .clicked()
+        {
+            channel.collapsed = !channel.collapsed;
+        }
+    }
+    if let Some(rect) = layout.reorder {
+        controls::track_reorder_grip_at(
+            ui,
+            rect,
+            Id::new(("gallery_track_grip", index)),
+            index as u64,
+        );
+    }
     if let Some(rect) = layout.record_arm
         && controls::record_arm_at(
             ui,

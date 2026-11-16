@@ -21,6 +21,7 @@ pub(crate) struct ArrangerSelection {
     /// release; retaining the group while held keeps group dragging possible.
     pub(crate) plain_click_candidate: Option<u64>,
     pub(crate) click_tracker: daw_ui::ItemClickTracker,
+    pub(crate) header_click_tracker: daw_ui::ItemClickTracker,
     pub(crate) background_click_tracker: daw_ui::ItemClickTracker,
     clipboard: Option<ClipClipboard>,
 }

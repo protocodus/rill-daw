@@ -137,7 +137,7 @@ fn audio_and_midi_names_can_be_hidden_restored_and_recalled_without_losing_clip_
             let empty = context_name(&mut app, id, "");
             if id == audio_id {
                 let handle = &region(&empty, id)["fade_in_handle"];
-                // This starts inside the generous rename band, on a real fade
+                // This starts on a real fade
                 // handle. The existing handle keeps pointer ownership.
                 let fade = point(handle, 0.5, 0.1);
                 let zoom = empty["timeline"]["pixels_per_beat"].as_f64().unwrap();
@@ -161,19 +161,11 @@ fn audio_and_midi_names_can_be_hidden_restored_and_recalled_without_losing_clip_
             }
             let empty = app.inspect();
             let body = point(&region(&empty, id)["content_rect"], 0.5, 0.7);
-            // Double-click anywhere on a clip names it; the editor opens from
-            // the context menu.
-            let renaming = pointer(&mut app, "double_click", body, false);
-            assert_eq!(renaming["view"], "Arrangement");
-            assert_eq!(renaming["selected_clip"], id);
-            assert!(
-                renaming["visible_labels"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .any(|label| label == "Apply name")
-            );
-            app.key("Escape");
+            let editing = pointer(&mut app, "double_click", body, false);
+            assert_eq!(editing["view"], "Clip");
+            assert_eq!(editing["selected_clip"], id);
+            assert_eq!(editing["project"], empty["project"]);
+            app.click("Back");
 
             let before = app.inspect();
             let body = point(&region(&before, id)["content_rect"], 0.5, 0.85);

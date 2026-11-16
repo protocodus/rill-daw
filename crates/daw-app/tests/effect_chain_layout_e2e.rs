@@ -121,6 +121,140 @@ fn long_chains_keep_insert_footer_and_mouse_actions_visible_in_both_themes() {
 }
 
 #[test]
+fn chooser_inserts_before_after_or_at_the_end_of_the_clicked_chain() {
+    let mut app = Harness::new();
+    fixture(&mut app, 2);
+    app.command(json!({"command":"viewport","width":1440,"height":1000}));
+    app.click("Window");
+    let mut chain = app.click("Effects");
+    let slots = |state: &Value| {
+        state["project"]["tracks"][0]["inserts"]
+            .as_array()
+            .unwrap()
+            .clone()
+    };
+    // The second card is explicitly the anchor, independent of which channel
+    // or device the browser last displayed.
+    for (action, occurrence, position) in [
+        ("Insert before…", 1, 1),
+        ("Insert after…", 1, 2),
+        ("+ Insert", 0, 4),
+    ] {
+        let before = slots(&chain);
+        let chooser =
+            app.command(json!({"command":"click","label":action,"occurrence":occurrence}));
+        assert_eq!(chooser["popups"]["library"], true);
+        assert_eq!(chooser["library"]["primary_enabled"], true);
+        if action != "+ Insert" {
+            let anchor = before[occurrence]["name"].as_str().unwrap();
+            assert!(
+                chooser["library"]["destination"]
+                    .as_str()
+                    .unwrap()
+                    .contains(anchor)
+            );
+            let cancelled = app.key("Escape");
+            assert_eq!(slots(&cancelled), before);
+            app.command(json!({"command":"click","label":action,"occurrence":occurrence}));
+        }
+        chain = app.click("Add to effect chain");
+        assert_eq!(chain["popups"]["effects"], true);
+        let mut after = slots(&chain);
+        assert_eq!(after.len(), before.len() + 1);
+        let inserted = after.remove(position);
+        assert!(!before.iter().any(|slot| slot["id"] == inserted["id"]));
+        assert_eq!(after, before);
+        app.click("Edit");
+        let undone = app.click("Undo");
+        assert_eq!(slots(&undone), before);
+        app.click("Edit");
+        chain = app.click("Redo");
+        assert_eq!(slots(&chain)[position], inserted);
+    }
+    app.quit();
+}
+
+#[test]
+fn right_clicking_an_insert_card_opens_its_rack_commands() {
+    let mut app = Harness::new();
+    fixture(&mut app, 2);
+    app.command(json!({"command":"viewport","width":1440,"height":1000}));
+    app.click("Window");
+    let initial = app.click("Effects");
+    let original = &initial["project"]["tracks"][0]["inserts"];
+    let context = |app: &mut Harness, state: &Value| {
+        let (x, y) = center(label(state, "01  First insert"));
+        app.command(json!({"command":"pointer","phase":"click","button":"secondary","x":x,"y":y}))
+    };
+    let mut chain = initial.clone();
+    for (command, index) in [("Insert before…", 0), ("Insert after…", 1)] {
+        let menu = context(&mut app, &chain);
+        assert_eq!(&menu["project"]["tracks"][0]["inserts"], original);
+        for command in [
+            "Open editor",
+            "Parameters…",
+            "Insert before…",
+            "Insert after…",
+            "Bypass insert",
+            "Up",
+            "Down",
+            "Remove insert",
+        ] {
+            assert!(
+                menu["menu_label_rects"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|row| row["text"] == command),
+                "Right-click card menu should offer {command}"
+            );
+        }
+        let chooser = app.click(command);
+        assert!(
+            chooser["library"]["destination"]
+                .as_str()
+                .unwrap()
+                .contains("First insert")
+        );
+        let added = app.click("Add to effect chain");
+        let mut inserts = added["project"]["tracks"][0]["inserts"]
+            .as_array()
+            .unwrap()
+            .clone();
+        inserts.remove(index);
+        assert_eq!(inserts.as_slice(), original.as_array().unwrap().as_slice());
+        app.click("Edit");
+        chain = app.click("Undo");
+    }
+    context(&mut app, &chain);
+    let bypassed = app.click("Bypass insert");
+    assert_eq!(
+        bypassed["project"]["tracks"][0]["inserts"][0]["enabled"],
+        false
+    );
+    context(&mut app, &bypassed);
+    let enabled = app.click("Enable insert");
+    assert_eq!(&enabled["project"]["tracks"][0]["inserts"], original);
+    context(&mut app, &enabled);
+    let moved = app.click("Down");
+    assert_eq!(moved["project"]["tracks"][0]["inserts"][1], original[0]);
+    app.click("Edit");
+    let restored = app.click("Undo");
+    context(&mut app, &restored);
+    let removed = app.click("Remove insert");
+    assert_eq!(
+        removed["project"]["tracks"][0]["inserts"],
+        json!([original[1]])
+    );
+    app.click("Edit");
+    assert_eq!(
+        &app.click("Undo")["project"]["tracks"][0]["inserts"],
+        original
+    );
+    app.quit();
+}
+
+#[test]
 fn mixer_scale_marks_match_native_fader_gain_and_empty_chains_offer_insertion() {
     let mut app = Harness::new();
     fixture(&mut app, 0);

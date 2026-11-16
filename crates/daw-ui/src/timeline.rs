@@ -408,7 +408,7 @@ pub fn time_signature_choice(ui: &mut Ui, beats_per_bar: &mut u8) -> Response {
 /// The same 1/4–32/4 chooser for any meter, such as a meter change.
 pub fn meter_choice(ui: &mut Ui, id_salt: &str, beats_per_bar: &mut u8) -> Response {
     let before = *beats_per_bar;
-    let height = (ui.ctx().content_rect().height() - 100.0).clamp(68.0, 240.0);
+    let height = crate::widgets::menu_body_height(ui.ctx(), ui.style()).min(240.0);
     let mut response = crate::select(id_salt, format!("{}/4", *beats_per_bar))
         .width(56.0)
         .height(height)

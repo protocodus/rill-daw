@@ -107,7 +107,6 @@ pub(crate) struct SampleBrowser {
     destination: bool,
     destination_load: bool,
     destination_original: Option<Option<(u64, u32)>>,
-    root_draft: String,
     items: Vec<BrowserItem>,
     results: Vec<SampleResult>,
     result_lookup: HashMap<String, usize>,
@@ -551,7 +550,7 @@ impl DawApp {
         let height = ui.available_height();
         let mut result_response = daw_ui::SampleResultsResponse::default();
         let mut source_response = daw_ui::SampleSourcesResponse::default();
-        daw_ui::sample_browser_workspace(
+        let panes = daw_ui::sample_browser_workspace(
             ui,
             egui::Id::new("sample_browser_workspace"),
             height,
@@ -635,10 +634,18 @@ impl DawApp {
                         |region, ui| match region {
                             SampleRegion::Header => self.sample_inspector_header(ui),
                             SampleRegion::Body => {
-                                self.sample_inspector_backdrop(ui);
+                                let height = ui.available_height();
                                 egui::ScrollArea::vertical()
                                     .id_salt("sample_inspector_scroll")
-                                    .show(ui, |ui| self.sample_selection_details(ui));
+                                    .show(ui, |ui| {
+                                        let top = ui.cursor().top();
+                                        self.sample_selection_details(ui);
+                                        let spare = height - (ui.cursor().top() - top);
+                                        self.sample_inspector_analysis(
+                                            ui,
+                                            spare.max(tokens::CONTROL_HEIGHT * 4.0),
+                                        );
+                                    });
                             }
                             SampleRegion::Footer => self.sample_use_actions(ui),
                         },
@@ -647,10 +654,35 @@ impl DawApp {
                 _ => (),
             },
         );
+        for (key, row) in &source_response.rows {
+            let Some(SourceScope::Folder(path)) = SourceScope::from_key(key) else {
+                continue;
+            };
+            daw_ui::context_menu(row, |ui| {
+                if daw_ui::button(ui, "Show samples").clicked() {
+                    self.set_sample_scope(key);
+                    ui.close();
+                }
+                if daw_ui::button(ui, "Copy folder path").clicked() {
+                    ui.ctx().copy_text(path.display().to_string());
+                    ui.close();
+                }
+                if let Some(index) = self
+                    .settings
+                    .sample_roots
+                    .iter()
+                    .position(|root| root == &path)
+                    && daw_ui::button(ui, "Remove folder").clicked()
+                {
+                    self.remove_sample_folder(index);
+                    ui.close();
+                }
+            });
+        }
         if let Some((_, source)) = &source_response.dropped {
             self.add_browser_source_to_project(source.clone());
         }
-        self.sample_browser_diagnostics(ui, &result_response, &source_response, false);
+        self.sample_browser_diagnostics(ui, &result_response, &source_response, Some(panes));
         self.sample_browser_dialogs(ui.ctx());
     }
 
@@ -804,7 +836,7 @@ impl DawApp {
         if let Some(response) = drop_response {
             sources.drop_targets.push(("project".into(), response));
         }
-        self.sample_browser_diagnostics(ui, &result_response, &sources, true);
+        self.sample_browser_diagnostics(ui, &result_response, &sources, None);
     }
 
     /// Audition and metadata decorate one cached row without rebuilding or
@@ -1000,8 +1032,8 @@ impl DawApp {
         }
     }
     /// Only the visible selected-source inspector requests analysis. Painting
-    /// is behind the scrolling metadata and allocates no interaction targets.
-    fn sample_inspector_backdrop(&mut self, ui: &egui::Ui) {
+    /// follows the metadata in the same scrollable column.
+    fn sample_inspector_analysis(&mut self, ui: &mut egui::Ui, height: f32) {
         self.sample_browser.visual_bounds = None;
         self.sample_browser.visual_waveform = None;
         self.sample_browser.visual_spectrum = None;
@@ -1019,20 +1051,23 @@ impl DawApp {
             self.settings.scratch_dir.clone(),
             ui.ctx(),
         );
-        let bounds = ui.max_rect().intersect(ui.clip_rect());
-        self.sample_browser.visual_bounds = Some(bounds);
+
         if let crate::sample_visual::SampleVisualStatus::Ready(data) =
             self.sample_browser.visual.selected(&source.path)
         {
-            let painted = daw_ui::paint_audio_preview_backdrop(
+            let (bounds, _) = ui.allocate_exact_size(
+                egui::vec2(ui.available_width(), height),
+                egui::Sense::hover(),
+            );
+            self.sample_browser.visual_bounds = Some(bounds);
+            let painted = daw_ui::paint_audio_preview(
                 ui.painter(),
                 bounds,
-                daw_ui::AudioPreviewBackdrop {
+                daw_ui::AudioPreview {
                     waveform: &data.waveform,
                     spectrum: &data.spectrum,
                     state: daw_ui::AudioPreviewState::Ready,
                 },
-                daw_ui::theme::palette(ui.ctx()).bg,
             );
             self.sample_browser.visual_waveform = painted.waveform;
             self.sample_browser.visual_spectrum = painted.spectrum;
@@ -1484,7 +1519,7 @@ impl DawApp {
                         3,
                     );
                     if daw_ui::button(ui, "Add folder…").clicked() {
-                        self.sample_browser.folders = true;
+                        self.choose_sample_folder();
                     }
                 }
                 _ if self.sample_browser.index.roots() != self.settings.sample_roots.as_slice() => {
@@ -1518,15 +1553,16 @@ impl DawApp {
     fn sample_browser_dialogs(&mut self, ctx: &egui::Context) {
         if self.sample_browser.folders {
             let mut open = true;
-            let mut add = None;
             let mut remove = None;
             daw_ui::popup("Sample folders", ctx)
                 .id(egui::Id::new("sample_folder_manager"))
                 .open(&mut open)
                 .show(ctx, |ui| {
-                    daw_ui::text::note(ui, "Add folders here, then scan when you are ready.");
+                    if daw_ui::button(ui, "Add folder…").clicked() {
+                        self.choose_sample_folder();
+                    }
                     for (index, root) in self.settings.sample_roots.iter().enumerate() {
-                        ui.push_id(index, |ui| {
+                        ui.push_id(root, |ui| {
                             daw_ui::path_row(ui, root, |ui| {
                                 if daw_ui::quiet_button(ui, "Remove folder").clicked() {
                                     remove = Some(index);
@@ -1534,45 +1570,10 @@ impl DawApp {
                             });
                         });
                     }
-                    let field = daw_ui::text_field(
-                        ui,
-                        &mut self.sample_browser.root_draft,
-                        "Sample folder path",
-                        ui.available_width(),
-                    );
-                    daw_ui::name_keyboard_button(ui, field.id, &mut self.sample_browser.root_draft);
-                    daw_ui::control_row_wrapped(ui, |ui| {
-                        if daw_ui::button(ui, "Add folder").clicked() {
-                            add = Some(PathBuf::from(self.sample_browser.root_draft.trim()));
-                        }
-                        if daw_ui::quiet_button(ui, "Browse folder…").clicked() {
-                            add = daw_ui::with_native_dialog_menu(|| {
-                                rfd::FileDialog::new().pick_folder()
-                            });
-                        }
-                    });
-                    if daw_ui::button(ui, "Done").clicked() {
-                        self.sample_browser.folders = false;
-                    }
                 });
             self.sample_browser.folders &= open;
-            if let Some(path) = add {
-                self.add_sample_root(path);
-            }
             if let Some(index) = remove {
-                let mut next = self.settings.clone();
-                next.sample_roots.remove(index);
-                match next.save() {
-                    Ok(()) => {
-                        self.settings = next;
-                        self.setup_draft.sample_roots = self.settings.sample_roots.clone();
-                        if matches!(&self.sample_browser.scope, SourceScope::Folder(path) if !self.settings.sample_roots.iter().any(|root| path.starts_with(root)))
-                        {
-                            self.sample_browser.scope = SourceScope::All;
-                        }
-                    }
-                    Err(error) => self.sample_browser.notice = Some((error.to_string(), true)),
-                }
+                self.remove_sample_folder(index);
             }
         }
         if self.sample_browser.scan_details {
@@ -1727,23 +1728,34 @@ impl DawApp {
             }
         }
     }
-    fn add_sample_root(&mut self, path: PathBuf) {
+    fn remove_sample_folder(&mut self, index: usize) {
+        let mut next = self.settings.clone();
+        next.sample_roots.remove(index);
+        match next.save() {
+            Ok(()) => {
+                self.settings = next;
+                self.setup_draft.sample_roots = self.settings.sample_roots.clone();
+                if matches!(&self.sample_browser.scope, SourceScope::Folder(path) if !self.settings.sample_roots.iter().any(|root| path.starts_with(root)))
+                {
+                    self.sample_browser.scope = SourceScope::All;
+                }
+            }
+            Err(error) => self.sample_browser.notice = Some((error.to_string(), true)),
+        }
+    }
+    fn choose_sample_folder(&mut self) {
+        let Some(path) = self.pick_document_path(crate::document_ui::DocumentDialog::SampleFolder)
+        else {
+            return;
+        };
         let result = (|| -> anyhow::Result<()> {
             anyhow::ensure!(path.is_dir(), "Choose an existing sample folder");
-            let path = path.canonicalize()?;
-            if self.settings.sample_roots.contains(&path) {
-                return Ok(());
-            }
-            anyhow::ensure!(
-                self.settings.sample_roots.len() < 64,
-                "Choose at most 64 sample folders"
-            );
             let mut next = self.settings.clone();
-            next.sample_roots.push(path);
-            next.save()?;
-            self.settings = next;
-            self.setup_draft.sample_roots = self.settings.sample_roots.clone();
-            self.sample_browser.root_draft.clear();
+            if next.include_sample_root(path.canonicalize()?) {
+                next.save()?;
+                self.setup_draft.sample_roots = next.sample_roots.clone();
+                self.settings = next;
+            }
             Ok(())
         })();
         if let Err(error) = result {
@@ -1804,7 +1816,7 @@ impl DawApp {
         ui: &egui::Ui,
         results: &daw_ui::SampleResultsResponse,
         sources: &daw_ui::SampleSourcesResponse,
-        palette: bool,
+        panes: Option<[egui::Rect; 3]>,
     ) {
         let rect = |rect: egui::Rect| serde_json::json!({"min":[rect.min.x,rect.min.y],"max":[rect.max.x,rect.max.y]});
         let samples: Vec<_> = results.rows.iter().filter_map(|(id, response)| self.sample_source(id).map(|source| serde_json::json!({"id":id,"path":source.path,"rect":rect(response.rect),"min":[response.rect.min.x,response.rect.min.y],"max":[response.rect.max.x,response.rect.max.y]}))).collect();
@@ -1826,7 +1838,7 @@ impl DawApp {
             });
         let data = serde_json::json!({
             "audition":audition,"results_focused":daw_ui::sample_results_owns_keys(ui.ctx()),
-            "bounds":rect(ui.max_rect().intersect(ui.clip_rect())),"view":"samples","scanning":self.sample_browser.index.scanning(),"total":self.sample_browser.results.len(),"indexed":self.sample_browser.index.entries().len(),"roots":self.settings.sample_roots,
+            "panes":panes.map(|panes| panes.map(rect)), "bounds":rect(ui.max_rect().intersect(ui.clip_rect())),"view":"samples","scanning":self.sample_browser.index.scanning(),"total":self.sample_browser.results.len(),"indexed":self.sample_browser.index.entries().len(),"roots":self.settings.sample_roots,
             "scope":self.sample_browser.scope.key(),"scope_label":self.sample_browser.scope.label(),"query":self.sample_browser.query,"selected":self.sample_browser.selected,"target":self.sample_browser.target,"captured":self.sample_browser.captured,
             "auto_play":self.settings.sample_auto_play,"favorites_only":self.sample_browser.scope==SourceScope::Favorites,
             "favorites":self.sample_browser.library.entries().iter().map(|entry| serde_json::json!({"id":entry.id,"path":entry.path,"name":entry.name,"favorite":entry.favorite})).collect::<Vec<_>>(),"favorite_busy":self.sample_browser.library.busy(),
@@ -1836,7 +1848,7 @@ impl DawApp {
         });
         ui.ctx().data_mut(|storage| {
             storage.insert_temp(
-                egui::Id::new(if palette {
+                egui::Id::new(if panes.is_none() {
                     "sample_palette_diagnostics"
                 } else {
                     "library_diagnostics"
