@@ -197,6 +197,63 @@ fn pitch_fine_and_the_pitch_envelope_transpose_a_hit() {
 }
 
 #[test]
+fn overlapping_hits_keep_their_own_velocity_pitch_through_the_pitch_envelope() {
+    let sample = sine(RATE, 1.0, 400.0, 0.24);
+    let samples = [(0, Arc::clone(&sample)), (1, sample)];
+    for amount in [-12.0, 12.0] {
+        // A half-velocity hit gets half the specified offset. A full hit
+        // overlaps it on the same pad and should keep its original pitch.
+        let mut dynamic = kit(
+            &samples,
+            &[(id(0, PITCH_ENV), 5.0), (id(0, VELOCITY_PITCH), amount)],
+        );
+        let actual = render(
+            &mut *dynamic,
+            0.4,
+            &[(0.0, hit_with(0, 0.5)), (0.1, hit(0))],
+        );
+        let mut reference = kit(
+            &samples,
+            &[
+                (id(0, PITCH_ENV), 5.0),
+                (id(0, PITCH), amount * 0.5),
+                (id(1, PITCH_ENV), 5.0),
+            ],
+        );
+        let expected = render(&mut *reference, 0.4, &[(0.0, hit(0)), (0.1, hit(1))]);
+        assert_eq!(actual, expected);
+    }
+    let mut instrument = kit(&samples, &[(id(0, VELOCITY_PITCH), -12.0)]);
+    assert!(instrument.tail_samples() >= at(2.0) as u32);
+    let unaffected = render(&mut *instrument, 0.2, &[(0.0, hit_with(1, 0.25))]);
+    let mut clean = kit(&samples, &[]);
+    assert_eq!(unaffected, render(&mut *clean, 0.2, &[(0.0, hit(1))]));
+}
+
+#[test]
+fn bit_depth_quantizes_the_sum_of_a_pads_hits_on_both_channels() {
+    let left = vec![0.002; at(0.3)];
+    let right = vec![-0.006; at(0.3)];
+    let sample = Arc::new(SampleData::new(RATE, &[&left, &right]));
+    let samples = [(0, Arc::clone(&sample)), (1, sample)];
+    let hits = [(0.0, hit(0)), (0.1, hit(0))];
+    let mut clean = kit(&samples, &[]);
+    let dry = render(&mut *clean, 0.25, &hits);
+    for (bits, scale) in [(1.0, 2048.0), (2.0, 128.0)] {
+        let mut reduced = kit(&samples, &[(id(0, BITS), bits)]);
+        let wet = render(&mut *reduced, 0.25, &hits);
+        for (input, output) in [(&dry.0, &wet.0), (&dry.1, &wet.1)] {
+            for (&sample, &quantized) in input.iter().zip(output) {
+                assert_eq!(quantized, (sample * scale).round() / scale);
+            }
+        }
+        reduced.reset();
+        let unaffected = render(&mut *reduced, 0.25, &[(0.0, hit(1)), (0.1, hit(1))]);
+        assert_eq!(unaffected, dry);
+    }
+}
+
+#[test]
 fn a_choke_group_cuts_the_other_pads_of_the_group_in_five_ms() {
     let long = sine(RATE, 2.0, 500.0, 0.5);
     let samples = [(6, Arc::clone(&long)), (10, Arc::clone(&long))];

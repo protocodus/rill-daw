@@ -1,5 +1,5 @@
 use daw_ui::{self as ui, TimelineViewport, WaveformColumn, text, theme, tokens};
-use egui::{Align2, FontId, Rect, Sense, Stroke, Ui, pos2, vec2};
+use egui::{Align2, FontId, Rect, Sense, Ui, pos2, vec2};
 
 pub struct State {
     columns: Vec<WaveformColumn>,
@@ -59,7 +59,8 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         row_height: 31.0,
         ..Default::default()
     };
-    ui::paint_timeline_ruler(ui.painter(), ruler, view, 120.0, &ui::MeterMap::uniform(4));
+    let meter = ui::MeterMap::uniform(4);
+    ui::paint_timeline_ruler(ui.painter(), ruler, view, 120.0, &meter);
     let lane = Rect::from_min_max(pos2(ruler.left(), ruler.bottom()), ruler_bounds.max);
     let mut range = ui::TimelineLoop {
         start: state.loop_start,
@@ -76,42 +77,39 @@ pub fn show(ui: &mut Ui, state: &mut State) {
         8.0,
         Some(ui::TimelineLoopLabel {
             tempo: 120.0,
-            meter: &ui::MeterMap::uniform(4),
+            meter: &meter,
             playhead: 0.0,
         }),
     );
     state.loop_start = range.start;
     state.loop_end = range.end;
-    let (clip, _) = ui.allocate_exact_size(vec2(ui.available_width(), 152.0), Sense::hover());
-    ui.painter().rect_filled(clip, tokens::RADIUS, colors.bg);
-    let title = Rect::from_min_size(clip.min + vec2(10.0, 4.0), vec2(clip.width() - 20.0, 20.0));
+    let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), 152.0), Sense::hover());
+    ui.painter().rect_filled(row, 0.0, colors.bg);
+    ui::ArrangerGrid::new(ruler, view, &meter).paint_track(ui.painter(), row);
+    let clip = ui::clip_lane_rect(row).with_max_x(view.x_at(row, 7.0));
+    let track_color = egui::Color32::from_rgb(60, 160, 225);
+    let surface = ui::clip_surface(ui.painter(), clip, track_color, true);
     ui::clip_title(
         ui.painter(),
-        title,
-        FontId::proportional(tokens::FONT_TRACK),
-        colors.text,
+        surface.title,
+        surface.title_font(),
+        surface.title_color,
         "Glass rhythm · linked copy",
         true,
     );
-    let plot = Rect::from_min_max(pos2(clip.left(), clip.top() + 28.0), clip.max);
-    for step in 0..=16 {
-        let x = plot.left() + step as f32 * plot.width() / 16.0;
-        ui.painter()
-            .vline(x, plot.y_range(), Stroke::new(1.0_f32, colors.grid_minor));
-    }
+    let plot = Rect::from_x_y_ranges(clip.x_range(), surface.content.y_range());
     ui::paint_audio_waveform(
-        ui.painter(),
+        &ui.painter_at(surface.content),
         plot,
         view,
         &state.columns,
         2,
         1.0,
-        egui::Color32::from_rgb(60, 160, 225),
+        track_color,
     );
     ui::paint_timeline_selection(ui.painter(), plot, view, 2.5, 4.0);
     ui::paint_audio_clip_edges(ui.painter(), plot, view, 0.0, 7.0, colors.accent);
-    ui::paint_clip_tail(ui.painter(), plot, view.x_at(plot, 7.0));
-    ui::paint_timeline_cursor(ui.painter(), ruler, clip, view.x_at(plot, 3.25));
+    ui::paint_timeline_cursor(ui.painter(), ruler, row, view.x_at(plot, 3.25));
     ui.add_space(tokens::SPACE_LG);
     ui.columns(2, |columns| {
         text::subtitle(&mut columns[0], "Piano-key states");

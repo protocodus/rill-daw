@@ -219,6 +219,7 @@ pub fn resize_value_at(
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TrackDensity {
+    Overview,
     #[default]
     Compact,
     Standard,
@@ -226,10 +227,16 @@ pub enum TrackDensity {
 }
 
 impl TrackDensity {
-    pub const ALL: [Self; 3] = [Self::Compact, Self::Standard, Self::Detailed];
+    pub const ALL: [Self; 4] = [
+        Self::Overview,
+        Self::Compact,
+        Self::Standard,
+        Self::Detailed,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
+            Self::Overview => "Overview",
             Self::Compact => "Compact",
             Self::Standard => "Standard",
             Self::Detailed => "Detailed",
@@ -238,6 +245,7 @@ impl TrackDensity {
 
     pub fn row_height(self) -> f32 {
         match self {
+            Self::Overview => tokens::CONTROL_HEIGHT,
             Self::Compact => 64.0,
             Self::Standard => crate::TRACK_HEADER_COMPACT_HEIGHT,
             Self::Detailed => crate::TRACK_HEADER_HEIGHT,
@@ -246,6 +254,7 @@ impl TrackDensity {
 
     fn hint(self) -> &'static str {
         match self {
+            Self::Overview => "Single-line tracks with mute, solo and clip previews",
             Self::Compact => {
                 "More tracks in view · volume, pan, mute, solo and metering remain accessible"
             }
@@ -305,7 +314,7 @@ pub fn track_dimensions(ui: &mut Ui, header: &mut f32, row_height: &mut f32, max
             let label = ui.label("Row height");
             ui.add(
                 crate::number(row_height)
-                    .range(56.0..=1024.0)
+                    .range(TrackDensity::Overview.row_height()..=1024.0)
                     .clamp_existing_to_range(false)
                     .speed(1.0)
                     .fixed_decimals(0)

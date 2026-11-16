@@ -159,12 +159,37 @@ fn laptop_density_presets_keep_channel_actions_and_remember_the_view_without_edi
         unchanged(&baseline, &standard);
         assert_eq!(standard["timeline"]["row_height"], 89.0);
         assert_eq!(standard["timeline"]["preferred_density"], "Standard");
+
+        preset(&mut app, "Overview");
+        let overview = app.inspect();
+        unchanged(&baseline, &overview);
+        assert_eq!(overview["timeline"]["row_height"], 34.0);
+        assert!(full_track_count(&overview) > compact_count);
+        let sections = &item(&overview, "tracks", first)["sections"];
+        assert!(sections["mix"].is_null());
+        for control in ["mute", "solo"] {
+            assert!((point(&sections[control]).1 - point(&sections["identity"]).1).abs() < 0.01);
+            let toggled = click_rect(&mut app, &sections[control], false);
+            let track = toggled["project"]["tracks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|track| track["id"] == first)
+                .unwrap();
+            assert_eq!(track[control], true);
+            app.click("Edit");
+            assert_eq!(app.click("Undo")["project"], initial["project"]);
+        }
+        let channel = click_rect(&mut app, &sections["details"], false);
+        assert_eq!(channel["popups"]["properties"], true);
+        assert_eq!(channel["selected_track"], first);
+        app.click("Arranger");
     }
     let mut app = app.restart();
     app.command(json!({"command":"open","path":path}));
     let restored = app.inspect();
-    assert_eq!(restored["timeline"]["row_height"], 89.0);
-    assert_eq!(restored["timeline"]["preferred_density"], "Standard");
+    assert_eq!(restored["timeline"]["row_height"], 34.0);
+    assert_eq!(restored["timeline"]["preferred_density"], "Overview");
     assert_eq!(restored["project"], serde_json::to_value(project).unwrap());
     app.quit();
 }

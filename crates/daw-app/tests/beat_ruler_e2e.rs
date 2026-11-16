@@ -268,6 +268,82 @@ fn close_zoom_rulers_show_aligned_beat_and_clock_anchors_in_all_music_editors() 
 }
 
 #[test]
+fn zoomed_arranger_positions_distant_events_on_the_ruler_time_axis() {
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    let track = project.add_midi_track("Long arrangement");
+    let start = 900_000.28125;
+    project.track_mut(track).unwrap().clips.push(Clip::midi(
+        "Off-grid attack",
+        start,
+        0.25,
+        vec![Note::new(60, 0.0, 0.125, 96)],
+    ));
+    let sustained = project.add_midi_track("Long clip");
+    let note_start = start - 0.125;
+    project.track_mut(sustained).unwrap().clips.push(Clip::midi(
+        "Late note",
+        0.0,
+        start,
+        vec![Note::new(64, note_start, 0.0625, 100)],
+    ));
+    let source = app.directory.path().join("cue.wav");
+    AudioData {
+        sample_rate: 8000,
+        channels: 1,
+        samples: vec![0.1; 8000],
+    }
+    .write_wav(&source)
+    .unwrap();
+    let audio = project.add_audio_track("Long audio event");
+    let mut cue = Clip::audio("Tail fade", 0.0, start, source.to_string_lossy());
+    if let daw_core::ClipContent::Audio { fade_out, .. } = &mut cue.content {
+        *fade_out = 0.125;
+    }
+    project.track_mut(audio).unwrap().clips.push(cue);
+    let path = app.directory.path().join("distant-event.rill");
+    project.save(&path).unwrap();
+    app.command(json!({"command":"open","path":path}));
+    navigate(&mut app, Editor::Arrangement, 1600.0, start - 0.25);
+    let state = app.command(json!({"command":"inspect","paint":true}));
+    let (first, pixels, canvas) = view(&state, Editor::Arrangement);
+    let expected = canvas[0] + (start - first) * pixels;
+    assert!(expected > canvas[0] && expected < canvas[2]);
+    let clips = state["timeline"]["clips"].as_array().unwrap();
+    let clip = clips.iter().find(|clip| clip["track"] == track).unwrap();
+    assert!((clip["rect"]["min"][0].as_f64().unwrap() - expected).abs() < 1.0);
+    let clip = clips
+        .iter()
+        .find(|clip| clip["track"] == sustained)
+        .unwrap();
+    assert!((clip["rect"]["max"][0].as_f64().unwrap() - expected).abs() < 1.0);
+    let note_x = canvas[0] + (note_start - first) * pixels;
+    let audio_clip = clips.iter().find(|clip| clip["track"] == audio).unwrap();
+    let handle = &audio_clip["fade_out_handle"];
+    let handle_x = (handle["min"][0].as_f64().unwrap() + handle["max"][0].as_f64().unwrap()) / 2.0;
+    assert!(
+        (handle_x - note_x).abs() < 1.0,
+        "the fade and note share one beat"
+    );
+    let top = clip["content_rect"]["min"][1].as_f64().unwrap();
+    let bottom = clip["content_rect"]["max"][1].as_f64().unwrap();
+    assert!(
+        state["painted_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|shape| {
+                let rect = &shape["rect"];
+                (rect["min"][0].as_f64().unwrap() - note_x).abs() < 1.0
+                    && rect["min"][1].as_f64().unwrap() >= top
+                    && rect["max"][1].as_f64().unwrap() <= bottom
+            }),
+        "the note near the end of a long clip must share the ruler's time axis"
+    );
+    app.quit();
+}
+
+#[test]
 fn elapsed_clock_labels_omit_empty_hours_but_keep_real_hour_and_second_values() {
     let mut app = Harness::new();
     let mut project = Project::new();
@@ -307,6 +383,93 @@ fn elapsed_clock_labels_omit_empty_hours_but_keep_real_hour_and_second_values() 
                 );
             }
         }
+    }
+    app.quit();
+}
+
+#[test]
+fn four_bar_guides_follow_meter_changes_through_tracks_empty_space_and_the_ruler() {
+    let mut app = Harness::new();
+    let mut project = Project::new();
+    project.beats_per_bar = 4;
+    project.set_meter_change(3, 3).unwrap();
+    let track = project.add_midi_track("Meter guide");
+    project
+        .track_mut(track)
+        .unwrap()
+        .clips
+        .push(Clip::midi("Cue", 0.0, 2.0, vec![]));
+    let path = app.directory.path().join("four-bar-guides.rill");
+    project.save(&path).unwrap();
+    let original = app.command(json!({"command":"open", "path":path}));
+    let editor = Editor::Arrangement;
+
+    for (dark, density) in [(false, 1.0), (true, 2.0)] {
+        app.command(json!({"command":"system_theme","dark":dark}));
+        app.command(
+            json!({"command":"viewport","width":1280,"height":800,"pixels_per_point":density}),
+        );
+        navigate(&mut app, editor, 36.0, 0.0);
+        let state = app.command(json!({"command":"inspect","paint":true}));
+        let (start, pixels, rect) = view(&state, editor);
+        let middle_y = |area: &Value| {
+            (area["min"][1].as_f64().unwrap() + area["max"][1].as_f64().unwrap()) * 0.5
+        };
+        let row_y = middle_y(&state["timeline"]["tracks"][0]["header"]);
+        let empty_y = middle_y(&state["timeline"]["empty_canvas"]);
+        // The grid is neutral. A more prominent line is brighter in the
+        // dark theme and darker in the light theme.
+        let strength = |beat: f64, y: f64| {
+            let x = rect[0] + (beat - start) * pixels;
+            let line = state["painted_lines"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|line| {
+                    let p = &line["points"];
+                    (p[0][0].as_f64().unwrap() - x).abs() <= 0.6
+                        && (p[1][0].as_f64().unwrap() - x).abs() <= 0.6
+                        && p[0][1].as_f64().unwrap() < y
+                        && y < p[1][1].as_f64().unwrap()
+                })
+                .unwrap_or_else(|| panic!("No visible grid line at beat {beat}, ({x},{y})"));
+            let rgb: i64 = (0..3).map(|i| line["stroke"][i].as_i64().unwrap()).sum();
+            if dark { rgb } else { -rgb }
+        };
+        // Bar 5 falls at beat 14 after the change to 3/4. Its
+        // predecessor is bar 4 at beat 11, with beat 12 inside it.
+        assert!(strength(14.0, row_y) > strength(11.0, row_y));
+        assert!(strength(11.0, row_y) > strength(12.0, row_y));
+        assert!(strength(14.0, empty_y) > strength(11.0, empty_y));
+
+        navigate(&mut app, editor, 8.0, 0.0);
+        let wide = app.command(json!({"command":"inspect","paint":true}));
+        let (start, pixels, rect) = view(&wide, editor);
+        for (bar, beat) in [("1", 0.0), ("5", 14.0), ("9", 26.0)] {
+            let label = ruler_label(&wide, editor, bar, rect)
+                .unwrap_or_else(|| panic!("Missing bar {bar} from the song overview"));
+            let expected = rect[0] + (beat - start) * pixels + f64::from(daw_ui::tokens::SPACE_XS);
+            assert!((label["min"][0].as_f64().unwrap() - expected).abs() < 1.0);
+        }
+        assert!(ruler_label(&wide, editor, "4", rect).is_none());
+        let (_, bottom) = ruler_vertical_bounds(&wide, editor, rect);
+        let unlabeled_bar = rect[0] + (11.0 - start) * pixels;
+        assert!(
+            wide["painted_lines"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|line| {
+                    let p = &line["points"];
+                    (p[0][0].as_f64().unwrap() - unlabeled_bar).abs() < 0.6
+                        && (p[1][0].as_f64().unwrap() - unlabeled_bar).abs() < 0.6
+                        && (p[1][1].as_f64().unwrap() - bottom).abs() <= 0.6
+                        && (2.0..=6.0).contains(&(bottom - p[0][1].as_f64().unwrap()))
+                }),
+            "unlabeled bar 4 still needs its musical tick"
+        );
+        assert_eq!(wide["project"], original["project"]);
+        assert_eq!(wide["history"], original["history"]);
     }
     app.quit();
 }

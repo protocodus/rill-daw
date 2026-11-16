@@ -172,7 +172,7 @@ In the piano roll, **Generate…** opens Chord, Arpeggio and Melody modes. Start
 
 Double-click a track name or icon in Arrangement to open Track Properties. Type to replace the selected name, click **Color** to pick a tint, or choose an **Icon**. **Track type** restores the default icon. A folder’s chevron opens and closes its children. Volume and pan sit beside **M**ute and **S**olo; **Routing** and **Instrument** or **Input** each have their own row. Stereo output meters occupy a dedicated column. Drag a volume or pan rail, or click its value for exact entry. Pan shows **C** at center and **L/R** percentages elsewhere. Cancel, Escape or clicking outside the value popup discards the draft; displaying a rounded caption never changes stored precision. −60 dB silences the channel.
 
-**View → Track density** offers **Compact**, **Standard** and **Detailed**. Compact is the default: 64-point rows keep volume, pan, M/S, arm and metering available while showing more of the song. Standard adds room for volume/pan rails; Detailed exposes routing and source controls directly. The sliders icon beside a compact track's title opens its complete Channel view. The density preference is remembered across projects and restarts without changing the song or Undo history. Fit and manual row resizing remain temporary view changes.
+Choose **View → Track density → Overview** to see more of the arrangement. Its 34-point rows keep clip previews visible and put M/S beside each channel name. The sliders icon opens the full channel controls. **Compact** is the default and includes volume, pan, arm and meters in a 64-point row. **Standard** adds room for the volume and pan rails. **Detailed** shows routing and source controls. Rill remembers your density across projects and restarts. Fit and manual row resizing are temporary view changes.
 
 In Detailed headers, click **Routing** to choose Master or an eligible output bus. **Instrument** chooses or replaces the MIDI track's VST; **Input** opens audio recording and monitoring settings. The default label width is 288 points. Very short rows use readable value controls instead of miniature rails. Folders and automation tracks have no audio meter or gain/pan controls; folder mute/solo acts on descendants.
 
@@ -529,9 +529,9 @@ entry; pan shows **C** at center and **L/R** percentages to either side. **M**
 mutes the track and **S** solos it. Clicking the color strip opens the color
 picker, while the name and grip retain track selection and reordering.
 
-The default header is 288 points wide. **View → Track density** chooses Compact
-(64-point default), Standard (89) or Detailed (144); resize the header gutter or
-track's lower edge for temporary custom sizing.
+The default header is 288 points wide. **View → Track density** chooses Overview
+(34 points), Compact (64, the default), Standard (89) or Detailed (144).
+Resize the header gutter or a track's lower edge for temporary custom sizing.
 The Compact density keeps mix controls and a channel-controls button. To collapse
 one track, click the chevron beside its icon. The 21-point header keeps the color
 strip, chevron, icon and name. Click the chevron again to restore the controls.
@@ -655,7 +655,11 @@ Keys play the recording at their interval from **Root key** (C4 unless you chang
 
 ## R1 Drums
 
-The **Sample** task controls the selected pad’s playback and tuning; **Shape** controls its envelope, filter and drive. Pads and the selected waveform stay visible. The footer distinguishes **Pad volume** from the whole kit’s **Kit volume**.
+The **Sample** tab controls the selected pad’s playback and tuning. **Shape** controls its envelope and tone. Pads and the selected waveform stay visible. The footer distinguishes **Pad volume** from the whole kit’s **Kit volume**.
+
+For a snare with lower-pitched ghost notes, open **Sample → Tuning** and set **Soft hit pitch** to −4 semitones. Click near the bottom of the pad to hear the lower pitch, then near the top to hear its original tuning. A positive setting raises softer hits. The default is 0 semitones.
+
+For a grainier tail, open **Shape → Tone → Bit depth** on that pad. **12-bit** adds subtle grit as the hit fades. **8-bit** makes the steps easier to hear. **Clean** keeps full precision and is the default for every pad.
 
 **R1 Drums** has sixteen larger pads, each with its own sample player tree, on MIDI notes 36 (C1, pad 1) to 51 (D#2, pad 16). Give a MIDI track R1 Drums from the device browser and open **Window → Instrument**. Pads are laid out bottom row first, pad 1 at the bottom left. Clicking a pad selects and plays it, louder the higher you hit it. **Rename…** sets a pad name independently of its source filenames.
 

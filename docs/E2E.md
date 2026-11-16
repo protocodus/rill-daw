@@ -398,9 +398,9 @@ cargo test --locked -p daw-app --test mixer_readability_e2e --test effect_chain_
 
 `clip_identity_e2e` verifies full hover identity for repeated long Unicode names, independent and linked occurrences, narrow windows and scaled displays. Hovering preserves geometry, selection, cursor, history and project data.
 
-`clip_surface_e2e` verifies opaque audio/MIDI clip bodies, separate title and
-preview geometry, extreme-pitch thumbnail visibility, compact rows and mouse
-selection through the running app in both appearances and display densities.
+`clip_surface_e2e` checks track color, title and note contrast, muted clips,
+actual waveform paint and mouse selection in Overview and Compact rows across
+both appearances and display densities.
 
 `composer_e2e` exercises the native composition module through the running
 assistant and MCP boundary. A deterministic provider fixture creates chord,
@@ -463,7 +463,7 @@ intact and guards text/numeric entry, menus, utilities and document decisions.
 `beat_ruler_e2e` checks readable beat and subdivision labels across those same
 editors, including 3/4 and 4/4, both themes and display densities. It also checks
 compact elapsed-time labels at 15 seconds, 2:45 and 5:15:55 through real viewport
-navigation. Shared typography tests verify proportional fonts and ruler spacing;
+navigation, plus downbeat ticks and grid emphasis across a meter change. Shared typography tests verify proportional fonts and ruler spacing;
 formatter cases cover fractional precision and minute/hour rounding carry.
 `mixer_gain_entry_e2e` types an exact dB value, checks Undo/Redo and portable
 recall against exported level, and ensures middle-drag scrolling and stored
@@ -1398,6 +1398,8 @@ cargo test --locked -p daw-app --test empty_workspace_e2e --test novice_clip_e2e
 `arranger_density_e2e` clicks the chevron on each track kind and checks the
 painted clip bars, automation marks and empty gaps in channel colors, including
 a closed folder. It saves and reopens the song and expands the rows again.
+It also selects Overview by mouse, checks how many full rows fit, operates M/S
+and opens channel details from the identity row, then checks density after restart.
 `arranger_automation_e2e` checks collapsed and expanded lane geometry, pattern
 positions, rendered audio and the saved disclosure state.
 

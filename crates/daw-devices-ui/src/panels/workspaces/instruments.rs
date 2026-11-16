@@ -404,34 +404,36 @@ fn drums_workspace(mut layout: Layout, pad: usize, page: usize) -> Workspace {
             cells(
                 "Region",
                 0,
-                4,
-                &[&[C(at(START), 1), C(at(END), 1), C(at(REVERSE), 2)]],
+                7,
+                &[&[C(at(START), 2), C(at(END), 2), C(at(REVERSE), 3)]],
             ),
-            cells("Tuning", 0, 4, &[&[C(at(PITCH), 2), C(at(FINE), 2)]]),
-            cells("Trigger", 0, 4, &[&[C(at(TRIGGER), 2), C(at(CHOKE), 2)]]),
+            cells(
+                "Tuning",
+                0,
+                10,
+                &[&[C(at(PITCH), 2), C(at(FINE), 3), C(at(VELOCITY_PITCH), 5)]],
+            ),
+            cells("Trigger", 0, 7, &[&[C(at(TRIGGER), 4), C(at(CHOKE), 3)]]),
         ]
     } else {
         vec![
             cells(
                 "Pitch env",
                 0,
-                3,
-                &[&[C(at(PITCH_ENV), 2), C(at(ENV_DECAY), 1)]],
+                6,
+                &[&[C(at(PITCH_ENV), 3), C(at(ENV_DECAY), 3)]],
             ),
-            cells(
-                "Amp envelope",
-                0,
-                5,
-                &[&[
-                    Faders(&DRUM_ENVELOPES[pad], 4),
-                    Faders(&DRUM_VELOCITIES[pad], 1),
-                ]],
-            ),
+            cells("Amp envelope", 0, 9, &[&[Faders(&DRUM_AMP_FADERS[pad], 9)]]),
             cells(
                 "Tone",
                 0,
-                4,
-                &[&[C(at(FILTER), 2), C(at(RESONANCE), 1), C(at(DRIVE), 1)]],
+                10,
+                &[&[
+                    C(at(FILTER), 3),
+                    C(at(RESONANCE), 2),
+                    C(at(DRIVE), 2),
+                    C(at(BITS), 3),
+                ]],
             ),
         ]
     };
@@ -446,6 +448,9 @@ fn drums_workspace(mut layout: Layout, pad: usize, page: usize) -> Workspace {
             });
         }
         match drums::pad_of(id).map(|(_, offset)| offset) {
+            Some(VELOCITY_PITCH) => Some(
+                "Pitch shift at the softest velocity. Harder hits shift less, reaching the pad's tuned pitch at full velocity.",
+            ),
             Some(CHOKE) => {
                 Some("Pads in the same choke group stop each other's hits. Off lets hits overlap.")
             }

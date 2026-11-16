@@ -1,6 +1,10 @@
 //! Clip identity presentation shared by timeline canvases and property views.
 //! The application decides which instances are linked and owns all editing.
-use crate::{Icon, text, tokens};
+use crate::{
+    Icon,
+    color_math::{contrast_luminance, luminance},
+    text, tokens,
+};
 use egui::emath::GuiRounding as _;
 use egui::{
     Color32, CornerRadius, FontId, Painter, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui,
@@ -50,14 +54,21 @@ pub struct ClipSurfaceLayout {
     pub title: Rect,
     pub content: Rect,
     pub title_color: Color32,
+    /// Contrasting track hue for notes on the body.
+    pub preview_color: Color32,
     /// The painted title band, including the thin strip on unnamed clips.
     /// It is geometry only; the caller retains body, edge and fade ownership.
     pub name_hit: Rect,
 }
 
-/// An opaque clip surface with a quiet track-colored title band and a soft
-/// selection halo. The opaque
-/// body keeps the beat grid from competing with waveforms and MIDI thumbnails.
+impl ClipSurfaceLayout {
+    /// Keep labels inside the actual name band when a lane is only one row high.
+    pub fn title_font(self) -> FontId {
+        FontId::proportional(tokens::FONT_CANVAS.min(self.title.height() * 0.78))
+    }
+}
+
+/// An opaque, track-colored event with a contrasting name band and selection halo.
 /// This is paint only: the caller retains the clip's complete interaction target.
 pub fn clip_surface(
     painter: &Painter,
@@ -65,7 +76,7 @@ pub fn clip_surface(
     color: Color32,
     selected: bool,
 ) -> ClipSurfaceLayout {
-    clip_surface_with_name(painter, rect, color, selected, true)
+    ClipSurfaceColors::new(painter.ctx(), color).paint(painter, rect, selected, true)
 }
 
 /// An optional clip name uses space only when present. Blank/whitespace names
@@ -77,7 +88,19 @@ pub fn clip_surface_named(
     selected: bool,
     name: &str,
 ) -> ClipSurfaceLayout {
-    clip_surface_with_name(painter, rect, color, selected, !name.trim().is_empty())
+    ClipSurfaceColors::new(painter.ctx(), color).paint(
+        painter,
+        rect,
+        selected,
+        !name.trim().is_empty(),
+    )
+}
+
+/// Shared vertical bounds for events, automation, overlaps and live recordings.
+/// Thin gutters keep time-aligned content legible as track height is reduced.
+pub fn clip_lane_rect(row: Rect) -> Rect {
+    let gutter = (row.height() / 16.0).round().min(tokens::SPACE_XS);
+    row.shrink2(Vec2::new(0.0, gutter))
 }
 
 /// The painted title is the rename target. Even a collapsed row keeps room
@@ -89,79 +112,128 @@ pub fn clip_title_band(rect: Rect, named: bool, pixels_per_point: f32) -> Rect {
     } else {
         3.0
     };
-    let body_height = tokens::SPACE_SM.min(rect.height() * 0.5);
-    let bottom =
-        (rect.top() + height.min(rect.height() - body_height)).round_to_pixels(pixels_per_point);
+    // Keep at least half of a single-row event available for its musical content.
+    let bottom = (rect.top() + height.min(rect.height() * 0.5)).round_to_pixels(pixels_per_point);
     Rect::from_min_max(rect.min, Pos2::new(rect.right(), bottom))
 }
 
-fn clip_surface_with_name(
-    painter: &Painter,
-    rect: Rect,
-    color: Color32,
-    selected: bool,
-    named: bool,
-) -> ClipSurfaceLayout {
-    let colors = crate::theme::palette(painter.ctx());
-    // Whole physical pixels keep the rounded outline continuous where the
-    // title band meets it, at any display density.
-    let pixel = 1.0 / painter.pixels_per_point();
-    let rect = rect.round_to_pixels(painter.pixels_per_point());
-    let band = clip_title_band(rect, named, painter.pixels_per_point());
-    let header_bottom = band.bottom();
-    let inset_x = tokens::SPACE_XS.min(rect.width().max(0.0) * 0.5);
-    let content_top = (header_bottom + tokens::SPACE_XS * 0.5).min(rect.bottom());
-    let content_bottom = (rect.bottom() - tokens::SPACE_XS).max(content_top);
-    let header_fill = colors
-        .panel
-        .lerp_to_gamma(color, if selected { 0.42 } else { 0.28 });
-    let layout = ClipSurfaceLayout {
-        // The name starts where the waveform or notes start.
-        title: Rect::from_min_max(
-            Pos2::new(rect.left() + inset_x, rect.top()),
-            Pos2::new(rect.right() - inset_x, header_bottom),
-        ),
-        content: Rect::from_min_max(
-            Pos2::new(rect.left() + inset_x, content_top),
-            Pos2::new(rect.right() - inset_x, content_bottom),
-        ),
-        title_color: crate::theme::contrast_text(header_fill),
-        name_hit: band,
+/// Keep the full time axis for waveform sampling, fades and automation points.
+/// Callers can clip horizontal padding without shifting the musical origin.
+pub fn clip_preview_rect(rect: Rect, band: Rect) -> Rect {
+    let height = (rect.bottom() - band.bottom()).max(0.0);
+    let inset: f32 = if rect.height() <= tokens::SPACE_XL {
+        1.0
+    } else {
+        2.0
     };
-    if !rect.is_positive() || !rect.is_finite() {
-        return layout;
+    let top_gap = inset.min(height * 0.25);
+    let bottom_gap = (inset * 1.5).min(height * 0.25);
+    Rect::from_x_y_ranges(
+        rect.x_range(),
+        (band.bottom() + top_gap)..=(rect.bottom() - bottom_gap),
+    )
+}
+
+/// Derive the preview ink and opaque body once for events sharing a track color.
+#[derive(Clone, Copy)]
+pub struct ClipSurfaceColors {
+    track: Color32,
+    body: Color32,
+    ink: Color32,
+}
+
+impl ClipSurfaceColors {
+    pub fn new(ctx: &egui::Context, color: Color32) -> Self {
+        let colors = crate::theme::palette(ctx);
+        // Limit the tint by contrast with both ends of the amplitude-colored waveform.
+        let ink = crate::waveform_peak_color(color, colors);
+        let peak = luminance(ink.to_opaque());
+        let quiet = luminance(crate::waveform_quiet_color(color, colors.muted));
+        let body_fill = [0.55, 0.40, 0.28, 0.16, 0.08]
+            .into_iter()
+            .map(|tint| colors.bg.blend(color.gamma_multiply(tint)))
+            .find(|fill| {
+                let background = luminance(*fill);
+                contrast_luminance(background, peak) >= 3.0
+                    && contrast_luminance(background, quiet) >= 3.0
+            })
+            .unwrap_or(colors.bg);
+        Self {
+            track: color,
+            body: body_fill,
+            ink,
+        }
     }
-    if selected {
-        crate::paint_selection_glow(painter, rect, tokens::RADIUS, color);
+
+    pub fn paint(
+        self,
+        painter: &Painter,
+        rect: Rect,
+        selected: bool,
+        named: bool,
+    ) -> ClipSurfaceLayout {
+        let colors = crate::theme::palette(painter.ctx());
+        let Self {
+            track: color,
+            body: body_fill,
+            ink,
+        } = self;
+        let header_fill =
+            colors
+                .panel
+                .blend(color.gamma_multiply(if selected { 0.96 } else { 0.80 }));
+        // Whole physical pixels keep the rounded outline continuous where the
+        // title band meets it, at any display density.
+        let pixel = 1.0 / painter.pixels_per_point();
+        let rect = rect.round_to_pixels(painter.pixels_per_point());
+        let band = clip_title_band(rect, named, painter.pixels_per_point());
+        let header_bottom = band.bottom();
+        let inset_x = tokens::SPACE_XS.min(rect.width().max(0.0) * 0.08);
+        let preview = clip_preview_rect(rect, band);
+        let layout = ClipSurfaceLayout {
+            // The name starts where the waveform or notes start.
+            title: Rect::from_min_max(
+                Pos2::new(rect.left() + inset_x, rect.top()),
+                Pos2::new(rect.right() - inset_x, header_bottom),
+            ),
+            content: preview.shrink2(Vec2::new(inset_x, 0.0)),
+            title_color: crate::theme::contrast_text(header_fill),
+            preview_color: body_fill.blend(ink),
+            name_hit: band,
+        };
+        if !rect.is_positive() || !rect.is_finite() {
+            return layout;
+        }
+        if selected {
+            crate::paint_selection_glow(painter, rect, tokens::CLIP_RADIUS, color);
+        }
+        let painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
+        painter.rect_filled(rect, tokens::CLIP_RADIUS, body_fill);
+        painter.rect_filled(
+            Rect::from_min_max(rect.min, Pos2::new(rect.right(), header_bottom)),
+            CornerRadius {
+                nw: tokens::CLIP_RADIUS,
+                ne: tokens::CLIP_RADIUS,
+                sw: 0,
+                se: 0,
+            },
+            header_fill,
+        );
+        painter.rect_stroke(
+            rect,
+            tokens::CLIP_RADIUS,
+            Stroke::new(
+                if selected { 2.0 * pixel } else { pixel },
+                if selected {
+                    ink.to_opaque().lerp_to_gamma(colors.text, 0.65)
+                } else {
+                    body_fill.blend(ink.gamma_multiply(0.65))
+                },
+            ),
+            StrokeKind::Inside,
+        );
+        layout
     }
-    let painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
-    painter.rect_filled(
-        rect,
-        tokens::RADIUS,
-        colors
-            .bg
-            .lerp_to_gamma(color, if selected { 0.22 } else { 0.12 }),
-    );
-    painter.rect_filled(
-        Rect::from_min_max(rect.min, Pos2::new(rect.right(), header_bottom)),
-        CornerRadius {
-            nw: tokens::RADIUS,
-            ne: tokens::RADIUS,
-            sw: 0,
-            se: 0,
-        },
-        header_fill,
-    );
-    painter.rect_stroke(
-        rect,
-        tokens::RADIUS,
-        Stroke::new(
-            if selected { 2.0 * pixel } else { pixel },
-            color.gamma_multiply(if selected { 1.0 } else { 0.65 }),
-        ),
-        StrokeKind::Inside,
-    );
-    layout
 }
 
 /// Paint one MIDI thumbnail note inside a clip's dedicated preview region.
@@ -178,16 +250,31 @@ pub fn clip_note_preview(
     if !content.is_positive() || !content.is_finite() || time.end <= time.start {
         return None;
     }
-    // A small range still fills the preview: at least eight rows, notes 2–6
-    // points tall, so a short pattern reads as notes rather than hairlines.
+    // One physical pixel keeps close intervals distinct in short previews.
+    // Taller lanes use bolder strokes, with at least eight pitch rows.
     let low = f32::from(*pitches.start());
     let high = f32::from(*pitches.end());
     let span = (high - low + 2.0).max(8.0);
-    let height = (content.height() / (span + 1.0))
-        .clamp(2.0, tokens::SPACE_XS + 1.0)
-        .min(content.height());
+    let compact = content.height() < tokens::SPACE_LG;
+    let pixels_per_point = painter.pixels_per_point();
+    let row_height = content.height() / (span + 1.0);
+    let height = if compact {
+        row_height
+            .round_to_pixels(pixels_per_point)
+            .max(1.0 / pixels_per_point)
+    } else {
+        row_height.clamp(2.0, tokens::SPACE_XS + 1.0)
+    }
+    .min(content.height());
     let pitch_y = (0.5 + (f32::from(pitch) - (low + high) * 0.5) / span).clamp(0.0, 1.0);
     let y = content.bottom() - height - pitch_y * (content.height() - height);
+    let y = if compact {
+        y.round_to_pixels(pixels_per_point)
+            .max(content.top())
+            .min(content.bottom() - height)
+    } else {
+        y
+    };
     let rect = Rect::from_min_size(
         Pos2::new(time.start, y),
         Vec2::new((time.end - time.start - 1.0).max(2.0), height),
@@ -196,16 +283,9 @@ pub fn clip_note_preview(
     if !rect.is_positive() || !rect.intersects(painter.clip_rect()) {
         return None;
     }
-    let background = crate::theme::palette(painter.ctx()).bg;
     painter
         .with_clip_rect(content.intersect(painter.clip_rect()))
-        .rect(
-            rect,
-            1.0,
-            color,
-            Stroke::new(tokens::BORDER_WIDTH, color.lerp_to_gamma(background, 0.4)),
-            StrokeKind::Inside,
-        );
+        .rect_filled(rect, 0.0, color);
     Some(rect)
 }
 
@@ -245,7 +325,7 @@ pub fn clip_title(
         layout.icon = Some(icon);
         layout.text.min.x = (icon.right() + tokens::SPACE_XS).min(rect.right());
     }
-    if layout.text.is_positive() {
+    if layout.text.width() >= font.size && layout.text.is_positive() {
         text::paint_single_line(&painter, layout.text, font, color, title);
     }
     layout

@@ -4,6 +4,7 @@
 //! Components return native egui responses/builders so callers
 //! retain keyboard focus, tooltips, disabled state, and layout composition.
 
+pub mod arranger_grid;
 pub mod assistant;
 pub mod audio_clip_controls;
 pub mod audio_clip_storage;
@@ -94,6 +95,7 @@ pub mod value_entry;
 pub mod waveform;
 pub mod widgets;
 
+pub use arranger_grid::ArrangerGrid;
 pub use assistant::*;
 pub use audio_clip_controls::*;
 pub use audio_clip_storage::*;

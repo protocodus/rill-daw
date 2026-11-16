@@ -177,6 +177,13 @@ pub fn clip_fade_handles_with_hover_bounds(
     }
     let left = view.x_at(rect, bounds.start);
     let right = view.x_at(rect, bounds.end);
+    let hit_width = 16.0_f32.min((right - left) / 3.0);
+    // Narrow events still need a body to open or drag and lower edges to trim.
+    let handle_band = if hit_width < 16.0 && rect.height() < 32.0 {
+        rect.with_max_y(rect.center().y)
+    } else {
+        rect
+    };
     let inset = 7.0_f32.min((right - left) / 4.0);
     let positions = [bounds.fade_in_end, bounds.fade_out_start].map(|beat| {
         view.x_at(rect, beat.clamp(bounds.start, bounds.end))
@@ -191,11 +198,11 @@ pub fn clip_fade_handles_with_hover_bounds(
             [bounds.fade_in_end, bounds.fade_out_start][index].clamp(bounds.start, bounds.end);
         // Square handles sit SPACE_SM below the canvas top, clear of the
         // loop lane and of waveform peaks at full scale.
-        let half = HANDLE_SIZE * 0.5;
-        let vertical_inset = half.min(rect.height() * 0.5);
+        let marker_size = HANDLE_SIZE.min(handle_band.height()).min(hit_width);
+        let half = marker_size * 0.5;
         let position = Pos2::new(
             positions[index],
-            (rect.top()
+            (handle_band.top()
                 + crate::tokens::SPACE_SM
                 + half
                 + if separate && index == 1 {
@@ -203,9 +210,19 @@ pub fn clip_fade_handles_with_hover_bounds(
                 } else {
                     0.0
                 })
-            .clamp(rect.top() + vertical_inset, rect.bottom() - vertical_inset),
+            .clamp(handle_band.top() + half, handle_band.bottom() - half),
         );
-        let target = Rect::from_center_size(position, Vec2::splat(16.0)).intersect(rect);
+        let mut target =
+            Rect::from_center_size(position, Vec2::new(hit_width, 16.0)).intersect(handle_band);
+        // When both endpoints coincide, short rows cannot stack the handles.
+        if separate && handle_band.height() < 32.0 {
+            let split = (positions[0] + positions[1]) * 0.5;
+            if (index == 0) == (positions[0] <= positions[1]) {
+                target.max.x = target.max.x.min(split);
+            } else {
+                target.min.x = target.min.x.max(split);
+            }
+        }
         let origin_id = id.with(("origin", index));
         let active_origin = ui.ctx().data(|data| data.get_temp::<(f64, f32)>(origin_id));
         if active_origin.is_none()
@@ -330,8 +347,9 @@ pub fn clip_fade_handles_with_hover_bounds(
                 0.75,
             ));
         }
-        if result.visible[index] {
-            let marker = Rect::from_center_size(position, Vec2::splat(HANDLE_SIZE));
+        if result.visible[index] && target.is_positive() {
+            let size = marker_size.min(target.width()).min(target.height());
+            let marker = Rect::from_center_size(target.center(), Vec2::splat(size));
             painter.rect_filled(marker, crate::tokens::NOTE_RADIUS, colors.orange);
             painter.rect_stroke(
                 marker,
@@ -376,8 +394,20 @@ pub fn crossfade_duration_handle(
         duration,
     } = bounds;
     let effective = duration.clamp(0.0, (end - start).max(0.0));
-    let position = Pos2::new(view.x_at(rect, start + effective), rect.bottom() - 9.0);
-    let target = Rect::from_center_size(position, Vec2::splat(tokens::HIT_TARGET)).intersect(rect);
+    // Keep the middle of short events available for ordinary body gestures.
+    let lower = if rect.height() < tokens::HIT_TARGET {
+        rect.with_min_y(rect.bottom() - rect.height() / 3.0)
+    } else {
+        rect
+    };
+    let position = Pos2::new(
+        view.x_at(rect, start + effective),
+        rect.bottom() - 9.0_f32.min(lower.height() * 0.5),
+    );
+    let width =
+        tokens::HIT_TARGET.min((view.x_at(rect, end) - view.x_at(rect, start)).max(0.0) * 0.67);
+    let target =
+        Rect::from_center_size(position, Vec2::new(width, tokens::HIT_TARGET)).intersect(lower);
     let origin_id = id.with("origin");
     let active_origin = ui.ctx().data(|data| data.get_temp::<(f64, f32)>(origin_id));
     let visible = end > start
@@ -480,12 +510,13 @@ pub fn crossfade_duration_handle(
             || response.is_pointer_button_down_on());
     if painted {
         let color = theme::palette(ui.ctx()).automation_override;
+        let radius = 6.0_f32.min(lower.height() * 0.5).min(width * 0.5);
         ui.painter_at(rect).add(Shape::convex_polygon(
             vec![
-                position - Vec2::new(0.0, 6.0),
-                position + Vec2::new(6.0, 0.0),
-                position + Vec2::new(0.0, 6.0),
-                position - Vec2::new(6.0, 0.0),
+                position - Vec2::new(0.0, radius),
+                position + Vec2::new(radius, 0.0),
+                position + Vec2::new(0.0, radius),
+                position - Vec2::new(radius, 0.0),
             ],
             color,
             Stroke::new(1.0_f32, theme::palette(ui.ctx()).bg),

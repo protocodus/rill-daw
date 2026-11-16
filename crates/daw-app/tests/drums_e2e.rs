@@ -5,7 +5,7 @@
 mod common;
 
 use common::Harness;
-use daw_core::{AudioData, Clip, Instrument, Note, Project};
+use daw_core::{AudioData, Clip, DeviceSample, Instrument, Note, Project};
 use serde_json::{Value, json};
 
 fn song_tool(app: &mut Harness, name: &str, arguments: Value) -> Value {
@@ -36,12 +36,12 @@ fn sine(app: &Harness, name: &str, hz: f32) -> std::path::PathBuf {
     path
 }
 
-/// A MIDI track with R1 Drums playing `notes` (pitch, beat) for a beat
+/// A MIDI track with R1 Drums playing `notes` (pitch, beat, velocity) for a beat
 /// each at 120 BPM, and, muted on an audio track, one clip per recording,
 /// named as given. Returns the project, the drum track and the clips.
 fn project(
     recordings: &[(&str, &std::path::Path)],
-    notes: &[(u8, f64)],
+    notes: &[(u8, f64, u8)],
 ) -> (Project, u64, Vec<u64>) {
     let mut project = Project::new();
     project.tempo = 120.0;
@@ -65,7 +65,7 @@ fn project(
         12.0,
         notes
             .iter()
-            .map(|(pitch, at)| Note::new(*pitch, *at, 1.0, 127))
+            .map(|&(pitch, at, velocity)| Note::new(pitch, at, 1.0, velocity))
             .collect(),
     ));
     (project, beat, clips)
@@ -163,7 +163,7 @@ fn each_pad_plays_its_own_recording_and_a_choke_group_cuts_the_other_pad() {
     // 3 s, pad 9 (44) half a second later while pad 7 still rings.
     let (project, beat, clips) = project(
         &[("Snare", &low), ("Closed", &closed), ("Open", &open_hat)],
-        &[(38, 0.0), (42, 6.0), (44, 7.0)],
+        &[(38, 0.0, 127), (42, 6.0, 127), (44, 7.0, 127)],
     );
     let before = open(&mut app, &project);
     assert!(
@@ -238,7 +238,7 @@ fn a_file_dropped_on_a_pad_loads_into_that_pad_and_its_note_plays_it() {
     let mut app = Harness::new();
     let first = sine(&app, "first.wav", 440.0);
     let second = sine(&app, "second.wav", 220.0);
-    let (project, beat, clips) = project(&[("Kick", &first), ("Snare", &first)], &[(38, 0.0)]);
+    let (project, beat, clips) = project(&[("Kick", &first), ("Snare", &first)], &[(38, 0.0, 127)]);
     let before = open(&mut app, &project);
     let mut state = before.clone();
     for (pad, clip) in [(0, clips[0]), (2, clips[1])] {
@@ -283,5 +283,96 @@ fn a_file_dropped_on_a_pad_loads_into_that_pad_and_its_note_plays_it() {
     assert_eq!(dropped["history"]["undo"][0], "Load sample");
     let hz = frequency(&export(&mut app, "dropped.wav"), 0.1, 0.4);
     assert!((hz - 220.0).abs() < 8.0, "{hz} Hz");
+    app.quit();
+}
+
+fn choose_bit_depth(app: &mut Harness, current: &str, choice: &str) {
+    let (x, y) = label_center(&app.inspect(), "Bit depth");
+    app.command(json!({"command":"pointer","phase":"move","x":x,"y":y}));
+    app.click(current);
+    let picked = app.click(choice);
+    assert_eq!(picked["history"]["undo"][0], "Instrument parameter");
+}
+
+fn difference_rms(a: &AudioData, b: &AudioData, from: f32, to: f32) -> f32 {
+    assert_eq!(a.sample_rate, b.sample_rate);
+    let a = window(a, from, to);
+    let b = window(b, from, to);
+    assert!(!a.is_empty());
+    assert_eq!(a.len(), b.len());
+    (a.iter().zip(b).map(|(x, y)| (x - y).powi(2)).sum::<f32>() / a.len() as f32).sqrt()
+}
+
+#[test]
+fn soft_hit_pitch_and_bit_depth_shape_only_the_selected_pad_and_survive_reopen() {
+    let mut app = Harness::new();
+    let path = sine(&app, "drum-tone.wav", 440.0);
+    // Separate hits in time: an untouched soft pad, then hard and soft hits
+    // on the pad to edit. Both pads play exactly the same recording.
+    let (mut project, track, _) = project(&[], &[(36, 0.0, 64), (38, 4.5, 127), (38, 9.0, 64)]);
+    for (slot, name) in [(0, "Reference"), (2, "Snare")] {
+        project
+            .load_device_sample(
+                track,
+                DeviceSample {
+                    slot,
+                    name: name.into(),
+                    path: path.to_string_lossy().into_owned(),
+                },
+            )
+            .unwrap();
+    }
+    open(&mut app, &project);
+    let clean = export(&mut app, "clean.wav");
+    for start in [0.1, 2.4, 4.6] {
+        let hz = frequency(&clean, start, start + 0.4);
+        assert!(
+            (hz - 440.0).abs() < 5.0,
+            "Default pitch: {hz} Hz at {start}"
+        );
+    }
+
+    app.command(json!({"command":"viewport","width":1600,"height":1400,"pixels_per_point":1.0}));
+    app.click("Beat");
+    app.click("Window");
+    app.click("Instrument");
+    common::wait_visible(&mut app, "Snare");
+    app.click("Snare");
+    common::wait_visible(&mut app, "PAD 3");
+    let (x, caption_y) = label_center(&app.inspect(), "Soft hit pitch");
+    let y = caption_y + 29.0;
+    let pitched = app.command(json!({"command":"pointer","phase":"drag","x":x,"y":y,
+        "to_x":x,"to_y":y-200.0}));
+    assert_eq!(pitched["history"]["undo"][0], "Instrument parameter");
+    app.click("Shape");
+    choose_bit_depth(&mut app, "Clean", "12-bit");
+    let twelve = export(&mut app, "twelve.wav");
+    choose_bit_depth(&mut app, "12-bit", "8-bit");
+
+    let save = app.directory.path().join("drum-performance.rill");
+    app.command(json!({"command":"save","path":save}));
+    app.command(json!({"command":"open","path":save}));
+    let eight = export(&mut app, "eight-after-reopen.wav");
+    let soft_hz = 440.0 * 2.0_f32.powf(1.0 - 64.0 / 127.0);
+    for audio in [&twelve, &eight] {
+        let hard = frequency(audio, 2.4, 2.8);
+        let soft = frequency(audio, 4.6, 5.0);
+        assert!((hard - 440.0).abs() < 5.0, "Full velocity: {hard} Hz");
+        assert!((soft - soft_hz).abs() < 5.0, "Half velocity: {soft} Hz");
+        assert!(
+            difference_rms(&clean, audio, 0.1, 0.5) < 1e-6,
+            "Changing pad 3 altered pad 1"
+        );
+    }
+    // The full-velocity hit is still on pitch, isolating the resolution
+    // change. Four fewer bits make each quantization step 16 times larger.
+    let error_12 = difference_rms(&clean, &twelve, 2.4, 2.8);
+    let error_8 = difference_rms(&clean, &eight, 2.4, 2.8);
+    assert!(error_12 > 1e-5, "12-bit matched Clean: {error_12}");
+    let ratio = error_8 / error_12;
+    assert!(
+        (12.0..20.0).contains(&ratio),
+        "8-bit/12-bit noise ratio: {ratio}"
+    );
     app.quit();
 }

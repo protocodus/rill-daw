@@ -184,6 +184,20 @@ impl TrackHeaderLayout {
         layout
     }
 
+    /// Single-line channel headers prioritize M/S and the route to full controls.
+    /// Taller sources put record arm on the identity line and M/S in the mix row.
+    pub fn with_channel_identity(mut self, is_bus: bool) -> Self {
+        if self.mix.is_none() {
+            self = self.with_state_toggles();
+        } else if !is_bus {
+            self = self.with_record_arm();
+        }
+        if is_bus {
+            self = self.with_bus_badge();
+        }
+        self
+    }
+
     /// Source channels reserve a distinct arm target beside their identity.
     pub fn with_record_arm(mut self) -> Self {
         if self.identity.height() >= tokens::COMPACT_HEIGHT {
@@ -194,7 +208,7 @@ impl TrackHeaderLayout {
 
     /// Expanded channels reserve an effects button when their identity can fit it.
     pub fn with_effects(mut self) -> Self {
-        if self.identity.height() >= tokens::COMPACT_HEIGHT {
+        if self.mix.is_some() && self.identity.height() >= tokens::COMPACT_HEIGHT {
             self.effects = self.reserve_name_end(tokens::COMPACT_HEIGHT);
         }
         self

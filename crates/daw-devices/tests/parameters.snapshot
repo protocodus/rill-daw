@@ -511,3 +511,35 @@ r1-drums 527 pad16.choke "Choke" choice Off|1|2|3|4
 r1-drums 528 pad16.volume "Volume" linear -60 12
 r1-drums 529 pad16.pan "Pan" linear -100 100
 r1-drums 530 pad16.mute "Mute" toggle
+r1-drums 51 pad1.bits "Bit depth" choice Clean|12-bit|8-bit
+r1-drums 52 pad1.velocity_pitch "Soft hit pitch" linear -12 12
+r1-drums 83 pad2.bits "Bit depth" choice Clean|12-bit|8-bit
+r1-drums 84 pad2.velocity_pitch "Soft hit pitch" linear -12 12
+r1-drums 115 pad3.bits "Bit depth" choice Clean|12-bit|8-bit
+r1-drums 116 pad3.velocity_pitch "Soft hit pitch" linear -12 12
+r1-drums 147 pad4.bits "Bit depth" choice Clean|12-bit|8-bit
+r1-drums 148 pad4.velocity_pitch "Soft hit pitch" linear -12 12
+r1-drums 179 pad5.bits "Bit depth" choice Clean|12-bit|8-bit
+r1-drums 180 pad5.velocity_pitch "Soft hit pitch" linear -12 12
+r1-drums 211 pad6.bits "Bit depth" choice Clean|12-bit|8-bit
+r1-drums 212 pad6.velocity_pitch "Soft hit pitch" linear -12 12
+r1-drums 243 pad7.bits "Bit depth" choice Clean|12-bit|8-bit
+r1-drums 244 pad7.velocity_pitch "Soft hit pitch" linear -12 12
+r1-drums 275 pad8.bits "Bit depth" choice Clean|12-bit|8-bit
+r1-drums 276 pad8.velocity_pitch "Soft hit pitch" linear -12 12
+r1-drums 307 pad9.bits "Bit depth" choice Clean|12-bit|8-bit
+r1-drums 308 pad9.velocity_pitch "Soft hit pitch" linear -12 12
+r1-drums 339 pad10.bits "Bit depth" choice Clean|12-bit|8-bit
+r1-drums 340 pad10.velocity_pitch "Soft hit pitch" linear -12 12
+r1-drums 371 pad11.bits "Bit depth" choice Clean|12-bit|8-bit
+r1-drums 372 pad11.velocity_pitch "Soft hit pitch" linear -12 12
+r1-drums 403 pad12.bits "Bit depth" choice Clean|12-bit|8-bit
+r1-drums 404 pad12.velocity_pitch "Soft hit pitch" linear -12 12
+r1-drums 435 pad13.bits "Bit depth" choice Clean|12-bit|8-bit
+r1-drums 436 pad13.velocity_pitch "Soft hit pitch" linear -12 12
+r1-drums 467 pad14.bits "Bit depth" choice Clean|12-bit|8-bit
+r1-drums 468 pad14.velocity_pitch "Soft hit pitch" linear -12 12
+r1-drums 499 pad15.bits "Bit depth" choice Clean|12-bit|8-bit
+r1-drums 500 pad15.velocity_pitch "Soft hit pitch" linear -12 12
+r1-drums 531 pad16.bits "Bit depth" choice Clean|12-bit|8-bit
+r1-drums 532 pad16.velocity_pitch "Soft hit pitch" linear -12 12

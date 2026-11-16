@@ -88,7 +88,12 @@ fn unnamed_clips_recover_the_title_space_and_keep_a_thin_restorable_border() {
                                 name,
                             );
                             assert!(blank.title.height() <= 3.5);
-                            assert!(blank.content.height() >= named.content.height() + 16.0);
+                            let recovered = named.title.height() - blank.title.height();
+                            assert!(recovered >= 12.0);
+                            assert!(
+                                (blank.content.height() - named.content.height() - recovered).abs()
+                                    < 0.1
+                            );
                             assert!(rect.contains_rect(blank.name_hit));
                             assert!(
                                 !blank.name_hit.contains(rect.center()),

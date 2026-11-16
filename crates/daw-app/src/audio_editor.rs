@@ -485,6 +485,52 @@ fn snap_audio_move(
 }
 
 impl DawApp {
+    pub(crate) fn paint_arranger_waveform(
+        &self,
+        painter: &egui::Painter,
+        rect: Rect,
+        view: TimelineViewport,
+        clip: &Clip,
+        color: egui::Color32,
+        amplitude: daw_ui::WaveformAmplitudeScale,
+    ) {
+        let ClipContent::Audio { path, .. } = &clip.content else {
+            return;
+        };
+        let channel_view = |channels: usize| TimelineViewport {
+            row_offset: 0.0,
+            row_height: rect.height() / (2 * channels.clamp(1, 2)) as f32,
+            ..view
+        };
+        if let Some(data) = self.waveforms.get(path) {
+            draw_waveform(
+                painter,
+                rect,
+                channel_view(data.channels),
+                data,
+                clip,
+                self.project.tempo,
+                1.0,
+                color,
+                "arranger",
+                amplitude,
+            );
+        } else if let Some(file) = self.audio_files.get(path) {
+            crate::spectrogram::streamed_waveform::paint(
+                painter,
+                rect,
+                channel_view(file.info().channels),
+                file,
+                clip,
+                self.project.tempo,
+                1.0,
+                color,
+                "arranger",
+                amplitude,
+            );
+        }
+    }
+
     pub(crate) fn audio_source_beats(&self, clip: &Clip) -> Option<f64> {
         let ClipContent::Audio { path, .. } = &clip.content else {
             return None;
@@ -3528,20 +3574,6 @@ pub(crate) fn paint_audio_file_clip(
     );
 }
 
-pub(crate) fn paint_audio_clip(
-    painter: &egui::Painter,
-    rect: Rect,
-    data: &AudioData,
-    clip: &Clip,
-    tempo: f64,
-    color: egui::Color32,
-    amplitude: daw_ui::WaveformAmplitudeScale,
-) {
-    paint_audio_clip_scaled_in_view(
-        painter, rect, data, clip, tempo, color, "arranger", amplitude,
-    );
-}
-
 pub(crate) fn paint_audio_clip_in_view(
     painter: &egui::Painter,
     rect: Rect,
@@ -3550,29 +3582,6 @@ pub(crate) fn paint_audio_clip_in_view(
     tempo: f64,
     color: egui::Color32,
     view_name: &'static str,
-) {
-    paint_audio_clip_scaled_in_view(
-        painter,
-        rect,
-        data,
-        clip,
-        tempo,
-        color,
-        view_name,
-        daw_ui::WaveformAmplitudeScale::Default,
-    );
-}
-
-#[allow(clippy::too_many_arguments)]
-fn paint_audio_clip_scaled_in_view(
-    painter: &egui::Painter,
-    rect: Rect,
-    data: &AudioData,
-    clip: &Clip,
-    tempo: f64,
-    color: egui::Color32,
-    view_name: &'static str,
-    amplitude: daw_ui::WaveformAmplitudeScale,
 ) {
     if !rect.is_positive() || data.channels == 0 {
         return;
@@ -3589,7 +3598,16 @@ fn paint_audio_clip_scaled_in_view(
             }) as f32,
     };
     draw_waveform(
-        painter, rect, view, data, clip, tempo, 1.0, color, view_name, amplitude,
+        painter,
+        rect,
+        view,
+        data,
+        clip,
+        tempo,
+        1.0,
+        color,
+        view_name,
+        daw_ui::WaveformAmplitudeScale::Default,
     );
 }
 

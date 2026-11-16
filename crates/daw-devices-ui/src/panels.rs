@@ -533,19 +533,9 @@ const fn per_pad<const N: usize>(offsets: [u32; N]) -> [[u32; N]; drums::PADS] {
     ids
 }
 
-static DRUM_ENVELOPES: [[u32; 3]; drums::PADS] =
-    per_pad([drums::ATTACK, drums::HOLD, drums::DECAY]);
-static DRUM_VELOCITIES: [[u32; 1]; drums::PADS] = per_pad([drums::VELOCITY]);
-static DRUM_CHOKES: [u32; drums::PADS] = {
-    let ids = per_pad([drums::CHOKE]);
-    let mut out = [0; drums::PADS];
-    let mut pad = 0;
-    while pad < drums::PADS {
-        out[pad] = ids[pad][0];
-        pad += 1;
-    }
-    out
-};
+static DRUM_AMP_FADERS: [[u32; 4]; drums::PADS] =
+    per_pad([drums::ATTACK, drums::HOLD, drums::DECAY, drums::VELOCITY]);
+static DRUM_DIALS: [[u32; 2]; drums::PADS] = per_pad([drums::CHOKE, drums::BITS]);
 
 /// Captions of every pad's controls where the card names the rest.
 static DRUM_CAPTIONS: [(u32, &str); 2 * drums::PADS] = {
@@ -564,8 +554,7 @@ static DRUM_CAPTIONS: [(u32, &str); 2 * drums::PADS] = {
 /// width; below, that pad's controls on R1 Mini's grid of equal cells in
 /// the order of its signal: what of the recording plays and how a hit cuts
 /// others, its pitch and pitch envelope, the amplifier, then the pad's
-/// filter, drive, level and pan. Twelve cells by two lines hold the
-/// nineteen controls with no hole.
+/// tone and output. Each line fills the twelve-cell grid.
 fn drums_layout(mut layout: Layout, pad: usize) -> Layout {
     use Slot::{Control as C, Faders};
     use drums::*;
@@ -587,36 +576,32 @@ fn drums_layout(mut layout: Layout, pad: usize) -> Layout {
         cells(
             "Pitch",
             0,
-            2,
+            3,
             &[
-                &[C(at(PITCH), 1), C(at(FINE), 1)],
-                &[C(at(PITCH_ENV), 1), C(at(ENV_DECAY), 1)],
+                &[C(at(PITCH), 1), C(at(FINE), 1), C(at(VELOCITY_PITCH), 1)],
+                &[C(at(PITCH_ENV), 2), C(at(ENV_DECAY), 1)],
             ],
         ),
-        cells(
-            "Amp envelope",
-            0,
-            4,
-            &[&[
-                Faders(&DRUM_ENVELOPES[pad], 3),
-                Faders(&DRUM_VELOCITIES[pad], 1),
-            ]],
-        ),
+        cells("Amp envelope", 0, 2, &[&[Faders(&DRUM_AMP_FADERS[pad], 2)]]),
         // The pad's own path after its hits, in order; a card of one cell
         // would be too narrow for the filter's corner.
         cells(
             "Filter & output",
             0,
-            3,
+            4,
             &[
-                &[C(at(FILTER), 1), C(at(RESONANCE), 1), C(at(DRIVE), 1)],
-                &[C(at(LEVEL), 1), C(at(PAN), 1), C(at(MUTE), 1)],
+                &[
+                    C(at(FILTER), 1),
+                    C(at(RESONANCE), 1),
+                    C(at(DRIVE), 1),
+                    C(at(BITS), 1),
+                ],
+                &[C(at(LEVEL), 2), C(at(PAN), 1), C(at(MUTE), 1)],
             ],
         ),
     ];
     layout.captions = &DRUM_CAPTIONS;
-    // Five groups are too many for toggles in one cell.
-    layout.dials = &DRUM_CHOKES;
+    layout.dials = &DRUM_DIALS[pad];
     layout.visible = |id, values| applies(id, &drums_settings(values));
     layout.keep_inactive = true;
     layout.readout = |id, values| {

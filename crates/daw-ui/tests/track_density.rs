@@ -8,7 +8,18 @@ fn named_track_densities_keep_basic_channel_controls_and_detail_access() {
             egui::pos2(21.0, 34.0),
             egui::vec2(288.0, density.row_height()),
         );
-        let layout = TrackHeaderLayout::new(rect).with_record_arm().with_depth(2);
+        let layout = TrackHeaderLayout::new(rect)
+            .with_channel_identity(false)
+            .with_depth(2);
+        if density == TrackDensity::Overview {
+            assert!(layout.mix.is_none());
+            for target in [layout.state_toggles.unwrap(), layout.details.unwrap()] {
+                assert!(rect.contains_rect(target));
+                assert_eq!(target.center().y, layout.name.center().y);
+                assert!(!target.intersects(layout.name));
+            }
+            continue;
+        }
         for part in [layout.mix, layout.meter, layout.record_arm] {
             assert!(
                 part.is_some_and(|part| rect.contains_rect(part)),

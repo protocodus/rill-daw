@@ -9,7 +9,7 @@ pub const SNAP_GRID: f64 = -1.0;
 
 /// Closest spacing of Grid lines in points. Between `SPACE_SM` and `SPACE_MD`
 /// so the default arranger and piano-roll zooms both land on 1/16 notes.
-const GRID_MIN_SPACING: f64 = 10.0;
+pub(crate) const GRID_MIN_SPACING: f64 = 10.0;
 
 /// Beat step of the zoom-dependent timeline grid: the finest of 1/32 to 1/4
 /// notes, then whole bars doubling, whose lines are `GRID_MIN_SPACING` apart.

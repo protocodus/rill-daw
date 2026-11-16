@@ -1847,12 +1847,13 @@ per pad tuned for one-shots. Existing projects retain their one-sample behavior.
 | Filter | one bipolar control: low-pass to the left, off at center, high-pass to the right | center |
 | Drive | 0 – 24 dB (Saturator kernel, Transistor model) | 0 dB |
 | Velocity → Level | 0 – 100 % | 80 % |
+| Soft hit pitch | −12 to +12 semitones at the softest hit | 0 |
+| Bit depth | Clean, 12-bit, 8-bit | Clean |
 | Choke group | Off, 1 – 4 | Off |
 | Gain, Pan | −∞ – +12 dB, L – R | 0 dB, center |
 | Mute | toggle | off |
 
-Global: Volume. That is 18 parameters per pad; each pad owns a fixed block of
-32 IDs so pads can gain parameters later without renumbering.
+Each pad owns a fixed block of 32 parameter IDs. Volume controls the whole kit.
 
 **DSP.** The Sampler's playback kernel without looping; attack/hold/decay
 envelope; one SVF; optional drive at 2×; choke groups fade the choked pad over
@@ -1872,9 +1873,9 @@ Rill ships no factory samples. An empty pad shows **Drop a sample** and the
 empty Sampler shows **Load sample…**; a kit preset can bring its own samples
 ([Presets](#presets)).
 
-**As built** (305 parameters: the kit's Volume, ID 1, and nineteen per pad
-in pad `n`'s block from `32 n`, IDs and keys `pad1.start` … `pad16.mute` in
-`devices/drums.rs`). Where it departs from the table above:
+**As built.** The 337 parameters comprise the kit's Volume (ID 1) and 21 per
+pad. Pad `n` starts at ID `32 n`. Bit depth and Soft hit pitch use offsets
+19 and 20 with keys `padN.bits` and `padN.velocity_pitch`.
 
 - *Resonance.* A nineteenth pad parameter, 0 – 100 % (Q 0.707 to about 8),
   for the filter: a sweep without it cannot peak the way drum filters are
@@ -1903,6 +1904,13 @@ in pad `n`'s block from `32 n`, IDs and keys `pad1.start` … `pad16.mute` in
   filter.
 - *Velocity.* Level = 1 − a + a·v², a the Velocity amount: the square law of
   drum modules, at 80 % by default.
+- *Soft hit pitch.* Each hit adds `amount × (1 − velocity)` semitones to its
+  pad tuning and pitch envelope, using velocity from 0 to 1. At full velocity
+  the pad plays at its set tuning. All layers in a hit share the offset.
+- *Bit depth.* Clean passes the pad signal through at full precision. The
+  12-bit and 8-bit settings round each channel of the summed pad signal to
+  signed PCM levels and clip peaks at full scale. Filter and Drive follow
+  this stage, so Filter can soften the added harmonics.
 - *Voices.* Four hits of one pad overlap; a fifth fades the oldest over 5 ms.
   Six slots per pad leave room for hits fading out. A pad in a choke group,
   or set to Gate, also fades its own earlier hits, as hi-hats do.
@@ -1914,23 +1922,13 @@ in pad `n`'s block from `32 n`, IDs and keys `pad1.start` … `pad16.mute` in
   pads cut each other.
 - *Telemetry.* Per pad the loudest envelope of its hits (the pad flash) and
   the playhead of its latest hit; the number of hits sounding.
-- *Panel.* `POPUP_WIDTH_LG` on the twelve-column grid. On top a **Kit**
-  card (five columns) with the pads, bottom row first, and the kit's Volume
-  fader, and the selected pad's card (seven columns): its sample's name and
-  length, **Load sample…** and **Clear**, and its `sample_view` with Start
-  and End markers, the amp envelope over the waveform at the pad's pitch and
-  the latest hit's playhead. Below, the selected pad's controls on equal
-  cells, in its signal order, two full lines with no hole: **Playback**
-  (Start, End, Reverse; Trigger, Choke), **Pitch** (Pitch, Fine; Env, Decay),
-  **Amp envelope** (Attack, Hold and Decay faders and a Velocity fader) and
-  **Filter & output** (Filter, Resonance, Drive; Volume, Pan, Mute). Choke
-  stands with Trigger, since both decide how a hit ends; it is a detented
-  dial (five groups are too many for toggles in one cell). A click on a pad
-  selects it and sounds it at a velocity from where it is hit; a file
-  dropped on a pad loads into that pad; the instrument keyboard below starts
-  at pad 1. An empty pad reads **Empty**; a muted one is dimmed and marked
-  **M**. A long name is cut and shown whole on hover. No pad context menu
-  yet (Copy/Paste pad, Swap with…).
+- *Panel.* The **Kit** grid sits beside the selected pad’s waveform. The
+  **Sample** tab groups Region, Tuning (including Soft hit pitch), and Trigger
+  with its Choke group. **Shape** groups the pitch and amp envelopes with
+  Tone (Bit depth, Filter, Resonance and Drive). Pad volume, Pan, Mute and
+  Kit volume stay accessible on both tabs. Click higher on a pad for a
+  harder hit, or drop a sample onto it to load it. The waveform shows the
+  draggable Start and End markers, amp envelope and latest hit’s playhead.
 - *Tools.* No new tools: `set_device_sample` and `document_action` import
   take `slot` 0 – 15 for R1 Drums.
 

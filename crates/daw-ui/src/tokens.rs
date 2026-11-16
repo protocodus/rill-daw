@@ -110,6 +110,8 @@ pub const PIANO_KEYS_WIDTH: f32 = SPACE_XL + SPACE_LG + SPACE_XS;
 pub const NAMED_NOTE_KEYS_WIDTH: f32 = 160.0;
 pub const VELOCITY_LANE_HEIGHT: f32 = 89.0;
 pub const NOTE_RADIUS: f32 = 3.0;
+/// Short timeline events keep a straight, readable time boundary.
+pub const CLIP_RADIUS: u8 = 2;
 /// Icon glyph box inside buttons and rows: the control height minus the button padding.
 pub const ICON_SIZE: f32 = CONTROL_HEIGHT - 2.0 * BUTTON_PADDING_Y;
 /// Square hit target for canvas handles such as fade corners and curve points.

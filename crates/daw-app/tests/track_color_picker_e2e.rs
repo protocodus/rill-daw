@@ -176,22 +176,23 @@ fn assert_arranger_paint(state: &Value, id: u64) {
             assert!(shapes.iter().any(|shape| shape["rect"] == *mark && shape["fill"] == json!(color.to_array())), "Collapsed clips repaint from their channel color");
             continue;
         }
-        let rect = bounds(&clip["rect"]);
-        let selected = state["selected_clip"] == clip["id"];
-        let stroke = color
-            .gamma_multiply(if selected { 1.0 } else { 0.65 })
-            .to_array();
+        let band = bounds(&clip["name_hit_rect"]);
+        let panel = if state["effective_theme"] == "Dark" {
+            daw_ui::theme::DARK.panel
+        } else {
+            daw_ui::theme::LIGHT.panel
+        };
         assert!(
             shapes.iter().any(|shape| {
-                // The outline snaps to whole physical pixels.
-                bounds(&shape["rect"])
-                    .into_iter()
-                    .zip(rect)
-                    .all(|(a, b)| (a - b).abs() < 1.0)
-                    && shape["stroke"] == json!(stroke)
-                    && shape["stroke_width"].as_f64().unwrap() > 0.0
+                bounds(&shape["rect"]) == band
+                    && shape["fill"][3] == 255
+                    && (0..3).all(|i| {
+                        let track = i64::from(color[i]);
+                        let delta = (shape["fill"][i].as_i64().unwrap() - track).abs();
+                        delta <= 1 + (i64::from(panel[i]) - track).abs() / 2
+                    })
             }),
-            "clip {} must repaint from its track color",
+            "clip {} must repaint its title band from the chosen track color",
             clip["id"]
         );
     }

@@ -507,17 +507,6 @@ pub fn paint_timeline_ruler(
     if !end_beat.is_finite() {
         return;
     }
-    const LABEL_SPACING: f32 = 80.0;
-    let shortest_bar = meter
-        .segments()
-        .iter()
-        .map(|segment| segment.beats_per_bar)
-        .min()
-        .unwrap_or(1);
-    let bar_step = (LABEL_SPACING / (view.pixels_per_beat * f32::from(shortest_bar)))
-        .ceil()
-        .clamp(1.0, u32::MAX as f32) as u32;
-    let first_bar = (meter.position(view.start_beat).0 - 1) / bar_step * bar_step + 1;
     let painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
     let palette = crate::theme::palette(painter.ctx());
     let font = egui::FontId::proportional(crate::tokens::FONT_CANVAS);
@@ -558,34 +547,34 @@ pub fn paint_timeline_ruler(
             .is_finite()
             .then(|| crate::format_clock_time(seconds, 2))
     };
-    let tick = |x: f32, length: f32| {
+    let tick = |x: f32, length: f32, color| {
         if x >= rect.left() && x <= rect.right() {
             painter.line_segment(
                 [
                     egui::pos2(x, rect.bottom() - length),
                     egui::pos2(x, rect.bottom()),
                 ],
-                egui::Stroke::new(1.0_f32, palette.line),
+                egui::Stroke::new(1.0 / painter.pixels_per_point(), color),
             );
         }
     };
     // Reserve the primary bar and clock labels first so finer anchors cannot
     // displace them, including at large bar numbers or a clipped viewport edge.
-    let bars = (first_bar..u32::MAX)
-        .step_by(bar_step as usize)
-        .map(|bar| (bar, meter.bar_start(bar)))
-        .take_while(|(_, beat)| *beat <= end_beat.ceil());
-    for (bar, beat) in bars.take(2048) {
-        let x = view.x_at(rect, beat);
-        label(format!("{bar}"), x, true, palette.text, &mut upper);
-        if let Some(text) = clock(beat) {
-            label(text, x, false, palette.muted, &mut lower);
+    for bar in crate::arranger_grid::visible_bars(rect, view, meter) {
+        let x = view.x_at(rect, bar.beat);
+        if bar.labeled {
+            label(bar.number.to_string(), x, true, palette.text, &mut upper);
+            if let Some(text) = clock(bar.beat) {
+                label(text, x, false, palette.muted, &mut lower);
+            }
+            tick(x, crate::tokens::SPACE_SM, palette.grid_emphasis());
+        } else {
+            tick(x, crate::tokens::SPACE_XS, palette.grid_bar);
         }
-        tick(x, 8.0);
     }
-    let divisions = [4, 2, 1]
-        .into_iter()
-        .find(|division| view.pixels_per_beat / *division as f32 >= LABEL_SPACING);
+    let divisions = [4, 2, 1].into_iter().find(|division| {
+        view.pixels_per_beat / *division as f32 >= crate::arranger_grid::RULER_LABEL_SPACING
+    });
     let Some(divisions) = divisions else {
         return;
     };
@@ -610,7 +599,11 @@ pub fn paint_timeline_ruler(
         if let Some(text) = clock(beat) {
             label(text, x, false, palette.muted, &mut lower);
         }
-        tick(x, if quarter.is_multiple_of(4) { 5.0 } else { 3.0 });
+        tick(
+            x,
+            if quarter.is_multiple_of(4) { 5.0 } else { 3.0 },
+            palette.line,
+        );
     }
 }
 

@@ -107,8 +107,11 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             ),
             (
                 5,
-                "Short · 56 points high",
-                vec2(controls::TRACK_HEADER_WIDTH, 56.0),
+                "Overview · 34 points high",
+                vec2(
+                    controls::TRACK_HEADER_WIDTH,
+                    controls::TrackDensity::Overview.row_height(),
+                ),
             ),
         ] {
             ui.vertical(|ui| {
@@ -142,10 +145,7 @@ fn header(ui: &mut Ui, index: usize, channel: &mut Channel, size: egui::Vec2) {
     } else {
         controls::TrackHeaderLayout::new(rect)
     };
-    layout = match channel.kind {
-        Kind::Bus => layout.with_bus_badge(),
-        Kind::Audio | Kind::Midi => layout.with_record_arm(),
-    };
+    layout = layout.with_channel_identity(matches!(channel.kind, Kind::Bus));
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 0, theme::palette(ui.ctx()).panel);
     controls::color_strip_at(
@@ -209,6 +209,17 @@ fn header(ui: &mut Ui, index: usize, channel: &mut Channel, size: egui::Vec2) {
         .clicked()
     {
         channel.armed = !channel.armed;
+    }
+    if let Some(rect) = layout.state_toggles {
+        let [mute, solo] = controls::track_state_toggles_at(
+            ui,
+            rect,
+            ("gallery_track_state", index),
+            channel.muted,
+            channel.solo,
+        );
+        channel.muted ^= mute.clicked();
+        channel.solo ^= solo.clicked();
     }
     if let Some(rect) = layout.mix {
         let response = controls::track_mix_controls_at(

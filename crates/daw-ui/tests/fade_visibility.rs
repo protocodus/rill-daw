@@ -135,6 +135,54 @@ fn named_collapsed_clips_keep_fade_targets_inside_the_short_waveform_body() {
     });
 }
 
+#[test]
+fn short_events_leave_body_space_between_coincident_fades_and_crossfades() {
+    let ctx = Context::default();
+    let _ = ctx.run(RawInput::default(), |ctx| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            let body = Rect::from_min_size(pos2(80.0, 80.0), vec2(20.0, 10.0));
+            let view = TimelineViewport {
+                pixels_per_beat: 20.0,
+                ..Default::default()
+            };
+            let fades = daw_ui::clip_fade_handles(
+                ui,
+                Id::new("fades"),
+                body,
+                view,
+                ClipFadeBounds {
+                    start: 0.0,
+                    end: 1.0,
+                    fade_in_end: 0.5,
+                    fade_out_start: 0.5,
+                },
+                true,
+            );
+            let [a, b] = fades.handles.map(Option::unwrap);
+            let crossfade = daw_ui::crossfade_duration_handle(
+                ui,
+                Id::new("overlap"),
+                body,
+                view,
+                daw_ui::CrossfadeBounds {
+                    start: 0.0,
+                    end: 1.0,
+                    duration: 0.5,
+                },
+                true,
+            )
+            .handle
+            .unwrap();
+            assert!(a.is_positive() && b.is_positive() && crossfade.is_positive());
+            assert!(a.right() <= b.left());
+            assert!(a.bottom().max(b.bottom()) < crossfade.top());
+            for handle in [a, b, crossfade] {
+                assert!(body.contains_rect(handle));
+            }
+        });
+    });
+}
+
 fn pointer(at: Pos2, pressed: bool) -> Vec<Event> {
     vec![
         Event::PointerMoved(at),

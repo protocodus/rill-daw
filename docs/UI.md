@@ -321,7 +321,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Masked credential input | `secret_field` |
 | Aligned settings and paths | `form_grid`, `form_label`, `path_row`, `section_gap` |
 | Ghost clip identity | `clip_occurrence_hover`, `clip_title`, `ClipTitleLayout`, `clip_label`, `clip_choice`, `Icon::Link`, `Icon::Unlink` |
-| Arrangement clip surfaces and previews | `clip_surface`, `clip_surface_named`, `ClipSurfaceLayout`, `clip_note_preview`, `collapsed_track_span` |
+| Arrangement clip surfaces and previews | `clip_surface`, `clip_surface_named`, `ClipSurfaceColors`, `ClipSurfaceLayout`, `clip_lane_rect`, `clip_preview_rect`, `clip_note_preview`, `collapsed_track_span` |
 | One choice among fixed options | `choice` (toggle buttons for fewer than five options, otherwise a drop-down), `toggle_group`, `toggle_group_vertical`, `toggle_grid` |
 | Dropdown choices | `select`, `select_labeled` |
 | Numeric widget builders | `slider`, `Slider`, `SliderScaleGeometry`, `slider_scale_geometry`, `number`, `Number` |
@@ -731,9 +731,9 @@ retain direct dragging, and right-click still opens parameter automation actions
 
 `TrackHeaderLayout::new(rect)` measures an expanded header from the available
 rectangle. Every track has a color strip, disclosure, icon and name. Expanded
-headers add a reorder grip and controls for their track kind. The three density
-presets use row heights of 64, 89 and 144 points. `with_state_toggles` reserves
-Mute and Solo on an expanded folder's identity line.
+headers add a reorder grip and controls for their track kind. The four density
+presets use row heights of 34, 64, 89 and 144 points. `with_state_toggles` reserves
+Mute and Solo on a single-line channel or expanded folder header.
 
 `TrackHeaderLayout::collapsed(rect)` centers the disclosure, icon and name on a
 21-point row. `track_header_disclosure_at` gives the chevron a separate pointer
@@ -829,13 +829,16 @@ beat count; a later meter change retains that increment with an explicit beat la
 The arranger reserves a `TIMELINE_LOOP_HEIGHT` loop strip below bar/time labels,
 the same `timeline_loop_editor` lane as the clip editors. The canvas starts
 `SPACE_SM` right of the header so beat 0, the playhead and the first clip edge
-clear the header border; it never scrolls before beat 0. Row stripes alternate by
-visible row. The empty area below the tracks continues the bar lines. Drag the label
+clear the header border. Row stripes alternate by visible row. `ArrangerGrid`
+draws subdued snap subdivisions and stronger downbeats, with an accent every
+four visible bars. As bars get closer together, the grid and ruler thin their
+guides in groups of two, following each meter change. The empty area below
+the tracks continues the bar lines across the viewport. Drag the label
 gutter to resize all track headers, or a header's lower edge to resize every track
 row together. View → Track density uses shared `TrackDensity` presets:
-Compact (64 points, the default), Standard (89), and Detailed (144). Every preset
-reuses the adaptive header; compact rows retain mix/arm/meter controls and a
-one-click route to full channel details. The named choice is a persisted user
+Overview (34 points), Compact (64 points, the default), Standard (89), and Detailed (144).
+Overview uses a single identity row with M/S and a button for full channel controls.
+Compact adds inline volume, pan, arm and metering. The named choice is a persisted user
 preference, not a project edit. View → Track layout provides precise dimensions. These dimensions
 are session view state and leave content, selection and history intact. Folder
 headings use disclosure controls, folder icons, depth guides and spacing; Tracks
@@ -1058,14 +1061,18 @@ over each bar is a mouse target for selecting or opening the clip.
 
 `clip_occurrence_hover` extends the existing clip hover with its full Unicode name, track, musical start and clock range. It preserves the linked-source explanation and adds no persistent geometry or project edits.
 
-`clip_surface` gives audio and MIDI clips the same opaque, track-tinted body and
-quiet title band, keeping the beat grid behind musical content. Its returned title
-and content rectangles remain separate even on compact tracks; title and content
-share one left inset. `clip_note_preview` fits thumbnail notes within that content
-area using the clip's visible pitch range plus a row above and below (at least
-eight rows), so small patterns fill the clip. Notes are 2–6 points tall, in the
-full track color with a 1-point darker outline; very high and low notes remain
-distinct and never cover the name. The clip context menu follows the Edit menu:
+`clip_lane_rect` keeps a narrow gutter around timeline events, overlaps and live
+recordings. `clip_surface` paints an opaque body, a track-colored title band
+and a two-point corner radius. Selected clips have a stronger outline and halo.
+The body tint preserves contrast for both quiet and peak waveform colors.
+Muted clips keep a softer tint. `ClipSurfaceColors` can be reused across events
+on the same track. The name and preview share a left inset and remain separate
+at every expanded track height, including Overview. Blank names release their
+band for more preview space. Single-row events keep at least half their height
+for music. `clip_note_preview` fits the visible pitch range with at least eight
+rows, using an ink color that contrasts with the body. In short previews the
+strokes can be as thin as one physical pixel to separate notes in a chord.
+The clip context menu follows the Edit menu:
 open (Edit notes/audio, Properties) | selection | Cut, Copy, Paste, Duplicate |
 Rename… | Split at cursor, Join clips…, Stretch, Slip contents, Ghost copy, Make
 independent | Crossfade… | Loop playback over clip | Delete. The clip, track

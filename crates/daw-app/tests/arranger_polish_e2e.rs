@@ -267,7 +267,7 @@ fn mute_and_solo_use_their_own_colors_and_folders_paint_one_compact_row() {
 }
 
 #[test]
-fn midi_previews_paint_readable_track_colored_notes() {
+fn midi_previews_preserve_durations_and_pitch_order_in_the_track_lane() {
     let mut app = Harness::new();
     let (_, midi, _) = fixture(&mut app);
     app.command(json!({"command":"viewport","width":1280,"height":900,"pixels_per_point":1.0}));
@@ -279,41 +279,35 @@ fn midi_previews_paint_readable_track_colored_notes() {
         .find(|clip| clip["track"] == midi)
         .unwrap();
     let content = bounds(&clip["content_rect"]);
-    let track = state["project"]["tracks"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|track| track["id"] == midi)
-        .unwrap();
-    let rgb: Vec<u8> = track["color"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_u64().unwrap() as u8)
-        .collect();
-    let color = json!(Color32::from_rgb(rgb[0], rgb[1], rgb[2]).to_array());
-    let notes: Vec<_> = state["painted_rects"]
+    let mut notes: Vec<_> = state["painted_rects"]
         .as_array()
         .unwrap()
         .iter()
         .filter(|shape| {
             let b = bounds(&shape["rect"]);
-            shape["fill"] == color
+            shape["fill"][3] == 255
                 && b[0] >= content[0] - 0.5
                 && b[2] <= content[2] + 0.5
                 && b[1] >= content[1] - 0.5
                 && b[3] <= content[3] + 0.5
         })
+        .map(|shape| bounds(&shape["rect"]))
         .collect();
-    assert_eq!(notes.len(), 2, "each note paints once in full track color");
-    for note in notes {
-        let b = bounds(&note["rect"]);
+    assert_eq!(notes.len(), 2, "each source note paints once");
+    notes.sort_by(|a, b| a[0].total_cmp(&b[0]));
+    let origin = bounds(&clip["rect"])[0];
+    let beat_width = state["timeline"]["pixels_per_beat"].as_f64().unwrap();
+    assert!((notes[0][0] - content[0]).abs() <= 1.0);
+    assert!((notes[1][0] - (origin + 2.0 * beat_width)).abs() <= 1.0);
+    assert!(
+        notes[1][1] < notes[0][1],
+        "the higher note paints above the lower one"
+    );
+    for (index, b) in notes.iter().enumerate() {
+        let expected_end = origin + (2 * index + 1) as f64 * beat_width;
+        assert!((b[2] - expected_end).abs() <= 1.5);
         let height = b[3] - b[1];
         assert!((2.0..=6.01).contains(&height), "note height {height}");
-        assert!(
-            note["stroke_width"].as_f64().unwrap() >= 1.0,
-            "notes keep a darker outline"
-        );
     }
     // Title text and preview share one left inset.
     assert!((bounds(&clip["title_rect"])[0] - content[0]).abs() < 0.5);

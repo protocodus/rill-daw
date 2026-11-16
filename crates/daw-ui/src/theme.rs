@@ -180,6 +180,11 @@ pub fn contrast_text(background: Color32) -> Color32 {
     }
 }
 impl Palette {
+    /// Stronger musical landmarks shared by the ruler and arrangement grid.
+    pub fn grid_emphasis(self) -> Color32 {
+        self.grid_bar.lerp_to_gamma(self.muted, 0.28)
+    }
+
     /// Quietly desaturate content outside a clip toward its surrounding canvas.
     /// Light canvases remain light instead of receiving a fixed black veil.
     pub fn inactive_clip_tint(self) -> Color32 {

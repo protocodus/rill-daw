@@ -3,7 +3,7 @@
 use crate::app::DawApp;
 use daw_core::{AutomationClip, AutomationLane, Interpolation, MAX_BEAT};
 use daw_ui::{AutomationCanvas, AutomationCanvasResponse, CurveEdit, CurvePoint, TimelineViewport};
-use eframe::egui::{self, Pos2, Rect, Vec2};
+use eframe::egui::{self, Pos2, Rect};
 
 pub(crate) enum AutomationEdit {
     Clear,
@@ -282,10 +282,7 @@ pub(crate) fn automation_lane(
             continue;
         }
         let clip_id = id.with(clip.id);
-        let title = view
-            .collapsed_color
-            .is_none()
-            .then(|| daw_ui::clip_title_band(rect, true, ui.pixels_per_point()));
+        let title = daw_ui::clip_title_band(rect, true, ui.pixels_per_point());
         let mark = view.collapsed_color.and_then(|color| {
             daw_ui::collapsed_track_span(
                 ui.painter(),
@@ -340,7 +337,7 @@ pub(crate) fn automation_lane(
             result.clip_click = Some((
                 clip.id,
                 position,
-                title.is_some_and(|band| band.contains(position)),
+                view.collapsed_color.is_none() && title.contains(position),
             ));
         }
         let pointer_beat = |position: Pos2| view.viewport.beat_at(view.rect, position.x);
@@ -543,10 +540,7 @@ pub(crate) fn automation_lane(
                 "title_rect":null,"plot":null,"segment_handles":[],"points":[]}));
             continue;
         }
-        let plot = Rect::from_min_max(
-            rect.min + Vec2::new(0.0, 23.0_f32.min(rect.height() * 0.4)),
-            rect.max - Vec2::new(0.0, 3.0),
-        );
+        let plot = daw_ui::clip_preview_rect(rect, title);
         let response = daw_ui::automation_canvas_with_segments_at(
             ui,
             clip_id.with("points"),
@@ -573,7 +567,7 @@ pub(crate) fn automation_lane(
                 .edits
                 .push(AutomationEdit::Curve(Some(clip.id), edit));
         }
-        clip_diagnostics.push(serde_json::json!({"id":clip.id,"rect":rect_json(rect.intersect(ui.clip_rect())),"title_rect":title.map(|r| rect_json(r.intersect(ui.clip_rect()))),"plot":rect_json(plot.intersect(ui.clip_rect())),"segment_handles":segment_diagnostics(&response.segments),"points":response.points.into_iter().map(|(id,rect)| serde_json::json!({"id":id,"rect":rect_json(rect)})).collect::<Vec<_>>()}));
+        clip_diagnostics.push(serde_json::json!({"id":clip.id,"rect":rect_json(rect.intersect(ui.clip_rect())),"title_rect":rect_json(title.intersect(ui.clip_rect())),"plot":rect_json(plot.intersect(ui.clip_rect())),"segment_handles":segment_diagnostics(&response.segments),"points":response.points.into_iter().map(|(id,rect)| serde_json::json!({"id":id,"rect":rect_json(rect)})).collect::<Vec<_>>()}));
     }
     if view.pointer_blocked {
         result.edits.retain(|edit| {

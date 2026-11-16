@@ -64,6 +64,92 @@ fn export(app: &mut Harness, name: &str) -> AudioData {
 }
 
 #[test]
+fn overview_short_audio_events_keep_select_open_and_trim_targets_beside_handles() {
+    let mut app = Harness::new();
+    let path = source(&app, "short-events.wav", 0.3);
+    let mut project = Project::new();
+    let track = project.add_audio_track("Short events");
+    let named = Clip::audio("Hit", 1.0, 0.5, path.to_string_lossy());
+    let unnamed = Clip::audio("", 3.0, 0.5, path.to_string_lossy());
+    let ids = [named.id, unnamed.id];
+    project.track_mut(track).unwrap().clips.extend([
+        named,
+        Clip::audio("Tail", 2.0, 1.25, path.to_string_lossy()),
+        unnamed,
+    ]);
+    open(&mut app, &project);
+    app.click("View");
+    app.click("Track density");
+    app.click("Overview");
+    let state = app.inspect();
+    let canvas = &state["timeline"]["canvas"];
+    let x = canvas["min"][0].as_f64().unwrap() + 1.0;
+    let (_, y) = center(canvas);
+    let scale = state["timeline"]["pixels_per_beat"].as_f64().unwrap();
+    app.command(
+        json!({"command":"scroll","x":x,"y":y,"delta":(40.0/scale).ln()/0.005,"ctrl":true}),
+    );
+    let initial = app.inspect();
+    assert_eq!(initial["timeline"]["row_height"], 34.0);
+    for (index, id) in [0, 2].into_iter().zip(ids) {
+        let state = app.inspect();
+        let event = diagnostic(&state, id);
+        assert!(event["fade_in_handle"].is_object() && event["fade_out_handle"].is_object());
+        if index == 2 {
+            assert!(
+                event["crossfade_handle"].is_object(),
+                "incoming unnamed event overlaps its neighbor"
+            );
+        }
+        let r = &event["rect"];
+        let left = r["min"][0].as_f64().unwrap();
+        let right = r["max"][0].as_f64().unwrap();
+        assert!((19.0..=21.0).contains(&(right - left)));
+        let content = &event["content_rect"];
+        let top = content["min"][1].as_f64().unwrap();
+        let bottom = content["max"][1].as_f64().unwrap();
+        let x = left + (right - left) * 0.6;
+        let y = top + (bottom - top) * 0.75;
+        let selected = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+        assert_eq!(
+            selected["selected_clip"], id,
+            "select the body of the short audio event"
+        );
+        let opened = app.command(json!({"command":"pointer","phase":"double_click","x":x,"y":y}));
+        assert_eq!(
+            opened["view"], "Clip",
+            "open the event from its musical preview"
+        );
+        assert_eq!(opened["selected_clip"], id);
+        assert_eq!(opened["project"], initial["project"]);
+        app.click("Back");
+        let edge = (right - 1.0, r["max"][1].as_f64().unwrap() - 1.0);
+        let trimmed = drag(&mut app, edge, -10.0, false);
+        near(clip(&trimmed, 0, index)["length"].as_f64().unwrap(), 0.25);
+        assert_eq!(audio(&trimmed, 0, index)["fade_out"], 0.0);
+        assert_eq!(undo(&mut app)["project"], initial["project"]);
+
+        let handle = if index == 0 {
+            "fade_in_handle"
+        } else {
+            "crossfade_handle"
+        };
+        let handle = center(&diagnostic(&app.inspect(), id)[handle]);
+        let changed = drag(&mut app, handle, 10.0, false);
+        let clip_audio = audio(&changed, 0, index);
+        let duration = if index == 0 {
+            &clip_audio["fade_in"]
+        } else {
+            &clip_audio["crossfade"]["duration"]
+        };
+        near(duration.as_f64().unwrap(), 0.25);
+        assert_eq!(clip(&changed, 0, index)["length"], 0.5);
+        assert_eq!(undo(&mut app)["project"], initial["project"]);
+    }
+    app.quit();
+}
+
+#[test]
 fn all_audio_clips_have_non_destructive_handles_including_compact_reverse_and_stretch() {
     let mut app = Harness::new();
     let path = source(&app, "unchanged-source.wav", 0.4);

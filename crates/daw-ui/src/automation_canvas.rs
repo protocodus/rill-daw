@@ -267,7 +267,7 @@ pub fn automation_pattern_header(
     crate::clip_title(
         &painter,
         surface.title,
-        egui::FontId::proportional(tokens::FONT_CANVAS),
+        surface.title_font(),
         surface.title_color,
         pattern.name,
         pattern.linked,

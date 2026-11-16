@@ -321,11 +321,11 @@ impl Panel {
         )
     }
 
-    fn click_label(&mut self, label: &str) {
+    fn painted_frame(&mut self, size: egui::Vec2) -> egui::FullOutput {
         let ctx = self.ctx.clone();
-        let output = ctx.run(
+        ctx.run(
             egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 1000.0))),
+                screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, size)),
                 time: Some(ctx.cumulative_frame_nr() as f64 * 0.1),
                 ..Default::default()
             },
@@ -334,7 +334,11 @@ impl Panel {
                     ui.scope(|ui| show(ui, self.descriptor, &mut self.host, &mut self.state));
                 });
             },
-        );
+        )
+    }
+
+    fn click_label(&mut self, label: &str) {
+        let output = self.painted_frame(vec2(1200.0, 1000.0));
         let at = output
             .shapes
             .iter()
@@ -2004,6 +2008,56 @@ fn drums_controls_stay_inside_their_cards() {
                 panel.cell(drums::VOLUME),
                 panel.cell(drums::id(pad, drums::LEVEL))
             );
+        }
+    }
+}
+
+#[test]
+fn drum_inspector_captions_fit_on_one_line_at_popup_width() {
+    let mut panel = Panel::new(&drums::DESCRIPTOR);
+    let width = panel_width(&drums::DESCRIPTOR) + 2.0 * daw_ui::tokens::SPACE_SM;
+    let captions: [&[&str]; 2] = [
+        &[
+            "Start",
+            "End",
+            "Reverse",
+            "Pitch",
+            "Fine",
+            "Soft hit pitch",
+            "Trigger",
+            "Choke",
+        ],
+        &[
+            "Amount",
+            "Decay",
+            "Attack",
+            "Hold",
+            "Vel",
+            "Filter",
+            "Reso",
+            "Drive",
+            "Bit depth",
+        ],
+    ];
+    for (page, expected) in captions.into_iter().enumerate() {
+        panel.page(page);
+        let frame = panel.painted_frame(vec2(width, 800.0));
+        let mut seen = Vec::new();
+        for shape in &frame.shapes {
+            if let egui::Shape::Text(text) = &shape.shape {
+                let caption = text.galley.text();
+                if expected.contains(&caption) {
+                    assert_eq!(
+                        text.galley.rows.len(),
+                        1,
+                        "Wrapped {caption} on page {page}"
+                    );
+                    seen.push(caption);
+                }
+            }
+        }
+        for caption in expected {
+            assert!(seen.contains(caption), "Missing {caption} on page {page}");
         }
     }
 }

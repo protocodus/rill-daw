@@ -175,15 +175,15 @@ fn identical_clip_names_reveal_track_position_and_link_scope_without_editing() {
                         + f64::from(daw_ui::tokens::SPACE_XS))
                     .min(title_right)
                 };
-                if text_left < title_right {
+                if title_right - text_left >= f64::from(daw_ui::tokens::FONT_CANVAS) {
                     assert!(
                         title.is_some(),
                         "Truncated title must remain inside its clip when text has room: width={width}, density={density}, hovered={id}, checked={visible_id}, clip={clip}, painted_text={}",
                         state["painted_text"]
                     );
                 } else {
-                    // A narrow ghost reserves its whole title for the chain
-                    // icon. Its full name must still be exposed by hover above.
+                    // With less than a glyph's width after the chain icon,
+                    // the title yields to the full occurrence name on hover.
                     assert_eq!(clip["linked"], true);
                     assert!(
                         title.is_none(),

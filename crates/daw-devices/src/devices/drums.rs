@@ -1,12 +1,12 @@
 //! R1 Drums: sixteen pads on MIDI notes 36–51. Each pad plays a composable
 //! sample-selection tree; older kits retain their recording in slots 0–15.
 //! A hit reads its selected recordings through `daw_dsp`'s
-//! band-limited mip-map at the pitch its tune and pitch envelope ask for,
-//! walks the pad's start and end markers with the shared playhead and
-//! shapes it with an attack, hold and decay. Each pad then sums its voices
-//! into one short chain: a one-knob filter (low-pass left, high-pass right,
-//! nothing in the middle), a drive, pan and level. Up to four hits of one
-//! pad overlap, so rolls ring on; a choke group or Gate cuts them in 5 ms.
+//! band-limited mip-map at the pitch set by its tune, velocity and pitch
+//! envelope. It walks the pad's start and end markers with the shared
+//! playhead and shapes the sound with an attack, hold and decay. Each pad
+//! sums its voices before optional bit reduction, a one-knob filter
+//! (low-pass left, high-pass right, bypassed at center), drive, pan and level.
+//! Up to four hits of one pad overlap. A choke group or Gate cuts them in 5 ms.
 //! See `docs/R1_DEVICES.md#r1-drums`.
 use super::param;
 use crate::dsp::playback::{Markers, Playhead, Region};
@@ -57,8 +57,10 @@ pub const CHOKE: u32 = 15;
 pub const LEVEL: u32 = 16;
 pub const PAN: u32 = 17;
 pub const MUTE: u32 = 18;
+pub const BITS: u32 = 19;
+pub const VELOCITY_PITCH: u32 = 20;
 /// Parameters of one pad.
-pub const PAD_PARAMETERS: u32 = 19;
+pub const PAD_PARAMETERS: u32 = 21;
 
 /// Telemetry value slots. Activity: one per pad from
 /// [`TELEMETRY_ACTIVITY`], the loudest envelope of its hits, 0–1.
@@ -70,6 +72,7 @@ pub const TELEMETRY_VOICES: usize = 32;
 
 pub const TRIGGERS: &[&str] = &["One-shot", "Gate"];
 pub const CHOKES: &[&str] = &["Off", "1", "2", "3", "4"];
+pub const BIT_DEPTHS: &[&str] = &["Clean", "12-bit", "8-bit"];
 
 /// Hits of one pad that sound together; a fifth fades the oldest out.
 pub const VOICES_PER_PAD: usize = 4;
@@ -159,7 +162,10 @@ const fn pad_parameter(
         CHOKE => ("Choke", "", ParamRange::Choice(CHOKES), 0.0),
         LEVEL => ("Volume", "dB", linear(LEVEL_OFF_DB, 12.0), 0.0),
         PAN => ("Pan", "%", linear(-100.0, 100.0), 0.0),
-        _ => ("Mute", "", ParamRange::Toggle, 0.0),
+        MUTE => ("Mute", "", ParamRange::Toggle, 0.0),
+        BITS => ("Bit depth", "", ParamRange::Choice(BIT_DEPTHS), 0.0),
+        VELOCITY_PITCH => ("Soft hit pitch", "st", linear(-12.0, 12.0), 0.0),
+        _ => panic!("unknown drum parameter"),
     };
     param(
         PAD_BLOCK * number + offset,
@@ -206,6 +212,8 @@ macro_rules! parameters {
                 pad_parameter($n, LEVEL, concat!("pad", $n, ".volume"), concat!("Pad ", $n)),
                 pad_parameter($n, PAN, concat!("pad", $n, ".pan"), concat!("Pad ", $n)),
                 pad_parameter($n, MUTE, concat!("pad", $n, ".mute"), concat!("Pad ", $n)),
+                pad_parameter($n, BITS, concat!("pad", $n, ".bits"), concat!("Pad ", $n)),
+                pad_parameter($n, VELOCITY_PITCH, concat!("pad", $n, ".velocity_pitch"), concat!("Pad ", $n)),
             )*
         ]
     };
@@ -248,6 +256,8 @@ pub struct Pad {
     pub reverse: bool,
     /// Semitones, fine tune included.
     pub pitch: f32,
+    /// Extra semitones on the softest hit, falling to zero at full velocity.
+    pub velocity_pitch: f32,
     /// Semitones at the hit, falling to none over `env_decay_ms`.
     pub pitch_env: f32,
     pub env_decay_ms: f32,
@@ -257,6 +267,8 @@ pub struct Pad {
     pub decay_ms: f32,
     /// A released note fades over Decay; a one-shot ignores note-offs.
     pub gate: bool,
+    /// Signed PCM quantization steps per unit of amplitude, or None for Clean.
+    pub quantize_scale: Option<f32>,
     /// −1 (low-pass) to 1 (high-pass); 0 is no filter.
     pub filter: f32,
     /// 0–1.
@@ -294,12 +306,18 @@ impl Pad {
             end: plain(END) / 100.0,
             reverse: plain(REVERSE) >= 0.5,
             pitch: plain(PITCH) + plain(FINE) / 100.0,
+            velocity_pitch: plain(VELOCITY_PITCH),
             pitch_env: plain(PITCH_ENV),
             env_decay_ms: plain(ENV_DECAY),
             attack_ms: plain(ATTACK),
             hold_ms: (hold < HOLD_FULL_MS * 0.999).then_some(hold),
             decay_ms: plain(DECAY),
             gate: plain(TRIGGER) >= 0.5,
+            quantize_scale: match plain(BITS) as u8 {
+                1 => Some(2048.0),
+                2 => Some(128.0),
+                _ => None,
+            },
             filter: plain(FILTER) / 100.0,
             resonance: plain(RESONANCE) / 100.0,
             drive_db: plain(DRIVE),
@@ -434,6 +452,8 @@ struct Voice {
     age: u64,
     /// Velocity gain.
     gain: f32,
+    /// The hit's input velocity, independent of its amplitude response.
+    velocity: f32,
     layers: [LayerVoice; LAYERS],
     layer_count: usize,
     amp: Adsr,
@@ -732,6 +752,7 @@ impl Drums {
         voice.note = note;
         voice.age = self.age;
         voice.gain = p.velocity_gain(velocity);
+        voice.velocity = velocity.clamp(0.0, 1.0);
         voice.fade = 1.0;
         voice.fading = false;
         voice.sweep = 1.0;
@@ -814,6 +835,12 @@ impl Drums {
                 fade_step,
                 end_fade,
             );
+            if let Some(scale) = self.settings.pads[pad].quantize_scale {
+                let step = scale.recip();
+                for sample in pad_left.iter_mut().chain(pad_right.iter_mut()) {
+                    *sample = (*sample * scale).round().clamp(-scale, scale - 1.0) * step;
+                }
+            }
             let chain = &mut self.chains[pad];
             let mut peak = 0.0_f32;
             for ((out_left, out_right), (l, r)) in left
@@ -873,7 +900,8 @@ fn voice_control(
     sweep: f32,
     start: bool,
 ) {
-    let semitones = pad.pitch + pad.pitch_env * voice.sweep;
+    let semitones =
+        pad.pitch + pad.velocity_pitch * (1.0 - voice.velocity) + pad.pitch_env * voice.sweep;
     voice.sweep *= sweep;
     let ratio = (semitones / 12.0).exp2() / rate;
     for playing in &mut voice.layers[..voice.layer_count] {
@@ -893,7 +921,7 @@ fn voice_control(
     }
 }
 
-/// Adds layered hits before the pad's shared filter, drive, pan and volume.
+/// Adds layered hits before the pad's shared bit reduction, filter, drive and output.
 fn render_voices(
     voices: &mut [Voice],
     samples: &[Option<Arc<SampleData>>; SAMPLE_SLOTS],
@@ -1129,7 +1157,7 @@ impl Device for Drums {
                 let Some(sample) = &self.samples[leaf.slot as usize] else {
                     return;
                 };
-                let lowest = p.pitch.min(p.pitch + p.pitch_env);
+                let lowest = p.pitch + p.velocity_pitch.min(0.0) + p.pitch_env.min(0.0);
                 let played =
                     (p.end - p.start).abs() * (leaf.end - leaf.start) * sample.frames() as f32
                         / sample.sample_rate()
