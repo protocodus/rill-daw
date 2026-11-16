@@ -35,11 +35,17 @@ fn seed_song(app: &mut Harness) {
     app.command(json!({"command":"open", "path":path}));
 }
 
-fn index_folder(app: &mut Harness, root: &Path, count: usize) -> Value {
+fn open_samples(app: &mut Harness) {
     app.command(json!({"command":"viewport", "width":1500, "height":1050}));
     app.click("Window");
     app.click("Device browser");
+    // The initial device scan can change the browser toolbar between pointer frames.
+    common::wait_until(app, |state| state["library"]["sync"]["phase"] == "Idle");
     app.click("Samples");
+}
+
+fn index_folder(app: &mut Harness, root: &Path, count: usize) -> Value {
+    open_samples(app);
     app.add_sample_folder(root);
     app.click("Scan folders");
     common::wait_until(app, |state| {
@@ -263,11 +269,12 @@ fn adding_an_audio_track_from_a_project_sample_reuses_its_media_and_name() {
     let song = app.directory.path().join("Named sample.rill");
     project.save(&song).unwrap();
     app.command(json!({"command":"open", "path":song}));
-    app.command(json!({"command":"viewport", "width":1500, "height":1050}));
-    app.click("Window");
-    app.click("Device browser");
-    app.click("Samples");
-    let before = app.click("Friendly shaker");
+    open_samples(&mut app);
+    app.click("Friendly shaker");
+    // Selection analysis decodes into a temporary WAV in the same scratch directory.
+    let before = common::wait_until(&mut app, |state| {
+        state["library"]["visual_analysis"]["state"] == "ready"
+    });
     let managed = before["project"]["samples"][0]["path"].as_str().unwrap();
     assert_ne!(
         managed,
