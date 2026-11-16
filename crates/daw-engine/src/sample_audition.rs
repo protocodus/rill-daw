@@ -87,19 +87,15 @@ impl Shared {
         // Stale frames are discarded by the sole consumer before every read.
         self.queue.discard_before(epoch);
         let mut output = [0.0; 2];
-        if self.active.load(Ordering::Acquire) == epoch {
-            if let Some((sample, final_frame, generation)) = self.queue.pop_generation(epoch) {
-                if generation == epoch {
-                    output = sample;
-                    if final_frame > 0.0 {
-                        let _ = self.active.compare_exchange(
-                            epoch,
-                            0,
-                            Ordering::AcqRel,
-                            Ordering::Relaxed,
-                        );
-                    }
-                }
+        if self.active.load(Ordering::Acquire) == epoch
+            && let Some((sample, final_frame, generation)) = self.queue.pop_generation(epoch)
+            && generation == epoch
+        {
+            output = sample;
+            if final_frame > 0.0 {
+                let _ = self
+                    .active
+                    .compare_exchange(epoch, 0, Ordering::AcqRel, Ordering::Relaxed);
             }
         }
         let remaining = self.fade_left.load(Ordering::Relaxed);
@@ -151,21 +147,21 @@ impl Worker {
 
     /// Runs even when the song's queue is full or its transport is paused.
     pub(super) fn fill(&mut self, shared: &Shared) {
-        if let Ok(mut command) = shared.command.try_lock() {
-            if let Some((epoch, sample)) = command.take() {
-                self.playing = sample
-                    .filter(|_| shared.active.load(Ordering::Acquire) == epoch)
-                    .map(|sample| {
-                        let step = f64::from(sample.sample_rate()) / f64::from(self.sample_rate);
-                        Playing {
-                            sample,
-                            epoch,
-                            position: 0.0,
-                            step,
-                            reader: Step::new(step as f32),
-                        }
-                    });
-            }
+        if let Ok(mut command) = shared.command.try_lock()
+            && let Some((epoch, sample)) = command.take()
+        {
+            self.playing = sample
+                .filter(|_| shared.active.load(Ordering::Acquire) == epoch)
+                .map(|sample| {
+                    let step = f64::from(sample.sample_rate()) / f64::from(self.sample_rate);
+                    Playing {
+                        sample,
+                        epoch,
+                        position: 0.0,
+                        step,
+                        reader: Step::new(step as f32),
+                    }
+                });
         }
         if self
             .playing

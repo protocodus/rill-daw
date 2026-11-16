@@ -987,28 +987,26 @@ pub(crate) fn sample(
                 ui,
                 summary.is_some(),
                 summary.as_ref().is_some_and(|s| s.audible_region.is_some()),
+            ) && !edit_audible_region(
+                descriptor,
+                host,
+                &summary,
+                [START, END, REVERSE],
+                bounds,
+                action,
             ) {
-                if !edit_audible_region(
-                    descriptor,
-                    host,
-                    &summary,
-                    [START, END, REVERSE],
-                    bounds,
-                    action,
-                ) {
-                    request = if action == daw_ui::SampleAction::Export {
-                        let start = source_position(bounds, share(START, host));
-                        let end = source_position(bounds, share(END, host));
-                        Some(SampleRequest::ExportRegion {
-                            start: start.min(end),
-                            end: start.max(end),
-                            reverse: bounds.2 ^ (host.value(REVERSE) >= 0.5),
-                            gain_db: sample_gain(player.as_ref()),
-                        })
-                    } else {
-                        sample_request(action)
-                    };
-                }
+                request = if action == daw_ui::SampleAction::Export {
+                    let start = source_position(bounds, share(START, host));
+                    let end = source_position(bounds, share(END, host));
+                    Some(SampleRequest::ExportRegion {
+                        start: start.min(end),
+                        end: start.max(end),
+                        reverse: bounds.2 ^ (host.value(REVERSE) >= 0.5),
+                        gain_db: sample_gain(player.as_ref()),
+                    })
+                } else {
+                    sample_request(action)
+                };
             }
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 daw_ui::sample_identity(
@@ -1349,29 +1347,27 @@ pub(crate) fn drums(
                     ui,
                     summary.is_some(),
                     summary.is_some_and(|s| s.audible_region.is_some()),
+                ) && !edit_audible_region(
+                    descriptor,
+                    host,
+                    &summaries[pad],
+                    [ids(START), ids(END), ids(REVERSE)],
+                    bounds,
+                    action,
                 ) {
-                    if !edit_audible_region(
-                        descriptor,
-                        host,
-                        &summaries[pad],
-                        [ids(START), ids(END), ids(REVERSE)],
-                        bounds,
-                        action,
-                    ) {
-                        let next = if action == daw_ui::SampleAction::Export {
-                            let start = source_position(bounds, settings.pads[pad].start);
-                            let end = source_position(bounds, settings.pads[pad].end);
-                            Some(SampleRequest::ExportRegion {
-                                start: start.min(end),
-                                end: start.max(end),
-                                reverse: bounds.2 ^ settings.pads[pad].reverse,
-                                gain_db: sample_gain(players[pad].as_ref()),
-                            })
-                        } else {
-                            sample_request(action)
-                        };
-                        request = next.map(|request| (sample_slot, request));
-                    }
+                    let next = if action == daw_ui::SampleAction::Export {
+                        let start = source_position(bounds, settings.pads[pad].start);
+                        let end = source_position(bounds, settings.pads[pad].end);
+                        Some(SampleRequest::ExportRegion {
+                            start: start.min(end),
+                            end: start.max(end),
+                            reverse: bounds.2 ^ settings.pads[pad].reverse,
+                            gain_db: sample_gain(players[pad].as_ref()),
+                        })
+                    } else {
+                        sample_request(action)
+                    };
+                    request = next.map(|request| (sample_slot, request));
                 }
                 ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                     daw_ui::sample_identity(

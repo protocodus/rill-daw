@@ -86,7 +86,7 @@ enum ImportDestination {
         track: u64,
         slot: u32,
         guard: SampleImportGuard,
-        player: Option<PlayerImport>,
+        player: Option<Box<PlayerImport>>,
     },
     ProjectSamples,
 }
@@ -694,7 +694,7 @@ impl DawApp {
                     track,
                     slot,
                     guard,
-                    player,
+                    player: player.map(Box::new),
                 },
             ),
             Err(error) => {
@@ -1123,7 +1123,7 @@ impl DawApp {
                     *guard == SampleImportGuard::capture(instrument, *slot)?,
                     "Sample destination changed while importing; the recording was not loaded"
                 );
-                self.commit_sample_import(*track, *slot, player.as_ref(), batch)?;
+                self.commit_sample_import(*track, *slot, player.as_deref(), batch)?;
                 return Ok(receipt);
             }
             ImportDestination::ProjectSamples => {

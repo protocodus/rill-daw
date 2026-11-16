@@ -327,7 +327,7 @@ fn check_control(app: &mut Harness, name: &str, width: i32, canvas_top: f64) -> 
     );
     let gap = text[0] - icon[2];
     assert!(
-        gap >= 2.0 && gap <= 8.0,
+        (2.0..=8.0).contains(&gap),
         "{name} icon stays close to its label: gap {gap}"
     );
     let vertical = (hit[3] - hit[1] - (text[3] - text[1])) * 0.5;

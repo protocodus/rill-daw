@@ -576,16 +576,26 @@ fn track_context_menu_compacts_its_row_while_keeping_the_clip_visible() {
     harness.full_pointer(header, PointerButton::Secondary, true);
     harness.full_pointer(header, PointerButton::Secondary, false);
     let output = harness.settle_full();
-    let collapse = text_position(&output, "Collapse", 0.0) + Vec2::new(12.0, 5.0);
-    harness.full_pointer(collapse, PointerButton::Primary, true);
-    harness.full_pointer(collapse, PointerButton::Primary, false);
+    let collapse = text_position(&output, "Collapse track", 0.0) + Vec2::new(12.0, 5.0);
+    harness.full_click(collapse);
     let output = harness.settle_full();
     assert!(harness.app.project.track(first).unwrap().collapsed);
     assert!(
         text_position(&output, "After", 0.0).y < old_y,
         "Compacting must reduce the row height while retaining its controls"
     );
-    assert!(has_text(&output, "Pattern"));
+    let overview = harness.ctx.data(|data| {
+        let timeline = data
+            .get_temp::<serde_json::Value>(egui::Id::new("timeline_diagnostics"))
+            .unwrap();
+        let clip = &timeline["clips"][0];
+        assert_eq!(clip["id"], harness.app.project.tracks[0].clips[0].id);
+        rect_from_diagnostics(&clip["overview"])
+    });
+    assert!(output.shapes.iter().any(|shape| {
+        shape.clip_rect.intersects(overview)
+            && matches!(&shape.shape, egui::epaint::Shape::Rect(painted) if painted.rect == overview)
+    }), "The clip must remain visible as a span in its collapsed track");
 }
 
 #[test]
@@ -1195,7 +1205,10 @@ fn detaching_a_midi_instance_keeps_audio_equivalent_and_does_not_rebuild_graph()
     let (mut harness, track, clips) = linked_midi_harness(1.0);
     let before = harness.app.project.clone();
     let revision = harness.app.revision;
-    harness.menu("Edit", "Make independent");
+    let output = harness.menu("Edit", "Make independent");
+    assert_eq!(harness.app.project, before);
+    let disconnect = text_position(&output, "Apply and disconnect", 0.0) + Vec2::new(8.0, 8.0);
+    harness.full_click(disconnect);
     assert!(
         harness
             .app

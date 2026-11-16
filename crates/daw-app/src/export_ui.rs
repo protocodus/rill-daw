@@ -345,10 +345,9 @@ impl DawApp {
             .export_run
             .as_ref()
             .and_then(|run| run.request.managed.as_ref())
+            && !asset.retained.load(Ordering::Acquire)
         {
-            if !asset.retained.load(Ordering::Acquire) {
-                let _ = std::fs::remove_file(&asset.path);
-            }
+            let _ = std::fs::remove_file(&asset.path);
         }
     }
 

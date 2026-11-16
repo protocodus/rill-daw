@@ -272,7 +272,7 @@ fn zoomed_arranger_positions_distant_events_on_the_ruler_time_axis() {
     let mut app = Harness::new();
     let mut project = Project::new();
     let track = project.add_midi_track("Long arrangement");
-    let start = 900_000.28125;
+    let start = 900_000.281_25;
     project.track_mut(track).unwrap().clips.push(Clip::midi(
         "Off-grid attack",
         start,

@@ -1387,7 +1387,7 @@ fn response(
             if node.enable.is_none() && node.menu.is_none() {
                 continue;
             }
-            daw_ui::context_menu(&hit, |ui| {
+            daw_ui::context_menu(hit, |ui| {
                 if let Some(id) = node.enable {
                     let label = if values(id) >= 0.5 {
                         "Disable"

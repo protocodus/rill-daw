@@ -585,16 +585,15 @@ fn node_inspector(
         if index != previous {
             node.kind = group_kind(index, into_children(node.kind.clone()));
         }
-        if let PlayerKind::Velocity { children } = &mut node.kind {
-            if crate::button(ui, "Distribute velocities")
+        if let PlayerKind::Velocity { children } = &mut node.kind
+            && crate::button(ui, "Distribute velocities")
                 .on_hover_text("Divide 1–127 evenly between child players")
                 .clicked()
-            {
-                let count = children.len().max(1);
-                for (index, child) in children.iter_mut().enumerate() {
-                    child.min = (1 + index * 127 / count) as u8;
-                    child.max = ((index + 1) * 127 / count).max(usize::from(child.min)) as u8;
-                }
+        {
+            let count = children.len().max(1);
+            for (index, child) in children.iter_mut().enumerate() {
+                child.min = (1 + index * 127 / count) as u8;
+                child.max = ((index + 1) * 127 / count).max(usize::from(child.min)) as u8;
             }
         }
         crate::text::note(

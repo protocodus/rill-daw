@@ -842,10 +842,10 @@ impl DawApp {
     /// Audition and metadata decorate one cached row without rebuilding or
     /// cloning the catalog. The virtual list borrows the cached result slice.
     fn update_sample_row_status(&mut self) {
-        if let Some(index) = self.sample_browser.audition_index.take() {
-            if let Some(row) = self.sample_browser.results.get_mut(index) {
-                row.audition = SampleAuditionState::Idle;
-            }
+        if let Some(index) = self.sample_browser.audition_index.take()
+            && let Some(row) = self.sample_browser.results.get_mut(index)
+        {
+            row.audition = SampleAuditionState::Idle;
         }
         let Some(id) = self.sample_browser.selected.as_deref() else {
             return;
@@ -1712,10 +1712,9 @@ impl DawApp {
             self.sample_browser.destination &= open;
             if !self.sample_browser.destination
                 && let Some(original) = self.sample_browser.destination_original.take()
+                && !accepted
             {
-                if !accepted {
-                    self.sample_browser.target = original;
-                }
+                self.sample_browser.target = original;
             }
             if load
                 && let Some(source) = self

@@ -557,15 +557,15 @@ impl BrowserPanes {
             egui::Sense::hover(),
         );
         let mut edges = [rect.left(), rect.right()];
-        for i in 0..2 {
+        for (i, center_edge) in edges.iter_mut().enumerate() {
             let width = self.sides[i];
             if width <= 0.0 {
                 continue;
             }
             let sign = if i == 0 { 1.0 } else { -1.0 };
-            let edge = edges[i] + sign * width;
+            let edge = *center_edge + sign * width;
             let gap = tokens::SPACE_MD;
-            edges[i] = edge + sign * gap;
+            *center_edge = edge + sign * gap;
             let handle = egui::Rect::from_center_size(
                 egui::pos2(edge + sign * gap * 0.5, rect.center().y),
                 egui::vec2(gap, height),

@@ -661,14 +661,14 @@ impl Drums {
                 hits += 1;
                 voice_control(voice, &p, &self.samples, rate, sweep, false);
                 activity = activity.max(voice.level());
-                if newest.is_none_or(|(age, _)| voice.age > age) {
-                    if let Some(playing) = voice.layers.iter().find(|layer| layer.active) {
-                        let frames = self.samples[playing.sample.slot as usize]
-                            .as_ref()
-                            .map_or(1, |s| s.frames());
-                        let at = playing.playhead.position(&playing.region) / frames.max(1) as f64;
-                        newest = Some((voice.age, at as f32));
-                    }
+                if newest.is_none_or(|(age, _)| voice.age > age)
+                    && let Some(playing) = voice.layers.iter().find(|layer| layer.active)
+                {
+                    let frames = self.samples[playing.sample.slot as usize]
+                        .as_ref()
+                        .map_or(1, |s| s.frames());
+                    let at = playing.playhead.position(&playing.region) / frames.max(1) as f64;
+                    newest = Some((voice.age, at as f32));
                 }
             }
             sounding += hits;

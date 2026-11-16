@@ -500,10 +500,11 @@ impl DawApp {
                     let ids: Vec<_> = std::iter::once(anchor.id).chain(self.project.track(track_id).into_iter().flat_map(|track| &track.clips).filter(|clip| clip.id != anchor.id && !clip.is_take_source() && clip.take_group().is_none() && clip.start < anchor.end() && clip.end() > anchor.start).map(|clip| clip.id)).collect();
                     if ui.add_enabled(!busy && ids.len() > 1, daw_ui::button_widget("Group overlapping clips"))
                         .on_hover_text("Collect overlapping clips on this track as alternate takes for one comp")
-                        .on_disabled_hover_text(if busy { "Wait for the current take import to finish" } else { "This track needs at least two overlapping audio clips" }).clicked() {
-                        if let Err(error) = self.group_existing_audio_takes(track_id, ids) {
-                            self.message(Err(error), "");
-                        }
+                        .on_disabled_hover_text(if busy { "Wait for the current take import to finish" } else { "This track needs at least two overlapping audio clips" })
+                        .clicked()
+                        && let Err(error) = self.group_existing_audio_takes(track_id, ids)
+                    {
+                        self.message(Err(error), "");
                     }
                 }
                 if let Some(group) = group

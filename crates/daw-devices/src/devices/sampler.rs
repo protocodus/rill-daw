@@ -1178,7 +1178,7 @@ impl Sampler {
             };
             return;
         }
-        if !voice.amp.is_active() || !(legato && overlapping) {
+        if !(voice.amp.is_active() && legato && overlapping) {
             // Mono retriggers the recording; Legato does only for a new phrase.
             self.start(
                 0,

@@ -34,23 +34,23 @@ fn every_workspace_fits_and_keeps_output_and_keyboard_fixed() {
                             ));
                         }
                         let current = panel.state.output_rect.expect("persistent output");
-                        if let Some(previous) = output {
-                            if previous != current {
-                                failures.push(format!(
-                                    "{} output moved on page {page}: {previous:?} -> {current:?}",
-                                    descriptor.id
-                                ));
-                            }
+                        if let Some(previous) = output
+                            && previous != current
+                        {
+                            failures.push(format!(
+                                "{} output moved on page {page}: {previous:?} -> {current:?}",
+                                descriptor.id
+                            ));
                         }
                         output = Some(current);
                         if let Some(current) = panel.state.performance_rects {
-                            if let Some(previous) = keyboard {
-                                if previous != current {
-                                    failures.push(format!(
-                                        "{} keyboard moved on page {page}",
-                                        descriptor.id
-                                    ));
-                                }
+                            if let Some(previous) = keyboard
+                                && previous != current
+                            {
+                                failures.push(format!(
+                                    "{} keyboard moved on page {page}",
+                                    descriptor.id
+                                ));
                             }
                             keyboard = Some(current);
                         }
