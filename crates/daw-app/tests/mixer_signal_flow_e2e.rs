@@ -82,11 +82,6 @@ fn mixer_measures_after_processing_and_exposes_full_size_mute_solo_controls() {
         let baseline = app.click("Mixer");
         let state = app.command(json!({"command":"inspect", "paint":true}));
         assert_eq!(state["mixer"]["compact"], height == 900);
-        let control_height = if height == 900 {
-            daw_ui::tokens::COMPACT_HEIGHT
-        } else {
-            daw_ui::tokens::CONTROL_HEIGHT
-        };
         unchanged(&state, &baseline);
         for id in [source, other, bus] {
             let channel = channel(&state, id);
@@ -120,7 +115,8 @@ fn mixer_measures_after_processing_and_exposes_full_size_mute_solo_controls() {
                 let rect = &channel[control];
                 assert!(edge(rect, "max", 0) - edge(rect, "min", 0) >= 60.0);
                 assert!(
-                    edge(rect, "max", 1) - edge(rect, "min", 1) >= f64::from(control_height) - 0.1
+                    edge(rect, "max", 1) - edge(rect, "min", 1)
+                        >= f64::from(daw_ui::MIXER_SWITCH_HEIGHT) - 0.1
                 );
             }
         }

@@ -83,7 +83,7 @@ pub fn device_summary_row(ui: &mut Ui, name: &str, metadata: &str) -> Response {
 }
 
 /// Compact direct-access device row for mixer strips and other narrow views.
-/// Custom identity is primary; the manufacturer's model remains recognizable.
+/// Custom identity is primary; the product stays recognizable beneath it.
 /// The lit lamp at the leading edge bypasses the device without opening it,
 /// and an optional curve shows what it does at a glance.
 pub fn device_identity_button(
@@ -163,20 +163,29 @@ pub fn device_identity_button(
         );
         text.min.x = image.right() + tokens::SPACE_SM;
     }
-    crate::text::paint_single_line(
-        &painter,
-        Rect::from_min_max(text.min, egui::pos2(text.right(), text.top() + 19.0)),
-        egui::FontId::proportional(tokens::FONT_CAPTION),
-        if *enabled { colors.text } else { colors.muted },
-        device.name,
-    );
-    crate::text::paint_single_line(
-        &painter,
-        Rect::from_min_max(egui::pos2(text.left(), text.top() + 19.0), text.max),
-        egui::FontId::proportional(tokens::FONT_CANVAS),
-        colors.muted,
-        device.model,
-    );
+    // The producer stays in the tooltip; the row names only the product, and
+    // only when the custom name differs from it.
+    let product = device.model.rsplit(" · ").next().unwrap_or(device.model);
+    let name_color = if *enabled { colors.text } else { colors.muted };
+    let caption = egui::FontId::proportional(tokens::FONT_CAPTION);
+    if product == device.name {
+        crate::text::paint_single_line(&painter, text, caption, name_color, device.name);
+    } else {
+        crate::text::paint_single_line(
+            &painter,
+            Rect::from_min_max(text.min, egui::pos2(text.right(), text.top() + 19.0)),
+            caption,
+            name_color,
+            device.name,
+        );
+        crate::text::paint_single_line(
+            &painter,
+            Rect::from_min_max(egui::pos2(text.left(), text.top() + 19.0), text.max),
+            egui::FontId::proportional(tokens::FONT_CANVAS),
+            colors.muted,
+            product,
+        );
+    }
     let state = *enabled;
     power.widget_info(|| {
         egui::WidgetInfo::selected(

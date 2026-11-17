@@ -153,7 +153,7 @@ fn master_and_channel_meters_match_actual_bus_send_and_muted_mix_pcm() {
         near(channel(&paused, id), [0.0, 0.0]);
     }
     app.click("Stop");
-    app.command(json!({"command":"click", "label":"Mute", "occurrence":0}));
+    app.command(json!({"command":"click", "label":"M", "occurrence":0}));
     app.click("Play");
     wait_for_engine(&mut app);
     let state = pump(&mut app, 512);

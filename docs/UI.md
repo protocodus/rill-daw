@@ -973,8 +973,10 @@ sends. The height calculation reserves two 34-point routing lanes (main output
 and one send) plus space for an ordinary notice. Faders retain their usable
 minimum height; shorter windows and additional lanes remain accessible by
 scrolling. Notices and added routing lanes keep existing controls in place.
-`mixer_mute_solo` gives the two independent switches equal-width, fill-only
-buttons. Mute uses amber `Palette::mute` and Solo uses green `Palette::solo` even
+`mixer_pan_row` puts compact **M** and **S** switches (`MIXER_SWITCH_HEIGHT`,
+21 points, half the strip each; accessible names Mute and Solo) under the pan
+rail; Master keeps only **M**. `mixer_mute_solo` gives the two independent
+switches equal-width, fill-only buttons where there is room for the full words. Mute uses amber `Palette::mute` and Solo uses green `Palette::solo` even
 while idle; active switches use solid operation-color fills and contrasting text.
 
 The toolbar places **Add send…** beside **Add bus**. Its send menu uses the

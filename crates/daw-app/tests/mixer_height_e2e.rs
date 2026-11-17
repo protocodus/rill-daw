@@ -146,13 +146,13 @@ fn assert_layout(state: &Value, height: f64) -> f64 {
     }
     for (label, minimum_height) in [
         ("C", 12.0),
-        ("Mute", f64::from(daw_ui::tokens::FONT_CAPTION)),
-        ("Solo", f64::from(daw_ui::tokens::FONT_CAPTION)),
+        ("M", f64::from(daw_ui::tokens::FONT_CAPTION)),
+        ("S", f64::from(daw_ui::tokens::FONT_CAPTION)),
         ("Automation", 17.0),
     ] {
         let controls = labels(state, label);
         // Master has its own pan, mute and automation controls, but no Solo.
-        let expected = channels.len() + usize::from(label != "Solo");
+        let expected = channels.len() + usize::from(label != "S");
         assert_eq!(
             controls.len(),
             expected,

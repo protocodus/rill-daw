@@ -366,7 +366,7 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
         "audio channels have no instrument editor"
     );
     app.key("Escape");
-    let muted = app.command(json!({"command":"click","label":"Mute","occurrence":1}));
+    let muted = app.command(json!({"command":"click","label":"M","occurrence":1}));
     assert_eq!(muted["project"]["tracks"][1]["mute"], true);
     assert_eq!(muted["project"]["tracks"][0]["mute"], false);
     let undone = menu(&mut app, "Edit", "Undo");

@@ -431,7 +431,7 @@ impl DawApp {
         } else {
             0.0
         };
-        let pan_row_height = daw_ui::tokens::COMPACT_HEIGHT + spacing + control;
+        let pan_row_height = daw_ui::MIXER_PAN_ROW_HEIGHT;
         let send_area_height = 2.0 * daw_ui::MIXER_SEND_ROW_HEIGHT + spacing;
         // The same identity band sits above every processing/fader row. Bus
         // names remain lower beneath their role icon, without changing gain

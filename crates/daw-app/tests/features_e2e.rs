@@ -345,10 +345,10 @@ fn effects_routing_and_mixer_controls_update_the_same_channel_graph() {
             .values()
             .all(|open| open == false)
     );
-    let state = app.click("Mute");
+    let state = app.click("M");
     assert_eq!(state["project"]["tracks"][0]["mute"], true);
     assert_eq!(state["project"]["tracks"][1]["mute"], false);
-    let state = app.click("Solo");
+    let state = app.click("S");
     assert_eq!(state["project"]["tracks"][0]["solo"], true);
     app.quit();
 }

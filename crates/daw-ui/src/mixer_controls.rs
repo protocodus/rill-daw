@@ -16,9 +16,6 @@ pub const MIXER_FADER_UNIT_WIDTH: f32 =
 pub const MIXER_FADER_INSET: f32 = crate::MIXER_CAP_SIZE.y * 0.5;
 /// Width reserved for the pan value ("L100") beside the pan rail.
 pub const MIXER_PAN_CAPTION_WIDTH: f32 = crate::tokens::SPACE_XL;
-/// The pan rail row above the Mute and Solo row.
-pub const MIXER_PAN_ROW_HEIGHT: f32 =
-    crate::tokens::COMPACT_HEIGHT + crate::MIXER_ROW_GAP + crate::tokens::CONTROL_HEIGHT;
 /// Pan values this close to center snap to it while dragging: the center detent.
 const PAN_DETENT: f32 = 0.03;
 
@@ -425,7 +422,7 @@ pub struct MixerPanRowResponse {
     pub solo: Response,
 }
 
-/// The pan rail with its value, then Mute and Solo underneath.
+/// The pan rail with its value, then compact M and S switches underneath.
 pub fn mixer_pan_row(
     ui: &mut Ui,
     pan: &mut f32,
@@ -433,21 +430,52 @@ pub fn mixer_pan_row(
     solo: &mut bool,
     width: f32,
 ) -> MixerPanRowResponse {
-    let height =
-        crate::tokens::COMPACT_HEIGHT + crate::MIXER_ROW_GAP + crate::mixer_control_height(ui);
+    pan_row(ui, pan, mute, Some(solo), width)
+}
+
+/// Height of the M and S switches under the pan rail.
+pub const MIXER_SWITCH_HEIGHT: f32 = crate::tokens::COMPACT_HEIGHT;
+
+/// Height of [`mixer_pan_row`] and [`mixer_master_pan_row`].
+pub const MIXER_PAN_ROW_HEIGHT: f32 =
+    crate::tokens::COMPACT_HEIGHT + crate::MIXER_ROW_GAP + MIXER_SWITCH_HEIGHT;
+
+fn pan_row(
+    ui: &mut Ui,
+    pan: &mut f32,
+    mute: &mut bool,
+    solo: Option<&mut bool>,
+    width: f32,
+) -> MixerPanRowResponse {
     ui.allocate_ui_with_layout(
-        Vec2::new(width, height),
+        Vec2::new(width, MIXER_PAN_ROW_HEIGHT),
         egui::Layout::top_down(egui::Align::Min),
         |ui| {
-            ui.set_min_size(Vec2::new(width, height));
+            ui.set_min_size(Vec2::new(width, MIXER_PAN_ROW_HEIGHT));
             ui.spacing_mut().item_spacing.y = crate::MIXER_ROW_GAP;
             let pan = mixer_pan(ui, pan, width);
-            let switches = mixer_mute_solo(ui, mute, solo, width);
-            MixerPanRowResponse {
-                pan,
-                mute: switches.mute,
-                solo: switches.solo,
-            }
+            let (mute, solo) = ui
+                .allocate_ui_with_layout(
+                    Vec2::new(width, MIXER_SWITCH_HEIGHT),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        let gap = crate::tokens::SPACE_XS;
+                        ui.set_max_height(MIXER_SWITCH_HEIGHT);
+                        ui.spacing_mut().item_spacing.x = gap;
+                        ui.spacing_mut().interact_size.y = MIXER_SWITCH_HEIGHT;
+                        ui.spacing_mut().button_padding = Vec2::ZERO;
+                        let size = Vec2::new((width - gap) * 0.5, MIXER_SWITCH_HEIGHT);
+                        let mute = mixer_switch(ui, mute, "M", size.x, size.y, true);
+                        // Master keeps the solo column empty so its switch lines up with the channels'.
+                        let solo = match solo {
+                            Some(solo) => mixer_switch(ui, solo, "S", size.x, size.y, false),
+                            None => ui.allocate_exact_size(size, egui::Sense::hover()).1,
+                        };
+                        (mute, solo)
+                    },
+                )
+                .inner;
+            MixerPanRowResponse { pan, mute, solo }
         },
     )
     .inner
@@ -471,8 +499,22 @@ pub fn mixer_mute_solo(
             ui.spacing_mut().item_spacing.x = gap;
             ui.spacing_mut().button_padding.x = crate::tokens::SPACE_XS;
             MixerMuteSoloResponse {
-                mute: mixer_switch(ui, mute, "Mute", button_width, true),
-                solo: mixer_switch(ui, solo, "Solo", button_width, false),
+                mute: mixer_switch(
+                    ui,
+                    mute,
+                    "Mute",
+                    button_width,
+                    crate::mixer_control_height(ui),
+                    true,
+                ),
+                solo: mixer_switch(
+                    ui,
+                    solo,
+                    "Solo",
+                    button_width,
+                    crate::mixer_control_height(ui),
+                    false,
+                ),
             }
         },
     )
@@ -496,8 +538,8 @@ pub fn mixer_folded_mute_solo(
             ui.spacing_mut().item_spacing.x = gap;
             ui.spacing_mut().button_padding.x = 2.0;
             MixerMuteSoloResponse {
-                mute: mixer_switch(ui, mute, "M", (width - gap) * 0.5, true),
-                solo: mixer_switch(ui, solo, "S", (width - gap) * 0.5, false),
+                mute: mixer_switch(ui, mute, "M", (width - gap) * 0.5, height, true),
+                solo: mixer_switch(ui, solo, "S", (width - gap) * 0.5, height, false),
             }
         },
     )
@@ -512,39 +554,21 @@ pub fn mixer_master_pan_row(
     mute: &mut bool,
     width: f32,
 ) -> MixerPanRowResponse {
-    let height =
-        crate::tokens::COMPACT_HEIGHT + crate::MIXER_ROW_GAP + crate::mixer_control_height(ui);
-    ui.allocate_ui_with_layout(
-        Vec2::new(width, height),
-        egui::Layout::top_down(egui::Align::Min),
-        |ui| {
-            ui.set_min_size(Vec2::new(width, height));
-            ui.spacing_mut().item_spacing.y = crate::MIXER_ROW_GAP;
-            let pan = mixer_pan(ui, pan, width);
-            let (mute, solo) = ui
-                .horizontal(|ui| {
-                    let gap = crate::tokens::SPACE_XS;
-                    ui.spacing_mut().item_spacing.x = gap;
-                    let mute = mixer_switch(ui, mute, "Mute", (width - gap) * 0.5, true);
-                    let (_, solo) = ui.allocate_exact_size(
-                        Vec2::new((width - gap) * 0.5, crate::mixer_control_height(ui)),
-                        egui::Sense::hover(),
-                    );
-                    (mute, solo)
-                })
-                .inner;
-            MixerPanRowResponse { pan, mute, solo }
-        },
-    )
-    .inner
+    pan_row(ui, pan, mute, None, width)
 }
 
-fn mixer_switch(ui: &mut Ui, value: &mut bool, label: &str, width: f32, mute: bool) -> Response {
+fn mixer_switch(
+    ui: &mut Ui,
+    value: &mut bool,
+    label: &str,
+    width: f32,
+    height: f32,
+    mute: bool,
+) -> Response {
     let colors = crate::theme::palette(ui.ctx());
     let accent = if mute { colors.mute } else { colors.solo };
     // Color identifies the operation even while idle. A solid fill and
     // contrasting label distinguish the active state without relying on hue.
-    let height = crate::mixer_control_height(ui);
     let mut response = ui.add_sized(
         Vec2::new(width, height),
         crate::IconButton::new(label)
