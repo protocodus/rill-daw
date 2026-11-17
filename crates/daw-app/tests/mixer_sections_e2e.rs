@@ -1,5 +1,6 @@
-//! Mixer sections use spacing instead of enclosing frames. Outlines belong to
-//! individual input fields, processing actions and troughs, which remain mouse-editable.
+//! Mixer sections are separated by space and a quiet band, never an enclosing
+//! frame. Outlines belong to individual input fields, processing actions and
+//! troughs, which remain mouse-editable.
 mod common;
 use common::Harness;
 use daw_core::Project;
@@ -40,8 +41,8 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
                     .collect::<Vec<_>>(),
                 ["Source", "Effects", "Volume & pan", "Output & sends"]
             );
-            // Input trim sits before the inserts; post-fader RMS statistics
-            // sit before routing. Neither belongs to an empty section gap.
+            // Input trim belongs to the input section, a full gap before the
+            // inserts; post-fader RMS statistics sit before routing.
             let source_role_space = if channel["bus"] == true {
                 0.0
             } else {
@@ -61,7 +62,7 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
                 (
                     &channel["stereo_width"],
                     &sections[1]["rect"],
-                    f64::from(daw_ui::MIXER_ROW_GAP),
+                    f64::from(daw_ui::MIXER_SECTION_GAP),
                 ),
                 (
                     &sections[1]["rect"],

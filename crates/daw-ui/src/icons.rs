@@ -71,6 +71,7 @@ pub enum Icon {
     FitSelection,
     Crossfade,
     Input,
+    Output,
     Arranger,
     Grid,
     Nudge,
@@ -779,6 +780,12 @@ impl Icon {
                 line(&[(3., 12.), (14., 12.)]);
                 line(&[(10., 8.), (14., 12.), (10., 16.)]);
                 line(&[(17., 4.), (21., 4.), (21., 20.), (17., 20.)]);
+            }
+            // Input mirrored: the signal leaves the bracket.
+            Self::Output => {
+                line(&[(7., 4.), (3., 4.), (3., 20.), (7., 20.)]);
+                line(&[(10., 12.), (21., 12.)]);
+                line(&[(17., 8.), (21., 12.), (17., 16.)]);
             }
             // The two home views: three track rows, three channel strips.
             Self::Arranger => {

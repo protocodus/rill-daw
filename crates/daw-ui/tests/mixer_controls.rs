@@ -439,7 +439,6 @@ fn channel_meter_follows_the_fader_scale_and_sanitizes_input() {
         } else {
             egui::Theme::Light
         });
-        let colors = daw_ui::theme::palette(&ctx);
         for peaks in [
             [0.0, 0.0],
             [f32::NAN, f32::INFINITY],
@@ -457,11 +456,12 @@ fn channel_meter_follows_the_fader_scale_and_sanitizes_input() {
                     assert!(shape.shape.visual_bounding_rect().is_finite());
                 }
             }
+            // Each signal is one smooth gradient mesh rising from the bottom.
             let fills: Vec<_> = output
                 .shapes
                 .iter()
                 .filter_map(|shape| match &shape.shape {
-                    egui::Shape::Rect(rect) if rect.fill == colors.guide => Some(rect.rect),
+                    egui::Shape::Mesh(mesh) => Some(mesh.calc_bounds()),
                     _ => None,
                 })
                 .collect();

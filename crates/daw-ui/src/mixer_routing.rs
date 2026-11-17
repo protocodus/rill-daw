@@ -12,7 +12,7 @@ pub fn mixer_output_button(
     destination_color: Option<Color32>,
 ) -> Response {
     let colors = theme::palette(ui.ctx());
-    crate::mixer_row(
+    crate::mixer_row_with_icon(
         ui,
         width,
         crate::mixer_control_height(ui),
@@ -20,6 +20,7 @@ pub fn mixer_output_button(
         crate::MixerRowText::Body,
         Some(destination_color.unwrap_or(colors.accent)),
         None,
+        Some(crate::Icon::Output),
     )
     .on_hover_text(format!(
         "Main output → {destination}\nAfter inserts, volume and pan · Click to choose an output or create a bus"

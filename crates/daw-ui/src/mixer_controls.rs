@@ -342,42 +342,33 @@ pub fn mixer_stereo_width(ui: &mut Ui, stereo_width: &mut f32, width: f32, name:
             ui.set_max_height(height);
             ui.spacing_mut().interact_size.y = height;
             ui.spacing_mut().item_spacing.x = crate::tokens::SPACE_XS;
-            ui.spacing_mut().slider_width =
-                (width - MIXER_PAN_CAPTION_WIDTH - crate::tokens::SPACE_XS).max(0.0);
-            let mut response = ui.add(
-                crate::slider(stereo_width, 0.0..=2.0)
-                    .mixer_style()
-                    .scale_ticks(&[(0.5, true)])
-                    .zero_reference(1.0)
-                    .clamping(SliderClamping::Always)
-                    .show_value(false)
-                    .scale_labels(false),
+            // Named in place: a bare percentage does not say what it scales.
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new("Width")
+                        .size(crate::tokens::FONT_CAPTION)
+                        .color(crate::theme::palette(ui.ctx()).muted),
+                )
+                .selectable(false),
             );
-            let pointer =
-                ui.input(|input| input.pointer.any_down() || input.pointer.any_released());
-            if response.changed()
-                && pointer
-                && *stereo_width != 1.0
-                && (*stereo_width - 1.0).abs() < PAN_DETENT
-            {
+            let knob_width = crate::inline_knob_width(ui, "200%");
+            ui.add_space((ui.available_width() - knob_width).max(0.0));
+            let mut value = f64::from(*stereo_width);
+            let mut response = ui.add(
+                crate::inline_knob("Stereo width", &mut value, 0.0..=2.0, mixer_width_caption(*stereo_width))
+                    .width(knob_width)
+                    .bipolar(),
+            );
+            if response.changed() {
+                *stereo_width = value as f32;
+                if *stereo_width != 1.0 && (*stereo_width - 1.0).abs() < PAN_DETENT {
+                    *stereo_width = 1.0;
+                }
+            }
+            if response.double_clicked() && *stereo_width != 1.0 {
                 *stereo_width = 1.0;
                 response.mark_changed();
             }
-            ui.allocate_ui_with_layout(
-                Vec2::new(MIXER_PAN_CAPTION_WIDTH, height),
-                egui::Layout::right_to_left(egui::Align::Center),
-                |ui| {
-                    ui.add(
-                        egui::Label::new(
-                            egui::RichText::new(mixer_width_caption(*stereo_width))
-                                .size(crate::tokens::FONT_CAPTION)
-                                .color(crate::theme::palette(ui.ctx()).muted),
-                        )
-                        .selectable(false)
-                        .sense(Sense::hover()),
-                    )
-                },
-            );
             let mut exact = None;
             crate::context_menu(&response, |ui| {
                 if let Some(value) = crate::value_entry_named(
@@ -402,7 +393,7 @@ pub fn mixer_stereo_width(ui: &mut Ui, stereo_width: &mut f32, width: f32, name:
             crate::hover_text(
                 response,
                 format!(
-                    "Stereo width · {} · 0% is mono, 100% unchanged, 200% doubles the side\nSnaps to 100%. Right-click for exact value entry",
+                    "Stereo width · {} · 0% is mono, 100% unchanged, 200% doubles the side\nSnaps to 100%. Double-click to reset. Right-click for exact value entry",
                     mixer_width_caption(*stereo_width)
                 ),
             )
@@ -646,6 +637,79 @@ pub(crate) fn meter_zones(colors: &crate::theme::Palette) -> [(f32, f32, egui::C
     ]
 }
 
+/// Color stops of a vertical peak meter from its silent bottom up, blending
+/// briefly across the hot and full-scale lines so the fill reads as one bar.
+pub(crate) fn meter_stops(
+    colors: &crate::theme::Palette,
+    bottom: f32,
+    hot: f32,
+    unity: f32,
+) -> [(f32, egui::Color32); 5] {
+    const BLEND: f32 = 2.0;
+    let zones = meter_zones(colors);
+    [
+        (bottom, zones[0].2),
+        (hot + BLEND, zones[0].2),
+        (hot - BLEND, zones[1].2),
+        (unity + BLEND * 0.5, zones[1].2),
+        (unity - BLEND * 0.5, zones[2].2),
+    ]
+}
+
+/// One flat meter bar: a fully rounded trough and the level from its bottom up
+/// to `level` as a single mesh whose color follows `stops` (bottom first).
+pub(crate) fn paint_meter_bar(
+    painter: &egui::Painter,
+    bar: Rect,
+    level: f32,
+    stops: &[(f32, egui::Color32)],
+    trough: egui::Color32,
+) {
+    let radius = (bar.width() * 0.5).min(2.0);
+    painter.rect_filled(bar, radius, trough);
+    // The fill starts at the first stop, silence, which may sit above the bar's end.
+    let base = stops[0].0.min(bar.bottom());
+    let top = level.clamp(bar.top(), base);
+    if top >= base - 0.5 {
+        return;
+    }
+    let color_at = |y: f32| {
+        let mut previous = stops[0];
+        for &stop in stops {
+            if y >= stop.0 {
+                let span = previous.0 - stop.0;
+                let t = if span > 0.0 {
+                    (previous.0 - y) / span
+                } else {
+                    1.0
+                };
+                return previous.1.lerp_to_gamma(stop.1, t.clamp(0.0, 1.0));
+            }
+            previous = stop;
+        }
+        previous.1
+    };
+    let mut rows: Vec<f32> = stops
+        .iter()
+        .map(|stop| stop.0)
+        .filter(|y| *y > top && *y < base)
+        .chain([base, top])
+        .collect();
+    rows.sort_by(|a, b| b.total_cmp(a));
+    let mut mesh = egui::Mesh::default();
+    for (index, y) in rows.iter().enumerate() {
+        let color = color_at(*y);
+        mesh.colored_vertex(Pos2::new(bar.left(), *y), color);
+        mesh.colored_vertex(Pos2::new(bar.right(), *y), color);
+        if index > 0 {
+            let base = 2 * index as u32;
+            mesh.add_triangle(base - 2, base - 1, base);
+            mesh.add_triangle(base - 1, base + 1, base);
+        }
+    }
+    painter.add(mesh);
+}
+
 /// Vertical stereo peak meter on the fader's scale: `inset` is the distance
 /// from the rect's ends to silence and to +3.5 dB, the fader's handle travel,
 /// so one scale serves both. Green, amber over the last 6 dB of headroom and
@@ -720,28 +784,14 @@ fn channel_meter_inner(
                 rect.min + Vec2::new(index as f32 * (bar_width + gap), 0.0),
                 Vec2::new(bar_width, rect.height()),
             );
-            // The same trough as the fader rail beside it.
-            ui.painter().rect(
+            // The same flat, rounded trough as the fader rail beside it.
+            paint_meter_bar(
+                ui.painter(),
                 egui::emath::GuiRounding::round_to_pixels(bar, ui.pixels_per_point()),
-                1.0,
-                colors.bg,
-                Stroke::new(1.0 / ui.pixels_per_point(), colors.line),
-                egui::StrokeKind::Inside,
+                y(peak),
+                &meter_stops(&colors, bottom, y(10f32.powf(METER_HOT_DB / 20.0)), y(1.0)),
+                colors.trough,
             );
-            for (from, to, color) in meter_zones(&colors) {
-                if peak <= from {
-                    break;
-                }
-                let start = if from > 0.0 { y(from) } else { bottom };
-                ui.painter().rect_filled(
-                    egui::emath::GuiRounding::round_to_pixels(
-                        Rect::from_x_y_ranges(bar.x_range(), y(peak.min(to))..=start),
-                        ui.pixels_per_point(),
-                    ),
-                    1.0,
-                    color,
-                );
-            }
             if state.hold[index] > 0.0 {
                 let hold = y(state.hold[index]);
                 ui.painter().line_segment(

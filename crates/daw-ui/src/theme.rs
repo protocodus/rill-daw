@@ -71,6 +71,11 @@ pub struct Palette {
     pub grid_bar: Color32,
     pub control_fill: Color32,
     pub control_hover: Color32,
+    /// A quiet band behind one section of a narrow column, such as a mixer
+    /// strip: darker than the column in dark themes, lighter in light ones.
+    pub section: Color32,
+    /// The recessed groove of a meter or fader, readable on `section`.
+    pub trough: Color32,
     pub piano_black: Color32,
     pub piano_white: Color32,
     pub note: Color32,
@@ -115,6 +120,8 @@ pub const DARK: Palette = Palette {
     grid_bar: rgb(65, 69, 77),
     control_fill: rgb(48, 52, 59),
     control_hover: rgb(59, 64, 72),
+    section: Color32::from_rgba_premultiplied(11, 12, 14, 115),
+    trough: rgb(25, 27, 31),
     piano_black: rgb(31, 34, 39),
     piano_white: rgb(41, 44, 49),
     note: rgb(145, 153, 164),
@@ -155,6 +162,8 @@ pub const LIGHT: Palette = Palette {
     grid_bar: rgb(184, 190, 198),
     control_fill: rgb(229, 231, 234),
     control_hover: rgb(215, 219, 224),
+    section: Color32::from_rgba_premultiplied(140, 140, 140, 140),
+    trough: rgb(216, 220, 224),
     piano_black: rgb(235, 237, 240),
     piano_white: rgb(245, 247, 250),
     note: rgb(105, 115, 129),

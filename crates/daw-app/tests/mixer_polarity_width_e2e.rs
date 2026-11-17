@@ -1,4 +1,4 @@
-//! The mixer strip's polarity switch and stereo width rail edit the channel,
+//! The mixer strip's polarity switch and stereo width knob edit the channel,
 //! undo as one step each and reach the exported audio.
 mod common;
 use common::Harness;

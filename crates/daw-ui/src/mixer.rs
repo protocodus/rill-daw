@@ -140,6 +140,21 @@ pub fn mixer_row(
     rail: Option<Color32>,
     trailing: Option<(&str, Color32)>,
 ) -> Response {
+    mixer_row_with_icon(ui, width, height, label, style, rail, trailing, None)
+}
+
+/// [`mixer_row`] with a small leading icon, such as the input and output arrows.
+#[allow(clippy::too_many_arguments)]
+pub fn mixer_row_with_icon(
+    ui: &mut Ui,
+    width: f32,
+    height: f32,
+    label: &str,
+    style: MixerRowText,
+    rail: Option<Color32>,
+    trailing: Option<(&str, Color32)>,
+    icon: Option<crate::Icon>,
+) -> Response {
     let (rect, response) = ui.allocate_exact_size(Vec2::new(width, height), Sense::click());
     if ui.is_rect_visible(rect) {
         let colors = crate::theme::palette(ui.ctx());
@@ -202,7 +217,10 @@ pub fn mixer_row(
             );
             right -= crate::tokens::SPACE_XS;
         }
-        let left = rect.left() + crate::tokens::SPACE_SM;
+        let mut left = rect.left() + crate::tokens::SPACE_SM;
+        if let Some(icon) = icon {
+            left = paint_leading_icon(ui, icon, left, rect.center().y);
+        }
         let galley = one_line(ui, label, font, color, right - left);
         ui.painter().galley(
             Pos2::new(left, rect.center().y - galley.size().y * 0.5),
@@ -221,6 +239,19 @@ pub enum MixerNamePlateKind {
     Track,
     Bus,
     Master,
+}
+
+/// Size of the input and output arrows that lead mixer rows.
+const MIXER_ROW_ICON: f32 = crate::tokens::SPACE_MD;
+
+/// Paints a muted row icon at `left`, centered on `center_y`; returns where the text starts.
+fn paint_leading_icon(ui: &Ui, icon: crate::Icon, left: f32, center_y: f32) -> f32 {
+    let rect = Rect::from_min_size(
+        Pos2::new(left, center_y - MIXER_ROW_ICON * 0.5),
+        Vec2::splat(MIXER_ROW_ICON),
+    );
+    icon.paint(ui.painter(), rect, crate::theme::palette(ui.ctx()).muted);
+    rect.right() + crate::tokens::SPACE_XS
 }
 
 fn one_line(
@@ -388,13 +419,18 @@ pub fn mixer_insert_slot(ui: &mut Ui, width: f32) -> Response {
     )
 }
 
-/// The source row's caption: the kind plus the actual source, e.g. "Audio · In 1".
+/// The source row's caption after an input arrow: the kind plus the actual source, e.g. "Audio · In 1".
 pub fn mixer_source_caption(ui: &mut Ui, text: &str, width: f32) -> Response {
     let (rect, response) =
         ui.allocate_exact_size(Vec2::new(width, mixer_control_height(ui)), Sense::hover());
     if ui.is_rect_visible(rect) {
         let color = crate::theme::palette(ui.ctx()).muted;
-        let left = rect.left() + crate::tokens::SPACE_SM;
+        let left = paint_leading_icon(
+            ui,
+            crate::Icon::Input,
+            rect.left() + crate::tokens::SPACE_SM,
+            rect.center().y,
+        );
         let galley = one_line(
             ui,
             text,
@@ -761,5 +797,34 @@ impl MixerSection {
             Self::Level => "Volume & pan",
             Self::Output => "Output & sends",
         }
+    }
+}
+
+/// Quiet background bands behind a strip's sections (input, effects, pan,
+/// level, output, sends). Space separates them first; the band only groups
+/// what belongs together, without frames or rules. Reserve before the
+/// controls so the bands paint beneath them.
+pub struct MixerSectionBands(egui::layers::ShapeIdx);
+
+impl MixerSectionBands {
+    pub fn reserve(ui: &Ui) -> Self {
+        Self(ui.painter().add(egui::Shape::Noop))
+    }
+
+    pub fn paint(self, ui: &Ui, sections: &[Rect]) {
+        let colors = crate::theme::palette(ui.ctx());
+        let fill = colors.section;
+        let shapes = sections
+            .iter()
+            .filter(|rect| rect.is_positive())
+            .map(|rect| {
+                let band = egui::emath::GuiRounding::round_to_pixels(
+                    rect.expand2(Vec2::new(crate::tokens::SPACE_XS, 3.0)),
+                    ui.pixels_per_point(),
+                );
+                egui::Shape::rect_filled(band, crate::tokens::RADIUS, fill)
+            })
+            .collect();
+        ui.painter().set(self.0, egui::Shape::Vec(shapes));
     }
 }

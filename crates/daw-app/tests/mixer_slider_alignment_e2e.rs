@@ -72,7 +72,7 @@ fn actual_fader_index(state: &Value, control: &Value, density: f64, unity: bool)
     indexes[0]
 }
 
-fn assert_meter_alignment(state: &Value, id: u64, density: f64, unity: bool) {
+fn assert_meter_alignment(state: &Value, id: u64, density: f64, unity: bool, dark: bool) {
     let control = channel(state, id);
     let gain = number(&state["project"]["tracks"][0]["gain"]);
     let meter = &control["meter"];
@@ -110,6 +110,12 @@ fn assert_meter_alignment(state: &Value, id: u64, density: f64, unity: bool) {
     }
 
     // Read all three narrow troughs from actual submitted painter rectangles.
+    // Troughs are flat, so the shared trough color tells them from level fills.
+    let trough = if dark {
+        daw_ui::theme::DARK.trough
+    } else {
+        daw_ui::theme::LIGHT.trough
+    };
     // Equal outer rows prevent the cap and meter from appearing vertically
     // offset even when their independently calibrated level indices agree.
     let troughs_in = |min_x: f64, max_x: f64| -> Vec<&Value> {
@@ -124,9 +130,7 @@ fn assert_meter_alignment(state: &Value, id: u64, density: f64, unity: bool) {
                     && max[1] - min[1] > 80.0
                     && min[0] >= min_x - 0.51 / density
                     && max[0] <= max_x + 0.51 / density
-                    && number(&shape["stroke_width"]) > 0.0
-                    && number(&shape["stroke"][3]) > 0.0
-                    && number(&shape["fill"][3]) > 0.0
+                    && shape["fill"] == json!(trough.to_array())
             })
             .collect()
     };
@@ -239,7 +243,7 @@ fn rendered_signal_and_mouse_edited_fader_share_pixel_rows_at_multiple_scales() 
                 });
                 app.command(json!({"command":"pump_audio", "frames":512}));
                 let paint = painted(&mut app);
-                assert_meter_alignment(&paint, id, density, fraction == 0.75);
+                assert_meter_alignment(&paint, id, density, fraction == 0.75, dark);
                 for key in ["project", "history", "modified"] {
                     assert_eq!(
                         paint[key], edited[key],

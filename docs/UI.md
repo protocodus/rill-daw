@@ -68,6 +68,14 @@ Musical time, piano-key states, velocities, waveforms, and clip regions use the 
 
 Channel strips, meters, gain/pan controls, and recording controls with fixed demonstration levels.
 
+In the Mixer, each strip groups input (source, trim, polarity, width), effects,
+pan with M/S, level, output and sends. Space separates the groups first and a
+quiet `section` band second; no group gets a frame. Arrows mark the input source
+and the output destination. Faders and meters share one flat look: a rounded
+`trough` groove with no outline, a smooth level fill and a hairline cap. Stereo
+width is a small knob captioned **Width**, centered at 100%. The workspace keeps
+`SPACE_MD` × `SPACE_SM` padding around the strips.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/mixer-dark.png">
   <img alt="Mixer strips with stereo meters, gain and pan controls, recording buttons, and input metering." src="assets/ui-gallery/mixer-light.png" width="1120">

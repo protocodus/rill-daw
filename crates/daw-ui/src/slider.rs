@@ -410,13 +410,8 @@ pub fn paint_slider_rail(ui: &Ui, response: &Response, geometry: &SliderScaleGeo
         Rect::from_min_max(first - cross - along, last + cross + along),
         painter.pixels_per_point(),
     );
-    painter.rect(
-        trough,
-        trough_width * 0.5,
-        colors.bg,
-        Stroke::new(hairline, colors.line),
-        egui::StrokeKind::Inside,
-    );
+    // Flat: a rounded recess without an outline.
+    painter.rect_filled(trough, trough_width * 0.5, colors.trough);
     let anchor = if !vertical && geometry.range[0] < 0.0 && geometry.range[1] > 0.0 {
         let fraction = (-geometry.range[0] / (geometry.range[1] - geometry.range[0])) as f32;
         slider_paint_center(
@@ -428,10 +423,11 @@ pub fn paint_slider_rail(ui: &Ui, response: &Response, geometry: &SliderScaleGeo
     };
     let handle = slider_paint_center(geometry.handle, ui.pixels_per_point());
     if anchor.distance(handle) > 0.5 {
-        let fill = Rect::from_two_pos(anchor, handle).expand2(swap(egui::vec2(1.0, 0.0)));
+        // The level fills the trough's full width with the same rounded ends.
+        let fill = Rect::from_two_pos(anchor, handle).expand2(cross);
         painter.rect_filled(
             egui::emath::GuiRounding::round_to_pixels(fill, painter.pixels_per_point()),
-            1.0,
+            trough_width * 0.5,
             if ui.is_enabled() {
                 colors.accent
             } else {
@@ -472,9 +468,10 @@ pub fn paint_slider_rail(ui: &Ui, response: &Response, geometry: &SliderScaleGeo
         )),
     );
     let active = response.dragged() || response.has_focus();
+    // A flat, softly rounded cap; only focus and dragging add a ring.
     painter.rect(
         cap,
-        3.0,
+        4.0,
         if response.hovered() || active {
             colors.control_hover
         } else {
@@ -489,7 +486,7 @@ pub fn paint_slider_rail(ui: &Ui, response: &Response, geometry: &SliderScaleGeo
             if active && ui.is_enabled() {
                 colors.accent
             } else {
-                colors.line.lerp_to_gamma(colors.muted, 0.5)
+                colors.line
             },
         ),
         egui::StrokeKind::Inside,
@@ -502,7 +499,7 @@ pub fn paint_slider_rail(ui: &Ui, response: &Response, geometry: &SliderScaleGeo
         painter.line_segment(
             [center - half, center + half],
             Stroke::new(
-                hairline,
+                (2.0 * hairline).max(1.0),
                 if ui.is_enabled() {
                     colors.text
                 } else {

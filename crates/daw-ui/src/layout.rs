@@ -824,30 +824,17 @@ pub fn stereo_meter(ui: &mut Ui, peaks: [f32; 2], size: egui::Vec2) -> Response 
     for (index, peak) in peaks.into_iter().enumerate() {
         let peak = if peak.is_finite() { peak.max(0.0) } else { 0.0 };
         db[index] = 20.0 * peak.log10();
-        let level = ((db[index] + 60.0) / 60.0).clamp(0.0, 1.0);
         let bar = egui::Rect::from_min_size(
             rect.min + egui::vec2(index as f32 * (width + gap), 0.0),
             egui::vec2(width, rect.height()),
         );
-        ui.painter().rect_filled(bar, 1.0, colors.bg);
-        if peak >= 1.0 {
-            ui.painter().rect_filled(bar, 1.0, colors.warning);
-            continue;
-        }
-        let y = |gain: f32| {
-            let db = 20.0 * gain.max(1e-9).log10();
-            bar.bottom() - bar.height() * ((db + 60.0) / 60.0).clamp(0.0, 1.0)
+        let y = |db: f32| bar.bottom() - bar.height() * ((db + 60.0) / 60.0).clamp(0.0, 1.0);
+        let stops = if peak >= 1.0 {
+            [(bar.bottom(), colors.warning); 5]
+        } else {
+            crate::meter_stops(&colors, bar.bottom(), y(crate::METER_HOT_DB), y(0.0))
         };
-        for (from, to, color) in crate::meter_zones(&colors) {
-            if level <= 0.0 || peak <= from {
-                break;
-            }
-            ui.painter().rect_filled(
-                egui::Rect::from_x_y_ranges(bar.x_range(), y(peak.min(to))..=y(from)),
-                1.0,
-                color,
-            );
-        }
+        crate::paint_meter_bar(ui.painter(), bar, y(db[index]), &stops, colors.trough);
     }
     response.widget_info(|| {
         egui::WidgetInfo::labeled(
