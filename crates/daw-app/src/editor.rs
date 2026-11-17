@@ -457,7 +457,7 @@ impl DawApp {
             + spacing
             + role_height
             + section_gap
-            // Polarity and input gain, then the width rail.
+            // Polarity and input gain; width sits with pan after the inserts.
             + control
             + spacing
             + daw_ui::tokens::COMPACT_HEIGHT
@@ -836,9 +836,8 @@ impl DawApp {
                             track.input_gain = input_gain; changed = true;
                             automation_overrides.push((input_target, AutomationParameter::TrackInputGain.normalize(input_gain)));
                         }
-                        let stereo_width = daw_ui::mixer_stereo_width(ui, &mut track.stereo_width, content_width, &format!("{} · Stereo width", track.name));
-                        changed |= polarity.changed() || stereo_width.changed();
-                        let input_section = source.response.rect.union(input_gain_response.rect).union(polarity.rect).union(stereo_width.rect);
+                        changed |= polarity.changed();
+                        let input_section = source.response.rect.union(input_gain_response.rect).union(polarity.rect);
                         ui.add_space(section_gap - spacing);
                         let processing = daw_ui::mixer_processing_row(ui, content_width,
                             track.inserts.len(), track.inserts.iter().filter(|slot| slot.enabled).count());
@@ -870,8 +869,11 @@ impl DawApp {
                                 });
                             }
                         }).response;
-                        // Volume & pan: pan with mute/solo, then the fader unit and its readouts.
+                        // In signal-flow order after the inserts: width, pan and
+                        // mute/solo, then the fader unit and its readouts.
                         ui.add_space(section_gap - spacing);
+                        let stereo_width = daw_ui::mixer_stereo_width(ui, &mut track.stereo_width, content_width, &format!("{} · Stereo width", track.name));
+                        changed |= stereo_width.changed();
                         let mut pan = pan_automation.filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
                             .map(|(_, _, value)| AutomationParameter::TrackPan.denormalize(value)).unwrap_or(track.pan);
                         let pan_row = daw_ui::mixer_pan_row(ui, &mut pan, &mut track.mute, &mut track.solo, content_width);
@@ -940,13 +942,9 @@ impl DawApp {
                         ui.spacing_mut().item_spacing.y = spacing;
                         let rms = self.engine.as_ref().map(|engine| engine.channel_rms(track.id)).unwrap_or([0.0; 2]);
                         let statistics = daw_ui::channel_meter_statistics(ui, content_width, rms);
-                        // Output & sends
+                        // Sends tap the channel before or after the fader; the
+                        // output is the end of the strip.
                         ui.add_space(section_gap);
-                        let target = daw_ui::mixer_output_button(ui, content_width, destination,
-                            track.output_bus.and_then(|id| channel_colors.get(&id)).copied())
-                            .on_hover_text(format!("Output → {destination}\nAfter inserts, volume and pan · Click to choose output"));
-                        output_menus.push((track.id, target.clone()));
-                        ui.add_space(section_gap - spacing);
                         let send_details: Vec<_> = track.sends.iter().map(|send| daw_ui::MixerSend {
                             destination: names.get(&send.target_bus).map(String::as_str).unwrap_or("Bus"),
                             color: channel_colors.get(&send.target_bus).copied().unwrap_or(palette(ui.ctx()).accent),
@@ -987,10 +985,15 @@ impl DawApp {
                         let add_send = daw_ui::mixer_add_send_button(ui, content_width);
                         send_menus.push((track.id, add_send.clone()));
                         let sends_rect = send_area.response.rect.union(add_send.rect);
-                        let level_rect = pan_response.rect.union(mute_solo_rect).union(gain.rect).union(fader_rect).union(level.rect);
+                        ui.add_space(section_gap - spacing);
+                        let target = daw_ui::mixer_output_button(ui, content_width, destination,
+                            track.output_bus.and_then(|id| channel_colors.get(&id)).copied())
+                            .on_hover_text(format!("Output → {destination}\nAfter inserts, volume and pan · Click to choose output"));
+                        output_menus.push((track.id, target.clone()));
+                        let level_rect = stereo_width.rect.union(pan_response.rect).union(mute_solo_rect).union(gain.rect).union(fader_rect).union(level.rect);
                         bands.paint(ui, &[input_section, effects.rect.union(insert_summary.rect),
-                            pan_response.rect.union(mute_solo_rect), gain.rect.union(readout.rect).union(fader_rect).union(level.rect).union(statistics.rect),
-                            target.rect, sends_rect]);
+                            stereo_width.rect.union(pan_response.rect).union(mute_solo_rect), gain.rect.union(readout.rect).union(fader_rect).union(level.rect).union(statistics.rect),
+                            sends_rect, target.rect]);
                         let sections = [name.rect.union(source.response.rect), effects.rect.union(insert_summary.rect), level_rect, target.rect.union(sends_rect)];
                         let section_diagnostics: Vec<_> = daw_ui::MixerSection::ALL.into_iter().zip(sections).map(|(section, bounds)| serde_json::json!({"name":section.name(),"rect":rect_json(bounds)})).collect();
                         let mut details = serde_json::json!({"track":track.id,"selected":selected_channels.contains(&track.id),"channel":channel_numbers[&track.id],"bus":bus,"peaks":channel_peaks,"name":rect_json(name.rect),"reorder_grip":rect_json(grip.rect),"reorder_source":reorder_enabled.then(|| rect_json(name.rect)),"source":rect_json(source.response.rect),
@@ -1113,9 +1116,8 @@ impl DawApp {
                             master_track.input_gain = input_gain; changed = true;
                             automation_overrides.push((input_target, AutomationParameter::TrackInputGain.normalize(input_gain)));
                         }
-                        let stereo_width = daw_ui::mixer_stereo_width(ui, &mut master_track.stereo_width, content_width, "Master · Stereo width");
-                        changed |= polarity.changed() || stereo_width.changed();
-                        let input_section = source.response.rect.union(input.rect).union(polarity.rect).union(stereo_width.rect);
+                        changed |= polarity.changed();
+                        let input_section = source.response.rect.union(input.rect).union(polarity.rect);
                         ui.add_space(section_gap - spacing);
                         let processing = daw_ui::mixer_processing_row(ui, content_width, master_track.inserts.len(), master_track.inserts.iter().filter(|slot| slot.enabled).count());
                         let effects = processing.effects;
@@ -1141,6 +1143,8 @@ impl DawApp {
                             }
                         }).response;
                         ui.add_space(section_gap - spacing);
+                        let stereo_width = daw_ui::mixer_stereo_width(ui, &mut master_track.stereo_width, content_width, "Master · Stereo width");
+                        changed |= stereo_width.changed();
                         let mut pan = pan_automation.filter(|(_, state, _)| *state != daw_ui::AutomationState::Bypassed)
                             .map(|(_, _, value)| AutomationParameter::TrackPan.denormalize(value)).unwrap_or(master_track.pan);
                         let pan_row = daw_ui::mixer_master_pan_row(ui, &mut pan, &mut master_track.mute, content_width);
@@ -1201,11 +1205,13 @@ impl DawApp {
                         ui.spacing_mut().item_spacing.y = spacing;
                         let rms = self.engine.as_ref().map(|engine| engine.channel_rms(master_id)).unwrap_or([0.0; 2]);
                         let statistics = daw_ui::channel_meter_statistics(ui, content_width, rms);
-                        ui.add_space(section_gap);
+                        // Master has no sends; its output lines up with the
+                        // channel outputs at the end of every strip.
+                        ui.add_space(section_gap + send_area_height + spacing + daw_ui::MIXER_SEND_ROW_HEIGHT + section_gap);
                         let output = daw_ui::mixer_output_button(ui, content_width, "Audio output", Some(palette(ui.ctx()).muted))
                             .on_hover_text("Master → audio device output · Click to open Setup › Audio");
                         if output.clicked() { master_output = true; }
-                        bands.paint(ui, &[input_section, effects.rect.union(insert_summary.rect), pan_response.rect.union(pan_row.mute.rect),
+                        bands.paint(ui, &[input_section, effects.rect.union(insert_summary.rect), stereo_width.rect.union(pan_response.rect).union(pan_row.mute.rect),
                             gain.rect.union(readout.rect).union(fader.rect).union(level.rect).union(statistics.rect), output.rect]);
                         serde_json::json!({"track":master_id,"meter":rect_json(level.rect),"meter_readout":rect_json(readout.rect),"peak_hold":master_peak_hold,"peak_clipped":master_peak_hold.iter().any(|peak| *peak >= 1.0),"target":rect_json(output.rect),
                             "name":rect_json(name.rect),"source":rect_json(source.response.rect),"source_menu":rect_json(source.inner.0),"analyze":rect_json(analyze.rect),"effects":rect_json(effects.rect),"insert_summary":rect_json(insert_summary.rect),

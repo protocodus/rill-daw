@@ -133,8 +133,8 @@ fn mixer_separates_channels_and_exposes_effects_outputs_and_sends_through_the_mo
             let output = Bounds::from(&channel["target"]);
             let sends = Bounds::from(&channel["sends"]);
             assert!(
-                sends.top >= output.bottom,
-                "Send actions overlap main output"
+                output.top >= sends.bottom,
+                "The main output ends the strip, below the sends"
             );
             assert!(sends.height() >= f64::from(daw_ui::tokens::CONTROL_HEIGHT) - 0.1);
             let strip = state["painted_rects"]

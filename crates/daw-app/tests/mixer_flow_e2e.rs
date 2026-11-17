@@ -183,12 +183,13 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
                 "source",
                 "effects",
                 "insert_summary",
+                "stereo_width",
                 "pan",
                 "mute_solo",
                 "gain",
                 "fader",
-                "target",
                 "sends",
+                "target",
             ];
             for pair in stages.windows(2) {
                 assert!(

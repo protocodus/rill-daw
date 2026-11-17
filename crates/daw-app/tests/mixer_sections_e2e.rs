@@ -41,8 +41,8 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
                     .collect::<Vec<_>>(),
                 ["Source", "Effects", "Volume & pan", "Output & sends"]
             );
-            // Input trim belongs to the input section, a full gap before the
-            // inserts; post-fader RMS statistics sit before routing.
+            // Strip rows follow the signal: input trim, inserts, width and pan,
+            // the fader, then sends and the output.
             let source_role_space = if channel["bus"] == true {
                 0.0
             } else {
@@ -56,12 +56,13 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
                 ),
                 (
                     &channel["input_gain"],
-                    &channel["stereo_width"],
-                    f64::from(daw_ui::MIXER_ROW_GAP),
-                ),
-                (
-                    &channel["stereo_width"],
                     &sections[1]["rect"],
+                    f64::from(daw_ui::MIXER_SECTION_GAP),
+                ),
+                // Width follows the inserts, as in the engine.
+                (
+                    &sections[1]["rect"],
+                    &channel["stereo_width"],
                     f64::from(daw_ui::MIXER_SECTION_GAP),
                 ),
                 (
@@ -74,6 +75,12 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
                     &channel["statistics"],
                     &sections[3]["rect"],
                     f64::from(daw_ui::MIXER_SECTION_GAP + daw_ui::MIXER_ROW_GAP),
+                ),
+                // Sends tap the channel; the output ends the strip.
+                (
+                    &channel["sends"],
+                    &channel["target"],
+                    f64::from(daw_ui::MIXER_SECTION_GAP),
                 ),
             ] {
                 let gap = next["min"][1].as_f64().unwrap() - previous["max"][1].as_f64().unwrap();

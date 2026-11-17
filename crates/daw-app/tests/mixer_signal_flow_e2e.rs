@@ -92,7 +92,14 @@ fn mixer_measures_after_processing_and_exposes_full_size_mute_solo_controls() {
                     "Signal stages {pair:?} overlap or run backwards: {channel}"
                 );
             }
-            for processing in ["effects", "insert_summary", "pan", "mute", "solo"] {
+            for processing in [
+                "effects",
+                "insert_summary",
+                "stereo_width",
+                "pan",
+                "mute",
+                "solo",
+            ] {
                 assert!(
                     edge(&channel[processing], "max", 1) <= edge(&channel["meter"], "min", 1),
                     "The measured output must follow {processing}"
@@ -108,9 +115,10 @@ fn mixer_measures_after_processing_and_exposes_full_size_mute_solo_controls() {
             }
             assert!(edge(&channel["meter"], "min", 0) >= edge(&channel["fader"], "max", 0));
             assert!(edge(&channel["gain"], "max", 1) <= edge(&channel["meter"], "min", 1));
-            assert!(edge(&channel["meter"], "max", 1) <= edge(&channel["target"], "min", 1));
-            assert!(edge(&channel["target"], "max", 1) <= edge(&channel["sends"], "min", 1));
-            assert!(edge(&channel["sends"], "max", 1) <= f64::from(height));
+            // Sends tap the channel after the meter; the output ends the strip.
+            assert!(edge(&channel["meter"], "max", 1) <= edge(&channel["sends"], "min", 1));
+            assert!(edge(&channel["sends"], "max", 1) <= edge(&channel["target"], "min", 1));
+            assert!(edge(&channel["target"], "max", 1) <= f64::from(height));
             for control in ["mute", "solo"] {
                 let rect = &channel[control];
                 assert!(edge(rect, "max", 0) - edge(rect, "min", 0) >= 60.0);

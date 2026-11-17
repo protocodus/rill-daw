@@ -68,8 +68,9 @@ Musical time, piano-key states, velocities, waveforms, and clip regions use the 
 
 Channel strips, meters, gain/pan controls, and recording controls with fixed demonstration levels.
 
-In the Mixer, each strip groups input (source, trim, polarity, width), effects,
-pan with M/S, level, output and sends. Space separates the groups first and a
+In the Mixer, each strip runs top to bottom in the engine's signal order: input
+(source, trim, polarity), effects, width with pan and M/S, level, sends, and the
+output last. Space separates the groups first and a
 quiet `section` band second; no group gets a frame. Arrows mark the input source
 and the output destination. Faders and meters share one flat look: a rounded
 `trough` groove with no outline, a smooth level fill and a hairline cap. Stereo
