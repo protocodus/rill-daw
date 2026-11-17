@@ -691,7 +691,7 @@ in persistent toolbars; keep explicit filled actions for primary tasks and
 confirmation. `command_group` supplies one rounded surface, five-point padding
 and complete-group wrapping, without taking input itself.
 
-`mixer_strip(ui, id, size, color, selected, contents)` creates a vertical, fill-only channel card with a stable ID, a quiet wash of the track color and 8-point margins; the selected strip adds a glow and outline. Size includes its margins; callers choose a common width and height. Mixer strips fill the available workspace height; channel faders and the Master meter stretch with the window, while horizontal channel meters retain their compact height. Names and footer controls retain their natural size; short windows scroll when the faders reach their usable minimum. `stereo_meter(ui, [left, right], size)` displays −60 to 0 dBFS peaks, marks clipping with the warning color, and sanitizes non-finite input. It does not own audio state or smoothing. Catalog rows measure their title/detail stack with 13-point insets and a 5-point text gap. They reserve the same preview space while thumbnails are loading so names and actions remain aligned.
+`mixer_strip(ui, id, size, color, selected, contents)` creates a vertical, fill-only channel card with a stable ID, a quiet wash of the track color and 8-point margins; the selected strip adds a glow and outline. Size includes its margins; callers choose a common width and height. Mixer strips fill the available workspace height; channel faders and the Master meter stretch with the window, while horizontal channel meters retain their compact height. Names and footer controls retain their natural size; short windows scroll when the faders reach their usable minimum. `stereo_meter(ui, [left, right], size)` displays −60 to 0 dBFS peaks in the signal color, amber over the last 6 dB (`METER_HOT_DB`), marks clipping with the warning color, and sanitizes non-finite input. It does not own audio state or smoothing. Catalog rows measure their title/detail stack with 13-point insets and a 5-point text gap. They reserve the same preview space while thumbnails are loading so names and actions remain aligned.
 
 `mixer_role_heading` places a 34-point vector icon and a concise **Bus** or
 **Send return** caption above downstream channels. Bus cards begin 60 points
@@ -778,7 +778,9 @@ for an empty chain. Double-click a track’s icon or name to open Track Properti
 with its name selected. The same form edits the track color and icon. **Track type**
 uses the default glyph for that kind of track. A folder’s chevron expands or
 collapses its contents. In the Mixer the instrument row, each insert row and **MIDI · Choose…** open
-their device directly. Mix controls remain when usable bounds exist; very small fitted
+their device directly; an insert row's lamp bypasses or restores it in one Undo
+step, and built-in filters, equalizers and compressors draw their static curve at
+the saved settings beside the name. Mix controls remain when usable bounds exist; very small fitted
 rows retain identity and the existing context actions. The meter has its own
 column and reads actual post-insert, post-fader, post-pan stereo engine peaks,
 including buses and routed audio. Peaks attack immediately, release at 24 dB/s,
@@ -952,7 +954,8 @@ their range extends. `paint_mixer_scale` paints the labelled dB stops (+3.5, 0,
 only; 0 dB keeps its solid-point landmark on the cap. The fader unit
 `[scale 34][rail 21][gap 5][meter 13]` is centered on the strip and pixel
 snapped: one 5-point trough, a 21×13 cap, and `channel_meter_with_peak_hold`, a
-vertical stereo peak meter on the same scale. The engine captures block maxima
+vertical stereo peak meter on the same scale: green, amber from −6 dBFS and the
+warning color past full scale. The engine captures block maxima
 even while the mixer is closed; its peak lines, clip lamp and
 `channel_peak_indicator` badge retain the highest level through silence, Pause,
 Stop and engine rebuilds. Click the badge or meter to reset only that channel's
@@ -2133,6 +2136,10 @@ attenuation veil, returning its actual extent; zero fades add no paint. `timelin
 returns loop bounds and handle geometry without advancing layout.
 `automation_canvas_at` returns point edits and per-point interpolation choices.
 `device_identity_button` shows a custom name, quiet model, and optional thumbnail.
+Its leading lamp (green while active, an empty slot while bypassed) toggles the
+insert without opening it, and an optional `DeviceCurve` miniature shows a
+response over 20 Hz – 20 kHz (±12 dB, 0 dB reference) or a dynamics transfer
+curve (−60 to 0 dB, unity reference), muted while bypassed.
 Application views own coordinate mapping, document validation and Undo.
 
 Mixer strip sections (Source, Effects, Volume & pan, Output & sends) are told

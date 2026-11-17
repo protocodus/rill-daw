@@ -1,13 +1,14 @@
 //! Write the song that `scripts/capture-screens.sh` photographs: the demo's
-//! MIDI parts on R1 Mini, its drum loop, a filtered bus with a send, and a
-//! volume curve, so every screen and dialog has something real to show.
+//! MIDI parts on R1 Mini, its drum loop with an equalizer and a compressor,
+//! a filtered bus with a send, a limited Master and a volume curve, so every
+//! screen and dialog has something real to show.
 //!
 //! cargo run -p daw-core --example screens_project -- out.rill
 
 use anyhow::{Context, Result};
 use daw_core::{
     AutomationParameter, AutomationPoint, AutomationTarget, Effect, EffectSlot, Instrument,
-    Project, TrackKind,
+    PluginParameterValue, Project, TrackKind,
 };
 
 fn main() -> Result<()> {
@@ -25,6 +26,18 @@ fn main() -> Result<()> {
 
     let chords = project.tracks[0].id;
     project.track_mut(chords).unwrap().inserts.push(filter());
+    // A bypassed insert shows the unlit state beside the active ones.
+    let mut presence = builtin("r1-equalizer", "Vocal Presence")?;
+    presence.enabled = false;
+    project.track_mut(chords).unwrap().inserts.push(presence);
+    let beat = project.tracks.last().unwrap().id;
+    let inserts = &mut project.track_mut(beat).unwrap().inserts;
+    inserts.push(builtin("r1-equalizer", "Kick Punch")?);
+    inserts.push(builtin("r1-compressor", "Drum Bus Glue")?);
+    project
+        .master
+        .inserts
+        .push(builtin("r1-compressor", "Brickwall Limiter")?);
     let space = project.add_bus("Space");
     project.track_mut(space).unwrap().inserts.push(filter());
     project.add_send(chords, space, 0.5, false)?;
@@ -51,6 +64,32 @@ fn main() -> Result<()> {
     project.save(&output)?;
     println!("Wrote {output}");
     Ok(())
+}
+
+/// A built-in device set to one of its factory presets, named after it.
+fn builtin(device: &str, preset: &str) -> Result<EffectSlot> {
+    let descriptor = daw_devices::descriptor(device).context("Unknown device")?;
+    let preset = daw_devices::factory_presets(descriptor)
+        .into_iter()
+        .find(|candidate| candidate.name == preset)
+        .context("Unknown preset")?;
+    let mut slot = EffectSlot::new(
+        preset.name.clone(),
+        Effect::Builtin {
+            device: device.into(),
+        },
+    );
+    slot.parameters = preset
+        .resolve(descriptor)
+        .map_err(|error| anyhow::anyhow!(error.0))?
+        .values
+        .into_iter()
+        .map(|(id, value)| PluginParameterValue {
+            id,
+            value: value.into(),
+        })
+        .collect();
+    Ok(slot)
 }
 
 fn filter() -> EffectSlot {

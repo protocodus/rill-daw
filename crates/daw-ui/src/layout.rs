@@ -812,7 +812,8 @@ pub fn mixer_strip<R>(
 }
 
 /// Stereo peak display, −60 dBFS to 0 dBFS. Non-finite readings show silence;
-/// normalized peaks at/above unity use the warning color. No smoothing state.
+/// the last 6 dB below full scale are amber and normalized peaks at/above
+/// unity fill the bar with the warning color. No smoothing state.
 pub fn stereo_meter(ui: &mut Ui, peaks: [f32; 2], size: egui::Vec2) -> Response {
     let (rect, response) =
         ui.allocate_exact_size(size.max(egui::Vec2::splat(1.0)), egui::Sense::hover());
@@ -829,18 +830,22 @@ pub fn stereo_meter(ui: &mut Ui, peaks: [f32; 2], size: egui::Vec2) -> Response 
             egui::vec2(width, rect.height()),
         );
         ui.painter().rect_filled(bar, 1.0, colors.bg);
-        if level > 0.0 {
+        if peak >= 1.0 {
+            ui.painter().rect_filled(bar, 1.0, colors.warning);
+            continue;
+        }
+        let y = |gain: f32| {
+            let db = 20.0 * gain.max(1e-9).log10();
+            bar.bottom() - bar.height() * ((db + 60.0) / 60.0).clamp(0.0, 1.0)
+        };
+        for (from, to, color) in crate::meter_zones(&colors) {
+            if level <= 0.0 || peak <= from {
+                break;
+            }
             ui.painter().rect_filled(
-                egui::Rect::from_min_max(
-                    egui::pos2(bar.left(), bar.bottom() - bar.height() * level),
-                    bar.max,
-                ),
+                egui::Rect::from_x_y_ranges(bar.x_range(), y(peak.min(to))..=y(from)),
                 1.0,
-                if peak >= 1.0 {
-                    colors.warning
-                } else {
-                    colors.guide
-                },
+                color,
             );
         }
     }

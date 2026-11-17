@@ -1,7 +1,7 @@
 //! The app's view of Rill's built-in devices: Library entries, the project
 //! variants they create, parameter metadata and user presets. Everything
 //! comes from the `daw-devices` registry, so a new device needs no change here.
-use daw_core::{Effect, Instrument, PluginParameterValue};
+use daw_core::{Effect, EffectSlot, Instrument, PluginParameterValue};
 use daw_devices::{DeviceDescriptor, DeviceKind, PRESET_EXTENSION, Preset};
 use daw_plugins::{
     ParameterInfo, PluginAudioBus, PluginInfo, PluginInspection, PluginParameterMetadata,
@@ -250,6 +250,20 @@ pub(crate) fn value(
         })
         .unwrap_or(0.0)
 }
+
+/// The miniature curve of a built-in insert at its saved settings, for the
+/// mixer's insert row; `None` for hosted plug-ins and devices without one.
+pub(crate) fn insert_curve(slot: &EffectSlot) -> Option<(daw_ui::DeviceCurve, Vec<f32>)> {
+    let descriptor = daw_devices::descriptor(slot.effect.builtin_device()?)?;
+    daw_devices_ui::static_curve(
+        descriptor,
+        &|id| value(descriptor, &slot.parameters, id),
+        INSERT_CURVE_POINTS,
+    )
+}
+
+/// Enough points for a smooth curve a few dozen pixels wide.
+const INSERT_CURVE_POINTS: usize = 33;
 
 fn preset_dir(device: &str) -> PathBuf {
     crate::settings::config_dir().join("presets").join(device)

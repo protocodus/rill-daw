@@ -23,3 +23,6 @@ flate2 = { version = "1", default-features = false, features = ["rust_backend"] 
 
 [target.'cfg(unix)'.dependencies]
 libc = "=0.2.191"
+
+[dev-dependencies]
+daw-devices.workspace = true

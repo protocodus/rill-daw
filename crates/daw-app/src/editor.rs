@@ -844,11 +844,13 @@ impl DawApp {
                                 }
                             } else {
                                 egui::ScrollArea::vertical().id_salt(("mixer_devices", track.id)).min_scrolled_height(0.0).max_height(device_height).auto_shrink([false, false]).show(ui, |ui| {
-                                    for slot in &track.inserts {
+                                    for slot in &mut track.inserts {
                                         let model = crate::library::effect_model(&self.vst_catalog, &slot.effect);
-                                        let response = daw_ui::device_identity_button(ui, egui::Id::new(("mixer_insert", track.id, slot.id)), content_width, daw_ui::DeviceIdentity { name: &slot.name, model: &model, preview: None, enabled: slot.enabled });
-                                        if response.clicked() { device_target = Some((track.id, Some(slot.id))); }
-                                        device_diagnostics.push(serde_json::json!({"track":track.id,"effect":slot.id,"name":slot.name,"model":model,"rect":rect_json(response.rect)}));
+                                        let curve = crate::builtin_devices::insert_curve(slot);
+                                        let row = daw_ui::device_identity_button(ui, egui::Id::new(("mixer_insert", track.id, slot.id)), content_width, daw_ui::DeviceIdentity { name: &slot.name, model: &model, preview: None, curve: curve.as_ref().map(|(kind, values)| (*kind, values.as_slice())) }, &mut slot.enabled);
+                                        changed |= row.power.changed();
+                                        if row.open.clicked() { device_target = Some((track.id, Some(slot.id))); }
+                                        device_diagnostics.push(serde_json::json!({"track":track.id,"effect":slot.id,"name":slot.name,"model":model,"rect":rect_json(row.open.rect),"power":rect_json(row.power.rect),"curve":curve.map(|(kind, _)| format!("{kind:?}"))}));
                                     }
                                 });
                             }
@@ -1105,11 +1107,13 @@ impl DawApp {
                                 if daw_ui::mixer_insert_slot(ui, content_width).clicked() { insert_target = Some(master_id); }
                             } else {
                                 egui::ScrollArea::vertical().id_salt(("mixer_devices", master_id)).min_scrolled_height(0.0).max_height(device_height).auto_shrink([false, false]).show(ui, |ui| {
-                                    for slot in &master_track.inserts {
+                                    for slot in &mut master_track.inserts {
                                         let model = crate::library::effect_model(&self.vst_catalog, &slot.effect);
-                                        let response = daw_ui::device_identity_button(ui, egui::Id::new(("mixer_insert", master_id, slot.id)), content_width, daw_ui::DeviceIdentity { name: &slot.name, model: &model, preview: None, enabled: slot.enabled });
-                                        if response.clicked() { device_target = Some((master_id, Some(slot.id))); }
-                                        device_diagnostics.push(serde_json::json!({"track":master_id,"effect":slot.id,"name":slot.name,"model":model,"rect":rect_json(response.rect)}));
+                                        let curve = crate::builtin_devices::insert_curve(slot);
+                                        let row = daw_ui::device_identity_button(ui, egui::Id::new(("mixer_insert", master_id, slot.id)), content_width, daw_ui::DeviceIdentity { name: &slot.name, model: &model, preview: None, curve: curve.as_ref().map(|(kind, values)| (*kind, values.as_slice())) }, &mut slot.enabled);
+                                        changed |= row.power.changed();
+                                        if row.open.clicked() { device_target = Some((master_id, Some(slot.id))); }
+                                        device_diagnostics.push(serde_json::json!({"track":master_id,"effect":slot.id,"name":slot.name,"model":model,"rect":rect_json(row.open.rect),"power":rect_json(row.power.rect),"curve":curve.map(|(kind, _)| format!("{kind:?}"))}));
                                     }
                                 });
                             }

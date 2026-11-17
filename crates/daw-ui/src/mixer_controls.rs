@@ -607,9 +607,25 @@ fn peak_db_text(peak: f32) -> String {
     }
 }
 
+/// Where a peak meter turns from the signal color to amber: the last 6 dB
+/// before full scale, where a hot channel is worth a look.
+pub const METER_HOT_DB: f32 = -6.0;
+
+/// Peak meter zones as `(from, to, color)` in linear gain: signal, the hot
+/// last 6 dB of headroom, then the warning color past full scale.
+pub(crate) fn meter_zones(colors: &crate::theme::Palette) -> [(f32, f32, egui::Color32); 3] {
+    let hot = 10f32.powf(METER_HOT_DB / 20.0);
+    [
+        (0.0, hot, colors.guide),
+        (hot, 1.0, colors.orange),
+        (1.0, f32::INFINITY, colors.warning),
+    ]
+}
+
 /// Vertical stereo peak meter on the fader's scale: `inset` is the distance
 /// from the rect's ends to silence and to +3.5 dB, the fader's handle travel,
-/// so one scale serves both. Holds each peak for 1.5 s and latches clipping
+/// so one scale serves both. Green, amber over the last 6 dB of headroom and
+/// red past full scale. Holds each peak for 1.5 s and latches clipping
 /// (warning color) until clicked. Readings are sanitized for painting only.
 pub fn channel_meter(
     ui: &mut Ui,
@@ -688,27 +704,19 @@ fn channel_meter_inner(
                 Stroke::new(1.0 / ui.pixels_per_point(), colors.line),
                 egui::StrokeKind::Inside,
             );
-            if peak > 0.0 {
-                let level = y(peak);
-                let unity = y(1.0);
+            for (from, to, color) in meter_zones(&colors) {
+                if peak <= from {
+                    break;
+                }
+                let start = if from > 0.0 { y(from) } else { bottom };
                 ui.painter().rect_filled(
                     egui::emath::GuiRounding::round_to_pixels(
-                        Rect::from_x_y_ranges(bar.x_range(), level.max(unity)..=bottom),
+                        Rect::from_x_y_ranges(bar.x_range(), y(peak.min(to))..=start),
                         ui.pixels_per_point(),
                     ),
                     1.0,
-                    colors.guide,
+                    color,
                 );
-                if level < unity {
-                    ui.painter().rect_filled(
-                        egui::emath::GuiRounding::round_to_pixels(
-                            Rect::from_x_y_ranges(bar.x_range(), level..=unity),
-                            ui.pixels_per_point(),
-                        ),
-                        1.0,
-                        colors.warning,
-                    );
-                }
             }
             if state.hold[index] > 0.0 {
                 let hold = y(state.hold[index]);
