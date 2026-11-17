@@ -8,7 +8,11 @@ pub const MIXER_CONTENT_WIDTH: f32 = MIXER_CHANNEL_WIDTH - 2.0 * MIXER_CHANNEL_M
 /// Space between rows of one section, and between sections. Sections are
 /// separated by space alone: the strip has no frames or rules inside.
 pub const MIXER_ROW_GAP: f32 = crate::tokens::SPACE_XS;
-pub const MIXER_SECTION_GAP: f32 = crate::tokens::SPACE_MD;
+/// Padding inside a section band, and the band's distance to the strip edge.
+pub const MIXER_BAND_PADDING: f32 = MIXER_CHANNEL_MARGIN * 0.5;
+/// Band padding, the gap between bands, then the next band's padding: every
+/// band sits the same distance from its neighbours and from the strip edges.
+pub const MIXER_SECTION_GAP: f32 = 3.0 * MIXER_BAND_PADDING;
 /// One reserved route lane under the strips: a caption over a 3 pt ribbon.
 pub const MIXER_ROUTE_LANE: f32 = crate::tokens::CONTROL_HEIGHT;
 /// Height of the empty-chain slot, one compact send row and "Add send…".
@@ -811,7 +815,9 @@ impl MixerSectionBands {
         Self(ui.painter().add(egui::Shape::Noop))
     }
 
-    pub fn paint(self, ui: &Ui, sections: &[Rect]) {
+    /// `gap` is the strip's section gap; a third of it pads each band, so
+    /// the visible space between bands matches their padding.
+    pub fn paint(self, ui: &Ui, sections: &[Rect], gap: f32) {
         let colors = crate::theme::palette(ui.ctx());
         let fill = colors.section;
         let shapes = sections
@@ -819,7 +825,7 @@ impl MixerSectionBands {
             .filter(|rect| rect.is_positive())
             .map(|rect| {
                 let band = egui::emath::GuiRounding::round_to_pixels(
-                    rect.expand2(Vec2::new(crate::tokens::SPACE_XS, 3.0)),
+                    rect.expand(gap / 3.0),
                     ui.pixels_per_point(),
                 );
                 egui::Shape::rect_filled(band, crate::tokens::RADIUS, fill)

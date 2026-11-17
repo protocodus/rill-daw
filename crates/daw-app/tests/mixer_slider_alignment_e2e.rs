@@ -126,7 +126,7 @@ fn assert_meter_alignment(state: &Value, id: u64, density: f64, unity: bool, dar
             .filter(|shape| {
                 let min = point(&shape["rect"]["min"]);
                 let max = point(&shape["rect"]["max"]);
-                (2.0..=8.0).contains(&(max[0] - min[0]))
+                (2.0..=16.0).contains(&(max[0] - min[0]))
                     && max[1] - min[1] > 80.0
                     && min[0] >= min_x - 0.51 / density
                     && max[0] <= max_x + 0.51 / density

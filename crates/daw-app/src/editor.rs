@@ -509,10 +509,12 @@ impl DawApp {
         let strip_height =
             (workspace_height - routing_overview_height - notice_reserve - group_header_height)
                 .max(fixed_height + daw_ui::tokens::MIXER_FADER_MIN);
-        // The `[scale][rail][gap][meter]` unit sits on the strip axis.
-        let unit_offset = ((content_width - daw_ui::MIXER_FADER_UNIT_WIDTH) * 0.5)
-            .max(0.0)
-            .floor();
+        // `[scale][rail][gap][meter]` ends at the strip's right edge like every
+        // other row, with a double-width stereo meter, so nothing is left
+        // unused beside the meter. The gain field above spans the rest.
+        let meter_width = 2.0 * daw_ui::tokens::MIXER_METER_WIDTH;
+        let unit_width = daw_ui::MIXER_FADER_WIDTH + daw_ui::MIXER_METER_GAP + meter_width;
+        let unit_offset = (content_width - unit_width).max(0.0).floor();
         let meter_offset = unit_offset + daw_ui::MIXER_FADER_WIDTH + daw_ui::MIXER_METER_GAP;
         let mut diagnostics = Vec::new();
         let mut route_diagnostics = Vec::new();
@@ -643,7 +645,7 @@ impl DawApp {
                             let level = ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing.x = 0.0;
                                 ui.add_space((inner_width - daw_ui::tokens::MIXER_METER_WIDTH) * 0.5);
-                                daw_ui::channel_meter_with_peak_hold(ui, meter_id, channel_peaks, channel_peak_hold, calibration.height(), daw_ui::MIXER_FADER_INSET)
+                                daw_ui::channel_meter_with_peak_hold(ui, meter_id, channel_peaks, channel_peak_hold, daw_ui::tokens::MIXER_METER_WIDTH, calibration.height(), daw_ui::MIXER_FADER_INSET)
                             }).inner;
                             if readout.clicked() || level.clicked() { reset_mixer_peak_hold(ui.ctx(), self.engine.as_ref(), generation, Some(track.id)); }
                             ui.spacing_mut().item_spacing.y = spacing;
@@ -837,7 +839,7 @@ impl DawApp {
                             automation_overrides.push((input_target, AutomationParameter::TrackInputGain.normalize(input_gain)));
                         }
                         changed |= polarity.changed();
-                        let input_section = source.response.rect.union(input_gain_response.rect).union(polarity.rect);
+                        let input_section = name.rect.union(source.response.rect).union(input_gain_response.rect).union(polarity.rect);
                         ui.add_space(section_gap - spacing);
                         let processing = daw_ui::mixer_processing_row(ui, content_width,
                             track.inserts.len(), track.inserts.iter().filter(|slot| slot.enabled).count());
@@ -912,7 +914,7 @@ impl DawApp {
                             automation_overrides.push((gain_target, AutomationParameter::TrackGain.normalize(track.gain)));
                         }
                         let readout = daw_ui::channel_peak_indicator(ui, meter_id, channel_peak_hold,
-                            readout_row.left() + meter_offset + daw_ui::tokens::MIXER_METER_WIDTH * 0.5, readout_row);
+                            readout_row.left() + meter_offset + meter_width * 0.5, readout_row);
                         ui.add_space(spacing);
                         let fader_height = (ui.max_rect().bottom() - ui.cursor().min.y - footer_height).max(daw_ui::tokens::MIXER_FADER_MIN);
                         let (fader_rect, fader_scale, level) = ui.horizontal(|ui| {
@@ -932,7 +934,7 @@ impl DawApp {
                             if (response.changed() || exact.is_some()) && !panning { track.gain = gain; changed = true;
                                 automation_overrides.push((gain_target, AutomationParameter::TrackGain.normalize(gain))); }
                             ui.add_space(daw_ui::MIXER_METER_GAP);
-                            let level = daw_ui::channel_meter_with_peak_hold(ui, meter_id, channel_peaks, channel_peak_hold, fader_height, daw_ui::MIXER_FADER_INSET);
+                            let level = daw_ui::channel_meter_with_peak_hold(ui, meter_id, channel_peaks, channel_peak_hold, meter_width, fader_height, daw_ui::MIXER_FADER_INSET);
                             (response.rect, scale, level)
                         }).inner;
                         if readout.clicked() || level.clicked() {
@@ -993,7 +995,7 @@ impl DawApp {
                         let level_rect = stereo_width.rect.union(pan_response.rect).union(mute_solo_rect).union(gain.rect).union(fader_rect).union(level.rect);
                         bands.paint(ui, &[input_section, effects.rect.union(insert_summary.rect),
                             stereo_width.rect.union(pan_response.rect).union(mute_solo_rect), gain.rect.union(readout.rect).union(fader_rect).union(level.rect).union(statistics.rect),
-                            sends_rect, target.rect]);
+                            sends_rect, target.rect], section_gap);
                         let sections = [name.rect.union(source.response.rect), effects.rect.union(insert_summary.rect), level_rect, target.rect.union(sends_rect)];
                         let section_diagnostics: Vec<_> = daw_ui::MixerSection::ALL.into_iter().zip(sections).map(|(section, bounds)| serde_json::json!({"name":section.name(),"rect":rect_json(bounds)})).collect();
                         let mut details = serde_json::json!({"track":track.id,"selected":selected_channels.contains(&track.id),"channel":channel_numbers[&track.id],"bus":bus,"peaks":channel_peaks,"name":rect_json(name.rect),"reorder_grip":rect_json(grip.rect),"reorder_source":reorder_enabled.then(|| rect_json(name.rect)),"source":rect_json(source.response.rect),
@@ -1117,7 +1119,7 @@ impl DawApp {
                             automation_overrides.push((input_target, AutomationParameter::TrackInputGain.normalize(input_gain)));
                         }
                         changed |= polarity.changed();
-                        let input_section = source.response.rect.union(input.rect).union(polarity.rect);
+                        let input_section = name.rect.union(source.response.rect).union(input.rect).union(polarity.rect);
                         ui.add_space(section_gap - spacing);
                         let processing = daw_ui::mixer_processing_row(ui, content_width, master_track.inserts.len(), master_track.inserts.iter().filter(|slot| slot.enabled).count());
                         let effects = processing.effects;
@@ -1179,7 +1181,7 @@ impl DawApp {
                             automation_overrides.push((gain_target, AutomationParameter::TrackGain.normalize(master_track.gain)));
                         }
                         let readout = daw_ui::channel_peak_indicator(ui, meter_id, master_peak_hold,
-                            readout_row.left() + meter_offset + daw_ui::tokens::MIXER_METER_WIDTH * 0.5, readout_row);
+                            readout_row.left() + meter_offset + meter_width * 0.5, readout_row);
                         ui.add_space(spacing);
                         let fader_height = (ui.max_rect().bottom() - ui.cursor().min.y - footer_height).max(daw_ui::tokens::MIXER_FADER_MIN);
                         let (fader, level) = ui.horizontal(|ui| {
@@ -1197,7 +1199,7 @@ impl DawApp {
                                 automation_overrides.push((gain_target, AutomationParameter::TrackGain.normalize(value)));
                             }
                             ui.add_space(daw_ui::MIXER_METER_GAP);
-                            let level = daw_ui::hover_text(daw_ui::channel_meter_with_peak_hold(ui, meter_id, master_peaks, master_peak_hold, fader_height, daw_ui::MIXER_FADER_INSET),
+                            let level = daw_ui::hover_text(daw_ui::channel_meter_with_peak_hold(ui, meter_id, master_peaks, master_peak_hold, meter_width, fader_height, daw_ui::MIXER_FADER_INSET),
                                 "Master channel · after inserts, pan and volume\nBefore device clipping, dry input monitoring and the click");
                             (fader, level)
                         }).inner;
@@ -1212,7 +1214,7 @@ impl DawApp {
                             .on_hover_text("Master → audio device output · Click to open Setup › Audio");
                         if output.clicked() { master_output = true; }
                         bands.paint(ui, &[input_section, effects.rect.union(insert_summary.rect), stereo_width.rect.union(pan_response.rect).union(pan_row.mute.rect),
-                            gain.rect.union(readout.rect).union(fader.rect).union(level.rect).union(statistics.rect), output.rect]);
+                            gain.rect.union(readout.rect).union(fader.rect).union(level.rect).union(statistics.rect), output.rect], section_gap);
                         serde_json::json!({"track":master_id,"meter":rect_json(level.rect),"meter_readout":rect_json(readout.rect),"peak_hold":master_peak_hold,"peak_clipped":master_peak_hold.iter().any(|peak| *peak >= 1.0),"target":rect_json(output.rect),
                             "name":rect_json(name.rect),"source":rect_json(source.response.rect),"source_menu":rect_json(source.inner.0),"analyze":rect_json(analyze.rect),"effects":rect_json(effects.rect),"insert_summary":rect_json(insert_summary.rect),
                             "input_gain":rect_json(input.rect),"input_gain_value":input_gain,"polarity":rect_json(polarity.rect),"stereo_width":rect_json(stereo_width.rect),"pan":rect_json(pan_response.rect),"mute":rect_json(pan_row.mute.rect),"gain":rect_json(gain.rect),"fader":rect_json(fader.rect),"fader_scale":scale_json(daw_ui::slider_scale_geometry(ui.ctx(), fader.id)),"statistics":rect_json(statistics.rect),"rms":rms})

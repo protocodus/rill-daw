@@ -722,20 +722,31 @@ pub fn channel_meter(
     height: f32,
     inset: f32,
 ) -> Response {
-    channel_meter_inner(ui, id, peaks, None, height, inset)
+    channel_meter_inner(
+        ui,
+        id,
+        peaks,
+        None,
+        crate::tokens::MIXER_METER_WIDTH,
+        height,
+        inset,
+    )
 }
 
 /// Stereo meter with an engine-owned peak hold. A single hold drives its
 /// peak lines, clip lamp and the adjacent [`channel_peak_indicator`] badge.
+/// `width` is at least [`crate::tokens::MIXER_METER_WIDTH`]; a mixer strip
+/// gives the meter the space beside its fader.
 pub fn channel_meter_with_peak_hold(
     ui: &mut Ui,
     id: egui::Id,
     peaks: [f32; 2],
     held: [f32; 2],
+    width: f32,
     height: f32,
     inset: f32,
 ) -> Response {
-    channel_meter_inner(ui, id, peaks, Some(held), height, inset)
+    channel_meter_inner(ui, id, peaks, Some(held), width, height, inset)
 }
 
 fn channel_meter_inner(
@@ -743,11 +754,12 @@ fn channel_meter_inner(
     id: egui::Id,
     peaks: [f32; 2],
     held: Option<[f32; 2]>,
+    width: f32,
     height: f32,
     inset: f32,
 ) -> Response {
     let (rect, response) = ui.allocate_exact_size(
-        Vec2::new(crate::tokens::MIXER_METER_WIDTH, height.max(1.0)),
+        Vec2::new(width.max(crate::tokens::MIXER_METER_WIDTH), height.max(1.0)),
         Sense::click(),
     );
     let peaks = peaks.map(sanitize_peak);

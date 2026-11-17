@@ -1435,13 +1435,13 @@ they do not simulate UI zoom or temporarily shrink resizable utility windows.
 
 `semantic_colors_e2e` exercises neutral track creation and painted action, view,
 AI, guide and automation colors in both appearances, retaining user colors in
-saved songs. `mixer_sections_e2e` checks that strip sections sit one 13-point
+saved songs. `mixer_sections_e2e` checks that strip sections sit one 12-point
 gap apart on quiet bands without frames, in signal order (trim, inserts, width
 and pan, fader, sends, output), that only input and volume fields, processing actions and
 troughs are outlined inside a strip, and direct mouse editing in both themes and
 densities. `mixer_slider_alignment_e2e` finds the flat fader and meter troughs by
-their shared `trough` color. `mixer_strip_e2e` checks aligned sections across strips, the centered
-`[scale][rail][gap][meter]` unit, "−∞ dB", real sources, compact send rows with
+their shared `trough` color. `mixer_strip_e2e` checks aligned sections across strips, the
+`[scale][rail][gap][meter]` unit flush with the right content edge, "−∞ dB", real sources, compact send rows with
 "PRE" and dB levels, "+N more", destination-only outputs and Master's output to
 Setup › Audio. `mixer_pan_e2e` drags the pan rail, including the center detent.
 `utility_header_e2e` checks the shared Channel/Instrument/Effects/Routing header:

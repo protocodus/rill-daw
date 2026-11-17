@@ -75,7 +75,14 @@ quiet `section` band second; no group gets a frame. Arrows mark the input source
 and the output destination. Faders and meters share one flat look: a rounded
 `trough` groove with no outline, a smooth level fill and a hairline cap. Stereo
 width is a small knob captioned **Width**, centered at 100%. The workspace keeps
-`SPACE_MD` × `SPACE_SM` padding around the strips.
+`SPACE_MD` × `SPACE_SM` padding around the strips. Inside a strip one value sets the rhythm:
+`MIXER_BAND_PADDING` (4, half the 8-point strip margin) is each band's
+padding, its distance to the strip edge and the space between bands, so
+`MIXER_SECTION_GAP` is three of it (12). These step off the Fibonacci scale on
+purpose; equal spacing cannot come from sums of different Fibonacci steps. The
+identity plate sits inside the input band. The fader unit ends on the right
+content edge with a double-width stereo meter, and the gain field above it
+starts on the left edge.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/ui-gallery/mixer-dark.png">

@@ -46,7 +46,7 @@ fn inside(state: &Value, text: &str, rect: &Value) -> bool {
 }
 
 #[test]
-fn strips_align_sections_center_the_fader_unit_and_list_sends_compactly() {
+fn strips_align_sections_and_the_fader_unit_and_list_sends_compactly() {
     for (dark, density) in [(false, 1.0), (true, 2.0)] {
         let mut app = Harness::new();
         let mut project = Project::new();
@@ -99,16 +99,16 @@ fn strips_align_sections_center_the_fader_unit_and_list_sends_compactly() {
                     );
                 }
             }
-            // The [scale][rail][gap][meter] unit is centered on the strip axis.
-            let strip = &channel["strip"];
-            // The fader response is its rail; the scale gutter lies left of it.
-            let unit_left =
-                edge(&channel["fader"], "min", 0) - f64::from(daw_ui::tokens::MIXER_SCALE_GUTTER);
-            let unit_right = edge(&channel["meter"], "max", 0);
-            let axis = (edge(strip, "min", 0) + edge(strip, "max", 0)) * 0.5;
+            // The [scale][rail][gap][meter] unit ends on the strip's right
+            // content edge, like the rows above it, so no space is left unused
+            // beside the meter; the gain field above starts on the left edge.
             assert!(
-                ((unit_left + unit_right) * 0.5 - axis).abs() <= 1.0,
-                "fader unit off the strip axis: {channel}"
+                (edge(&channel["meter"], "max", 0) - edge(&channel["pan"], "max", 0)).abs() <= 1.0,
+                "fader unit off the right edge: {channel}"
+            );
+            assert!(
+                (edge(&channel["gain"], "min", 0) - edge(&channel["pan"], "min", 0)).abs() <= 0.01,
+                "gain field off the left edge: {channel}"
             );
             assert_eq!(
                 edge(&channel["meter"], "min", 1),
