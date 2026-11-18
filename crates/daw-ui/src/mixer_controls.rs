@@ -253,7 +253,8 @@ pub fn mixer_pan(ui: &mut Ui, pan: &mut f32, width: f32) -> Response {
             let label = ui
                 .allocate_ui_with_layout(
                     Vec2::new(MIXER_PAN_CAPTION_WIDTH, height),
-                    egui::Layout::right_to_left(egui::Align::Center),
+                    egui::Layout::left_to_right(egui::Align::Center)
+                        .with_main_align(egui::Align::Center),
                     |ui| {
                         ui.add(
                             egui::Label::new(

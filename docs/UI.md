@@ -927,13 +927,16 @@ release, including across silent callbacks; pause and stop clear the moving
 meters while retaining each channel's peak badge until reset.
 
 Mixer follows signal order from top to bottom: the name plate, the source
-("Audio · In 1", "MIDI · <instrument>", "Bus · 2 in"), input Gain, **Analyze**, Effects and its inserts,
-pan with **Mute**/**Solo**, the gain and peak readouts over the fader unit, then
-the output and sends. Strips are 144-point fill-only cards with 8-point margins
+("Audio · In 1", "MIDI · <instrument>", "Bus · 2 in"), input Gain, Effects and its
+inserts, width and pan with **M**/**S**, the gain and peak readouts over the fader
+unit, the RMS row with **Analyze** at its end, the sends, then the output. A
+legend column left of the strips (`paint_mixer_section_legend`,
+`MIXER_LEGEND_WIDTH`) names the sections once: Input, Effects, Pan, Level, Sends,
+Output. The pan value is centered in its slot. Strips are 144-point fill-only cards with 8-point margins
 (`MIXER_CHANNEL_WIDTH`); only the selected strip is outlined. Rows of one section
-sit `MIXER_ROW_GAP` (5) apart and sections `MIXER_SECTION_GAP` (13) apart: space
-alone separates them, without frames or rules. The name plate, Effects row,
-"+ Insert" slot, output, send and **Add send…** rows share the quiet `mixer_row`
+sit `MIXER_ROW_GAP` (5) apart and sections `MIXER_SECTION_GAP` (12) apart on
+quiet bands, without frames or rules. The name plate, Effects row, output, send
+and the **Add insert…** and **Add send…** action rows share the quiet `mixer_row`
 (no surface until hover, a focus ring on keyboard focus, text inset 8 points,
 an optional 3-point destination rail). Inside a strip only the gain field, the
 pan and fader troughs and the meter troughs carry an outline.
@@ -1437,8 +1440,8 @@ are outside that tap. `channel_meter_statistics` displays the louder stereo side
 the engine's 300 ms exponential mean-square RMS detector.
 
 Short mixer workspaces use the existing 21-point compact controls; taller
-windows retain 34-point comfortable rows. Effects and Analyze share one outlined
-processing row. The shared identity band aligns every role's gain travel,
+windows retain 34-point comfortable rows. Effects is one outlined processing
+row; Analyze sits beside the levels it explains (`mixer_measure_row`). The shared identity band aligns every role's gain travel,
 meter calibration and output/send controls. Up to two routing overview lanes
 remain below the strips; more routes use that pane's own scroll. The same
 channel details and Routing windows expose the complete controls on demand.
@@ -1468,10 +1471,10 @@ enable switch with the plug-in model beneath it and a wrapping action row.
 Bypass reads the same on every surface: a muted name, a gray rail and a tooltip.
 
 Each mixer strip names its instrument in the source row and lists its inserts
-under **Effects**. Click a device to open that instance; an empty chain shows a
-quiet **+ Insert** row that opens that channel's effect chooser (right-click
+under **Effects**. Click a device to open that instance; an empty chain shows an
+**Add insert…** action row, styled like **Add send…**, that opens that channel's effect chooser (right-click
 **Effects** offers the same). Long chains scroll within their reserved area; channel/master faders
-stay aligned. Device rows show a custom name above subtle producer/model text.
+stay aligned. Device rows show a custom name above the product name when the two differ.
 Instrument and effect overviews provide a **Device name** text field. The name
 is saved with the song and supports Undo. The original model stays visible.
 

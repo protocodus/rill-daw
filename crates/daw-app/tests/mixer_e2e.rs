@@ -268,8 +268,8 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
     );
     assert_eq!(
         label_count(&state, "Effects"),
-        4,
-        "inserts precede channel volume on all three channels and Master"
+        5,
+        "inserts precede channel volume on all three channels and Master, plus the section legend"
     );
     assert!(!visible(&state, "Instrument"));
     let route_rows: Vec<_> = state["mixer"]["channels"]

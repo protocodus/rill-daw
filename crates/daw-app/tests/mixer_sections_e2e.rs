@@ -136,6 +136,36 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
                 "the gain field and troughs keep their outline"
             );
         }
+        // One legend left of the strips names every section, top to bottom,
+        // level with the first strip's sections.
+        let legend = state["mixer"]["legend"].as_array().unwrap();
+        assert_eq!(
+            legend
+                .iter()
+                .map(|row| row["name"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            ["Input", "Effects", "Pan", "Level", "Sends", "Output"]
+        );
+        let first = &state["mixer"]["channels"][0];
+        for (row, key) in legend
+            .iter()
+            .zip(["name", "effects", "stereo_width", "gain"])
+        {
+            assert_eq!(
+                row["top"].as_f64().unwrap(),
+                first[key]["min"][1].as_f64().unwrap()
+            );
+        }
+        for name in ["Input", "Pan", "Level", "Sends"] {
+            assert!(
+                state["visible_labels"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|label| label == name),
+                "legend label {name}"
+            );
+        }
         let channel = &state["mixer"]["channels"][0];
         let muted = click(&mut app, &channel["mute"]);
         assert_eq!(muted["project"]["tracks"][0]["mute"], true);

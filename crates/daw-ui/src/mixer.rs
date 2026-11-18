@@ -1,5 +1,5 @@
 //! Shared mixer identity, insert and routing summaries, and read-only routing lanes.
-use egui::{Color32, FontId, Pos2, Rect, Response, Sense, Ui, Vec2};
+use egui::{Align2, Color32, FontId, Pos2, Rect, Response, Sense, Ui, Vec2};
 
 /// Channel card width: 8 pt margins leave 128 pt for the strip's controls.
 pub const MIXER_CHANNEL_WIDTH: f32 = crate::tokens::MIXER_STRIP_WIDTH;
@@ -123,9 +123,9 @@ pub fn mixer_role_heading(
 pub enum MixerRowText {
     /// Body text for primary rows (Effects, the output destination).
     Body,
-    /// Caption text for compact rows (sends, "+ Insert").
+    /// Caption text for compact rows (sends).
     Caption,
-    /// A document-changing command ("Add send…").
+    /// A document-changing command ("Add send…", "Add insert…").
     Action,
     /// Muted caption for placeholders.
     Placeholder,
@@ -407,15 +407,16 @@ fn mixer_name_plate_inner(
     }
 }
 
-/// The empty-chain slot: a quiet "+ Insert" row; one click adds the first insert.
+/// The empty-chain slot: an "Add insert…" action row, styled like "Add send…";
+/// one click adds the first insert.
 pub fn mixer_insert_slot(ui: &mut Ui, width: f32) -> Response {
     crate::hover_text(
         mixer_row(
             ui,
             width,
             MIXER_SLOT_HEIGHT,
-            "+ Insert",
-            MixerRowText::Placeholder,
+            "Add insert…",
+            MixerRowText::Action,
             None,
             None,
         ),
@@ -503,14 +504,8 @@ pub fn mixer_effects_button(ui: &mut Ui, width: f32, count: usize, active: usize
     )
 }
 
-pub struct MixerProcessingResponse {
-    pub effects: Response,
-    pub analyze: Response,
-}
-
-/// One outlined analysis action for channel and Master processing rows.
-pub fn mixer_analysis_action(ui: &mut Ui) -> Response {
-    let height = mixer_control_height(ui);
+/// One outlined analysis action, `height` square, for the measuring row.
+pub fn mixer_analysis_action(ui: &mut Ui, height: f32) -> Response {
     let colors = crate::theme::palette(ui.ctx());
     let response = ui
         .scope(|ui| {
@@ -534,31 +529,43 @@ pub fn mixer_analysis_action(ui: &mut Ui) -> Response {
     )
 }
 
-/// Adjacent, explicitly outlined processing actions. The analysis utility does
-/// not consume a full extra row or compete with the channel's identity.
-pub fn mixer_processing_row(
-    ui: &mut Ui,
-    width: f32,
-    count: usize,
-    active: usize,
-) -> MixerProcessingResponse {
-    let height = mixer_control_height(ui);
+/// The outlined Effects action heading a strip's processing section.
+pub fn mixer_processing_row(ui: &mut Ui, width: f32, count: usize, active: usize) -> Response {
+    let effects = mixer_effects_button(ui, width, count, active);
+    let colors = crate::theme::palette(ui.ctx());
+    ui.painter().rect_stroke(
+        effects.rect,
+        crate::tokens::RADIUS,
+        egui::Stroke::new(1.0 / ui.ctx().pixels_per_point(), colors.line),
+        egui::StrokeKind::Inside,
+    );
+    effects
+}
+
+pub struct MixerMeasureResponse {
+    pub statistics: Response,
+    pub analyze: Response,
+}
+
+/// The RMS readout under the meters with the Analyze action at its end, so
+/// deeper measurement sits next to the levels it explains.
+pub fn mixer_measure_row(ui: &mut Ui, width: f32, rms: [f32; 2]) -> MixerMeasureResponse {
+    let height = crate::tokens::COMPACT_HEIGHT;
     ui.allocate_ui_with_layout(
         Vec2::new(width, height),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
             ui.spacing_mut().item_spacing.x = crate::tokens::SPACE_XS;
-            let effects =
-                mixer_effects_button(ui, width - height - crate::tokens::SPACE_XS, count, active);
-            let colors = crate::theme::palette(ui.ctx());
-            ui.painter().rect_stroke(
-                effects.rect,
-                crate::tokens::RADIUS,
-                egui::Stroke::new(1.0 / ui.ctx().pixels_per_point(), colors.line),
-                egui::StrokeKind::Inside,
+            let statistics = crate::channel_meter_statistics(
+                ui,
+                (width - height - crate::tokens::SPACE_XS).max(0.0),
+                rms,
             );
-            let analyze = mixer_analysis_action(ui);
-            MixerProcessingResponse { effects, analyze }
+            let analyze = mixer_analysis_action(ui, height);
+            MixerMeasureResponse {
+                statistics,
+                analyze,
+            }
         },
     )
     .inner
@@ -801,6 +808,26 @@ impl MixerSection {
             Self::Level => "Volume & pan",
             Self::Output => "Output & sends",
         }
+    }
+}
+
+/// Width of the legend column naming the strip sections, left of the strips.
+pub const MIXER_LEGEND_WIDTH: f32 = crate::tokens::SPACE_XL + crate::tokens::SPACE_LG;
+
+/// Names each strip section once, in a column left of the strips: every
+/// strip shares the same rows, so a label per strip would only repeat. `rows`
+/// pairs a name with the section's content rect in one strip.
+pub fn paint_mixer_section_legend(ui: &Ui, column: Rect, rows: &[(&str, Rect)]) {
+    let colors = crate::theme::palette(ui.ctx());
+    let painter = ui.painter_at(column);
+    for (name, section) in rows {
+        painter.text(
+            egui::pos2(column.right(), section.top()),
+            Align2::RIGHT_TOP,
+            *name,
+            FontId::proportional(crate::tokens::FONT_CAPTION),
+            colors.muted,
+        );
     }
 }
 

@@ -409,7 +409,10 @@ impl DawApp {
                 )
             })
             .collect();
-        let mixer_width = channel_widths.values().sum::<f32>()
+        let legend_width = daw_ui::MIXER_LEGEND_WIDTH;
+        let mixer_width = legend_width
+            + group_gap
+            + channel_widths.values().sum::<f32>()
             + strip_width
             + (channels.len() + 1 - group_count) as f32 * channel_gap
             + (group_count - 1) as f32 * group_gap;
@@ -518,6 +521,7 @@ impl DawApp {
         let meter_offset = unit_offset + daw_ui::MIXER_FADER_WIDTH + daw_ui::MIXER_METER_GAP;
         let mut diagnostics = Vec::new();
         let mut route_diagnostics = Vec::new();
+        let mut legend_diagnostics: Vec<serde_json::Value> = Vec::new();
         let mut master_diagnostics = None;
         let mut master_details = None;
         let mut master_identity_rect = egui::Rect::NOTHING;
@@ -564,7 +568,7 @@ impl DawApp {
             ui.spacing_mut().item_spacing.y = 0.0;
             ui.set_min_width(mixer_width);
             let (headings, _) = ui.allocate_exact_size(Vec2::new(mixer_width, daw_ui::tokens::COMPACT_HEIGHT), egui::Sense::hover());
-            let mut group_x = headings.left();
+            let mut group_x = headings.left() + legend_width + group_gap;
             for (owner, bus, ids) in &channel_groups {
                 let label = owner.and_then(|id| names.get(&id).map(String::as_str)).unwrap_or(if *bus { "Buses" } else { "Tracks" });
                 let width = ids.iter().map(|id| channel_widths[id]).sum::<f32>() + ids.len().saturating_sub(1) as f32 * channel_gap;
@@ -583,8 +587,11 @@ impl DawApp {
             daw_ui::paint_mixer_group_header(ui.painter(), output_rect, "Output");
             group_diagnostics.push(serde_json::json!({"label":"Output","rect":rect_json(output_rect)}));
             ui.add_space(daw_ui::tokens::SPACE_XS);
+            let mut legend_rows: Option<Vec<(&str, egui::Rect)>> = None;
             ui.horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
+                let (legend, _) = ui.allocate_exact_size(Vec2::new(legend_width, strip_height), egui::Sense::hover());
+                ui.add_space(group_gap);
                 let mut previous_group = None;
                 for index in channel_indices.iter().copied() {
                     let track = &mut self.project.tracks[index];
@@ -841,11 +848,8 @@ impl DawApp {
                         changed |= polarity.changed();
                         let input_section = name.rect.union(source.response.rect).union(input_gain_response.rect).union(polarity.rect);
                         ui.add_space(section_gap - spacing);
-                        let processing = daw_ui::mixer_processing_row(ui, content_width,
+                        let effects = daw_ui::mixer_processing_row(ui, content_width,
                             track.inserts.len(), track.inserts.iter().filter(|slot| slot.enabled).count());
-                        let analyze = processing.analyze;
-                        let effects = processing.effects;
-                        if analyze.clicked() { analysis_target = Some(daw_engine::SignalMonitorTarget::Channel(track.id)); }
                         if effects.clicked() {
                             self.selected_track = Some(track.id); popup = Some(PopupKind::Effects);
                         }
@@ -943,7 +947,10 @@ impl DawApp {
                         fader_calibration.get_or_insert(level.rect);
                         ui.spacing_mut().item_spacing.y = spacing;
                         let rms = self.engine.as_ref().map(|engine| engine.channel_rms(track.id)).unwrap_or([0.0; 2]);
-                        let statistics = daw_ui::channel_meter_statistics(ui, content_width, rms);
+                        let measure = daw_ui::mixer_measure_row(ui, content_width, rms);
+                        let statistics = measure.statistics;
+                        let analyze = measure.analyze;
+                        if analyze.clicked() { analysis_target = Some(daw_engine::SignalMonitorTarget::Channel(track.id)); }
                         // Sends tap the channel before or after the fader; the
                         // output is the end of the strip.
                         ui.add_space(section_gap);
@@ -993,9 +1000,11 @@ impl DawApp {
                             .on_hover_text(format!("Output → {destination}\nAfter inserts, volume and pan · Click to choose output"));
                         output_menus.push((track.id, target.clone()));
                         let level_rect = stereo_width.rect.union(pan_response.rect).union(mute_solo_rect).union(gain.rect).union(fader_rect).union(level.rect);
-                        bands.paint(ui, &[input_section, effects.rect.union(insert_summary.rect),
+                        let band_rects = [input_section, effects.rect.union(insert_summary.rect),
                             stereo_width.rect.union(pan_response.rect).union(mute_solo_rect), gain.rect.union(readout.rect).union(fader_rect).union(level.rect).union(statistics.rect),
-                            sends_rect, target.rect], section_gap);
+                            sends_rect, target.rect];
+                        bands.paint(ui, &band_rects, section_gap);
+                        legend_rows.get_or_insert_with(|| ["Input", "Effects", "Pan", "Level", "Sends", "Output"].into_iter().zip(band_rects).collect());
                         let sections = [name.rect.union(source.response.rect), effects.rect.union(insert_summary.rect), level_rect, target.rect.union(sends_rect)];
                         let section_diagnostics: Vec<_> = daw_ui::MixerSection::ALL.into_iter().zip(sections).map(|(section, bounds)| serde_json::json!({"name":section.name(),"rect":rect_json(bounds)})).collect();
                         let mut details = serde_json::json!({"track":track.id,"selected":selected_channels.contains(&track.id),"channel":channel_numbers[&track.id],"bus":bus,"peaks":channel_peaks,"name":rect_json(name.rect),"reorder_grip":rect_json(grip.rect),"reorder_source":reorder_enabled.then(|| rect_json(name.rect)),"source":rect_json(source.response.rect),
@@ -1121,10 +1130,7 @@ impl DawApp {
                         changed |= polarity.changed();
                         let input_section = name.rect.union(source.response.rect).union(input.rect).union(polarity.rect);
                         ui.add_space(section_gap - spacing);
-                        let processing = daw_ui::mixer_processing_row(ui, content_width, master_track.inserts.len(), master_track.inserts.iter().filter(|slot| slot.enabled).count());
-                        let effects = processing.effects;
-                        let analyze = processing.analyze;
-                        if analyze.clicked() { analysis_target = Some(daw_engine::SignalMonitorTarget::Master); }
+                        let effects = daw_ui::mixer_processing_row(ui, content_width, master_track.inserts.len(), master_track.inserts.iter().filter(|slot| slot.enabled).count());
                         if effects.clicked() { self.selected_track = Some(master_id); popup = Some(PopupKind::Effects); }
                         daw_ui::context_menu(&effects, |ui| { if daw_ui::button(ui, "+ Insert").clicked() { insert_target = Some(master_id); ui.close(); } });
                         let insert_summary = ui.allocate_ui_with_layout(Vec2::new(content_width, device_height), egui::Layout::top_down(egui::Align::Min), |ui| {
@@ -1206,15 +1212,20 @@ impl DawApp {
                         if readout.clicked() || level.clicked() { reset_mixer_peak_hold(ui.ctx(), self.engine.as_ref(), generation, None); }
                         ui.spacing_mut().item_spacing.y = spacing;
                         let rms = self.engine.as_ref().map(|engine| engine.channel_rms(master_id)).unwrap_or([0.0; 2]);
-                        let statistics = daw_ui::channel_meter_statistics(ui, content_width, rms);
+                        let measure = daw_ui::mixer_measure_row(ui, content_width, rms);
+                        let statistics = measure.statistics;
+                        let analyze = measure.analyze;
+                        if analyze.clicked() { analysis_target = Some(daw_engine::SignalMonitorTarget::Master); }
                         // Master has no sends; its output lines up with the
                         // channel outputs at the end of every strip.
                         ui.add_space(section_gap + send_area_height + spacing + daw_ui::MIXER_SEND_ROW_HEIGHT + section_gap);
                         let output = daw_ui::mixer_output_button(ui, content_width, "Audio output", Some(palette(ui.ctx()).muted))
                             .on_hover_text("Master → audio device output · Click to open Setup › Audio");
                         if output.clicked() { master_output = true; }
-                        bands.paint(ui, &[input_section, effects.rect.union(insert_summary.rect), stereo_width.rect.union(pan_response.rect).union(pan_row.mute.rect),
-                            gain.rect.union(readout.rect).union(fader.rect).union(level.rect).union(statistics.rect), output.rect], section_gap);
+                        let band_rects = [input_section, effects.rect.union(insert_summary.rect), stereo_width.rect.union(pan_response.rect).union(pan_row.mute.rect),
+                            gain.rect.union(readout.rect).union(fader.rect).union(level.rect).union(statistics.rect), output.rect];
+                        bands.paint(ui, &band_rects, section_gap);
+                        legend_rows.get_or_insert_with(|| ["Input", "Effects", "Pan", "Level", "Output"].into_iter().zip(band_rects).collect());
                         serde_json::json!({"track":master_id,"meter":rect_json(level.rect),"meter_readout":rect_json(readout.rect),"peak_hold":master_peak_hold,"peak_clipped":master_peak_hold.iter().any(|peak| *peak >= 1.0),"target":rect_json(output.rect),
                             "name":rect_json(name.rect),"source":rect_json(source.response.rect),"source_menu":rect_json(source.inner.0),"analyze":rect_json(analyze.rect),"effects":rect_json(effects.rect),"insert_summary":rect_json(insert_summary.rect),
                             "input_gain":rect_json(input.rect),"input_gain_value":input_gain,"polarity":rect_json(polarity.rect),"stereo_width":rect_json(stereo_width.rect),"pan":rect_json(pan_response.rect),"mute":rect_json(pan_row.mute.rect),"gain":rect_json(gain.rect),"fader":rect_json(fader.rect),"fader_scale":scale_json(daw_ui::slider_scale_geometry(ui.ctx(), fader.id)),"statistics":rect_json(statistics.rect),"rms":rms})
@@ -1226,6 +1237,9 @@ impl DawApp {
                 }
                 master_details = Some(master.inner);
                 master_diagnostics = Some(rect_json(master.response.rect));
+                let rows = legend_rows.take().unwrap_or_default();
+                daw_ui::paint_mixer_section_legend(ui, legend, &rows);
+                legend_diagnostics = rows.iter().map(|(name, rect)| serde_json::json!({"name":name,"top":rect.top()})).collect();
             });
             if self.selected_track != selection_before {
                 flow_source = self.selected_track.filter(|id| channels.contains(id));
@@ -1292,7 +1306,7 @@ impl DawApp {
         ui.ctx().data_mut(|data| {
             data.insert_temp(preview_id, (generation, frame, self.selected_track, flow_source));
             data.insert_temp(egui::Id::new("mixer_diagnostics"),
-                serde_json::json!({"order":order.label(),"compact":compact,"role_height":role_height,"channel_order":channels,"focused_channel":focused_channel,"reorder_enabled":reorder_enabled,"channels":diagnostics,"master_strip":master_diagnostics,"master":master_details,"master_peaks":master_peaks,"groups":group_diagnostics,"routes":route_diagnostics,"flow_source":flow_source,"route_height":route_height,"reorder_preview":reorder_preview,"reorder_viewport":reorder_viewport,"reorder_menu":reorder_menu}));
+                serde_json::json!({"order":order.label(),"compact":compact,"role_height":role_height,"channel_order":channels,"focused_channel":focused_channel,"reorder_enabled":reorder_enabled,"channels":diagnostics,"master_strip":master_diagnostics,"master":master_details,"master_peaks":master_peaks,"groups":group_diagnostics,"legend":legend_diagnostics,"routes":route_diagnostics,"flow_source":flow_source,"route_height":route_height,"reorder_preview":reorder_preview,"reorder_viewport":reorder_viewport,"reorder_menu":reorder_menu}));
         });
         if use_song_order {
             ui.ctx().data_mut(|data| {
