@@ -322,7 +322,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Mixer parameter controls and output level | `mixer_fader`, `gain_taper`/`gain_untaper`, `paint_mixer_scale`, `mixer_pan`, `mixer_pan_row`, `mixer_master_pan_row`, `mixer_mute_solo`, `mixer_folded_mute_solo`, `MixerMuteSoloResponse`, `channel_meter`, `channel_meter_with_peak_hold`, `channel_peak_indicator`, `channel_meter_readout`, `channel_meter_statistics`, `gain_value_button_named` |
 | Instrument-output groups and input trim | `mixer_output_group_header`, `mixer_output_disclosure`, `mixer_folded_output_name`, `mixer_folded_output_route`, `mixer_input_gain`, `mixer_polarity_switch`, `mixer_stereo_width` |
 | Track and channel ordering | `track_reorder_source`, `track_reorder_grip_at`, `track_reorder_grip_tinted_at`, `track_reorder_menu`, `track_reorder_target`, `track_reorder_target_with_after_edge`, `track_reorder_preview_label`, `track_reorder_scroll_delta`, `TrackDropIntent` |
-| Mixer identity, inserts and routing | `mixer_name_plate`, `mixer_name_plate_with_grip`, `MixerNamePlateKind`, `mixer_row`, `MixerRowText`, `mixer_source_caption`, `mixer_effects_button`, `mixer_insert_slot`, `mixer_bus_input_summary`, `mixer_output_button`, `mixer_send_row`, `mixer_more_sends`, `mixer_add_send_button`, `MixerSend`, `MIXER_CHANNEL_WIDTH`, `MIXER_ROW_GAP`, `MIXER_SECTION_GAP` |
+| Mixer identity, inserts and routing | `mixer_name_plate`, `mixer_name_plate_with_grip`, `MixerNamePlateKind`, `mixer_row`, `MixerRowText`, `mixer_source_caption`, `mixer_effects_button`, `mixer_add_effect_row`, `MixerAddEffectResponse`, `mixer_bus_input_summary`, `mixer_output_button`, `mixer_send_row`, `mixer_more_sends`, `mixer_add_send_button`, `MixerSend`, `MIXER_CHANNEL_WIDTH`, `MIXER_ROW_GAP`, `MIXER_SECTION_GAP` |
 | Live signal analysis | `mixer_analysis_button`, `signal_analyzer_tabs`, `signal_analyzer`, `SignalAnalyzerView`, `SignalAnalyzerData`, `SignalAnalyzerResponse` |
 | Exact note expression | `midi_expression_editor`, `MidiExpressionControls`, `MidiExpressionKind`, `MidiExpressionPoint`, `MidiExpressionAction` |
 | Insert-chain structure | `effect_chain_header`, `effect_slot`, `EffectSlotControls`, `empty_effect_chain` |
@@ -940,7 +940,7 @@ Output. The pan value is centered in its slot. Strips are 144-point fill-only ca
 (`MIXER_CHANNEL_WIDTH`); only the selected strip is outlined. Rows of one section
 sit `MIXER_ROW_GAP` (5) apart and sections `MIXER_SECTION_GAP` (12) apart on
 quiet bands, without frames or rules. The name plate, Effects row, output, send
-and the **Add insert…** and **Add send…** action rows share the quiet `mixer_row`
+and the **Add send…** action row share the quiet `mixer_row`
 (no surface until hover, a focus ring on keyboard focus, text inset 8 points,
 an optional 3-point destination rail). Inside a strip only the gain field, the
 pan and fader troughs and the meter troughs carry an outline.
@@ -1475,9 +1475,13 @@ enable switch with the plug-in model beneath it and a wrapping action row.
 Bypass reads the same on every surface: a muted name, a gray rail and a tooltip.
 
 Each mixer strip names its instrument in the source row and lists its inserts
-under **Effects**. Click a device to open that instance; an empty chain shows an
-**Add insert…** action row, styled like **Add send…**, that opens that channel's effect chooser (right-click
-**Effects** offers the same). Long chains scroll within their reserved area; channel/master faders
+under **Effects**. Click a device to open that instance. Every strip ends its
+Effects section with one add row in the action color, `mixer_add_effect_row`:
+**Insert…** opens that channel's effect chooser (right-click **Effects** offers
+the same), while **EQ** and **Comp** append R1 Equalizer or R1 Compressor in one
+Undo step and open its editor. The three targets split the row's width, with a
+muted dot between them. The chain list above the row is reserved only once some
+strip has inserts. Long chains scroll within their reserved area; channel/master faders
 stay aligned. Device rows show a custom name above the product name when the two differ.
 Instrument and effect overviews provide a **Device name** text field. The name
 is saved with the song and supports Undo. The original model stays visible.

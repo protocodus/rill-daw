@@ -185,6 +185,7 @@ impl DawApp {
         let mut device_target = None;
         let mut instrument_target = None;
         let mut insert_target = None;
+        let mut builtin_target: Option<(u64, &str)> = None;
         let mut device_diagnostics = Vec::new();
         let mut toggle_selection = None;
         let mut channel_selection = None;
@@ -496,8 +497,10 @@ impl DawApp {
             .max()
             .unwrap_or(0)
             .min(3);
+        // The add row ends every Effects section; the chain list above it is
+        // reserved only once some strip has inserts.
         let device_height = if device_rows == 0 {
-            daw_ui::MIXER_SLOT_HEIGHT
+            0.0
         } else {
             let budget = workspace_height
                 - routing_overview_height
@@ -512,7 +515,10 @@ impl DawApp {
             (rows * daw_ui::DEVICE_IDENTITY_HEIGHT + (rows - 1.0) * spacing)
                 .max(daw_ui::MIXER_SLOT_HEIGHT)
         };
-        fixed_height += device_height;
+        fixed_height += daw_ui::MIXER_SLOT_HEIGHT;
+        if device_height > 0.0 {
+            fixed_height += device_height + spacing;
+        }
         let strip_height =
             (workspace_height - routing_overview_height - notice_reserve - group_header_height)
                 .max(fixed_height + daw_ui::tokens::MIXER_FADER_MIN);
@@ -875,13 +881,9 @@ impl DawApp {
                         daw_ui::context_menu(&effects, |ui| {
                             if daw_ui::button(ui, "+ Insert").clicked() { insert_target = Some(track.id); ui.close(); }
                         });
-                        let insert_summary = ui.allocate_ui_with_layout(Vec2::new(content_width, device_height), egui::Layout::top_down(egui::Align::Min), |ui| {
+                        let chain = (device_height > 0.0).then(|| ui.allocate_ui_with_layout(Vec2::new(content_width, device_height), egui::Layout::top_down(egui::Align::Min), |ui| {
                             ui.set_min_size(Vec2::new(content_width, device_height));
-                            if track.inserts.is_empty() {
-                                if daw_ui::mixer_insert_slot(ui, content_width).clicked() {
-                                    insert_target = Some(track.id);
-                                }
-                            } else {
+                            if !track.inserts.is_empty() {
                                 egui::ScrollArea::vertical().id_salt(("mixer_devices", track.id)).min_scrolled_height(0.0).max_height(device_height).auto_shrink([false, false]).show(ui, |ui| {
                                     for slot in &mut track.inserts {
                                         let model = crate::library::effect_model(&self.vst_catalog, &slot.effect);
@@ -893,7 +895,13 @@ impl DawApp {
                                     }
                                 });
                             }
-                        }).response;
+                        }).response);
+                        let add = daw_ui::mixer_add_effect_row(ui, content_width);
+                        if add.insert.clicked() { insert_target = Some(track.id); }
+                        if add.eq.clicked() { builtin_target = Some((track.id, "r1-equalizer")); }
+                        if add.comp.clicked() { builtin_target = Some((track.id, "r1-compressor")); }
+                        let insert_summary = chain.map_or(add.insert.rect, |chain| chain.rect).union(add.comp.rect);
+                        let add_effect = [&add.insert, &add.eq, &add.comp].map(|response| rect_json(response.rect));
                         // In signal-flow order after the inserts: width, pan and
                         // mute/solo, then the fader unit and its readouts.
                         ui.add_space(section_gap - spacing);
@@ -1019,17 +1027,17 @@ impl DawApp {
                             .on_hover_text(format!("Output → {destination}\nAfter inserts, volume and pan · Click to choose output"));
                         output_menus.push((track.id, target.clone()));
                         let level_rect = stereo_width.rect.union(pan_response.rect).union(mute_solo_rect).union(gain.rect).union(fader_rect).union(level.rect);
-                        let band_rects = [input_section, effects.rect.union(insert_summary.rect),
+                        let band_rects = [input_section, effects.rect.union(insert_summary),
                             stereo_width.rect.union(pan_response.rect).union(mute_solo_rect), gain.rect.union(readout.rect).union(fader_rect).union(level.rect).union(statistics.rect),
                             sends_rect, target.rect];
                         bands.paint(ui, &band_rects, section_gap);
                         legend_rows.get_or_insert_with(|| ["Input", "Effects", "Pan", "Level", "Sends", "Output"].into_iter().zip(band_rects).collect());
-                        let sections = [name.rect.union(source.response.rect), effects.rect.union(insert_summary.rect), level_rect, target.rect.union(sends_rect)];
+                        let sections = [name.rect.union(source.response.rect), effects.rect.union(insert_summary), level_rect, target.rect.union(sends_rect)];
                         let section_diagnostics: Vec<_> = daw_ui::MixerSection::ALL.into_iter().zip(sections).map(|(section, bounds)| serde_json::json!({"name":section.name(),"rect":rect_json(bounds)})).collect();
                         let mut details = serde_json::json!({"track":track.id,"selected":selected_channels.contains(&track.id),"channel":channel_numbers[&track.id],"bus":bus,"peaks":channel_peaks,"name":rect_json(name.rect),"reorder_grip":rect_json(grip.rect),"reorder_source":reorder_enabled.then(|| rect_json(name.rect)),"source":rect_json(source.response.rect),
                             "source_kind":source_kind,"source_menu":rect_json(source.inner.0),"source_label":rect_json(source.inner.1),
                             "automation_state":channel_state.map(daw_ui::automation_state_label),
-                            "effects":rect_json(effects.rect),"insert_summary":rect_json(insert_summary.rect),
+                            "effects":rect_json(effects.rect),"insert_summary":rect_json(insert_summary),"add_effect":add_effect,
                             "incoming_count":incoming.get(&track.id).map_or(0, Vec::len),
                             "gain":rect_json(gain.rect),"fader":rect_json(fader_rect),"fader_scale":scale_json(fader_scale),
                             "pan":rect_json(pan_response.rect),"pan_knob":knob_json(daw_ui::knob_geometry(ui.ctx(), pan_response.id)),
@@ -1037,7 +1045,7 @@ impl DawApp {
                             "meter":rect_json(level.rect),"meter_readout":rect_json(readout.rect),"peak_hold":channel_peak_hold,"peak_clipped":channel_peak_hold.iter().any(|peak| *peak >= 1.0),"target":rect_json(target.rect),"sends":rect_json(sends_rect),
                             "send_rows":send_rows,"send_automation":send_automation,"add_send":rect_json(add_send.rect),
                             "analyze":rect_json(analyze.rect),"sections":section_diagnostics,
-                            "stages":{"input":rect_json(source.response.rect),"processing":rect_json(effects.rect.union(insert_summary.rect)),
+                            "stages":{"input":rect_json(source.response.rect),"processing":rect_json(effects.rect.union(insert_summary)),
                                 "measuring":rect_json(level.rect),"output":rect_json(target.rect.union(sends_rect))}});
                         details["input_gain"] = rect_json(input_gain_response.rect);
                         details["input_gain_value"] = serde_json::json!(input_gain);
@@ -1152,11 +1160,9 @@ impl DawApp {
                         let effects = daw_ui::mixer_processing_row(ui, content_width, master_track.inserts.len(), master_track.inserts.iter().filter(|slot| slot.enabled).count());
                         if effects.clicked() { self.selected_track = Some(master_id); popup = Some(PopupKind::Effects); }
                         daw_ui::context_menu(&effects, |ui| { if daw_ui::button(ui, "+ Insert").clicked() { insert_target = Some(master_id); ui.close(); } });
-                        let insert_summary = ui.allocate_ui_with_layout(Vec2::new(content_width, device_height), egui::Layout::top_down(egui::Align::Min), |ui| {
+                        let chain = (device_height > 0.0).then(|| ui.allocate_ui_with_layout(Vec2::new(content_width, device_height), egui::Layout::top_down(egui::Align::Min), |ui| {
                             ui.set_min_size(Vec2::new(content_width, device_height));
-                            if master_track.inserts.is_empty() {
-                                if daw_ui::mixer_insert_slot(ui, content_width).clicked() { insert_target = Some(master_id); }
-                            } else {
+                            if !master_track.inserts.is_empty() {
                                 egui::ScrollArea::vertical().id_salt(("mixer_devices", master_id)).min_scrolled_height(0.0).max_height(device_height).auto_shrink([false, false]).show(ui, |ui| {
                                     for slot in &mut master_track.inserts {
                                         let model = crate::library::effect_model(&self.vst_catalog, &slot.effect);
@@ -1168,7 +1174,13 @@ impl DawApp {
                                     }
                                 });
                             }
-                        }).response;
+                        }).response);
+                        let add = daw_ui::mixer_add_effect_row(ui, content_width);
+                        if add.insert.clicked() { insert_target = Some(master_id); }
+                        if add.eq.clicked() { builtin_target = Some((master_id, "r1-equalizer")); }
+                        if add.comp.clicked() { builtin_target = Some((master_id, "r1-compressor")); }
+                        let insert_summary = chain.map_or(add.insert.rect, |chain| chain.rect).union(add.comp.rect);
+                        let add_effect = [&add.insert, &add.eq, &add.comp].map(|response| rect_json(response.rect));
                         ui.add_space(section_gap - spacing);
                         let stereo_width = daw_ui::mixer_stereo_width(ui, &mut master_track.stereo_width, content_width, "Master · Stereo width");
                         changed |= stereo_width.changed();
@@ -1241,12 +1253,12 @@ impl DawApp {
                         let output = daw_ui::mixer_output_button(ui, content_width, "Audio output", Some(palette(ui.ctx()).muted))
                             .on_hover_text("Master → audio device output · Click to open Setup › Audio");
                         if output.clicked() { master_output = true; }
-                        let band_rects = [input_section, effects.rect.union(insert_summary.rect), stereo_width.rect.union(pan_response.rect).union(pan_row.mute.rect),
+                        let band_rects = [input_section, effects.rect.union(insert_summary), stereo_width.rect.union(pan_response.rect).union(pan_row.mute.rect),
                             gain.rect.union(readout.rect).union(fader.rect).union(level.rect).union(statistics.rect), output.rect];
                         bands.paint(ui, &band_rects, section_gap);
                         legend_rows.get_or_insert_with(|| ["Input", "Effects", "Pan", "Level", "Output"].into_iter().zip(band_rects).collect());
                         serde_json::json!({"track":master_id,"meter":rect_json(level.rect),"meter_readout":rect_json(readout.rect),"peak_hold":master_peak_hold,"peak_clipped":master_peak_hold.iter().any(|peak| *peak >= 1.0),"target":rect_json(output.rect),
-                            "name":rect_json(name.rect),"source":rect_json(source.response.rect),"source_menu":rect_json(source.inner.0),"analyze":rect_json(analyze.rect),"effects":rect_json(effects.rect),"insert_summary":rect_json(insert_summary.rect),
+                            "name":rect_json(name.rect),"source":rect_json(source.response.rect),"source_menu":rect_json(source.inner.0),"analyze":rect_json(analyze.rect),"effects":rect_json(effects.rect),"insert_summary":rect_json(insert_summary),"add_effect":add_effect,
                             "input_gain":rect_json(input.rect),"input_gain_value":input_gain,"polarity":rect_json(polarity.rect),"stereo_width":rect_json(stereo_width.rect),"pan":rect_json(pan_response.rect),"mute":rect_json(pan_row.mute.rect),"gain":rect_json(gain.rect),"fader":rect_json(fader.rect),"fader_scale":scale_json(daw_ui::slider_scale_geometry(ui.ctx(), fader.id)),"statistics":rect_json(statistics.rect),"rms":rms})
                 });
                 anchors.insert(None, master.response.rect.center_bottom());
@@ -1381,6 +1393,9 @@ impl DawApp {
         if let Some(track) = insert_target {
             self.selected_track = Some(track);
             self.open_effect_library(track, false);
+        }
+        if let Some((track, device)) = builtin_target {
+            self.add_builtin_insert(track, device);
         }
         if let Some(track) = instrument_target {
             self.selected_track = Some(track);
