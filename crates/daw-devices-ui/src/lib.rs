@@ -279,6 +279,34 @@ pub fn panel_width(descriptor: &DeviceDescriptor) -> f32 {
     panels::layout(descriptor).width + daw_ui::DEVICE_FRAME_INSET
 }
 
+/// The device's static curve at these settings, in miniature: the response
+/// of a device whose picture is one, the transfer curve of a dynamics
+/// processor. `None` for a device with another picture or none.
+pub fn static_curve(
+    descriptor: &DeviceDescriptor,
+    values: &dyn Fn(u32) -> f64,
+    points: usize,
+) -> Option<(daw_ui::DeviceCurve, Vec<f32>)> {
+    // A rate well above the audible range keeps the curve near 20 kHz true.
+    const RATE: f32 = 96_000.0;
+    let (kind, response) = match panels::layout(descriptor).picture? {
+        panels::Picture::Response(view) => (daw_ui::DeviceCurve::Response, Some(view.curve)),
+        panels::Picture::Dynamics { .. } => (daw_ui::DeviceCurve::Transfer, None),
+        _ => return None,
+    };
+    let input: Vec<f32> = (0..points).map(|index| kind.input(index, points)).collect();
+    let mut out = vec![0.0; points];
+    match response {
+        Some(curve) => curve(values, RATE, &input, &mut out),
+        None => daw_devices::devices::compressor::transfer_db(
+            &panels::compressor_settings(values),
+            &input,
+            &mut out,
+        ),
+    }
+    Some((kind, out))
+}
+
 /// Draws a device's panel in its frame: name and presets on the bar, the
 /// response, then the sections as cards in signal order, side by side where
 /// they share a row.

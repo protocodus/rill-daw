@@ -183,12 +183,13 @@ fn mixer_orders_signal_stages_and_separates_primary_and_send_arrows() {
                 "source",
                 "effects",
                 "insert_summary",
+                "stereo_width",
                 "pan",
                 "mute_solo",
                 "gain",
                 "fader",
-                "target",
                 "sends",
+                "target",
             ];
             for pair in stages.windows(2) {
                 assert!(
@@ -534,4 +535,33 @@ fn mixer_creates_buses_and_routes_to_multiple_destinations_without_feedback() {
         snapshot["tracks"][0]["sends"]
     );
     app.quit();
+}
+
+/// A route's lane hops over the stem of a lower route that rises through it,
+/// and only there: the lines cross without joining.
+#[test]
+fn route_lanes_hop_over_stems_they_do_not_join() {
+    for (dark, density) in [(false, 1.0), (true, 2.0)] {
+        let mut app = Harness::new();
+        let mut project = Project::new();
+        let source = project.add_audio_track("Lead");
+        let room = project.add_bus("Room");
+        project.add_send(source, room, 0.5, false).unwrap();
+        let path = app.directory.path().join("route-hops.rill");
+        project.save(&path).unwrap();
+        app.command(json!({"command":"open", "path":path}));
+        app.command(json!({"command":"system_theme", "dark":dark}));
+        app.command(json!({"command":"viewport", "width":1440, "height":1000,
+            "pixels_per_point":density}));
+        app.click("Mixer");
+        let state = app.command(json!({"command":"inspect", "paint":true}));
+        let routes = state["mixer"]["routes"].as_array().unwrap();
+        assert_eq!(routes.len(), 2, "{routes:?}");
+        // Output → Master runs past Room, whose send stem rises through it.
+        assert_eq!(routes[0]["kind"], "Output");
+        assert_eq!(routes[1]["target"], room);
+        assert_eq!(routes[0]["hops"], json!([routes[1]["to"][0]]));
+        assert_eq!(routes[1]["hops"], json!([]));
+        app.quit();
+    }
 }

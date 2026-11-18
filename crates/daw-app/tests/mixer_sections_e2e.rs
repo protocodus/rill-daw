@@ -1,5 +1,6 @@
-//! Mixer sections use spacing instead of enclosing frames. Outlines belong to
-//! individual input fields, processing actions and troughs, which remain mouse-editable.
+//! Mixer sections are separated by space and a quiet band, never an enclosing
+//! frame. Outlines belong to individual input fields, processing actions and
+//! troughs, which remain mouse-editable.
 mod common;
 use common::Harness;
 use daw_core::Project;
@@ -40,8 +41,8 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
                     .collect::<Vec<_>>(),
                 ["Source", "Effects", "Volume & pan", "Output & sends"]
             );
-            // Input trim sits before the inserts; post-fader RMS statistics
-            // sit before routing. Neither belongs to an empty section gap.
+            // Strip rows follow the signal: input trim, inserts, width and pan,
+            // the fader, then sends and the output.
             let source_role_space = if channel["bus"] == true {
                 0.0
             } else {
@@ -55,13 +56,14 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
                 ),
                 (
                     &channel["input_gain"],
-                    &channel["stereo_width"],
-                    f64::from(daw_ui::MIXER_ROW_GAP),
-                ),
-                (
-                    &channel["stereo_width"],
                     &sections[1]["rect"],
-                    f64::from(daw_ui::MIXER_ROW_GAP),
+                    f64::from(daw_ui::MIXER_SECTION_GAP),
+                ),
+                // Width follows the inserts, as in the engine.
+                (
+                    &sections[1]["rect"],
+                    &channel["stereo_width"],
+                    f64::from(daw_ui::MIXER_SECTION_GAP),
                 ),
                 (
                     &sections[1]["rect"],
@@ -73,6 +75,12 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
                     &channel["statistics"],
                     &sections[3]["rect"],
                     f64::from(daw_ui::MIXER_SECTION_GAP + daw_ui::MIXER_ROW_GAP),
+                ),
+                // Sends tap the channel; the output ends the strip.
+                (
+                    &channel["sends"],
+                    &channel["target"],
+                    f64::from(daw_ui::MIXER_SECTION_GAP),
                 ),
             ] {
                 let gap = next["min"][1].as_f64().unwrap() - previous["max"][1].as_f64().unwrap();
@@ -126,6 +134,36 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
             assert!(
                 !outlined.is_empty(),
                 "the gain field and troughs keep their outline"
+            );
+        }
+        // One legend left of the strips names every section, top to bottom,
+        // level with the first strip's sections.
+        let legend = state["mixer"]["legend"].as_array().unwrap();
+        assert_eq!(
+            legend
+                .iter()
+                .map(|row| row["name"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            ["Input", "Effects", "Pan", "Level", "Sends", "Output"]
+        );
+        let first = &state["mixer"]["channels"][0];
+        for (row, key) in legend
+            .iter()
+            .zip(["name", "effects", "stereo_width", "gain"])
+        {
+            assert_eq!(
+                row["top"].as_f64().unwrap(),
+                first[key]["min"][1].as_f64().unwrap()
+            );
+        }
+        for name in ["Input", "Pan", "Level", "Sends"] {
+            assert!(
+                state["visible_labels"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|label| label == name),
+                "legend label {name}"
             );
         }
         let channel = &state["mixer"]["channels"][0];

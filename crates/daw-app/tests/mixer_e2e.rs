@@ -268,8 +268,8 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
     );
     assert_eq!(
         label_count(&state, "Effects"),
-        4,
-        "inserts precede channel volume on all three channels and Master"
+        5,
+        "inserts precede channel volume on all three channels and Master, plus the section legend"
     );
     assert!(!visible(&state, "Instrument"));
     let route_rows: Vec<_> = state["mixer"]["channels"]
@@ -366,7 +366,7 @@ fn aligned_mixer_strips_keep_channel_selection_routing_and_editors_on_demand() {
         "audio channels have no instrument editor"
     );
     app.key("Escape");
-    let muted = app.command(json!({"command":"click","label":"Mute","occurrence":1}));
+    let muted = app.command(json!({"command":"click","label":"M","occurrence":1}));
     assert_eq!(muted["project"]["tracks"][1]["mute"], true);
     assert_eq!(muted["project"]["tracks"][0]["mute"], false);
     let undone = menu(&mut app, "Edit", "Undo");

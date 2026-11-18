@@ -939,7 +939,7 @@ fn automation_keeps_markers_on_wide_pan_rows_and_separate_value_buttons() {
         |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 let response = daw_ui::mixer_pan(ui, &mut pan, 180.0);
-                geometry = daw_ui::slider_scale_geometry(ctx, response.id);
+                geometry = daw_ui::knob_geometry(ctx, response.id);
                 daw_ui::paint_automation_control(ui, &response, AutomationState::Read);
                 daw_ui::automatable_parameter_value_button(
                     ui,
@@ -955,13 +955,8 @@ fn automation_keeps_markers_on_wide_pan_rows_and_separate_value_buttons() {
             });
         },
     );
-    // On the pan rail the marker sits beside the cap, never over it.
-    let geometry = geometry.unwrap();
-    let dial = Rect::from_center_size(
-        geometry.handle,
-        vec2(daw_ui::MIXER_CAP_SIZE.y, daw_ui::MIXER_CAP_SIZE.x),
-    )
-    .shrink(0.5);
+    // On the pan knob the marker sits beside the dial, never over it.
+    let dial = geometry.unwrap().dial.shrink(0.5);
     let markers: Vec<_> = output
         .shapes
         .iter()

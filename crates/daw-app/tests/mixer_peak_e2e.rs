@@ -225,7 +225,7 @@ fn every_channel_and_master_hold_transients_until_mouse_reset_and_switches_are_c
             &channel(&clear_paint, source)["meter_readout"],
             colors.muted,
         );
-        for (label, key, color) in [("Mute", "mute", colors.mute), ("Solo", "solo", colors.solo)] {
+        for (label, key, color) in [("M", "mute", colors.mute), ("S", "solo", colors.solo)] {
             let idle = paint(&mut app);
             assert_switch_color(&idle, &channel(&idle, source)[key], label, color, false);
             click_rect(&mut app, &channel(&idle, source)[key]);

@@ -911,6 +911,24 @@ impl<'a> Knob<'a> {
                         );
                     }
                 }
+            } else if self.mini {
+                // The value as an index from the hub across the arc: it reads
+                // where the active arc is empty (a centered bipolar value) and
+                // marks its end against the range track otherwise.
+                ui.painter().line_segment(
+                    [
+                        center,
+                        center + index_direction * (radius + MINI_ARC_WIDTH * 0.5),
+                    ],
+                    Stroke::new(
+                        1.5_f32,
+                        if ui.is_enabled() {
+                            colors.text
+                        } else {
+                            colors.muted
+                        },
+                    ),
+                );
             } else if !ring_only {
                 ui.painter().line_segment(
                     [center + index_direction * radius * 0.18, geometry.index],

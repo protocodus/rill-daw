@@ -6,6 +6,7 @@ pub struct State {
     pan: [f32; 3],
     muted: [bool; 3],
     solo: [bool; 3],
+    inserts: [bool; 3],
     precount: u8,
     click: bool,
     click_gain: f32,
@@ -20,6 +21,7 @@ impl Default for State {
             pan: [0.0, -0.2, 0.1],
             muted: [false, true, false],
             solo: [false, false, true],
+            inserts: [true, true, false],
             precount: 1,
             click: true,
             click_gain: 0.35,
@@ -106,7 +108,44 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                                     if role.is_none() {
                                         ui.add_space(ui::MIXER_ROLE_HEIGHT);
                                     }
-                                    ui::mixer_processing_row(ui, width, 0, 0);
+                                    ui::mixer_processing_row(
+                                        ui,
+                                        width,
+                                        1,
+                                        usize::from(state.inserts[index]),
+                                    );
+                                    let (insert, model, curve) = match index {
+                                        0 => (
+                                            "Kick EQ",
+                                            "Rill · R1 Equalizer",
+                                            Some(ui::DeviceCurve::Response),
+                                        ),
+                                        1 => (
+                                            "Glue",
+                                            "Rill · R1 Compressor",
+                                            Some(ui::DeviceCurve::Transfer),
+                                        ),
+                                        _ => ("Long hall", "Vendor · Hall", None),
+                                    };
+                                    let values: Vec<f32> = curve.map_or_else(Vec::new, |kind| {
+                                        (0..33)
+                                            .map(|point| {
+                                                demonstration_curve(kind, kind.input(point, 33))
+                                            })
+                                            .collect()
+                                    });
+                                    ui::device_identity_button(
+                                        ui,
+                                        Id::new(("gallery_insert", index)),
+                                        width,
+                                        ui::DeviceIdentity {
+                                            name: insert,
+                                            model,
+                                            preview: None,
+                                            curve: curve.map(|kind| (kind, values.as_slice())),
+                                        },
+                                        &mut state.inserts[index],
+                                    );
                                     let mut db = ui::channel_gain_to_db(state.gain[index]);
                                     if ui.add(ui::channel_gain_number(&mut db)).changed() {
                                         state.gain[index] = ui::channel_gain_from_db(db);
@@ -142,6 +181,16 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                     });
                 }
             });
+            // The send's lane hops over the stem rising to Music bus.
+            ui::mixer_route_lane_with_crossings(
+                ui,
+                endpoints[0],
+                endpoints[2],
+                "Pre send → Reverb",
+                ui.clip_rect(),
+                ui::MIXER_ROUTE_LANE,
+                &[endpoints[1].position.x],
+            );
             ui::mixer_route_lane(
                 ui,
                 endpoints[0],
@@ -199,4 +248,23 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             );
         });
     });
+}
+
+/// Fixed demonstration curves: a low cut with a presence lift, and a 4:1
+/// compressor from −24 dB.
+fn demonstration_curve(kind: ui::DeviceCurve, input: f32) -> f32 {
+    match kind {
+        ui::DeviceCurve::Response => {
+            let cut = -10.0 * (60.0 / input).powi(2).ln_1p();
+            let presence = 4.0 * (-(input / 3000.0).ln().powi(2) / 0.6).exp();
+            cut + presence
+        }
+        ui::DeviceCurve::Transfer => {
+            if input < -24.0 {
+                input
+            } else {
+                -24.0 + (input + 24.0) / 4.0
+            }
+        }
+    }
 }

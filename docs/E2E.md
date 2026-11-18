@@ -310,8 +310,8 @@ contrast in both themes, and ensures view/theme changes preserve the project and
 history. Opt-in paint diagnostics include paths, circles and text colors.
 
 `slider_scale_e2e` compares actual painted ticks and handle center lines with
-mouse edits at range endpoints and fractional positions. It checks adaptive
-mixer scales, direct track-header rail mapping and current-value readouts,
+mouse edits at range endpoints and fractional positions. It checks that the
+mixer fader paints only its unity mark, no dB captions, direct track-header rail mapping and current-value readouts,
 compact headers, both themes and display densities. `slider_automation_e2e` creates gain, pan and send lanes directly from
 controls, checks exact ownership, Undo/Redo, override and Resume. The optional
 `inspect` paint output includes `painted_lines` for these visual checks.
@@ -377,6 +377,9 @@ cargo test --locked -p daw-app --test automation_curves_e2e --test automation_in
 
 `mixer_readability_e2e` checks channel separation, destination color markers,
 bus input counts, insert summaries and mouse access to output/send routing.
+`mixer_insert_power_e2e` bypasses channel and Master inserts with their lamps
+in place, checks the Effects count, Undo and re-enabling, and that built-in
+equalizers and compressors (not hosted plug-ins) report their curve miniature.
 `effect_chain_layout_e2e` covers bounded effect names, status, pinned insertion,
 before/after placement and append through the chooser, card context actions, cancel, Undo/Redo, and calibrated fader interaction. `studio_windows_e2e`
 opens and closes on-demand utilities in both appearances and at narrow/wide
@@ -389,7 +392,7 @@ reaches **Add send…** and **New return with effect…** at the end, and
 checks mouse edits and Undo at 800×600 and 1100×850.
 
 ```sh
-cargo test --locked -p daw-app --test mixer_readability_e2e --test effect_chain_layout_e2e --test routing_layout_e2e --test studio_windows_e2e --test control_roles_e2e -- --test-threads=1
+cargo test --locked -p daw-app --test mixer_readability_e2e --test mixer_insert_power_e2e --test effect_chain_layout_e2e --test routing_layout_e2e --test studio_windows_e2e --test control_roles_e2e -- --test-threads=1
 ```
 
 `stretch_duration_range_e2e` verifies mode-specific duration limits before Apply, invalid drafts without document/history changes, exact supported bounds, already-stretched and trimmed linked audio/MIDI occurrences, consistent numeric/stepper/drag behavior, timeline bounds, and unchanged stored precision during inspection.
@@ -489,8 +492,9 @@ ordinary mixed rows and fractional display density.
 `arranger_layout_e2e` drives label and global row resizing, verifies the loop's
 separate painted lane, and creates/reparents nested folders with safe choices,
 Undo and portable recall. `mixer_flow_e2e` verifies signal-stage order and actual
-arrow geometry, multiple pre/post bus sends against rendered samples, feedback
-rejection, retained route preview, Undo and save/reopen.
+arrow geometry, hops where a lane crosses a stem it does not join, multiple
+pre/post bus sends against rendered samples, feedback rejection, retained route
+preview, Undo and save/reopen.
 `mixer_signal_flow_e2e` checks input → processing → horizontal stereo metering →
 output bounds in both appearances and densities, unchanged project/history on
 view, full-size Mute/Solo mouse actions on the correct channel and Undo. It also
@@ -1432,13 +1436,15 @@ they do not simulate UI zoom or temporarily shrink resizable utility windows.
 
 `semantic_colors_e2e` exercises neutral track creation and painted action, view,
 AI, guide and automation colors in both appearances, retaining user colors in
-saved songs. `mixer_sections_e2e` checks that strip sections sit one 13-point
-gap apart without frames, that only the gain field and the pan, fader and meter
+saved songs. `mixer_sections_e2e` checks that strip sections sit one 12-point
+gap apart on quiet bands without frames, in signal order (trim, inserts, width
+and pan, fader, sends, output), that only input and volume fields, processing actions and
 troughs are outlined inside a strip, and direct mouse editing in both themes and
-densities. `mixer_strip_e2e` checks aligned sections across strips, the centered
-`[scale][rail][gap][meter]` unit, "−∞ dB", real sources, compact send rows with
+densities. `mixer_slider_alignment_e2e` finds the flat fader and meter troughs by
+their shared `trough` color. `mixer_strip_e2e` checks aligned sections across strips, the
+`[rail][gap][meter]` unit and the gain row centered on the strip axis, "−∞ dB", real sources, compact send rows with
 "PRE" and dB levels, "+N more", destination-only outputs and Master's output to
-Setup › Audio. `mixer_pan_e2e` drags the pan rail, including the center detent.
+Setup › Audio. `mixer_pan_e2e` drags the pan knob, including the center detent.
 `utility_header_e2e` checks the shared Channel/Instrument/Effects/Routing header:
 one row of links in a fixed order with the AI action trailing, bodies starting at
 one height, and switching windows through the links. `routing_layout_e2e` and

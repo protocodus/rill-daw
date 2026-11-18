@@ -1,25 +1,20 @@
 //! Console controls composed from the shared native slider and button widgets.
 //! Audio levels and parameter values always belong to the caller.
-use egui::{Align2, FontId, Pos2, Rect, Response, Sense, SliderClamping, Stroke, Ui, Vec2};
+use egui::{Pos2, Rect, Response, Sense, SliderClamping, Stroke, Ui, Vec2};
 
 /// Rail thickness of the vertical mixer fader (its pointer target).
 pub const MIXER_FADER_RAIL: f32 = crate::tokens::COMPACT_HEIGHT;
-/// The dB scale gutter plus the fader rail.
-pub const MIXER_FADER_WIDTH: f32 = crate::tokens::MIXER_SCALE_GUTTER + MIXER_FADER_RAIL;
+/// The fader's width: its rail, which carries the unity mark too.
+pub const MIXER_FADER_WIDTH: f32 = MIXER_FADER_RAIL;
 /// Space between the fader rail's target and the channel meter.
 pub const MIXER_METER_GAP: f32 = crate::tokens::SPACE_XS;
-/// `[scale][rail][gap][meter]`: the unit centered on every strip axis.
+/// `[rail][gap][meter]`: the unit centered on every strip axis.
 pub const MIXER_FADER_UNIT_WIDTH: f32 =
     MIXER_FADER_WIDTH + MIXER_METER_GAP + crate::tokens::MIXER_METER_WIDTH;
 /// Distance from the fader rail's ends to its handle travel (silence and top):
 /// half the visible cap, so the cap never leaves the rail.
 pub const MIXER_FADER_INSET: f32 = crate::MIXER_CAP_SIZE.y * 0.5;
-/// Width reserved for the pan value ("L100") beside the pan rail.
-pub const MIXER_PAN_CAPTION_WIDTH: f32 = crate::tokens::SPACE_XL;
-/// The pan rail row above the Mute and Solo row.
-pub const MIXER_PAN_ROW_HEIGHT: f32 =
-    crate::tokens::COMPACT_HEIGHT + crate::MIXER_ROW_GAP + crate::tokens::CONTROL_HEIGHT;
-/// Pan values this close to center snap to it while dragging: the center detent.
+/// Knob values this close to their detent snap to it while dragging.
 const PAN_DETENT: f32 = 0.03;
 
 /// Gain at the top of the fader travel (+3.5 dB); the model allows 0..=1.5.
@@ -103,67 +98,31 @@ pub fn mixer_level_y(rect: Rect, inset: f32, gain: f32, pixels_per_point: f32) -
     .y
 }
 
-/// Paint the dB scale into the gutter left of `edge`: ticks end 1 pt before
-/// it, captions are right-aligned. `bottom`/`top` are the y of silence and of
-/// the travel top; positions follow [`gain_taper`]. On short faders captions
-/// that would collide are dropped, landmarks (0, −∞, +3.5) first kept.
-pub fn paint_mixer_scale(ui: &Ui, edge: f32, bottom: f32, top: f32) {
+/// Paint the fader's only landmark, unity gain: a short tick on each side
+/// of the trough centered on `axis`. The exact level is in the gain readout
+/// above the fader; numbers beside the rail would repeat it.
+/// `bottom`/`top` are the y of silence and of the travel top.
+pub fn paint_mixer_scale(ui: &Ui, axis: f32, bottom: f32, top: f32) {
     let colors = crate::theme::palette(ui.ctx());
     let painter = ui.painter();
-    let hairline = 1.0 / painter.pixels_per_point();
-    let stops = mixer_scale_stops();
-    let y = |gain: f32| {
-        egui::emath::GuiRounding::round_to_pixel_center(
-            bottom + (top - bottom) * gain_taper(gain),
-            painter.pixels_per_point(),
-        )
-    };
-    for (_, gain, major) in stops {
-        let reach = if major { 5.0 } else { 3.0 };
+    let y = egui::emath::GuiRounding::round_to_pixel_center(
+        bottom + (top - bottom) * gain_taper(1.0),
+        painter.pixels_per_point(),
+    );
+    // Clear of the 5 pt trough, inside the rail's target.
+    for side in [-1.0, 1.0] {
         painter.line_segment(
             [
-                Pos2::new(edge - reach, y(gain)),
-                Pos2::new(edge - 1.0, y(gain)),
+                Pos2::new(axis + side * 5.0, y),
+                Pos2::new(axis + side * 9.0, y),
             ],
-            Stroke::new(
-                hairline,
-                if gain == 1.0 {
-                    colors.text
-                } else {
-                    colors.muted
-                },
-            ),
-        );
-    }
-    let mut painted: Vec<f32> = Vec::new();
-    for label in ["0", "−∞", "+3.5", "−12", "−30", "−6", "−20"] {
-        let Some((_, gain, _)) = stops.iter().find(|stop| stop.0 == label) else {
-            continue;
-        };
-        let at = y(*gain);
-        if painted
-            .iter()
-            .any(|other| (other - at).abs() < crate::tokens::FONT_CAPTION + 1.0)
-        {
-            continue;
-        }
-        painted.push(at);
-        painter.text(
-            Pos2::new(edge - crate::tokens::SPACE_SM, at),
-            Align2::RIGHT_CENTER,
-            label,
-            FontId::proportional(crate::tokens::FONT_CAPTION),
-            if *gain == 1.0 {
-                colors.text
-            } else {
-                colors.muted
-            },
+            Stroke::new(1.5_f32, colors.text),
         );
     }
 }
 
-/// Channel gain on the shared console taper, with its dB scale in the
-/// left gutter. The native slider edits travel; the stored gain changes only
+/// Channel gain on the shared console taper, with a unity mark across
+/// the rail. The native slider edits travel; the stored gain changes only
 /// on an edit, so displaying never rounds or clamps the caller's value.
 /// The returned response retains the rail identity for exact entry,
 /// automation and scale geometry (whose value is the travel fraction).
@@ -180,7 +139,6 @@ pub fn mixer_fader(ui: &mut Ui, gain: &mut f32, height: f32) -> Response {
             |ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 ui.spacing_mut().slider_width = height;
-                ui.add_space(crate::tokens::MIXER_SCALE_GUTTER);
                 ui.add(
                     crate::slider(&mut travel, 0.0..=1.0)
                         .mixer_style()
@@ -200,7 +158,7 @@ pub fn mixer_fader(ui: &mut Ui, gain: &mut f32, height: f32) -> Response {
     if let Some(scale) = crate::slider_scale_geometry(ui.ctx(), response.id)
         && ui.is_rect_visible(scale.rail)
     {
-        paint_mixer_scale(ui, scale.rail.left(), scale.minimum.y, scale.maximum.y);
+        paint_mixer_scale(ui, scale.rail.center().x, scale.minimum.y, scale.maximum.y);
     }
     crate::hover_text(
         response,
@@ -222,10 +180,44 @@ pub fn mixer_pan_caption(pan: f32) -> String {
     }
 }
 
-/// Horizontal pan rail in the fader's skin with a center detent, and the
-/// value ("L15", "C") in a caption right of it. The whole row is one context
-/// target.
+/// Pan as a labelled bipolar knob, in the same row shape as the width knob
+/// above it: "Pan" on the left, the dial and its value ("L15", "C") on the
+/// right. Snaps to center while dragging; double-click resets to center.
+/// The whole row is one context target.
 pub fn mixer_pan(ui: &mut Ui, pan: &mut f32, width: f32) -> Response {
+    let response = mixer_knob_row(
+        ui,
+        width,
+        "Pan",
+        pan,
+        -1.0..=1.0,
+        0.0,
+        &mixer_pan_caption(*pan),
+    );
+    response.widget_info(|| egui::WidgetInfo::slider(ui.is_enabled(), f64::from(*pan), "Pan"));
+    crate::hover_text(
+        response,
+        format!(
+            "Stereo balance · {} · {}%\nDrag or use the arrow keys; Shift for fine adjustment. Snaps to center; double-click to reset.\nRight-click for exact value entry and automation",
+            crate::channel_pan_label(*pan),
+            *pan * 100.0
+        ),
+    )
+}
+
+/// One strip row of a named bipolar knob: the caption on the left, the dial
+/// and its value right-aligned in a cell wide enough for "200%", so the dials
+/// of the rows stack on one axis. Pointer edits snap to `detent` near it, and
+/// a double-click returns there. The returned response covers the whole row.
+fn mixer_knob_row(
+    ui: &mut Ui,
+    width: f32,
+    caption: &str,
+    value: &mut f32,
+    range: std::ops::RangeInclusive<f32>,
+    detent: f32,
+    text: &str,
+) -> Response {
     let height = crate::tokens::COMPACT_HEIGHT;
     let row = ui.allocate_ui_with_layout(
         Vec2::new(width, height),
@@ -235,58 +227,43 @@ pub fn mixer_pan(ui: &mut Ui, pan: &mut f32, width: f32) -> Response {
             ui.set_max_height(height);
             ui.spacing_mut().interact_size.y = height;
             ui.spacing_mut().item_spacing.x = crate::tokens::SPACE_XS;
-            ui.spacing_mut().slider_width =
-                (width - MIXER_PAN_CAPTION_WIDTH - crate::tokens::SPACE_XS).max(0.0);
-            let mut response = ui.add(
-                crate::slider(pan, -1.0..=1.0)
-                    .mixer_style()
-                    .scale_ticks(&[(0.5, true)])
-                    .zero_reference(0.0)
-                    .clamping(SliderClamping::Edits)
-                    .show_value(false)
-                    .scale_labels(false),
+            // Named in place: a bare value does not say what it controls.
+            let label = ui.add(
+                egui::Label::new(
+                    egui::RichText::new(caption)
+                        .size(crate::tokens::FONT_CAPTION)
+                        .color(crate::theme::palette(ui.ctx()).muted),
+                )
+                .selectable(false),
             );
-            // Pointer edits only: arrow keys keep their fine steps.
-            let pointer =
-                ui.input(|input| input.pointer.any_down() || input.pointer.any_released());
-            if response.changed() && pointer && *pan != 0.0 && pan.abs() < PAN_DETENT {
-                *pan = 0.0;
+            let knob_width = crate::inline_knob_width(ui, "200%");
+            ui.add_space((ui.available_width() - knob_width).max(0.0));
+            let mut edited = f64::from(*value);
+            let range = f64::from(*range.start())..=f64::from(*range.end());
+            let mut response = ui.add(
+                crate::inline_knob(caption, &mut edited, range, text)
+                    .width(knob_width)
+                    .bipolar(),
+            );
+            if response.changed() {
+                *value = edited as f32;
+                // Pointer edits only: arrow keys keep their fine steps.
+                let pointer =
+                    ui.input(|input| input.pointer.any_down() || input.pointer.any_released());
+                if pointer && *value != detent && (*value - detent).abs() < PAN_DETENT {
+                    *value = detent;
+                }
+            }
+            if response.double_clicked() && *value != detent {
+                *value = detent;
                 response.mark_changed();
             }
-            let label = ui
-                .allocate_ui_with_layout(
-                    Vec2::new(MIXER_PAN_CAPTION_WIDTH, height),
-                    egui::Layout::right_to_left(egui::Align::Center),
-                    |ui| {
-                        ui.add(
-                            egui::Label::new(
-                                egui::RichText::new(mixer_pan_caption(*pan))
-                                    .size(crate::tokens::FONT_CAPTION)
-                                    .color(crate::theme::palette(ui.ctx()).muted),
-                            )
-                            // The row owns context clicks and focus.
-                            .selectable(false)
-                            .sense(Sense::hover()),
-                        )
-                    },
-                )
-                .inner;
             response.labelled_by(label.id)
         },
     );
     let id = row.inner.id;
-    let response = row
-        .inner
-        .union(ui.interact(row.response.rect, id.with("row"), Sense::click()));
-    response.widget_info(|| egui::WidgetInfo::slider(ui.is_enabled(), f64::from(*pan), "Pan"));
-    crate::hover_text(
-        response,
-        format!(
-            "Stereo balance · {} · {}%\nDrag or use the arrow keys; Shift for fine adjustment. Snaps to center.\nRight-click for exact value entry and automation",
-            crate::channel_pan_label(*pan),
-            *pan * 100.0
-        ),
-    )
+    row.inner
+        .union(ui.interact(row.response.rect, id.with("row"), Sense::click()))
 }
 
 /// The strip's short width value, a whole percentage of the original side.
@@ -332,86 +309,47 @@ pub fn mixer_polarity_switch(ui: &mut Ui, invert: &mut bool) -> Response {
     )
 }
 
-/// Width rail in the pan rail's skin, snapping to 100%, with the value in a
-/// caption right of it. Right-click enters an exact value; `name` identifies
-/// the channel in that editor.
+/// Stereo width as a labelled knob snapping to 100%, in the pan row's shape.
+/// Right-click enters an exact value; `name` identifies the channel in that
+/// editor.
 pub fn mixer_stereo_width(ui: &mut Ui, stereo_width: &mut f32, width: f32, name: &str) -> Response {
-    let height = crate::tokens::COMPACT_HEIGHT;
-    ui.allocate_ui_with_layout(
-        Vec2::new(width, height),
-        egui::Layout::left_to_right(egui::Align::Center),
-        |ui| {
-            ui.set_min_size(Vec2::new(width, height));
-            ui.set_max_height(height);
-            ui.spacing_mut().interact_size.y = height;
-            ui.spacing_mut().item_spacing.x = crate::tokens::SPACE_XS;
-            ui.spacing_mut().slider_width =
-                (width - MIXER_PAN_CAPTION_WIDTH - crate::tokens::SPACE_XS).max(0.0);
-            let mut response = ui.add(
-                crate::slider(stereo_width, 0.0..=2.0)
-                    .mixer_style()
-                    .scale_ticks(&[(0.5, true)])
-                    .zero_reference(1.0)
-                    .clamping(SliderClamping::Always)
-                    .show_value(false)
-                    .scale_labels(false),
-            );
-            let pointer =
-                ui.input(|input| input.pointer.any_down() || input.pointer.any_released());
-            if response.changed()
-                && pointer
-                && *stereo_width != 1.0
-                && (*stereo_width - 1.0).abs() < PAN_DETENT
-            {
-                *stereo_width = 1.0;
-                response.mark_changed();
-            }
-            ui.allocate_ui_with_layout(
-                Vec2::new(MIXER_PAN_CAPTION_WIDTH, height),
-                egui::Layout::right_to_left(egui::Align::Center),
-                |ui| {
-                    ui.add(
-                        egui::Label::new(
-                            egui::RichText::new(mixer_width_caption(*stereo_width))
-                                .size(crate::tokens::FONT_CAPTION)
-                                .color(crate::theme::palette(ui.ctx()).muted),
-                        )
-                        .selectable(false)
-                        .sense(Sense::hover()),
-                    )
-                },
-            );
-            let mut exact = None;
-            crate::context_menu(&response, |ui| {
-                if let Some(value) = crate::value_entry_named(
-                    ui,
-                    response.id.with("exact_width"),
-                    f64::from(*stereo_width) * 100.0,
-                    0.0..=200.0,
-                    "%",
-                    name,
-                ) {
-                    exact = Some((value / 100.0) as f32);
-                    ui.close();
-                }
-            });
-            if let Some(value) = exact {
-                *stereo_width = value.clamp(0.0, 2.0);
-                response.mark_changed();
-            }
-            response.widget_info(|| {
-                egui::WidgetInfo::slider(ui.is_enabled(), f64::from(*stereo_width), "Stereo width")
-            });
-            crate::hover_text(
-                response,
-                format!(
-                    "Stereo width · {} · 0% is mono, 100% unchanged, 200% doubles the side\nSnaps to 100%. Right-click for exact value entry",
-                    mixer_width_caption(*stereo_width)
-                ),
-            )
-        },
+    let mut response = mixer_knob_row(
+        ui,
+        width,
+        "Width",
+        stereo_width,
+        0.0..=2.0,
+        1.0,
+        &mixer_width_caption(*stereo_width),
+    );
+    let mut exact = None;
+    crate::context_menu(&response, |ui| {
+        if let Some(value) = crate::value_entry_named(
+            ui,
+            response.id.with("exact_width"),
+            f64::from(*stereo_width) * 100.0,
+            0.0..=200.0,
+            "%",
+            name,
+        ) {
+            exact = Some((value / 100.0) as f32);
+            ui.close();
+        }
+    });
+    if let Some(value) = exact {
+        *stereo_width = value.clamp(0.0, 2.0);
+        response.mark_changed();
+    }
+    response.widget_info(|| {
+        egui::WidgetInfo::slider(ui.is_enabled(), f64::from(*stereo_width), "Stereo width")
+    });
+    crate::hover_text(
+        response,
+        format!(
+            "Stereo width · {} · 0% is mono, 100% unchanged, 200% doubles the side\nSnaps to 100%. Double-click to reset. Right-click for exact value entry",
+            mixer_width_caption(*stereo_width)
+        ),
     )
-    .inner
 }
 
 pub struct MixerMuteSoloResponse {
@@ -425,7 +363,7 @@ pub struct MixerPanRowResponse {
     pub solo: Response,
 }
 
-/// The pan rail with its value, then Mute and Solo underneath.
+/// The pan rail with its value, then compact M and S switches underneath.
 pub fn mixer_pan_row(
     ui: &mut Ui,
     pan: &mut f32,
@@ -433,21 +371,52 @@ pub fn mixer_pan_row(
     solo: &mut bool,
     width: f32,
 ) -> MixerPanRowResponse {
-    let height =
-        crate::tokens::COMPACT_HEIGHT + crate::MIXER_ROW_GAP + crate::mixer_control_height(ui);
+    pan_row(ui, pan, mute, Some(solo), width)
+}
+
+/// Height of the M and S switches under the pan rail.
+pub const MIXER_SWITCH_HEIGHT: f32 = crate::tokens::COMPACT_HEIGHT;
+
+/// Height of [`mixer_pan_row`] and [`mixer_master_pan_row`].
+pub const MIXER_PAN_ROW_HEIGHT: f32 =
+    crate::tokens::COMPACT_HEIGHT + crate::MIXER_ROW_GAP + MIXER_SWITCH_HEIGHT;
+
+fn pan_row(
+    ui: &mut Ui,
+    pan: &mut f32,
+    mute: &mut bool,
+    solo: Option<&mut bool>,
+    width: f32,
+) -> MixerPanRowResponse {
     ui.allocate_ui_with_layout(
-        Vec2::new(width, height),
+        Vec2::new(width, MIXER_PAN_ROW_HEIGHT),
         egui::Layout::top_down(egui::Align::Min),
         |ui| {
-            ui.set_min_size(Vec2::new(width, height));
+            ui.set_min_size(Vec2::new(width, MIXER_PAN_ROW_HEIGHT));
             ui.spacing_mut().item_spacing.y = crate::MIXER_ROW_GAP;
             let pan = mixer_pan(ui, pan, width);
-            let switches = mixer_mute_solo(ui, mute, solo, width);
-            MixerPanRowResponse {
-                pan,
-                mute: switches.mute,
-                solo: switches.solo,
-            }
+            let (mute, solo) = ui
+                .allocate_ui_with_layout(
+                    Vec2::new(width, MIXER_SWITCH_HEIGHT),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        let gap = crate::tokens::SPACE_XS;
+                        ui.set_max_height(MIXER_SWITCH_HEIGHT);
+                        ui.spacing_mut().item_spacing.x = gap;
+                        ui.spacing_mut().interact_size.y = MIXER_SWITCH_HEIGHT;
+                        ui.spacing_mut().button_padding = Vec2::ZERO;
+                        let size = Vec2::new((width - gap) * 0.5, MIXER_SWITCH_HEIGHT);
+                        let mute = mixer_switch(ui, mute, "M", size.x, size.y, true);
+                        // Master keeps the solo column empty so its switch lines up with the channels'.
+                        let solo = match solo {
+                            Some(solo) => mixer_switch(ui, solo, "S", size.x, size.y, false),
+                            None => ui.allocate_exact_size(size, egui::Sense::hover()).1,
+                        };
+                        (mute, solo)
+                    },
+                )
+                .inner;
+            MixerPanRowResponse { pan, mute, solo }
         },
     )
     .inner
@@ -471,8 +440,22 @@ pub fn mixer_mute_solo(
             ui.spacing_mut().item_spacing.x = gap;
             ui.spacing_mut().button_padding.x = crate::tokens::SPACE_XS;
             MixerMuteSoloResponse {
-                mute: mixer_switch(ui, mute, "Mute", button_width, true),
-                solo: mixer_switch(ui, solo, "Solo", button_width, false),
+                mute: mixer_switch(
+                    ui,
+                    mute,
+                    "Mute",
+                    button_width,
+                    crate::mixer_control_height(ui),
+                    true,
+                ),
+                solo: mixer_switch(
+                    ui,
+                    solo,
+                    "Solo",
+                    button_width,
+                    crate::mixer_control_height(ui),
+                    false,
+                ),
             }
         },
     )
@@ -496,8 +479,8 @@ pub fn mixer_folded_mute_solo(
             ui.spacing_mut().item_spacing.x = gap;
             ui.spacing_mut().button_padding.x = 2.0;
             MixerMuteSoloResponse {
-                mute: mixer_switch(ui, mute, "M", (width - gap) * 0.5, true),
-                solo: mixer_switch(ui, solo, "S", (width - gap) * 0.5, false),
+                mute: mixer_switch(ui, mute, "M", (width - gap) * 0.5, height, true),
+                solo: mixer_switch(ui, solo, "S", (width - gap) * 0.5, height, false),
             }
         },
     )
@@ -512,39 +495,21 @@ pub fn mixer_master_pan_row(
     mute: &mut bool,
     width: f32,
 ) -> MixerPanRowResponse {
-    let height =
-        crate::tokens::COMPACT_HEIGHT + crate::MIXER_ROW_GAP + crate::mixer_control_height(ui);
-    ui.allocate_ui_with_layout(
-        Vec2::new(width, height),
-        egui::Layout::top_down(egui::Align::Min),
-        |ui| {
-            ui.set_min_size(Vec2::new(width, height));
-            ui.spacing_mut().item_spacing.y = crate::MIXER_ROW_GAP;
-            let pan = mixer_pan(ui, pan, width);
-            let (mute, solo) = ui
-                .horizontal(|ui| {
-                    let gap = crate::tokens::SPACE_XS;
-                    ui.spacing_mut().item_spacing.x = gap;
-                    let mute = mixer_switch(ui, mute, "Mute", (width - gap) * 0.5, true);
-                    let (_, solo) = ui.allocate_exact_size(
-                        Vec2::new((width - gap) * 0.5, crate::mixer_control_height(ui)),
-                        egui::Sense::hover(),
-                    );
-                    (mute, solo)
-                })
-                .inner;
-            MixerPanRowResponse { pan, mute, solo }
-        },
-    )
-    .inner
+    pan_row(ui, pan, mute, None, width)
 }
 
-fn mixer_switch(ui: &mut Ui, value: &mut bool, label: &str, width: f32, mute: bool) -> Response {
+fn mixer_switch(
+    ui: &mut Ui,
+    value: &mut bool,
+    label: &str,
+    width: f32,
+    height: f32,
+    mute: bool,
+) -> Response {
     let colors = crate::theme::palette(ui.ctx());
     let accent = if mute { colors.mute } else { colors.solo };
     // Color identifies the operation even while idle. A solid fill and
     // contrasting label distinguish the active state without relying on hue.
-    let height = crate::mixer_control_height(ui);
     let mut response = ui.add_sized(
         Vec2::new(width, height),
         crate::IconButton::new(label)
@@ -607,9 +572,98 @@ fn peak_db_text(peak: f32) -> String {
     }
 }
 
+/// Where a peak meter turns from the signal color to amber: the last 6 dB
+/// before full scale, where a hot channel is worth a look.
+pub const METER_HOT_DB: f32 = -6.0;
+
+/// Peak meter zones as `(from, to, color)` in linear gain: signal, the hot
+/// last 6 dB of headroom, then the warning color past full scale.
+pub(crate) fn meter_zones(colors: &crate::theme::Palette) -> [(f32, f32, egui::Color32); 3] {
+    let hot = 10f32.powf(METER_HOT_DB / 20.0);
+    [
+        (0.0, hot, colors.guide),
+        (hot, 1.0, colors.orange),
+        (1.0, f32::INFINITY, colors.warning),
+    ]
+}
+
+/// Color stops of a vertical peak meter from its silent bottom up, blending
+/// briefly across the hot and full-scale lines so the fill reads as one bar.
+pub(crate) fn meter_stops(
+    colors: &crate::theme::Palette,
+    bottom: f32,
+    hot: f32,
+    unity: f32,
+) -> [(f32, egui::Color32); 5] {
+    const BLEND: f32 = 2.0;
+    let zones = meter_zones(colors);
+    [
+        (bottom, zones[0].2),
+        (hot + BLEND, zones[0].2),
+        (hot - BLEND, zones[1].2),
+        (unity + BLEND * 0.5, zones[1].2),
+        (unity - BLEND * 0.5, zones[2].2),
+    ]
+}
+
+/// One flat meter bar: a fully rounded trough and the level from its bottom up
+/// to `level` as a single mesh whose color follows `stops` (bottom first).
+pub(crate) fn paint_meter_bar(
+    painter: &egui::Painter,
+    bar: Rect,
+    level: f32,
+    stops: &[(f32, egui::Color32)],
+    trough: egui::Color32,
+) {
+    let radius = (bar.width() * 0.5).min(2.0);
+    painter.rect_filled(bar, radius, trough);
+    // The fill starts at the first stop, silence, which may sit above the bar's end.
+    let base = stops[0].0.min(bar.bottom());
+    let top = level.clamp(bar.top(), base);
+    if top >= base - 0.5 {
+        return;
+    }
+    let color_at = |y: f32| {
+        let mut previous = stops[0];
+        for &stop in stops {
+            if y >= stop.0 {
+                let span = previous.0 - stop.0;
+                let t = if span > 0.0 {
+                    (previous.0 - y) / span
+                } else {
+                    1.0
+                };
+                return previous.1.lerp_to_gamma(stop.1, t.clamp(0.0, 1.0));
+            }
+            previous = stop;
+        }
+        previous.1
+    };
+    let mut rows: Vec<f32> = stops
+        .iter()
+        .map(|stop| stop.0)
+        .filter(|y| *y > top && *y < base)
+        .chain([base, top])
+        .collect();
+    rows.sort_by(|a, b| b.total_cmp(a));
+    let mut mesh = egui::Mesh::default();
+    for (index, y) in rows.iter().enumerate() {
+        let color = color_at(*y);
+        mesh.colored_vertex(Pos2::new(bar.left(), *y), color);
+        mesh.colored_vertex(Pos2::new(bar.right(), *y), color);
+        if index > 0 {
+            let base = 2 * index as u32;
+            mesh.add_triangle(base - 2, base - 1, base);
+            mesh.add_triangle(base - 1, base + 1, base);
+        }
+    }
+    painter.add(mesh);
+}
+
 /// Vertical stereo peak meter on the fader's scale: `inset` is the distance
 /// from the rect's ends to silence and to +3.5 dB, the fader's handle travel,
-/// so one scale serves both. Holds each peak for 1.5 s and latches clipping
+/// so one scale serves both. Green, amber over the last 6 dB of headroom and
+/// red past full scale. Holds each peak for 1.5 s and latches clipping
 /// (warning color) until clicked. Readings are sanitized for painting only.
 pub fn channel_meter(
     ui: &mut Ui,
@@ -618,20 +672,31 @@ pub fn channel_meter(
     height: f32,
     inset: f32,
 ) -> Response {
-    channel_meter_inner(ui, id, peaks, None, height, inset)
+    channel_meter_inner(
+        ui,
+        id,
+        peaks,
+        None,
+        crate::tokens::MIXER_METER_WIDTH,
+        height,
+        inset,
+    )
 }
 
 /// Stereo meter with an engine-owned peak hold. A single hold drives its
 /// peak lines, clip lamp and the adjacent [`channel_peak_indicator`] badge.
+/// `width` is at least [`crate::tokens::MIXER_METER_WIDTH`]; a mixer strip
+/// gives the meter the space beside its fader.
 pub fn channel_meter_with_peak_hold(
     ui: &mut Ui,
     id: egui::Id,
     peaks: [f32; 2],
     held: [f32; 2],
+    width: f32,
     height: f32,
     inset: f32,
 ) -> Response {
-    channel_meter_inner(ui, id, peaks, Some(held), height, inset)
+    channel_meter_inner(ui, id, peaks, Some(held), width, height, inset)
 }
 
 fn channel_meter_inner(
@@ -639,11 +704,12 @@ fn channel_meter_inner(
     id: egui::Id,
     peaks: [f32; 2],
     held: Option<[f32; 2]>,
+    width: f32,
     height: f32,
     inset: f32,
 ) -> Response {
     let (rect, response) = ui.allocate_exact_size(
-        Vec2::new(crate::tokens::MIXER_METER_WIDTH, height.max(1.0)),
+        Vec2::new(width.max(crate::tokens::MIXER_METER_WIDTH), height.max(1.0)),
         Sense::click(),
     );
     let peaks = peaks.map(sanitize_peak);
@@ -680,36 +746,14 @@ fn channel_meter_inner(
                 rect.min + Vec2::new(index as f32 * (bar_width + gap), 0.0),
                 Vec2::new(bar_width, rect.height()),
             );
-            // The same trough as the fader rail beside it.
-            ui.painter().rect(
+            // The same flat, rounded trough as the fader rail beside it.
+            paint_meter_bar(
+                ui.painter(),
                 egui::emath::GuiRounding::round_to_pixels(bar, ui.pixels_per_point()),
-                1.0,
-                colors.bg,
-                Stroke::new(1.0 / ui.pixels_per_point(), colors.line),
-                egui::StrokeKind::Inside,
+                y(peak),
+                &meter_stops(&colors, bottom, y(10f32.powf(METER_HOT_DB / 20.0)), y(1.0)),
+                colors.trough,
             );
-            if peak > 0.0 {
-                let level = y(peak);
-                let unity = y(1.0);
-                ui.painter().rect_filled(
-                    egui::emath::GuiRounding::round_to_pixels(
-                        Rect::from_x_y_ranges(bar.x_range(), level.max(unity)..=bottom),
-                        ui.pixels_per_point(),
-                    ),
-                    1.0,
-                    colors.guide,
-                );
-                if level < unity {
-                    ui.painter().rect_filled(
-                        egui::emath::GuiRounding::round_to_pixels(
-                            Rect::from_x_y_ranges(bar.x_range(), level..=unity),
-                            ui.pixels_per_point(),
-                        ),
-                        1.0,
-                        colors.warning,
-                    );
-                }
-            }
             if state.hold[index] > 0.0 {
                 let hold = y(state.hold[index]);
                 ui.painter().line_segment(
@@ -796,7 +840,7 @@ fn channel_peak_indicator_inner(
     };
     let galley = ui.painter().layout_no_wrap(
         text.clone(),
-        FontId::proportional(crate::tokens::FONT_CAPTION),
+        egui::FontId::proportional(crate::tokens::FONT_CAPTION),
         color,
     );
     let size = Vec2::new(

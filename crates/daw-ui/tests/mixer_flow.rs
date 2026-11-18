@@ -355,3 +355,67 @@ fn scrolling_route_lanes_keeps_stems_attached_to_channel_bottoms() {
     );
     assert!(ribbon.clip_rect.bottom() <= route.lane.bottom());
 }
+
+#[test]
+fn routes_hop_over_unconnected_stems_inside_their_run_only() {
+    let ctx = Context::default();
+    theme::apply(&ctx);
+    let mut lane = None;
+    let output = ctx.run(
+        RawInput {
+            screen_rect: Some(Rect::from_min_size(
+                egui::Pos2::ZERO,
+                Vec2::new(800.0, 200.0),
+            )),
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.add_space(36.0);
+                lane = daw_ui::mixer_route_lane_with_crossings(
+                    ui,
+                    MixerRouteEndpoint {
+                        position: egui::pos2(90.0, 30.0),
+                        color: theme::DARK.accent,
+                    },
+                    MixerRouteEndpoint {
+                        position: egui::pos2(690.0, 30.0),
+                        color: theme::DARK.accent,
+                    },
+                    "Output → Master",
+                    ui.clip_rect(),
+                    daw_ui::MIXER_ROUTE_LANE,
+                    // A stem inside the run, one on each endpoint and one beyond.
+                    &[400.0, 90.0, 690.0, 750.0],
+                )
+                .painted;
+            });
+        },
+    );
+    let lane = lane.unwrap();
+    assert_eq!(lane.hops, [400.0]);
+    let ribbon = output
+        .shapes
+        .iter()
+        .find_map(|shape| match &shape.shape {
+            Shape::Mesh(mesh) if mesh.vertices.len() > 3 => Some(mesh.clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(ribbon.vertices.len(), 8 + 18, "one hop adds its arc");
+    let run = lane.path[1].y;
+    // Between the endpoint stems, the run rises around the crossing stem only.
+    let raised: Vec<_> = ribbon
+        .vertices
+        .iter()
+        .filter(|vertex| {
+            (100.0..680.0).contains(&vertex.pos.x) && vertex.pos.y < run - daw_ui::tokens::SPACE_XS
+        })
+        .collect();
+    assert!(!raised.is_empty());
+    assert!(
+        raised
+            .iter()
+            .all(|vertex| (vertex.pos.x - 400.0).abs() <= daw_ui::tokens::SPACE_SM + 2.0)
+    );
+}

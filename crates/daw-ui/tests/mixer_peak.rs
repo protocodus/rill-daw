@@ -39,6 +39,7 @@ fn frame(ctx: &Context, held: [f32; 2], time: f64, events: Vec<Event>) -> (Respo
                     egui::Id::new("peak"),
                     [0.0; 2],
                     held,
+                    daw_ui::tokens::MIXER_METER_WIDTH,
                     200.0,
                     8.0,
                 );

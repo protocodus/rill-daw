@@ -152,7 +152,11 @@ fn laptop_console_keeps_channel_roles_aligned_and_all_primary_actions_visible() 
                             < 0.01
                     );
                 }
-                assert!(edge(&channel["effects"], "max", 0) < edge(&channel["analyze"], "min", 0));
+                // Analyze ends the RMS row under the meters.
+                assert!(
+                    edge(&channel["statistics"], "max", 0) < edge(&channel["analyze"], "min", 0)
+                );
+                assert!(edge(&channel["meter"], "max", 1) <= edge(&channel["analyze"], "min", 1));
                 assert!(
                     edge(&channel["source_label"], "max", 0)
                         < edge(&channel["source_menu"], "min", 0)

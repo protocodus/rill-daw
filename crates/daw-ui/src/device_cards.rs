@@ -12,7 +12,44 @@ pub struct DeviceIdentity<'a> {
     pub name: &'a str,
     pub model: &'a str,
     pub preview: Option<&'a egui::TextureHandle>,
-    pub enabled: bool,
+    /// A miniature of the device's static curve, drawn at the row's end.
+    pub curve: Option<(DeviceCurve, &'a [f32])>,
+}
+
+/// What a [`DeviceIdentity`] curve plots. Values are in dB, evenly spaced
+/// along the x axis given by [`DeviceCurve::input`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeviceCurve {
+    /// Magnitude response over 20 Hz – 20 kHz on a logarithmic axis.
+    Response,
+    /// Output level for input levels from −60 to 0 dB.
+    Transfer,
+}
+
+impl DeviceCurve {
+    /// The frequency in Hz, or the input level in dB, of point `index` of `count`.
+    pub fn input(self, index: usize, count: usize) -> f32 {
+        let fraction = index as f32 / (count.max(2) - 1) as f32;
+        match self {
+            Self::Response => 20.0 * 1000f32.powf(fraction),
+            Self::Transfer => -60.0 + 60.0 * fraction,
+        }
+    }
+
+    fn range(self) -> (f32, f32) {
+        match self {
+            // Wide enough for a deep cut, close enough that a 3 dB shelf shows.
+            Self::Response => (-12.0, 12.0),
+            Self::Transfer => (-60.0, 0.0),
+        }
+    }
+}
+
+pub struct DeviceIdentityResponse {
+    /// The row itself: opens the device.
+    pub open: Response,
+    /// The lamp at the leading edge: bypasses or restores the device.
+    pub power: Response,
 }
 
 /// A bounded single-line selection summary. Its height stays identical while
@@ -46,30 +83,76 @@ pub fn device_summary_row(ui: &mut Ui, name: &str, metadata: &str) -> Response {
 }
 
 /// Compact direct-access device row for mixer strips and other narrow views.
-/// Custom identity is primary; the manufacturer's model remains recognizable.
+/// Custom identity is primary; the product stays recognizable beneath it.
+/// The lit lamp at the leading edge bypasses the device without opening it,
+/// and an optional curve shows what it does at a glance.
 pub fn device_identity_button(
     ui: &mut Ui,
     id: Id,
     width: f32,
     device: DeviceIdentity<'_>,
-) -> Response {
+    enabled: &mut bool,
+) -> DeviceIdentityResponse {
     let (rect, _) = ui.allocate_exact_size(
         egui::vec2(width, DEVICE_IDENTITY_HEIGHT),
         egui::Sense::hover(),
     );
-    let response = ui.interact(rect, id, egui::Sense::click());
+    let lamp_column =
+        Rect::from_min_size(rect.min, egui::vec2(tokens::SPACE_MD + 2.0, rect.height()));
+    let body = Rect::from_min_max(egui::pos2(lamp_column.right(), rect.top()), rect.max);
+    let mut power = ui.interact(lamp_column, id.with("power"), egui::Sense::click());
+    if power.clicked() && ui.is_enabled() {
+        *enabled = !*enabled;
+        power.mark_changed();
+    }
+    let response = ui.interact(body, id, egui::Sense::click());
     let colors = theme::palette(ui.ctx());
     let painter = ui.painter_at(rect);
-    painter.rect_filled(
-        rect,
-        tokens::RADIUS,
-        if response.hovered() {
-            colors.control_hover
-        } else {
-            colors.control_fill
-        },
-    );
-    let mut text = rect.shrink2(egui::vec2(tokens::SPACE_SM, 3.0));
+    painter.rect_filled(rect, tokens::RADIUS, colors.control_fill);
+    if response.hovered() {
+        painter.rect_filled(body, tokens::RADIUS, colors.control_hover);
+    }
+    let pixel = 1.0 / ui.pixels_per_point();
+    let lamp = Rect::from_center_size(
+        lamp_column.center(),
+        egui::vec2(tokens::SPACE_XS + 1.0, tokens::SPACE_LG),
+    )
+    .round_to_pixels(ui.pixels_per_point());
+    if *enabled {
+        painter.rect_filled(
+            lamp.expand(2.0),
+            tokens::RADIUS,
+            colors.guide.gamma_multiply(0.25),
+        );
+        painter.rect_filled(lamp, 2.0, colors.guide);
+    } else {
+        painter.rect(
+            lamp,
+            2.0,
+            colors.bg,
+            egui::Stroke::new(
+                if power.hovered() { 2.0 * pixel } else { pixel },
+                if power.hovered() {
+                    colors.muted
+                } else {
+                    colors.line
+                },
+            ),
+            egui::StrokeKind::Inside,
+        );
+    }
+    let mut text = body.shrink2(egui::vec2(0.0, 3.0));
+    text.max.x -= tokens::SPACE_XS;
+    if let Some((kind, values)) = device.curve {
+        let side = rect.height() - 2.0 * tokens::SPACE_XS;
+        let plot = Rect::from_min_size(
+            egui::pos2(text.right() - side, rect.center().y - side * 0.5),
+            egui::Vec2::splat(side),
+        )
+        .round_to_pixels(ui.pixels_per_point());
+        paint_device_curve(&painter, plot, kind, values, *enabled, pixel);
+        text.max.x = plot.left() - tokens::SPACE_XS;
+    }
     if let Some(preview) = device.preview {
         let image = Rect::from_min_size(text.min, egui::Vec2::splat(tokens::SPACE_XL));
         painter.image(
@@ -80,33 +163,103 @@ pub fn device_identity_button(
         );
         text.min.x = image.right() + tokens::SPACE_SM;
     }
-    crate::text::paint_single_line(
-        &painter,
-        Rect::from_min_max(text.min, egui::pos2(text.right(), text.top() + 19.0)),
-        egui::FontId::proportional(tokens::FONT_CAPTION),
-        if device.enabled {
-            colors.text
-        } else {
-            colors.muted
-        },
-        device.name,
-    );
-    crate::text::paint_single_line(
-        &painter,
-        Rect::from_min_max(egui::pos2(text.left(), text.top() + 19.0), text.max),
-        egui::FontId::proportional(tokens::FONT_CANVAS),
-        colors.muted,
-        device.model,
-    );
+    // The producer stays in the tooltip; the row names only the product, and
+    // only when the custom name differs from it.
+    let product = device.model.rsplit(" · ").next().unwrap_or(device.model);
+    let name_color = if *enabled { colors.text } else { colors.muted };
+    let caption = egui::FontId::proportional(tokens::FONT_CAPTION);
+    if product == device.name {
+        crate::text::paint_single_line(&painter, text, caption, name_color, device.name);
+    } else {
+        crate::text::paint_single_line(
+            &painter,
+            Rect::from_min_max(text.min, egui::pos2(text.right(), text.top() + 19.0)),
+            caption,
+            name_color,
+            device.name,
+        );
+        crate::text::paint_single_line(
+            &painter,
+            Rect::from_min_max(egui::pos2(text.left(), text.top() + 19.0), text.max),
+            egui::FontId::proportional(tokens::FONT_CANVAS),
+            colors.muted,
+            product,
+        );
+    }
+    let state = *enabled;
+    power.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::Checkbox,
+            ui.is_enabled(),
+            state,
+            format!("{} active", device.name),
+        )
+    });
+    let power = power.on_hover_text(if state {
+        format!("{} · Click to bypass", device.name)
+    } else {
+        format!("{} · Bypassed · Click to turn on", device.name)
+    });
     response.widget_info(|| {
         egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), device.name)
     });
-    response.on_hover_text(format!(
+    let open = response.on_hover_text(format!(
         "{}\n{}{}\nOpen device",
         device.name,
         device.model,
-        if device.enabled { "" } else { " · Bypassed" }
-    ))
+        if state { "" } else { " · Bypassed" }
+    ));
+    DeviceIdentityResponse { open, power }
+}
+
+/// A framed miniature of a device curve with its neutral reference: 0 dB for
+/// a response, unity for a transfer curve. Muted while the device is bypassed.
+fn paint_device_curve(
+    painter: &egui::Painter,
+    rect: Rect,
+    kind: DeviceCurve,
+    values: &[f32],
+    enabled: bool,
+    pixel: f32,
+) {
+    let colors = theme::palette(painter.ctx());
+    painter.rect(
+        rect,
+        2.0,
+        colors.bg,
+        egui::Stroke::new(pixel, colors.line),
+        egui::StrokeKind::Inside,
+    );
+    let inner = rect.shrink(2.0);
+    let (low, high) = kind.range();
+    let y = |db: f32| {
+        egui::remap_clamp(
+            if db.is_finite() { db } else { low },
+            low..=high,
+            inner.bottom()..=inner.top(),
+        )
+    };
+    let reference = match kind {
+        DeviceCurve::Response => [
+            egui::pos2(inner.left(), y(0.0)),
+            egui::pos2(inner.right(), y(0.0)),
+        ],
+        DeviceCurve::Transfer => [inner.left_bottom(), inner.right_top()],
+    };
+    painter.line_segment(reference, egui::Stroke::new(pixel, colors.line));
+    if values.len() < 2 {
+        return;
+    }
+    let last = (values.len() - 1) as f32;
+    let points = values
+        .iter()
+        .enumerate()
+        .map(|(index, db)| egui::pos2(inner.left() + inner.width() * index as f32 / last, y(*db)))
+        .collect();
+    painter.add(egui::Shape::line(
+        points,
+        egui::Stroke::new(1.5_f32, if enabled { colors.guide } else { colors.muted }),
+    ));
 }
 
 const NAME_HEIGHT: f32 = 2.0 * tokens::SPACE_LG;
