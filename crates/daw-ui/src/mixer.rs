@@ -590,7 +590,7 @@ pub struct MixerRouteEndpoint {
     pub color: Color32,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct MixerRoutePaint {
     pub lane: Rect,
     pub shaft: Rect,
@@ -601,6 +601,8 @@ pub struct MixerRoutePaint {
     pub source_color: Color32,
     pub target_color: Color32,
     pub stroke_width: f32,
+    /// Where the lane hops over other routes' stems (screen x).
+    pub hops: Vec<f32>,
     pub source_clipped: bool,
     pub target_clipped: bool,
 }
@@ -610,6 +612,9 @@ pub struct MixerRouteResponse {
     pub painted: Option<MixerRoutePaint>,
 }
 
+/// Segments of a route's hop over another route's stem.
+const HOP_STEPS: usize = 8;
+
 /// One destination per lane. The continuous U-shaped connection starts at the
 /// source strip, descends into its lane and rises to an arrowhead touching the
 /// destination strip. Vertex colors interpolate along the complete route.
@@ -617,8 +622,8 @@ pub struct MixerRouteResponse {
 /// `connection_clip` is the channel pane's clip rectangle, before entering the
 /// lane scroller: stems must remain attached above that scroller. Offscreen
 /// endpoints retain their true positions and are clipped, never moved to another
-/// channel. Each visible connection uses eight ribbon vertices and one triangle;
-/// there are no textures, per-pixel sampling, or extra repaint requests.
+/// channel. Each visible connection is one ribbon mesh (eight vertices, plus
+/// eighteen per hop) and one triangle; there are no textures, per-pixel sampling, or extra repaint requests.
 pub fn mixer_route_lane(
     ui: &mut Ui,
     source: MixerRouteEndpoint,
@@ -645,6 +650,21 @@ pub fn mixer_route_lane_with_height(
     caption: &str,
     connection_clip: Rect,
     height: f32,
+) -> MixerRouteResponse {
+    mixer_route_lane_with_crossings(ui, source, target, caption, connection_clip, height, &[])
+}
+
+/// [`mixer_route_lane_with_height`] whose horizontal run hops over the
+/// vertical stems of other routes at `crossings` (screen x): the lines cross
+/// there without connecting.
+pub fn mixer_route_lane_with_crossings(
+    ui: &mut Ui,
+    source: MixerRouteEndpoint,
+    target: MixerRouteEndpoint,
+    caption: &str,
+    connection_clip: Rect,
+    height: f32,
+    crossings: &[f32],
 ) -> MixerRouteResponse {
     let (rect, response) = ui.allocate_exact_size(
         Vec2::new(
@@ -697,30 +717,56 @@ pub fn mixer_route_lane_with_height(
     let mut painter = ui.painter().clone();
     painter.set_clip_rect(clip);
     let direction = (to.x - from.x).signum();
-    let total_length = (turn_y - from.y) + (to.x - from.x).abs() + (turn_y - to.y);
-    let progress = [
-        0.0,
-        turn_y - from.y,
-        turn_y - from.y + (to.x - from.x).abs(),
-        total_length - head_height,
-    ];
-    let stations = [path[0], path[1], path[2], to + Vec2::new(0.0, head_height)];
-    // Mitered corners share vertices, so neither direction has hairline gaps.
-    let offsets = [
-        Vec2::new(-half, 0.0),
-        Vec2::new(-half, direction * half),
-        Vec2::new(half, direction * half),
-        Vec2::new(half, 0.0),
-    ];
+    // The centerline: down the source stem, along the lane (hopping over
+    // other routes' stems), and up to the arrowhead's base.
+    let mut line = vec![path[0], path[1]];
+    let hop = crate::tokens::SPACE_SM;
+    let mut hops: Vec<f32> = crossings
+        .iter()
+        .copied()
+        .filter(|x| {
+            x.is_finite()
+                && *x > from.x.min(to.x) + hop + half
+                && *x < from.x.max(to.x) - hop - half
+        })
+        .collect();
+    hops.sort_by(|a, b| (direction * a).total_cmp(&(direction * b)));
+    for x in hops.iter().copied() {
+        line.extend((0..=HOP_STEPS).map(|step| {
+            let angle = std::f32::consts::PI * step as f32 / HOP_STEPS as f32;
+            Pos2::new(
+                x - direction * hop * angle.cos(),
+                turn_y - hop * angle.sin(),
+            )
+        }));
+    }
+    line.extend([path[2], to + Vec2::new(0.0, head_height)]);
+    let mut distances = vec![0.0];
+    for pair in line.windows(2) {
+        distances.push(distances.last().unwrap() + pair[0].distance(pair[1]));
+    }
+    let total_length = distances.last().unwrap() + head_height;
+    let normal = |a: Pos2, b: Pos2| {
+        let along = (b - a).normalized();
+        Vec2::new(-along.y, along.x)
+    };
     let mut mesh = egui::Mesh::default();
-    for ((position, offset), distance) in stations.into_iter().zip(offsets).zip(progress) {
+    for (index, (position, distance)) in line.iter().zip(&distances).enumerate() {
+        // Mitered joins share vertices, so no direction leaves hairline gaps.
+        let before = (index > 0).then(|| normal(line[index - 1], *position));
+        let after = line.get(index + 1).map(|next| normal(*position, *next));
+        let offset = match (before, after) {
+            (Some(a), Some(b)) => (a + b) / (1.0 + a.dot(b)).max(0.1),
+            (Some(a), None) | (None, Some(a)) => a,
+            (None, None) => Vec2::ZERO,
+        } * half;
         let color = source
             .color
             .lerp_to_gamma(target.color, distance / total_length);
-        mesh.colored_vertex(position + offset, color);
-        mesh.colored_vertex(position - offset, color);
+        mesh.colored_vertex(*position + offset, color);
+        mesh.colored_vertex(*position - offset, color);
     }
-    for index in 0..3_u32 {
+    for index in 0..line.len() as u32 - 1 {
         let start = index * 2;
         mesh.add_triangle(start, start + 1, start + 2);
         mesh.add_triangle(start + 1, start + 3, start + 2);
@@ -783,6 +829,7 @@ pub fn mixer_route_lane_with_height(
             source_color: source.color,
             target_color: target.color,
             stroke_width: crate::tokens::MIXER_ROUTE_WIDTH,
+            hops,
             source_clipped,
             target_clipped,
         }),

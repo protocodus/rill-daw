@@ -310,8 +310,8 @@ contrast in both themes, and ensures view/theme changes preserve the project and
 history. Opt-in paint diagnostics include paths, circles and text colors.
 
 `slider_scale_e2e` compares actual painted ticks and handle center lines with
-mouse edits at range endpoints and fractional positions. It checks adaptive
-mixer scales, direct track-header rail mapping and current-value readouts,
+mouse edits at range endpoints and fractional positions. It checks that the
+mixer fader paints only its unity mark, no dB captions, direct track-header rail mapping and current-value readouts,
 compact headers, both themes and display densities. `slider_automation_e2e` creates gain, pan and send lanes directly from
 controls, checks exact ownership, Undo/Redo, override and Resume. The optional
 `inspect` paint output includes `painted_lines` for these visual checks.
@@ -492,8 +492,9 @@ ordinary mixed rows and fractional display density.
 `arranger_layout_e2e` drives label and global row resizing, verifies the loop's
 separate painted lane, and creates/reparents nested folders with safe choices,
 Undo and portable recall. `mixer_flow_e2e` verifies signal-stage order and actual
-arrow geometry, multiple pre/post bus sends against rendered samples, feedback
-rejection, retained route preview, Undo and save/reopen.
+arrow geometry, hops where a lane crosses a stem it does not join, multiple
+pre/post bus sends against rendered samples, feedback rejection, retained route
+preview, Undo and save/reopen.
 `mixer_signal_flow_e2e` checks input → processing → horizontal stereo metering →
 output bounds in both appearances and densities, unchanged project/history on
 view, full-size Mute/Solo mouse actions on the correct channel and Undo. It also
@@ -1441,9 +1442,9 @@ and pan, fader, sends, output), that only input and volume fields, processing ac
 troughs are outlined inside a strip, and direct mouse editing in both themes and
 densities. `mixer_slider_alignment_e2e` finds the flat fader and meter troughs by
 their shared `trough` color. `mixer_strip_e2e` checks aligned sections across strips, the
-`[scale][rail][gap][meter]` unit flush with the right content edge, "−∞ dB", real sources, compact send rows with
+`[rail][gap][meter]` unit and the gain row centered on the strip axis, "−∞ dB", real sources, compact send rows with
 "PRE" and dB levels, "+N more", destination-only outputs and Master's output to
-Setup › Audio. `mixer_pan_e2e` drags the pan rail, including the center detent.
+Setup › Audio. `mixer_pan_e2e` drags the pan knob, including the center detent.
 `utility_header_e2e` checks the shared Channel/Instrument/Effects/Routing header:
 one row of links in a fixed order with the AI action trailing, bodies starting at
 one height, and switching windows through the links. `routing_layout_e2e` and

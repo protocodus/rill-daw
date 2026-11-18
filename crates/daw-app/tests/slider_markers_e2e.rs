@@ -130,7 +130,8 @@ fn assert_marker(state: &Value, scale_name: &str, expected: Marker) {
                         let a = point(&line["points"][0]);
                         let b = point(&line["points"][1]);
                         near([(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5], center)
-                            && (0.49..=1.01).contains(&number(&line["stroke_width"]))
+                            // Two physical pixels, at least one point.
+                            && (0.49..=2.01).contains(&number(&line["stroke_width"]))
                             && number(&line["stroke"][3]) > 0.0
                     }),
                 "Ordinary values retain a visible center index"

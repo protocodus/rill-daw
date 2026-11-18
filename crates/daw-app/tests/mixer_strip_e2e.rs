@@ -1,6 +1,6 @@
 //! Channel identities retain role headings while every functional console row
 //! shares a common baseline and calibrated fader travel.
-//! Each strip centers its calibrated fader/meter unit on its own channel axis.
+//! Each strip centers its fader/meter unit and gain readout on its own axis.
 mod common;
 
 use common::Harness;
@@ -99,16 +99,21 @@ fn strips_align_sections_and_the_fader_unit_and_list_sends_compactly() {
                     );
                 }
             }
-            // The [scale][rail][gap][meter] unit ends on the strip's right
-            // content edge, like the rows above it, so no space is left unused
-            // beside the meter; the gain field above starts on the left edge.
+            // The [rail][gap][meter] unit, and the gain field with its held
+            // peak above it, are centered on the strip's axis.
+            let axis = (edge(&channel["pan"], "min", 0) + edge(&channel["pan"], "max", 0)) * 0.5;
+            let unit =
+                (edge(&channel["fader"], "min", 0) + edge(&channel["meter"], "max", 0)) * 0.5;
             assert!(
-                (edge(&channel["meter"], "max", 0) - edge(&channel["pan"], "max", 0)).abs() <= 1.0,
-                "fader unit off the right edge: {channel}"
+                (unit - axis).abs() <= 1.0,
+                "fader unit off the strip axis: {channel}"
             );
+            let readout = (edge(&channel["gain"], "min", 0)
+                + edge(&channel["meter_readout"], "max", 0))
+                * 0.5;
             assert!(
-                (edge(&channel["gain"], "min", 0) - edge(&channel["pan"], "min", 0)).abs() <= 0.01,
-                "gain field off the left edge: {channel}"
+                (readout - axis).abs() <= 2.0,
+                "gain row off the strip axis: {channel}"
             );
             assert_eq!(
                 edge(&channel["meter"], "min", 1),

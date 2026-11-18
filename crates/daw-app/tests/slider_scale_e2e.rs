@@ -85,32 +85,42 @@ fn near(actual: f64, expected: f64, tolerance: f64) {
     );
 }
 
-fn caption_left_at(state: &Value, point: Point, text: &str) {
-    assert!(
-        state["label_rects"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|label| {
-                if label["text"] != text {
-                    return false;
-                }
-                let min = Point::from(&label["min"]);
-                let max = Point::from(&label["max"]);
-                let center = min.between(max, 0.5);
-                max.x < point.x
-                    && point.x - max.x < 40.0
-                    && (center.y - point.y).abs() < 1.0
-                    && max.y - min.y >= 10.0
-            }),
-        "Endpoint {text:?} must be visibly aligned to {point:?}: {:?}",
-        state["label_rects"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter(|label| label["text"] == text)
-            .collect::<Vec<_>>()
-    );
+/// The mixer fader paints no dB numbers, only its unity mark: a tick on each
+/// side of the trough at the 0 dB row.
+fn unity_mark_only(state: &Value, fader: Scale) {
+    for text in ["+3.5", "0", "−6", "−12", "−20", "−30"] {
+        assert!(
+            !state["label_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|label| {
+                    let min = Point::from(&label["min"]);
+                    let max = Point::from(&label["max"]);
+                    label["text"] == text
+                        && max.x <= fader.min.x
+                        && fader.min.x - max.x < 40.0
+                        && min.y <= fader.min.y
+                        && max.y >= fader.max.y
+                }),
+            "no {text:?} caption beside the fader"
+        );
+    }
+    let unity = fader.min.between(fader.max, 0.75);
+    let ticks = state["painted_lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|line| {
+            let a = Point::from(&line["points"][0]);
+            let b = Point::from(&line["points"][1]);
+            (a.y - unity.y).abs() < 1.0
+                && (b.y - unity.y).abs() < 1.0
+                && (a.x - unity.x).abs() < 12.0
+                && (b.x - unity.x).abs() < 12.0
+        })
+        .count();
+    assert!(ticks >= 2, "missing unity mark at {unity:?}");
 }
 fn click_fraction(app: &mut Harness, scale: Scale, fraction: f64) -> Value {
     let point = scale.min.between(scale.max, fraction);
@@ -140,7 +150,7 @@ fn assert_paint_alignment(state: &Value, scale: Scale, fraction: f64, ticks: &[f
             if scale.vertical() {
                 (a.y - point.y).abs() <= 0.7
                     && (b.y - point.y).abs() <= 0.7
-                    // Mixer scale ticks sit in the gutter, left of the cap.
+                    // The mixer unity mark sits on both sides of the trough.
                     && a.x.min(b.x) <= point.x + 18.0
                     && a.x.max(b.x) >= point.x - 18.0
             } else {
@@ -268,9 +278,7 @@ fn mixer_fader_range_ticks_and_handle_index_match_mouse_edits_at_multiple_sizes(
                 |rect: &Value| rect["max"][1].as_f64().unwrap() - rect["min"][1].as_f64().unwrap();
             allocations.push(height_of(&channel["fader"]));
             strip_heights.push(height_of(&channel["strip"]));
-            caption_left_at(&state, fader.min, "−∞");
-            caption_left_at(&state, fader.max, "+3.5");
-            caption_left_at(&state, fader.min.between(fader.max, 0.75), "0");
+            unity_mark_only(&state, fader);
             lengths.push(fader.length());
             for fraction in [0.0, 0.2, 0.5, 0.8, 1.0] {
                 let fader = Scale::from(&mixer_channel(&painted(&mut app), id)["fader_scale"]);
@@ -285,14 +293,16 @@ fn mixer_fader_range_ticks_and_handle_index_match_mouse_edits_at_multiple_sizes(
                     &state,
                     Scale::from(&mixer_channel(&state, id)["fader_scale"]),
                     fraction,
-                    &fractions,
+                    // Of the calibrated stops only unity is painted.
+                    &fractions[1..2],
                 );
             }
         }
-        near(
-            allocations[0],
-            f64::from(daw_ui::tokens::MIXER_FADER_MIN),
-            0.1,
+        // Near its usable minimum at 720 px, never below it.
+        assert!(
+            (0.0..=f64::from(daw_ui::tokens::SPACE_SM))
+                .contains(&(allocations[0] - f64::from(daw_ui::tokens::MIXER_FADER_MIN))),
+            "{allocations:?}"
         );
         assert!(allocations[1] > allocations[0]);
         // Generous fixed control rows occupy more height before the fader

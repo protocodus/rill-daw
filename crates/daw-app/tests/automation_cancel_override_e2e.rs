@@ -236,7 +236,7 @@ fn global_mouse_action_and_edit_menu_clear_all_targets_in_one_undoable_step() {
             < 1e-6
     );
     assert!(
-        channel(&displayed, source)["pan_scale"]["value"]
+        channel(&displayed, source)["pan_knob"]["value"]
             .as_f64()
             .unwrap()
             .abs()

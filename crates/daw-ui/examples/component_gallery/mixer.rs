@@ -181,6 +181,16 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                     });
                 }
             });
+            // The send's lane hops over the stem rising to Music bus.
+            ui::mixer_route_lane_with_crossings(
+                ui,
+                endpoints[0],
+                endpoints[2],
+                "Pre send → Reverb",
+                ui.clip_rect(),
+                ui::MIXER_ROUTE_LANE,
+                &[endpoints[1].position.x],
+            );
             ui::mixer_route_lane(
                 ui,
                 endpoints[0],

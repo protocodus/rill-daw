@@ -37,7 +37,7 @@ pub const SELECTION_GLOW_EXTENT: f32 = 6.0;
 pub const BACKDROP_BLUR_MAX_SIDE: u32 = 512;
 pub const BACKDROP_BLUR_DOWNSAMPLE: f32 = 4.0;
 pub const MIXER_ROUTE_WIDTH: f32 = 3.0;
-pub const MIXER_ROUTE_HEAD: f32 = 9.0;
+pub const MIXER_ROUTE_HEAD: f32 = SPACE_MD;
 pub const MIXER_ROUTE_LANE_HEIGHT: f32 = 40.0;
 pub const BUTTON_PADDING_X: f32 = SPACE_MD;
 pub const BUTTON_PADDING_Y: f32 = SPACE_SM;
@@ -100,8 +100,6 @@ pub const POPUP_WIDTH_MD: f32 = 610.0;
 pub const POPUP_BODY_MAX_DEFAULT_HEIGHT: f32 = 610.0;
 pub const POPUP_WIDTH_LG: f32 = 987.0;
 pub const MIXER_STRIP_WIDTH: f32 = 144.0;
-/// Caption gutter beside a vertical fader for its dB scale.
-pub const MIXER_SCALE_GUTTER: f32 = SPACE_XL;
 pub const MIXER_FADER_MIN: f32 = 144.0;
 /// A stereo meter beside the fader: two bars and their gap.
 pub const MIXER_METER_WIDTH: f32 = SPACE_MD;

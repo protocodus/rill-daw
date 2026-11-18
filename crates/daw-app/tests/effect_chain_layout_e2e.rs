@@ -255,7 +255,7 @@ fn right_clicking_an_insert_card_opens_its_rack_commands() {
 }
 
 #[test]
-fn mixer_scale_marks_match_native_fader_gain_and_empty_chains_offer_insertion() {
+fn mixer_fader_stops_match_native_gain_and_empty_chains_offer_insertion() {
     let mut app = Harness::new();
     fixture(&mut app, 0);
     let mixer = app.click("Mixer");
@@ -271,26 +271,22 @@ fn mixer_scale_marks_match_native_fader_gain_and_empty_chains_offer_insertion() 
     assert_eq!(library["project"], mixer["project"]);
     app.key("Escape");
     let mixer = app.click("Mixer");
-    let fader = &mixer["mixer"]["channels"][0]["fader"];
-    let x = center(fader).0;
-    for (mark, gain) in [("−6", 10.0_f64.powf(-6.0 / 20.0)), ("0", 1.0)] {
-        let current = app.inspect();
-        // Find the scale mark at the left of this channel's fader, not a count badge.
-        let tick = current["label_rects"]
+    // The fader's calibrated stops (only unity is painted) match its gain.
+    let scale = &mixer["mixer"]["channels"][0]["fader_scale"];
+    let x = scale["handle_center"][0].as_f64().unwrap();
+    for (fraction, gain) in [(0.63, 10.0_f64.powf(-6.0 / 20.0)), (0.75, 1.0)] {
+        let tick = scale["ticks"]
             .as_array()
             .unwrap()
             .iter()
-            .find(|rect| {
-                rect["text"] == mark
-                    && rect["max"][0].as_f64().unwrap() < x
-                    && center(rect).1 >= fader["min"][1].as_f64().unwrap()
-            })
+            .find(|tick| (tick["fraction"].as_f64().unwrap() - fraction).abs() < 1e-6)
             .unwrap();
-        let edited =
-            app.command(json!({"command":"pointer", "phase":"click", "x":x, "y":center(tick).1}));
+        let edited = app.command(
+            json!({"command":"pointer", "phase":"click", "x":x, "y":tick["y"].as_f64().unwrap()}),
+        );
         assert!(
             (edited["project"]["tracks"][0]["gain"].as_f64().unwrap() - gain).abs() < 0.015,
-            "{mark} dB tick must match the native fader's gain"
+            "the {fraction} stop must match the native fader's gain"
         );
     }
     let effects = app.click("Effects");

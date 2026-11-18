@@ -1,4 +1,4 @@
-use daw_ui::{MixerMuteSoloResponse, SliderScaleGeometry};
+use daw_ui::{KnobGeometry, MixerMuteSoloResponse, SliderScaleGeometry};
 use egui::{
     Context, Event, Key, Modifiers, PointerButton, RawInput, Rect, Response, SliderOrientation,
     pos2, vec2,
@@ -59,7 +59,7 @@ fn pan_frame(
     value: &mut f32,
     enabled: bool,
     events: Vec<Event>,
-) -> (Response, SliderScaleGeometry, egui::FullOutput) {
+) -> (Response, KnobGeometry, egui::FullOutput) {
     let mut response = None;
     let output = ctx.run(input(events), |ctx| {
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -69,8 +69,8 @@ fn pan_frame(
         });
     });
     let response = response.unwrap();
-    let geometry = daw_ui::slider_scale_geometry(ctx, response.id)
-        .expect("pan row must retain the rail's calibrated identity");
+    let geometry =
+        daw_ui::knob_geometry(ctx, response.id).expect("pan row must retain the knob's geometry");
     (response, geometry, output)
 }
 
@@ -197,8 +197,17 @@ fn mixer_fader_secondary_middle_and_disabled_input_never_edit_values() {
     }
 }
 
+fn text_rect(output: &egui::FullOutput, text: &str) -> Option<Rect> {
+    output.shapes.iter().find_map(|shape| match &shape.shape {
+        egui::Shape::Text(shape) if shape.galley.text() == text => {
+            Some(shape.galley.rect.translate(shape.pos.to_vec2()))
+        }
+        _ => None,
+    })
+}
+
 #[test]
-fn pan_rail_preserves_values_and_shows_detents_and_a_short_value() {
+fn pan_knob_preserves_values_and_shows_its_name_and_a_short_value() {
     for dark in [false, true] {
         let ctx = Context::default();
         daw_ui::theme::apply(&ctx);
@@ -214,36 +223,19 @@ fn pan_rail_preserves_values_and_shows_detents_and_a_short_value() {
             assert!(!response.changed());
             assert_eq!(geometry.value, f64::from(original));
             assert_eq!(geometry.range, [-1.0, 1.0]);
-            assert_eq!(geometry.orientation, SliderOrientation::Horizontal);
-            assert!(geometry.custom_scale);
-            assert_eq!(
-                geometry
-                    .ticks
-                    .iter()
-                    .map(|tick| tick.fraction)
-                    .collect::<Vec<_>>(),
-                [0.5]
-            );
             assert!((response.rect.width() - 180.0).abs() < 0.1);
             assert!(
                 (response.rect.height() - daw_ui::tokens::COMPACT_HEIGHT).abs() < 0.1,
                 "the pan row is one compact row: {:?}",
                 response.rect
             );
+            // "Pan" on the left, then the dial and its value at the right end.
+            let name = text_rect(&output, "Pan").expect("the row names the knob");
+            assert!(name.right() <= geometry.dial.left());
             let caption = daw_ui::mixer_pan_caption(original);
-            let labels = text_labels(&output);
-            assert!(labels.contains(&caption), "missing {caption}: {labels:?}");
-            let caption_rect = output
-                .shapes
-                .iter()
-                .find_map(|shape| match &shape.shape {
-                    egui::Shape::Text(text) if text.galley.text() == caption => {
-                        Some(text.galley.rect.translate(text.pos.to_vec2()))
-                    }
-                    _ => None,
-                })
-                .unwrap();
-            assert!(caption_rect.left() >= geometry.rail.right());
+            let caption_rect = text_rect(&output, &caption)
+                .unwrap_or_else(|| panic!("missing {caption}: {:?}", text_labels(&output)));
+            assert!(caption_rect.left() >= geometry.dial.right());
             assert!(
                 response.rect.expand(1.0).contains_rect(caption_rect),
                 "{caption_rect:?} escapes {:?}",
@@ -257,32 +249,33 @@ fn pan_rail_preserves_values_and_shows_detents_and_a_short_value() {
 }
 
 #[test]
-fn pan_rail_drags_and_context_clicks_never_jump_from_secondary_input() {
+fn pan_knob_drags_and_context_clicks_never_jump_from_secondary_input() {
     let ctx = Context::default();
     daw_ui::theme::apply(&ctx);
     let mut value = 0.0_f32;
     let (_, geometry, _) = pan_frame(&ctx, &mut value, true, vec![]);
-    let quarter = geometry.minimum.lerp(geometry.maximum, 0.25);
+    // A knob drag covers its range in 200 points: 50 points left is −0.5.
+    let start = geometry.center;
+    let left = start - vec2(50.0, 0.0);
     pan_frame(
         &ctx,
         &mut value,
         true,
-        pointer(geometry.handle, PointerButton::Primary, true),
+        pointer(start, PointerButton::Primary, true),
     );
-    pan_frame(&ctx, &mut value, true, vec![Event::PointerMoved(quarter)]);
-    let (response, _, _) = pan_frame(
+    pan_frame(&ctx, &mut value, true, vec![Event::PointerMoved(left)]);
+    pan_frame(
         &ctx,
         &mut value,
         true,
-        pointer(quarter, PointerButton::Primary, false),
+        pointer(left, PointerButton::Primary, false),
     );
     assert!((value + 0.5).abs() < 0.02, "{value}");
-    let _ = response;
     let before = value;
     for enabled in [true, false] {
         let (response, geometry, _) = pan_frame(&ctx, &mut value, enabled, vec![]);
-        let caption = pos2(response.rect.right() - 4.0, response.rect.center().y);
-        for target in [geometry.maximum, caption] {
+        let name = pos2(response.rect.left() + 4.0, response.rect.center().y);
+        for target in [geometry.center, name] {
             pan_frame(
                 &ctx,
                 &mut value,

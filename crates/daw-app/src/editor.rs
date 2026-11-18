@@ -77,6 +77,10 @@ const MIXER_PADDING: egui::Margin = egui::Margin::symmetric(
     daw_ui::tokens::SPACE_SM as i8,
 );
 
+/// Width of the mixer gain field: its readings ("−10.5 dB", "+3.5 dB") fit,
+/// so the field never grows into the held-peak readout beside it.
+const MIXER_GAIN_FIELD_WIDTH: f32 = 80.0;
+
 impl DawApp {
     /// Retain the engine's latched peaks before Stop or a graph rebuild retires
     /// it. Document replacement invalidates this cache through view generation.
@@ -512,13 +516,20 @@ impl DawApp {
         let strip_height =
             (workspace_height - routing_overview_height - notice_reserve - group_header_height)
                 .max(fixed_height + daw_ui::tokens::MIXER_FADER_MIN);
-        // `[scale][rail][gap][meter]` ends at the strip's right edge like every
-        // other row, with a double-width stereo meter, so nothing is left
-        // unused beside the meter. The gain field above spans the rest.
+        // `[rail][gap][meter]` sits on the strip's center axis, with a
+        // double-width stereo meter. Above it, the gain field and the held
+        // peak form one group on the same axis.
         let meter_width = 2.0 * daw_ui::tokens::MIXER_METER_WIDTH;
         let unit_width = daw_ui::MIXER_FADER_WIDTH + daw_ui::MIXER_METER_GAP + meter_width;
-        let unit_offset = (content_width - unit_width).max(0.0).floor();
-        let meter_offset = unit_offset + daw_ui::MIXER_FADER_WIDTH + daw_ui::MIXER_METER_GAP;
+        let unit_offset = ((content_width - unit_width) * 0.5).max(0.0).floor();
+        let peak_width = daw_ui::tokens::SPACE_XL;
+        let gain_width =
+            (content_width - daw_ui::tokens::SPACE_XS - peak_width).min(MIXER_GAIN_FIELD_WIDTH);
+        let gain_offset = ((content_width - gain_width - daw_ui::tokens::SPACE_XS - peak_width)
+            * 0.5)
+            .max(0.0)
+            .floor();
+        let peak_center = gain_offset + gain_width + daw_ui::tokens::SPACE_XS + peak_width * 0.5;
         let mut diagnostics = Vec::new();
         let mut route_diagnostics = Vec::new();
         let mut legend_diagnostics: Vec<serde_json::Value> = Vec::new();
@@ -539,6 +550,14 @@ impl DawApp {
                     "handle_center":[scale.handle.x,scale.handle.y],
                     "divisions":scale.divisions,"range":scale.range,"value":scale.value,
                     "ticks":scale.ticks.iter().map(|tick| serde_json::json!({"fraction":tick.fraction,"y":tick.center.y,"major":tick.major})).collect::<Vec<_>>(),
+                })
+            })
+        };
+        let knob_json = |knob: Option<daw_ui::KnobGeometry>| {
+            knob.map(|knob| {
+                serde_json::json!({
+                    "dial":rect_json(knob.dial),"center":[knob.center.x,knob.center.y],"radius":knob.radius,
+                    "index":[knob.index.x,knob.index.y],"range":knob.range,"value":knob.value,
                 })
             })
         };
@@ -903,7 +922,7 @@ impl DawApp {
                         // The gain readout over the rail, the held peak over the meter.
                         let (readout_row, _) = ui.allocate_exact_size(Vec2::new(content_width, control), egui::Sense::hover());
                         let mut db = daw_ui::channel_gain_to_db(displayed_gain);
-                        let gain = ui.put(egui::Rect::from_min_size(readout_row.min, Vec2::new(meter_offset - daw_ui::tokens::SPACE_SM, control)),
+                        let gain = ui.put(egui::Rect::from_min_size(readout_row.min + Vec2::new(gain_offset, 0.0), Vec2::new(gain_width, control)),
                             daw_ui::channel_gain_number(&mut db))
                             .on_hover_text("Channel volume · drag or double-click to type");
                         let (action, exact) = daw_ui::automatable_parameter_value_context_named(ui, &gain,
@@ -918,7 +937,7 @@ impl DawApp {
                             automation_overrides.push((gain_target, AutomationParameter::TrackGain.normalize(track.gain)));
                         }
                         let readout = daw_ui::channel_peak_indicator(ui, meter_id, channel_peak_hold,
-                            readout_row.left() + meter_offset + meter_width * 0.5, readout_row);
+                            readout_row.left() + peak_center, readout_row);
                         ui.add_space(spacing);
                         let fader_height = (ui.max_rect().bottom() - ui.cursor().min.y - footer_height).max(daw_ui::tokens::MIXER_FADER_MIN);
                         let (fader_rect, fader_scale, level) = ui.horizontal(|ui| {
@@ -1013,7 +1032,7 @@ impl DawApp {
                             "effects":rect_json(effects.rect),"insert_summary":rect_json(insert_summary.rect),
                             "incoming_count":incoming.get(&track.id).map_or(0, Vec::len),
                             "gain":rect_json(gain.rect),"fader":rect_json(fader_rect),"fader_scale":scale_json(fader_scale),
-                            "pan":rect_json(pan_response.rect),"pan_scale":scale_json(daw_ui::slider_scale_geometry(ui.ctx(), pan_response.id)),
+                            "pan":rect_json(pan_response.rect),"pan_knob":knob_json(daw_ui::knob_geometry(ui.ctx(), pan_response.id)),
                             "mute_solo":rect_json(mute_solo_rect),"mute":rect_json(pan_row.mute.rect),"solo":rect_json(pan_row.solo.rect),
                             "meter":rect_json(level.rect),"meter_readout":rect_json(readout.rect),"peak_hold":channel_peak_hold,"peak_clipped":channel_peak_hold.iter().any(|peak| *peak >= 1.0),"target":rect_json(target.rect),"sends":rect_json(sends_rect),
                             "send_rows":send_rows,"send_automation":send_automation,"add_send":rect_json(add_send.rect),
@@ -1175,7 +1194,7 @@ impl DawApp {
                             .map(|(_, _, value)| AutomationParameter::TrackGain.denormalize(value)).unwrap_or(master_track.gain);
                         let (readout_row, _) = ui.allocate_exact_size(Vec2::new(content_width, control), egui::Sense::hover());
                         let mut db = daw_ui::channel_gain_to_db(displayed_gain);
-                        let gain = ui.put(egui::Rect::from_min_size(readout_row.min, Vec2::new(meter_offset - daw_ui::tokens::SPACE_SM, control)), daw_ui::channel_gain_number(&mut db))
+                        let gain = ui.put(egui::Rect::from_min_size(readout_row.min + Vec2::new(gain_offset, 0.0), Vec2::new(gain_width, control)), daw_ui::channel_gain_number(&mut db))
                             .on_hover_text("Master volume · after inserts · drag or double-click to type");
                         let (action, exact) = daw_ui::automatable_parameter_value_context_named(ui, &gain,
                             daw_ui::AutomationControl::Gain { track: master_id }, gain_automation.map(|(lane, state, _)| (lane, state)),
@@ -1187,7 +1206,7 @@ impl DawApp {
                             automation_overrides.push((gain_target, AutomationParameter::TrackGain.normalize(master_track.gain)));
                         }
                         let readout = daw_ui::channel_peak_indicator(ui, meter_id, master_peak_hold,
-                            readout_row.left() + meter_offset + meter_width * 0.5, readout_row);
+                            readout_row.left() + peak_center, readout_row);
                         ui.add_space(spacing);
                         let fader_height = (ui.max_rect().bottom() - ui.cursor().min.y - footer_height).max(daw_ui::tokens::MIXER_FADER_MIN);
                         let (fader, level) = ui.horizontal(|ui| {
@@ -1255,24 +1274,28 @@ impl DawApp {
                 ui.set_min_width(mixer_width);
                 if let Some(track) = flow_source.and_then(|id| self.project.track(id)) {
                     let source_position = anchors.get(&Some(track.id)).copied().unwrap_or_default();
-                    let routes = std::iter::once((track.output_bus, "Output"))
-                        .chain(track.sends.iter().map(|send| (Some(send.target_bus), if send.pre_fader { "Pre send" } else { "Post send" })));
-                    for (target, kind) in routes {
+                    let routes: Vec<_> = std::iter::once((track.output_bus, "Output"))
+                        .chain(track.sends.iter().map(|send| (Some(send.target_bus), if send.pre_fader { "Pre send" } else { "Post send" })))
+                        .collect();
+                    let target_x: Vec<f32> = routes.iter().map(|(target, _)| anchors.get(target).copied().unwrap_or(source_position).x).collect();
+                    for (index, (target, kind)) in routes.into_iter().enumerate() {
                         let target_position = anchors.get(&target).copied().unwrap_or(source_position);
+                        // Lower lanes rise through this one to their targets.
+                        let crossings = &target_x[index + 1..];
                         let target_name = target.and_then(|id| names.get(&id)).map(String::as_str).unwrap_or("Master");
                         let caption = format!("{kind} → {target_name}");
-                        let lane = daw_ui::mixer_route_lane_with_height(ui,
+                        let lane = daw_ui::mixer_route_lane_with_crossings(ui,
                             daw_ui::MixerRouteEndpoint { position: source_position, color: color(track.color) },
                             daw_ui::MixerRouteEndpoint { position: target_position,
                                 color: target.and_then(|id| channel_colors.get(&id)).copied().unwrap_or(palette(ui.ctx()).accent) },
-                            &caption, connection_clip, route_lane_height);
+                            &caption, connection_clip, route_lane_height, crossings);
                         if let Some(painted) = lane.painted {
                             route_diagnostics.push(serde_json::json!({"source":track.id,"target":target,"kind":kind,
                                 "lane":rect_json(painted.lane),"shaft":rect_json(painted.shaft),"head":rect_json(painted.head),
                                 "from":[painted.from.x,painted.from.y],"to":[painted.to.x,painted.to.y],
                                 "path":painted.path.map(|point| [point.x,point.y]),
                                 "source_color":painted.source_color.to_array(),"target_color":painted.target_color.to_array(),
-                                "stroke_width":painted.stroke_width,
+                                "stroke_width":painted.stroke_width,"hops":painted.hops,
                                 "source_clipped":painted.source_clipped,"target_clipped":painted.target_clipped}));
                         }
                         let hint = match kind {
