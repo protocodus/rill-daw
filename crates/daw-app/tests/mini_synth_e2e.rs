@@ -127,18 +127,20 @@ fn new_midi_tracks_play_r1_mini_shaped_by_tools_presets_and_its_panel() {
     let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(undone["project"], before["project"]);
 
-    // The Sound task: drag Cutoff, then right-click it and Automate.
+    // Inspect the two oscillators, then drag and automate the filter cutoff.
     app.command(json!({"command":"viewport","width":1600,"height":1400,"pixels_per_point":1.0}));
     app.click("New pattern");
     menu(&mut app, "Window", "Instrument");
-    common::wait_visible(&mut app, "Cutoff");
+    common::wait_visible(&mut app, "OSCILLATOR 1");
     let state = app.inspect();
     for label in [
-        "Sound",
-        "Motion",
-        "OSCILLATORS",
+        "Oscillators",
+        "Filter & amp",
+        "Modulation",
+        "Voices",
+        "OSCILLATOR 1",
+        "OSCILLATOR 2",
         "SOURCE MIX",
-        "AMP ENVELOPE",
         "Volume",
     ] {
         assert!(
@@ -151,7 +153,7 @@ fn new_midi_tracks_play_r1_mini_shaped_by_tools_presets_and_its_panel() {
             state["visible_labels"]
         );
     }
-    // The filter's Cutoff comes first: left of the velocity's, above the LFO's.
+    let state = app.click("Filter & amp");
     let position = |entry: &Value| {
         (
             entry["min"][1].as_f64().unwrap(),
@@ -214,7 +216,7 @@ fn panel_keyboard_and_wheels_play_the_track_and_let_go_when_the_panel_closes() {
     app.key("Escape");
     app.command(json!({"command":"viewport","width":1600,"height":1400,"pixels_per_point":1.0}));
     menu(&mut app, "Window", "Instrument");
-    common::wait_visible(&mut app, "Cutoff");
+    common::wait_visible(&mut app, "OSCILLATOR 1");
     // The keyboard remains reachable below the fixed task workspace.
     let window = app.inspect()["window_rects"][0].clone();
     let (x, y) = center(&window);
@@ -276,7 +278,7 @@ fn panel_keyboard_and_wheels_play_the_track_and_let_go_when_the_panel_closes() {
 
     // Reopening reattaches the mod wheel it still shows, with the bend centred.
     menu(&mut app, "Window", "Instrument");
-    common::wait_visible(&mut app, "Cutoff");
+    common::wait_visible(&mut app, "OSCILLATOR 1");
     let reopened = app.inspect();
     let wheels = &reopened["native_editor"]["performance"]["wheels"];
     assert_eq!(wheels[0], track, "{wheels}");

@@ -33,10 +33,13 @@ cargo test --locked -p daw-app --test sample_player_e2e --test sample_player_too
 `r1_workspaces_e2e` opens all nine built-in devices in both themes through the
 running application, visits every task with the mouse, checks output and
 keyboard stability and reachability, and verifies navigation preserves the
-project and Undo history. It also selects every Equalizer band independently
-of band enablement, edits a Motion parameter across task changes and
-Undo/Redo/save/reopen, and checks that tool edits retain the drum task and its
-silent-volume readout. Knob coverage checks hover-only min/max/current values,
+project and Undo history. It checks that the tab row contains only page titles,
+that each page's controls sit below them, and that Spacer's panel fill and glow
+follow selection. It also selects every Equalizer band independently
+of band enablement, checks Frequency alignment, edits both Filter modulation
+sources on the same panel, and edits an LFO parameter across page changes,
+Undo/Redo and save/reopen. It checks the selected drum pad and its silent-volume
+readout after a tool edit. Knob coverage checks hover-only min/max/current values,
 disabled inspection, dragging, hiding after focus, stable geometry, compact
 output values and mouse selection from revealed choice menus. Run alongside
 the existing sound/automation workflows:

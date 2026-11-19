@@ -45,9 +45,8 @@ fn fixture(opposite: bool, muted: bool) -> (Harness, u64, u64) {
     (app, tone, bus)
 }
 
-fn open(app: &mut Harness, track: Option<u64>) -> Value {
-    let state = app.inspect();
-    let rect = match track {
+fn analyze_button(state: &Value, track: Option<u64>) -> &Value {
+    match track {
         Some(id) => &state["mixer"]["channels"]
             .as_array()
             .unwrap()
@@ -55,9 +54,31 @@ fn open(app: &mut Harness, track: Option<u64>) -> Value {
             .find(|channel| channel["track"] == id)
             .unwrap()["analyze"],
         None => &state["mixer"]["master"]["analyze"],
-    };
+    }
+}
+
+fn analyze_point(app: &mut Harness, track: Option<u64>) -> (f64, f64) {
+    let mut state = app.inspect();
+    let viewport = &state["mixer"]["reorder_viewport"];
+    let below = analyze_button(&state, track)["max"][1].as_f64().unwrap()
+        - viewport["max"][1].as_f64().unwrap();
+    if below > 0.0 {
+        let x = viewport["min"][0].as_f64().unwrap() + 20.0;
+        let y = (viewport["min"][1].as_f64().unwrap() + viewport["max"][1].as_f64().unwrap()) * 0.5;
+        app.command(json!({"command":"scroll","x":x,"y":y,"delta":-below-20.0}));
+        // Let the wheel movement settle before sending a pointer press.
+        for _ in 0..20 {
+            state = app.inspect();
+        }
+    }
+    let rect = analyze_button(&state, track);
     let x = (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5;
     let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
+    (x, y)
+}
+
+fn open(app: &mut Harness, track: Option<u64>) -> Value {
+    let (x, y) = analyze_point(app, track);
     let state = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
     assert_eq!(state["popups"]["analysis"], true);
     assert_eq!(state["signal_analysis"]["track"], json!(track));
@@ -334,8 +355,20 @@ fn target_deletion_undo_and_compact_views_never_restore_stale_measurements() {
     app.command(json!({"command":"viewport","width":800,"height":600}));
     open(&mut app, Some(tone));
     let baseline = app.inspect();
-    for view in ["Spectrum", "Levels", "Loudness", "Correlation", "Phase"] {
-        let state = app.click(view);
+    let pages = ["Spectrum", "Levels", "Loudness", "Correlation", "Phase"];
+    for view in pages {
+        app.click(view);
+        let state = app.command(json!({"command":"inspect","paint":true}));
+        assert_eq!(state["signal_analysis"]["view"], view);
+        for title in pages {
+            let text = state["painted_text"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|text| text["text"] == title)
+                .unwrap();
+            assert_eq!(text["colors"][0][3], 204, "{title} tab title opacity");
+        }
         assert!(state["signal_analysis"]["snapshot"].is_null());
         let reset = state["label_rects"]
             .as_array()
@@ -462,12 +495,10 @@ fn levels_measure_real_intersample_peaks_stereo_rms_and_reset_without_song_edits
 
 #[test]
 fn analyzer_hint_cannot_intercept_a_coalesced_click_on_effects() {
-    let (mut app, _, _) = fixture(false, false);
+    let (mut app, track, _) = fixture(false, false);
     app.command(json!({"command":"viewport","width":800,"height":600}));
     let before = app.inspect();
-    let analyze = &before["mixer"]["channels"][0]["analyze"];
-    let x = (analyze["min"][0].as_f64().unwrap() + analyze["max"][0].as_f64().unwrap()) * 0.5;
-    let y = (analyze["min"][1].as_f64().unwrap() + analyze["max"][1].as_f64().unwrap()) * 0.5;
+    let (x, y) = analyze_point(&mut app, Some(track));
     app.command(json!({"command":"pointer","phase":"move","x":x,"y":y}));
     let mut hovered = app.inspect();
     for _ in 0..40 {
@@ -480,8 +511,7 @@ fn analyzer_hint_cannot_intercept_a_coalesced_click_on_effects() {
             .iter()
             .any(|label| label == "Live spectrum, LUFS loudness, stereo correlation and phase")
     );
-    // The native hint overlaps the adjacent Effects caption. This semantic
-    // mouse click delivers pointer arrival and press together in one frame.
+    // The semantic click delivers pointer arrival and press over Effects in one frame.
     let effects = app.click("Effects");
     assert_eq!(effects["popups"]["effects"], true);
     assert_eq!(effects["popups"]["analysis"], false);

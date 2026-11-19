@@ -142,10 +142,10 @@ fn clip_and_channel_selection_add_halos_without_changing_geometry_or_controls() 
 }
 
 #[test]
-fn tool_and_page_selection_outline_the_full_target_without_moving_labels() {
+fn tool_selection_outlines_the_full_target_without_moving_labels() {
     for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
         for density in [1.0, 1.25, 2.0] {
-            for role in ["tool", "choice", "tab"] {
+            for chooser in [false, true] {
                 let ctx = Context::default();
                 theme::apply(&ctx);
                 theme::set_appearance(&ctx, appearance);
@@ -159,14 +159,14 @@ fn tool_and_page_selection_outline_the_full_target_without_moving_labels() {
                         egui::CentralPanel::default().show(ctx, |ui| {
                             let response = ui
                                 .add_enabled_ui(enabled, |ui| {
-                                    ui.add(match role {
-                                        "tool" => daw_ui::IconButton::tool(selected, "Duplicate"),
-                                        "choice" => daw_ui::IconButton::tool_group_choice(
+                                    ui.add(if chooser {
+                                        daw_ui::IconButton::tool_group_choice(
                                             "Duplicate",
                                             daw_ui::Icon::Duplicate,
                                             selected.then_some("Duplicate"),
-                                        ),
-                                        _ => daw_ui::IconButton::tab(selected, "Duplicate"),
+                                        )
+                                    } else {
+                                        daw_ui::IconButton::tool(selected, "Duplicate")
                                     })
                                 })
                                 .inner;

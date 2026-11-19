@@ -50,6 +50,8 @@ pub const TOOLBAR_ICON_SIZE: f32 = SPACE_MD;
 pub const ICON_LABEL_GAP: f32 = 3.0;
 /// Supporting glyphs stay slightly quieter than their readable labels.
 pub const BUTTON_ICON_OPACITY: f32 = 0.8;
+/// Page titles recede slightly on both the active face and translucent tabs.
+pub const TAB_LABEL_OPACITY: f32 = 0.8;
 pub const POPUP_MARGIN: f32 = SPACE_LG;
 // egui's native titlebar reserves 32 points at each side for its controls.
 // Keep its close target outside the overlapping titlebar click region.

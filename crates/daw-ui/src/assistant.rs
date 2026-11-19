@@ -159,8 +159,6 @@ pub fn assistant(
     if options.failure.is_none() {
         state.reset_failure_reveal();
     }
-    // Pages lead, as in every tabbed popup; the scope and its live context
-    // open the body beneath the tab rule.
     crate::popup_tabs_with_hints(
         ui,
         &mut state.page,
@@ -186,6 +184,9 @@ pub fn assistant(
                 "Read guidance for working with the music assistant",
             ),
         ],
+    );
+    crate::action_row(
+        ui,
         |ui| {
             crate::quiet_action_menu(ui, "More", |ui| {
                 let reuse = ui
@@ -237,13 +238,15 @@ pub fn assistant(
                 )
                 .clicked();
         },
+        |ui| {
+            let scope = format!("Scope · {}", bounded(options.scope, 2_048));
+            text::truncated(ui, text::TextRole::Label, scope)
+                .on_hover_text(bounded(options.context, 2_048));
+        },
     );
     if reuse_last {
         state.page = AssistantPage::Conversation;
     }
-    let scope = format!("Scope · {}", bounded(options.scope, 2_048));
-    text::truncated(ui, text::TextRole::Label, scope)
-        .on_hover_text(bounded(options.context, 2_048));
     // Status shares the header's context line. Keeping it out of the fixed
     // composer leaves room for readable diagnostics on a short display.
     // The complete musical context remains available on the scope label.

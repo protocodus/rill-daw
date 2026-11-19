@@ -821,29 +821,26 @@ fn saturator_readouts_say_what_the_device_does() {
 }
 
 #[test]
-fn compressor_controls_keep_their_places_on_both_tasks_in_every_mode() {
+fn compressor_controls_keep_their_places_in_every_mode() {
     use compressor::*;
     let mut panel = Panel::new(&DESCRIPTOR);
-    for page in 0..2 {
-        panel.page(page);
-        let used = panel.frame(vec![]);
-        let before = panel.state.control_rects.clone();
-        for mode in [1.0, 2.0, 0.0] {
-            panel.set(MODE, mode);
-            assert_eq!(panel.frame(vec![]), used, "page {page}, mode {mode}");
-            assert_eq!(
-                panel.state.control_rects, before,
-                "page {page}, mode {mode}"
-            );
-            let settings = panels::compressor_settings(&|id| panel.host.value(id));
-            let mut off: Vec<u32> = before
-                .iter()
-                .map(|(id, _)| *id)
-                .filter(|id| !applies(*id, &settings))
-                .collect();
-            off.sort_unstable();
-            assert_eq!(disabled(&panel), off, "page {page}, mode {mode}");
-        }
+    let used = panel.frame(vec![]);
+    let before = panel.state.control_rects.clone();
+    assert!(panel.state.tab_rects.is_empty());
+    assert!(panel.cell(SIDECHAIN).right() < panel.cell(THRESHOLD).left());
+    assert!(panel.cell(THRESHOLD).right() < panel.cell(ATTACK).left());
+    for mode in [1.0, 2.0, 0.0] {
+        panel.set(MODE, mode);
+        assert_eq!(panel.frame(vec![]), used, "mode {mode}");
+        assert_eq!(panel.state.control_rects, before, "mode {mode}");
+        let settings = panels::compressor_settings(&|id| panel.host.value(id));
+        let mut off: Vec<u32> = before
+            .iter()
+            .map(|(id, _)| *id)
+            .filter(|id| !applies(*id, &settings))
+            .collect();
+        off.sort_unstable();
+        assert_eq!(disabled(&panel), off, "mode {mode}");
     }
 }
 
@@ -1024,7 +1021,6 @@ fn compressor_meter_holds_the_largest_reduction_while_the_device_plays() {
 fn compressor_external_sidechain_names_its_source_and_opens_routing() {
     use compressor::*;
     let mut panel = Panel::new(&DESCRIPTOR);
-    panel.page(1);
     panel.host.sources = Some(Vec::new());
     // The value line of the Sidechain cell.
     let link = |panel: &Panel| {
@@ -1145,14 +1141,20 @@ fn modulator_controls_keep_their_places_in_every_mode() {
         assert!(shown.contains(&count));
         assert_eq!(disabled(&panel), off, "mode {mode}");
     }
-    // Core controls share their task row; output remains below it, and
-    // mode-specific controls replace each other in the same place.
+    // One control row beneath the plots, from LFO to wet path.
     panel.set(MODE, 0.0);
     panel.set(SYNC, 0.0);
-    for line in [[MODE, RATE, CENTER_CHORUS], [CHARACTER, SHAPE, VOICES]] {
-        let top = panel.cell(line[0]).top();
-        assert!(line.iter().all(|id| panel.cell(*id).top() == top));
-    }
+    let top = panel.cell(SHAPE).top();
+    assert!(
+        [RATE, CENTER_CHORUS, VOICES, LOW_CUT]
+            .iter()
+            .all(|id| panel.cell(*id).top() == top)
+    );
+    assert!(panel.cell(MODE).bottom() < panel.state.picture_rects[0].top());
+    assert_eq!(
+        panel.cell(CHARACTER).center().y,
+        panel.cell(MODE).center().y
+    );
     let voices = panel.cell(VOICES);
     panel.set(MODE, 2.0);
     assert_eq!(panel.cell(STAGES), voices);
@@ -1352,22 +1354,22 @@ fn modulator_picture_follows_the_playing_device_without_editing() {
 }
 
 #[test]
-fn spacer_models_stand_on_the_title_lines_and_pick_with_one_click() {
+fn spacer_models_can_be_chosen_from_their_engine_page() {
     use spacer::*;
     let mut panel = Panel::new(&DESCRIPTOR);
-    for (lamp, model, last, labels) in [
-        (ECHO_ON, ECHO_MODEL, ECHO_LEVEL, ECHO_MODELS),
-        (REVERB_ON, REVERB_MODEL, REVERB_LEVEL, REVERB_MODELS),
+    for (page, enable, model, labels) in [
+        (0, ECHO_ON, ECHO_MODEL, ECHO_MODELS),
+        (1, REVERB_ON, REVERB_MODEL, REVERB_MODELS),
     ] {
-        let (title, choice) = (panel.cell(lamp), panel.cell(model));
-        // On the title's line, clear of the name, flush with the card's
-        // last column, above the first line of controls.
-        assert!(title.right() + 8.0 < choice.left(), "{title:?} {choice:?}");
-        assert!((choice.center().y - title.center().y).abs() < 6.0);
-        assert!(choice.right() <= panel.cell(last).right() + 0.5);
-        assert!(choice.right() > panel.cell(last).center().x);
-        assert!(choice.bottom() < panel.cell(last).top());
-        // Three equal buttons, each wide enough for its name.
+        panel.page(page);
+        let choice = panel
+            .state
+            .grid_rects
+            .iter()
+            .find(|(id, _)| *id == model)
+            .unwrap()
+            .1;
+        assert!(panel.cell(model).contains_rect(choice));
         let third = choice.width() / 3.0;
         for (index, label) in labels.iter().enumerate() {
             let at = pos2(
@@ -1378,7 +1380,7 @@ fn spacer_models_stand_on_the_title_lines_and_pick_with_one_click() {
             assert_eq!(panel.plain(model), index as f32, "{label}");
         }
         // A section that is off keeps its model as it is.
-        panel.set(lamp, 0.0);
+        panel.set(enable, 0.0);
         panel.click(pos2(choice.left() + third * 0.5, choice.center().y), 1);
         assert_eq!(panel.plain(model), 2.0);
     }
@@ -1390,12 +1392,12 @@ fn spacer_models_stand_on_the_title_lines_and_pick_with_one_click() {
 }
 
 #[test]
-fn spacer_routing_stays_in_output_and_picks_with_one_click() {
+fn spacer_routing_precedes_the_graph_and_picks_with_one_click() {
     use spacer::*;
     let mut panel = Panel::new(&DESCRIPTOR);
     let routing = panel.cell(ROUTING);
-    assert!(routing.right() <= panel.cell(MIX).left());
-    assert!(routing.top() > panel.state.picture_rects[0].bottom());
+    assert!(routing.bottom() < panel.state.picture_rects[0].top());
+    assert!(panel.cell(MIX).top() > panel.cell(ECHO_LEVEL).bottom());
     panel.click(pos2(routing.right() - 15.0, routing.center().y), 1);
     assert_eq!(panel.plain(ROUTING), 1.0);
     panel.click(pos2(routing.left() + 15.0, routing.center().y), 1);
@@ -1408,7 +1410,6 @@ fn spacer_seed_is_a_stepper_that_fits_its_cell() {
     let mut panel = Panel::new(&DESCRIPTOR);
     panel.page(1);
     let cell = panel.cell(SEED);
-    assert!((cell.width() - panel.cell(DIFFUSION).width()).abs() < 0.5);
     assert_eq!(cell.top(), panel.cell(DIFFUSION).top());
     assert_eq!(cell.bottom(), panel.cell(DIFFUSION).bottom());
     // Previous, die, next: centred in the cell, level with the knobs.
@@ -1443,7 +1444,7 @@ fn spacer_controls_keep_their_places_on_both_tasks_whatever_is_switched() {
         panel.page(page);
         let used = panel.frame(vec![]);
         let before = places(&panel);
-        assert!(before.len() >= 18);
+        assert_eq!(before.len(), if page == 0 { 17 } else { 18 });
         for (echo_on, reverb_on, sync, model) in [
             (0.0, 1.0, 1.0, 0.0),
             (1.0, 0.0, 0.0, 1.0),
@@ -1472,23 +1473,26 @@ fn spacer_controls_keep_their_places_on_both_tasks_whatever_is_switched() {
             assert_eq!(disabled(&panel), off, "{case}");
         }
         let picture = panel.state.picture_rects[0];
-        assert!(picture.bottom() < panel.cell(ECHO_ON).top());
+        assert!(panel.cell(REVERB_ON).bottom() < picture.top());
         assert!(picture.height() >= 140.0);
-        assert_eq!(panel.cell(ECHO_MODEL).top(), panel.cell(REVERB_MODEL).top());
+        let model = if page == 0 { ECHO_MODEL } else { REVERB_MODEL };
+        assert!(picture.bottom() < panel.cell(model).top());
     }
 }
 
 #[test]
-fn spacer_title_lamps_switch_their_sections() {
+fn spacer_can_switch_either_engine_from_either_page() {
     use spacer::*;
     let mut panel = Panel::new(&DESCRIPTOR);
-    for id in [ECHO_ON, REVERB_ON] {
-        let lamp = panel.cell(id);
+    for (id, page) in [(ECHO_ON, 1), (REVERB_ON, 0)] {
+        panel.page(page);
+        let toggle = panel.cell(id);
         assert_eq!(panel.plain(id), 1.0);
-        panel.click(lamp.left_center() + vec2(5.0, 0.0), 1);
+        panel.click(toggle.center(), 1);
         assert_eq!(panel.plain(id), 0.0);
-        // The name beside the lamp is part of the switch.
-        panel.click(lamp.right_center() - vec2(10.0, 0.0), 1);
+        panel.page(1 - page);
+        assert_eq!(panel.cell(id), toggle);
+        panel.click(toggle.center(), 1);
         assert_eq!(panel.plain(id), 1.0);
     }
     assert_eq!(
@@ -1725,29 +1729,10 @@ fn spacer_picture_places_a_synced_echo_at_the_song_tempo_while_nothing_plays() {
 #[test]
 fn randomize_clicks_commit_one_named_complete_step_each() {
     let mut panel = Panel::new(&spacer::DESCRIPTOR);
-    let ctx = panel.ctx.clone();
-    let output = ctx.run(
-        egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 1000.0))),
-            ..Default::default()
-        },
-        |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| {
-                ui.scope(|ui| show(ui, panel.descriptor, &mut panel.host, &mut panel.state));
-            });
-        },
-    );
-    let at = output
-        .shapes
-        .iter()
-        .find_map(|shape| match &shape.shape {
-            egui::Shape::Text(text) if text.galley.text() == "100%" => {
-                Some(text.pos + text.galley.size() * 0.5)
-            }
-            _ => None,
-        })
-        .expect("Randomize amount button");
-    panel.click(at, 2);
+    for _ in 0..2 {
+        panel.click_label("Randomize");
+        panel.click_label("100%");
+    }
     assert_eq!(panel.host.commits.len(), 2);
     assert_eq!(panel.host.batches, 2);
     assert!(panel.host.singles.is_empty());
@@ -1806,7 +1791,7 @@ fn assert_workspace_controls_in_cards(panel: &Panel) {
         panel.state.selected.unwrap_or(1),
     );
     let bounds = panel.state.sections_rect.unwrap();
-    let gap = daw_ui::tokens::SPACE_SM;
+    let gap = daw_ui::tokens::SPACE_MD;
     let rows = workspace
         .layout
         .sections
@@ -1856,7 +1841,7 @@ fn assert_workspace_controls_in_cards(panel: &Panel) {
 #[test]
 fn sampler_controls_stay_inside_their_cards() {
     let mut panel = Panel::new(&sampler::DESCRIPTOR);
-    for page in 0..3 {
+    for page in 0..panels::workspaces::tabs(&sampler::DESCRIPTOR).len() {
         panel.page(page);
         assert_workspace_controls_in_cards(&panel);
     }
@@ -1923,7 +1908,7 @@ fn sampler_markers_drag_like_their_knobs() {
 fn sampler_disables_what_does_not_apply_in_place() {
     let mut panel = Panel::new(&sampler::DESCRIPTOR);
     assert!(panel.state.disabled.contains(&sampler::LOOP_START));
-    panel.page(1);
+    panel.page(2);
     assert!(panel.state.disabled.contains(&sampler::CUTOFF));
     let cutoff = panel.cell(sampler::CUTOFF);
     panel.set(sampler::FILTER_ON, 1.0);
@@ -1936,7 +1921,7 @@ fn sampler_disables_what_does_not_apply_in_place() {
 #[test]
 fn faders_on_a_row_of_one_line_keep_the_travel_of_two() {
     let mut panel = Panel::new(&sampler::DESCRIPTOR);
-    panel.page(1);
+    panel.page(2);
     // The cell holds the caption and the value besides the fader.
     for id in [sampler::FENV_ATTACK, sampler::AENV_RELEASE] {
         let fader = panel.cell(id);
@@ -1998,17 +1983,15 @@ fn drums_controls_stay_inside_their_cards() {
     for pad in [0, 15] {
         let mut panel = Panel::new(&drums::DESCRIPTOR);
         panel.state.pad = pad;
-        for page in 0..2 {
-            panel.page(page);
-            assert_workspace_controls_in_cards(&panel);
-            let output = panel.state.output_rect.unwrap();
-            assert!(output.contains_rect(panel.cell(drums::VOLUME)));
-            assert!(output.contains_rect(panel.cell(drums::id(pad, drums::LEVEL))));
-            assert_ne!(
-                panel.cell(drums::VOLUME),
-                panel.cell(drums::id(pad, drums::LEVEL))
-            );
-        }
+        panel.frame(vec![]);
+        assert_workspace_controls_in_cards(&panel);
+        let output = panel.state.output_rect.unwrap();
+        assert!(output.contains_rect(panel.cell(drums::VOLUME)));
+        assert!(output.contains_rect(panel.cell(drums::id(pad, drums::LEVEL))));
+        assert_ne!(
+            panel.cell(drums::VOLUME),
+            panel.cell(drums::id(pad, drums::LEVEL))
+        );
     }
 }
 
@@ -2016,49 +1999,38 @@ fn drums_controls_stay_inside_their_cards() {
 fn drum_inspector_captions_fit_on_one_line_at_popup_width() {
     let mut panel = Panel::new(&drums::DESCRIPTOR);
     let width = panel_width(&drums::DESCRIPTOR) + 2.0 * daw_ui::tokens::SPACE_SM;
-    let captions: [&[&str]; 2] = [
-        &[
-            "Start",
-            "End",
-            "Reverse",
-            "Pitch",
-            "Fine",
-            "Soft hit pitch",
-            "Trigger",
-            "Choke",
-        ],
-        &[
-            "Amount",
-            "Decay",
-            "Attack",
-            "Hold",
-            "Vel",
-            "Filter",
-            "Reso",
-            "Drive",
-            "Bit depth",
-        ],
+    let expected = [
+        "Start",
+        "End",
+        "Reverse",
+        "Pitch",
+        "Fine",
+        "Soft hit pitch",
+        "Trigger",
+        "Choke",
+        "Amount",
+        "Decay",
+        "Attack",
+        "Hold",
+        "Vel",
+        "Filter",
+        "Reso",
+        "Drive",
+        "Bit depth",
     ];
-    for (page, expected) in captions.into_iter().enumerate() {
-        panel.page(page);
-        let frame = panel.painted_frame(vec2(width, 800.0));
-        let mut seen = Vec::new();
-        for shape in &frame.shapes {
-            if let egui::Shape::Text(text) = &shape.shape {
-                let caption = text.galley.text();
-                if expected.contains(&caption) {
-                    assert_eq!(
-                        text.galley.rows.len(),
-                        1,
-                        "Wrapped {caption} on page {page}"
-                    );
-                    seen.push(caption);
-                }
+    let frame = panel.painted_frame(vec2(width, 800.0));
+    let mut seen = Vec::new();
+    for shape in &frame.shapes {
+        if let egui::Shape::Text(text) = &shape.shape {
+            let caption = text.galley.text();
+            if expected.contains(&caption) {
+                assert_eq!(text.galley.rows.len(), 1, "Wrapped {caption}");
+                seen.push(caption);
             }
         }
-        for caption in expected {
-            assert!(seen.contains(caption), "Missing {caption} on page {page}");
-        }
+    }
+    for caption in expected {
+        assert!(seen.contains(&caption), "Missing {caption}");
     }
 }
 
@@ -2264,7 +2236,6 @@ fn drums_readouts_say_what_a_pad_does() {
 #[test]
 fn drums_disable_what_does_not_apply_in_place() {
     let mut panel = Panel::new(&drums::DESCRIPTOR);
-    panel.page(1);
     assert!(
         panel
             .state
@@ -2353,10 +2324,11 @@ fn filter_keeps_every_control_in_its_cell_whatever_the_model() {
     let mut panel = Panel::new(&filter::DESCRIPTOR);
     let before = places(&panel);
     assert!(panel.state.disabled.contains(&filter::MORPH));
+    for (index, model) in filter::MODELS.iter().enumerate() {
+        panel.set(filter::MODEL, index as f32);
+        assert_eq!(places(&panel), before, "{model} changed the filter layout");
+    }
     // Vowel has a Morph and neither Type nor Slope.
-    panel.set(filter::MODEL, 8.0);
-    panel.frame(vec![]);
-    assert_eq!(places(&panel), before);
     assert!(!panel.state.disabled.contains(&filter::MORPH));
     assert!(panel.state.disabled.contains(&filter::TYPE));
 }

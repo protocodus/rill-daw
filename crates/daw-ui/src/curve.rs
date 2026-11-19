@@ -377,12 +377,12 @@ fn curve_editor_inner(
     let grid_meter = timeline
         .as_ref()
         .map(|(_, timeline)| timeline.meter.clone());
-    let top_inset = crate::tokens::SPACE_MD
-        + if musical {
-            crate::tokens::TIMELINE_RULER_HEIGHT
-        } else {
-            0.0
-        };
+    // The musical ruler includes its own space below the clock labels.
+    let top_inset = if musical {
+        crate::tokens::TIMELINE_RULER_HEIGHT
+    } else {
+        crate::tokens::SPACE_MD
+    };
     let bottom_inset = if musical {
         crate::tokens::SPACE_MD
     } else {
@@ -512,10 +512,7 @@ fn curve_editor_inner(
         end = viewport.beat_at(plot, plot.right());
         crate::paint_timeline_ruler(
             &painter,
-            Rect::from_min_max(
-                Pos2::new(plot.left(), rect.top()),
-                Pos2::new(plot.right(), plot.top() - 12.0),
-            ),
+            Rect::from_min_max(Pos2::new(plot.left(), rect.top()), plot.right_top()),
             *viewport,
             timeline.tempo,
             &timeline.meter,

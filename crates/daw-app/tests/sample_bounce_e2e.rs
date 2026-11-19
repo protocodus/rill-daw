@@ -111,7 +111,9 @@ fn selected_clips_bounce_named_quality_sample_with_undo_and_portable_recall() {
     click_clip(&mut app, ids[1], true);
     let before = app.inspect();
     bounce_options(&mut app);
+    assert_eq!(app.click("Stems")["export_preferences"]["what"], "stems");
     app.click("Project samples");
+    assert_eq!(app.click("Stems")["export_preferences"]["what"], "mix");
     rename(&mut app, "Selected clips", "Layered percussion");
     choose(&mut app, "32-bit float", "24-bit PCM");
     choose(&mut app, "Follow audio setup", "44.1 kHz");

@@ -558,7 +558,7 @@ and a new device has little to decide:
    repeats the name or the presets. No device draws its own header.
 2. **Width.** 610 points (`POPUP_WIDTH_MD`) or 987 points (`POPUP_WIDTH_LG`)
    inside the frame, nothing in between; the frame adds `DEVICE_FRAME_INSET`. No panel scrolls; a device that does not fit uses
-   pages (`tab_choice`) in the header.
+   a title-only `page_tab_bar` below the preset header.
 3. **Picture first.** One main visualization at the top shows what the device
    is doing, and is directly editable where that makes sense (drag the EQ
    node, the threshold, the envelope point, the sample marker).
@@ -1693,11 +1693,12 @@ or presets.
 3. **Effects and presets:** the effect slots and a factory bank covering
    bass, lead, pad, pluck, keys and effects.
 
-**Panel** (987 points, three pages as `tab_choice`: **Synth**, **Matrix**,
-**Effects**):
+**Panel** (987 points, with **Synth**, **Matrix** and **Effects** in a `page_tab_bar`):
 
 ```text
-┌ R1 Maxi ── preset ◂ ▸ ── [Synth] Matrix Effects ── scope/spectrum ─ Vol ┐
+┌ R1 Maxi ── preset ◂ ▸ ──────────────────────────────────────────────────┐
+│ [Synth]  Matrix  Effects                                                │
+│ scope/spectrum ─ Vol                                                    │
 │ OSC 1 [type ▾] [module view]  module knobs…   lvl pan │ FILTER 1 [plot] │
 │ OSC 2 [type ▾] [module view]  module knobs…   lvl pan │ FILTER 2 [plot] │
 │ OSC 3 [type ▾] [module view]  module knobs…   lvl pan │ routing         │

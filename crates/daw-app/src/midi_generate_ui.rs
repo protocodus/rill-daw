@@ -203,11 +203,7 @@ impl GenerateDialog {
                     .iter()
                     .map(|kind| (*kind, kind.name()))
                     .collect();
-                let ai = daw_ui::popup_tabs(ui, &mut self.settings.kind, &pages, |ui| {
-                    daw_ui::contextual_ai_button_compact(ui, &scope)
-                });
-                self.controls["ai"] = rect_json(ai.rect);
-                action.ai = ai.clicked();
+                daw_ui::popup_tabs(ui, &mut self.settings.kind, &pages);
                 let mut footer_slot = daw_ui::popup_footer(ui, "generation_actions");
                 let window_ui = ui;
                 let ui = footer_slot.body();
@@ -454,21 +450,21 @@ impl GenerateDialog {
                         || self.settings.kind == GenerateKind::Arpeggio
                             && self.settings.arp == ArpeggioPattern::Random;
                     let scale = matches!(self.settings.harmony, GenerateHarmony::Scale(_));
-                    if variation || scale {
-                        ui.horizontal(|ui| {
-                            if variation && daw_ui::button(ui, "New variation").clicked() {
-                                self.settings.seed = self.settings.seed.wrapping_add(1);
-                            }
-                            if scale {
-                                let response = daw_ui::button(ui, "Use scale for grid")
-                                    .on_hover_text(
-                                        "Use this root and scale for the editor's visual guide",
-                                    );
-                                self.controls["use_grid_scale"] = rect_json(response.rect);
-                                action.grid_scale = response.clicked();
-                            }
-                        });
-                    }
+                    daw_ui::control_row_wrapped(ui, |ui| {
+                        if variation && daw_ui::button(ui, "New variation").clicked() {
+                            self.settings.seed = self.settings.seed.wrapping_add(1);
+                        }
+                        if scale {
+                            let response = daw_ui::button(ui, "Use scale for grid").on_hover_text(
+                                "Use this root and scale for the editor's visual guide",
+                            );
+                            self.controls["use_grid_scale"] = rect_json(response.rect);
+                            action.grid_scale = response.clicked();
+                        }
+                        let ai = daw_ui::contextual_ai_button_compact(ui, &scope);
+                        self.controls["ai"] = rect_json(ai.rect);
+                        action.ai = ai.clicked();
+                    });
                     self.refresh(meter);
                     let status = self.error.clone().unwrap_or_else(|| {
                         if self.added_notes == 0 {

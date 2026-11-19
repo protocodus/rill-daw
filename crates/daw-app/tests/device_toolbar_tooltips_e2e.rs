@@ -167,6 +167,15 @@ fn check_device(effect: bool) {
             ],
         ),
         ("Reset", &["every parameter", "default"]),
+        ("Randomize", &["choose", "vary this sound"]),
+    ] {
+        let shown = hover(&mut app, action, fragments);
+        unchanged(&shown, &initial, action);
+        assert_eq!(preset_files(&presets), saved_before);
+    }
+    let menu = app.click("Randomize");
+    unchanged(&menu, &initial, "Opening Randomize");
+    for (action, fragments) in [
         (
             "1%",
             &["random variation", "1%", "output, volume", "unchanged"],
@@ -189,6 +198,7 @@ fn check_device(effect: bool) {
         );
     }
 
+    app.command(json!({"command":"key","key":"Escape"}));
     let naming = app.click("Save as…");
     unchanged(&naming, &initial, "Save as… opens naming");
     hover(

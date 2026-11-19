@@ -299,24 +299,28 @@ impl eframe::App for Gallery {
             )
             .show(ctx, |ui| {
                 if self.capture.is_none() {
-                    ui.horizontal_wrapped(|ui| {
-                        for (index, (label, _, _)) in PAGES.iter().enumerate() {
-                            if ui::view_choice(ui, self.page == index, *label).clicked() {
-                                self.page = index;
-                                egui::Popup::close_all(ctx);
-                            }
-                        }
-                        if ui::small_button(ui, "Light / Dark").clicked() {
-                            self.appearance = if self.appearance == theme::Appearance::Light {
-                                theme::Appearance::Dark
-                            } else {
-                                theme::Appearance::Light
-                            };
-                        }
-                    });
+                    let tabs = ui::page_tab_bar(ui, &PAGES.map(|(label, _, _)| label), self.page);
+                    if let Some(index) = tabs.iter().position(egui::Response::clicked) {
+                        self.page = index;
+                        egui::Popup::close_all(ctx);
+                    }
                     ui.add_space(ui::tokens::SPACE_MD);
+                    ui::action_row(
+                        ui,
+                        |ui| {
+                            if ui::small_button(ui, "Light / Dark").clicked() {
+                                self.appearance = if self.appearance == theme::Appearance::Light {
+                                    theme::Appearance::Dark
+                                } else {
+                                    theme::Appearance::Light
+                                };
+                            }
+                        },
+                        |ui| ui::text::title(ui, PAGES[self.page].1),
+                    );
+                } else {
+                    ui::text::title(ui, PAGES[self.page].1);
                 }
-                ui::text::title(ui, PAGES[self.page].1);
                 ui::text::note(ui, PAGES[self.page].2);
                 ui.add_space(ui::tokens::SPACE_MD);
                 ui.separator();

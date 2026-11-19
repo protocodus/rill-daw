@@ -67,17 +67,15 @@ pub fn mixer_analysis_button(ui: &mut Ui, width: f32) -> Response {
 }
 
 pub fn signal_analyzer_tabs(ui: &mut Ui, selected: &mut SignalAnalyzerView) {
-    ui.horizontal_wrapped(|ui| {
-        for view in [
-            SignalAnalyzerView::Spectrum,
-            SignalAnalyzerView::Levels,
-            SignalAnalyzerView::Loudness,
-            SignalAnalyzerView::Correlation,
-            SignalAnalyzerView::Phase,
-        ] {
-            crate::selectable_value(ui, selected, view, view.label());
-        }
-    });
+    let pages = [
+        SignalAnalyzerView::Spectrum,
+        SignalAnalyzerView::Levels,
+        SignalAnalyzerView::Loudness,
+        SignalAnalyzerView::Correlation,
+        SignalAnalyzerView::Phase,
+    ]
+    .map(|view| (view, view.label()));
+    crate::popup_tabs(ui, selected, &pages);
 }
 
 fn level(value: Option<f32>) -> String {

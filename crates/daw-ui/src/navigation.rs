@@ -9,8 +9,15 @@ pub struct ViewLink<T> {
     pub enabled: bool,
 }
 
-/// A compact, wrapping row of page links in a fixed order. The current
-/// destination stays in place as the selected tab, so the row never shifts.
+fn view_link<T: PartialEq>(current: T, link: &ViewLink<T>) -> crate::IconButton {
+    crate::IconButton::text(link.label)
+        .presentation()
+        .selected(current == link.value)
+        .quiet()
+        .wrap_mode(egui::TextWrapMode::Extend)
+}
+
+/// Links to related windows and workspaces in a fixed order.
 pub fn view_links<T: Copy + PartialEq>(
     ui: &mut Ui,
     current: T,
@@ -20,11 +27,7 @@ pub fn view_links<T: Copy + PartialEq>(
     ui.horizontal_wrapped(|ui| {
         for link in links {
             if ui
-                .add_enabled(
-                    link.enabled,
-                    crate::IconButton::tab(current == link.value, link.label)
-                        .wrap_mode(egui::TextWrapMode::Extend),
-                )
+                .add_enabled(link.enabled, view_link(current, link))
                 .clicked()
             {
                 selected = Some(link.value);
@@ -34,7 +37,7 @@ pub fn view_links<T: Copy + PartialEq>(
     selected
 }
 
-/// Whether the page links as tabs plus one trailing button fit on one line
+/// Whether the view links plus one trailing button fit on one line
 /// here, so a caller can shorten the trailing label instead of wrapping.
 /// Measured with an invisible sizing pass of the same widgets.
 pub fn links_fit<T: Copy + PartialEq>(
@@ -52,10 +55,7 @@ pub fn links_fit<T: Copy + PartialEq>(
     );
     probe.horizontal(|ui| {
         for link in links {
-            ui.add(
-                crate::IconButton::tab(current == link.value, link.label)
-                    .wrap_mode(egui::TextWrapMode::Extend),
-            );
+            ui.add(view_link(current, link));
         }
         ui.add(crate::ai_button_widget(trailing));
     });
@@ -379,7 +379,11 @@ impl<'a> Page<'a> {
                         .max_rect(body)
                         .layout(egui::Layout::top_down(egui::Align::Min)),
                 );
-                body_ui.set_clip_rect(ui.clip_rect().intersect(body));
+                // Controls at the edge of the body paint their glow into its margin.
+                body_ui.set_clip_rect(
+                    ui.clip_rect()
+                        .intersect(body.expand(crate::tokens::SELECTION_GLOW_EXTENT)),
+                );
                 add_contents(&mut body_ui)
             });
         if back && let Some(open) = open {

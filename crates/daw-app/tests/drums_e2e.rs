@@ -249,7 +249,7 @@ fn a_file_dropped_on_a_pad_loads_into_that_pad_and_its_note_plays_it() {
             json!({"session_id":id,"expected_revision":revision,"track_id":beat,"slot":pad,"clip_id":clip}),
         );
     }
-    app.command(json!({"command":"viewport","width":1600,"height":1400,"pixels_per_point":1.0}));
+    app.command(json!({"command":"viewport","width":1480,"height":960,"pixels_per_point":2.0}));
     app.click("Beat");
     app.click("Window");
     app.click("Instrument");
@@ -260,6 +260,22 @@ fn a_file_dropped_on_a_pad_loads_into_that_pad_and_its_note_plays_it() {
     let (x, y) = label_center(&state, "Snare");
     app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
     common::wait_visible(&mut app, "PAD 3");
+
+    // Rename the selected pad from its source header, then restore its original name.
+    let selected = app.inspect();
+    app.click("Rename…");
+    app.command(json!({"command":"text","text":"Backbeat"}));
+    let renamed = app.click("Apply name");
+    let instrument = &renamed["project"]["tracks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|track| track["id"] == beat)
+        .unwrap()["instrument"]["Builtin"];
+    assert_eq!(instrument["sample_names"]["2"], "Backbeat");
+    assert_eq!(slot(&renamed, beat, 2)["name"], "Snare");
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], selected["project"]);
 
     // A file dropped on pad 3 replaces its recording; nothing else changes.
     let dropped = app.command(json!({"command":"drop_at","paths":[second],"x":x,"y":y}));
@@ -281,6 +297,58 @@ fn a_file_dropped_on_a_pad_loads_into_that_pad_and_its_note_plays_it() {
         "the panel took the file"
     );
     assert_eq!(dropped["history"]["undo"][0], "Load sample");
+    // The footer stays below the entire keyboard on a native Retina display.
+    // Press the bottom of the D2 key, which plays the recording on pad 3.
+    let state = app.inspect();
+    let keyboard = &state["native_editor"]["performance"]["keyboard"];
+    let left = keyboard["min"][0].as_f64().unwrap();
+    let key_width = (keyboard["max"][0].as_f64().unwrap() - left) / 28.0;
+    let x = left + 1.5 * key_width;
+    let y = keyboard["max"][1].as_f64().unwrap() - 1.0;
+    let pressed = app.command(json!({"command":"pointer","phase":"down","x":x,"y":y}));
+    assert_eq!(pressed["audition_request"][0], beat);
+    assert_eq!(pressed["audition_request"][1], 38);
+    app.command(json!({"command":"pointer","phase":"up","x":x,"y":y}));
+    // The pad number, recording and duration share a line even in a narrow inspector.
+    // The narrower toolbar exposes all its commands in a second row.
+    for width in [1600, 800] {
+        app.command(
+            json!({"command":"viewport","width":width,"height":960,"pixels_per_point":1.0}),
+        );
+        let state = app.inspect();
+        let (_, pad_y) = label_center(&state, "PAD 3");
+        let (_, duration_y) = label_center(&state, "2.00 s");
+        assert!((pad_y - duration_y).abs() < 3.0);
+        let name_in_header = state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|label| {
+                label["text"] == "second"
+                    && label["min"][1].as_f64().unwrap() < pad_y
+                    && label["max"][1].as_f64().unwrap() > pad_y
+            });
+        assert!(name_in_header, "Recording name hidden at {width} points");
+        let (_, actions_y) = label_center(&state, "Sample actions");
+        assert_eq!(actions_y > pad_y + 20.0, width == 800);
+        let rect = |text| {
+            state["label_rects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|rect| rect["text"] == text)
+                .unwrap()
+        };
+        let one_shot = rect("One-shot");
+        let gate = rect("Gate");
+        let horizontal_gap =
+            gate["min"][0].as_f64().unwrap() - one_shot["max"][0].as_f64().unwrap();
+        let vertical_gap = gate["min"][1].as_f64().unwrap() - one_shot["max"][1].as_f64().unwrap();
+        assert!(
+            horizontal_gap >= 5.0 || vertical_gap >= 5.0,
+            "Touching trigger labels at width {width}"
+        );
+    }
     let hz = frequency(&export(&mut app, "dropped.wav"), 0.1, 0.4);
     assert!((hz - 220.0).abs() < 8.0, "{hz} Hz");
     app.quit();
@@ -344,7 +412,6 @@ fn soft_hit_pitch_and_bit_depth_shape_only_the_selected_pad_and_survive_reopen()
     let pitched = app.command(json!({"command":"pointer","phase":"drag","x":x,"y":y,
         "to_x":x,"to_y":y-200.0}));
     assert_eq!(pitched["history"]["undo"][0], "Instrument parameter");
-    app.click("Shape");
     choose_bit_depth(&mut app, "Clean", "12-bit");
     let twelve = export(&mut app, "twelve.wav");
     choose_bit_depth(&mut app, "12-bit", "8-bit");

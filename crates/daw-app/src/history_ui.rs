@@ -80,20 +80,16 @@ impl DawApp {
                     // A list of steps, newest first: undone steps (muted) above
                     // the "Current" marker, applied steps below it. Clicking a
                     // row returns the song to the state before that step.
-                    let muted = daw_ui::theme::palette(ui.ctx()).muted;
-                    let row = |ui: &mut egui::Ui, label: &str, color: Option<egui::Color32>| {
-                        let mut button = daw_ui::IconButton::tab(false, label).truncate();
-                        if let Some(color) = color {
-                            button = button.label_color(color);
-                        }
+                    let colors = daw_ui::theme::palette(ui.ctx());
+                    let row = |ui: &mut egui::Ui, label: &str, color: egui::Color32| {
                         ui.add_sized(
                             egui::vec2(ui.available_width(), daw_ui::tokens::CONTROL_HEIGHT),
-                            button,
+                            daw_ui::IconButton::text(label).quiet().label_color(color).truncate(),
                         )
                     };
                     ui.add_enabled_ui(!self.state_sync_pending(), |ui| {
                         for (index, label) in redo.iter().enumerate().rev() {
-                            if row(ui, label, Some(muted))
+                            if row(ui, label, colors.muted)
                                 .on_hover_text(format!("Redo through {label}"))
                                 .clicked()
                             {
@@ -107,7 +103,7 @@ impl DawApp {
                             });
                         }
                         for (index, label) in undo.iter().enumerate() {
-                            if row(ui, label, None)
+                            if row(ui, label, colors.text)
                                 .on_hover_text(format!("Undo {label} and later steps"))
                                 .clicked()
                             {

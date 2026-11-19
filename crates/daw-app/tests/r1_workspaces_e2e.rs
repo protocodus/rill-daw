@@ -40,20 +40,18 @@ fn unchanged(state: &Value, before: &Value) {
     }
 }
 
-fn task_content(device: &str, task: &str) -> &'static str {
+fn task_content(device: &str, task: &str) -> &'static [&'static str] {
     match (device, task) {
-        ("r1-mini", "Sound") => "OSCILLATORS",
-        ("r1-mini", "Motion") => "LFO",
-        ("r1-sampler", "Sample") | ("r1-drums", "Sample") => "REGION",
-        ("r1-sampler", "Shape") => "FILTER ENVELOPE",
-        ("r1-sampler", "Motion") => "LFO",
-        ("r1-drums", "Shape") => "PITCH ENV",
-        ("r1-filter", "Tone") => "CIRCUIT",
-        ("r1-filter", "Motion") => "ENVELOPE FOLLOWER",
-        ("r1-compressor", "Shape") => "DYNAMICS",
-        ("r1-compressor", "Detector") => "SIDECHAIN",
-        ("r1-spacer", "Space") => "Pre-delay",
-        ("r1-spacer", "Texture") => "Seed",
+        ("r1-mini", "Oscillators") => &["OSCILLATOR 1", "OSCILLATOR 2", "SOURCE MIX"],
+        ("r1-mini", "Voices") => &["VOICE ALLOCATION", "PITCH RESPONSE"],
+        ("r1-mini" | "r1-sampler", "Modulation") => &["LFO", "MODULATION DEPTH"],
+        ("r1-mini" | "r1-sampler", "Filter & amp") => {
+            &["FILTER", "FILTER ENVELOPE", "AMP ENVELOPE"]
+        }
+        ("r1-sampler", "Sample") => &["REGION", "LOOP"],
+        ("r1-sampler", "Pitch & voices") => &["PITCH", "VOICES"],
+        ("r1-spacer", "Echo") => &["Routing", "Echo on", "Reverb on", "Taps"],
+        ("r1-spacer", "Reverb") => &["Routing", "Echo on", "Reverb on", "Seed"],
         _ => panic!("Unknown task {device}/{task}"),
     }
 }
@@ -72,6 +70,96 @@ fn center(rect: &Value) -> (f64, f64) {
         (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5,
         (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5,
     )
+}
+
+fn assert_tab_titles(state: &Value, pages: &[&str], page_controls: &[&str]) {
+    let labels = state["label_rects"].as_array().unwrap();
+    // Start at the device header to inspect its own paint, above the arranger.
+    let header_end = labels
+        .iter()
+        .rposition(|entry| entry["text"] == "Randomize")
+        .unwrap();
+    let device_labels = &labels[header_end + 1..];
+    let find = |title: &str| {
+        device_labels
+            .iter()
+            .find(|entry| entry["text"] == title)
+            .unwrap_or_else(|| panic!("Missing device label {title}"))
+    };
+    let first = find(pages[0]);
+    let tab_y = center(first).1;
+    let row: Vec<_> = device_labels
+        .iter()
+        .filter(|entry| {
+            let top = entry["min"][1].as_f64().unwrap();
+            let bottom = entry["max"][1].as_f64().unwrap();
+            (top..=bottom).contains(&tab_y)
+        })
+        .map(|entry| entry["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(row, pages, "Only page titles belong on the tab strip");
+    for &caption in page_controls {
+        let control = find(caption);
+        visible_in_window(state, control);
+        assert!(
+            control["min"][1].as_f64().unwrap() > first["max"][1].as_f64().unwrap(),
+            "{caption} belongs below the tab strip"
+        );
+    }
+}
+
+fn assert_tab_paint(state: &Value, pages: &[&str], selected: &str) {
+    for &page in pages {
+        let title = label(state, page);
+        assert!(
+            state["painted_text"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|text| text["text"] == page
+                    && text["rect"]["min"] == title["min"]
+                    && text["rect"]["max"] == title["max"]
+                    && text["colors"]
+                        .as_array()
+                        .is_some_and(|colors| colors.iter().any(|ink| ink[3] == 204))),
+            "{page} title at 80% opacity"
+        );
+        let (title_x, title_y) = center(title);
+        let behind_title = |shape: &Value| {
+            let rect = &shape["rect"];
+            let (x, y) = center(rect);
+            (x - title_x).abs() <= 1.0
+                && (y - title_y).abs() <= f64::from(daw_ui::tokens::SELECTION_GLOW_EXTENT)
+                && rect["min"][0].as_f64().unwrap() < title["min"][0].as_f64().unwrap()
+                && rect["min"][1].as_f64().unwrap() < title["min"][1].as_f64().unwrap()
+        };
+        let has_expected_fill = state["painted_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|shape| behind_title(shape))
+            .any(|shape| {
+                if page == selected {
+                    shape["fill"] == state["theme_colors"]["panel"]
+                } else {
+                    shape["fill"][3] == (255.0_f32 * 0.245).round() as u8
+                }
+            });
+        let halo = state["painted_meshes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|mesh| {
+                behind_title(mesh)
+                    && mesh["transparent_vertices"].as_u64().unwrap() > 0
+                    && mesh["max_alpha"].as_u64().unwrap() > 0
+            });
+        assert!(
+            has_expected_fill,
+            "{page} face color or opacity, selected {selected}"
+        );
+        assert_eq!(halo, page == selected, "{page} glow, selected {selected}");
+    }
 }
 
 fn pointer(app: &mut Harness, phase: &str, point: (f64, f64)) -> Value {
@@ -129,15 +217,25 @@ fn visible_in_window(state: &Value, rect: &Value) {
 #[test]
 fn every_r1_workspace_is_reachable_without_changing_the_song_or_moving_output() {
     let devices: &[(&str, bool, &[&str], &str)] = &[
-        ("r1-mini", true, &["Sound", "Motion"], "Volume"),
-        ("r1-sampler", true, &["Sample", "Shape", "Motion"], "Volume"),
-        ("r1-drums", true, &["Sample", "Shape"], "Kit volume"),
-        ("r1-filter", false, &["Tone", "Motion"], "Output"),
+        (
+            "r1-mini",
+            true,
+            &["Oscillators", "Filter & amp", "Modulation", "Voices"],
+            "Volume",
+        ),
+        (
+            "r1-sampler",
+            true,
+            &["Sample", "Pitch & voices", "Filter & amp", "Modulation"],
+            "Volume",
+        ),
+        ("r1-drums", true, &[], "Kit volume"),
+        ("r1-filter", false, &[], "Output"),
         ("r1-equalizer", false, &[], "Output"),
         ("r1-saturator", false, &[], "Output"),
-        ("r1-compressor", false, &["Shape", "Detector"], "Output"),
+        ("r1-compressor", false, &[], "Output"),
         ("r1-modulator", false, &[], "Output"),
-        ("r1-spacer", false, &["Space", "Texture"], "Output"),
+        ("r1-spacer", false, &["Echo", "Reverb"], "Output"),
     ];
     for dark in [false, true] {
         for &(device, instrument, pages, output) in devices {
@@ -156,17 +254,40 @@ fn every_r1_workspace_is_reachable_without_changing_the_song_or_moving_output() 
             for page in pages.iter().rev().chain(pages.iter()) {
                 let state = app.click(page);
                 unchanged(&state, &before);
-                visible_in_window(&state, label(&state, task_content(device, page)));
+                assert_tab_titles(&state, pages, task_content(device, page));
                 assert_eq!(
                     label(&state, output),
                     &output_rect,
                     "{device}/{page} moved output"
                 );
                 visible_in_window(&state, label(&state, page));
+                if device == "r1-spacer" {
+                    let painted = app.command(json!({"command":"inspect","paint":true}));
+                    assert_tab_paint(&painted, pages, page);
+                }
                 if instrument {
                     assert_eq!(
                         state["native_editor"]["performance"]["keyboard"], performance["keyboard"],
                         "{device}/{page} moved keyboard"
+                    );
+                }
+            }
+            if instrument && dark && !pages.is_empty() {
+                app.command(json!({"command":"viewport","width":800,"height":960}));
+                let compact = app.inspect();
+                let level = label(&compact, output);
+                let keyboard = &compact["native_editor"]["performance"]["keyboard"];
+                for page in pages {
+                    let state = app.click(page);
+                    assert_tab_titles(&state, pages, task_content(device, page));
+                    assert_eq!(
+                        label(&state, output),
+                        level,
+                        "{device}/{page} compact level"
+                    );
+                    assert_eq!(
+                        &state["native_editor"]["performance"]["keyboard"], keyboard,
+                        "{device}/{page} compact keyboard"
                     );
                 }
             }
@@ -214,7 +335,7 @@ fn equalizer_band_inspection_does_not_enable_bands_or_edit_parameters() {
 fn a_motion_parameter_keeps_its_value_across_tasks_undo_and_reopen() {
     let mut app = Harness::new();
     open_device(&mut app, "r1-mini", true, true);
-    let before = app.click("Motion");
+    let before = app.click("Modulation");
     let rate = label(&before, "Rate");
     let x = (rate["min"][0].as_f64().unwrap() + rate["max"][0].as_f64().unwrap()) * 0.5;
     let y = (rate["min"][1].as_f64().unwrap() + rate["max"][1].as_f64().unwrap()) * 0.5 + 29.0;
@@ -225,8 +346,8 @@ fn a_motion_parameter_keeps_its_value_across_tasks_undo_and_reopen() {
         "Rate gesture did not edit sound"
     );
     assert_eq!(edited["history"]["undo"][0], "Instrument parameter");
-    unchanged(&app.click("Sound"), &edited);
-    unchanged(&app.click("Motion"), &edited);
+    unchanged(&app.click("Oscillators"), &edited);
+    unchanged(&app.click("Modulation"), &edited);
     let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(undone["project"], before["project"]);
     visible_in_window(&undone, label(&undone, "LFO"));
@@ -248,10 +369,6 @@ fn knob_values_follow_hover_without_moving_the_panel_or_sticking_after_focus() {
     let mut app = Harness::new();
     open_device(&mut app, "r1-mini", true, true);
     let before = pointer(&mut app, "move", (2.0, 2.0));
-    let caption = label(&before, "Cutoff").clone();
-    let output = label(&before, "Volume").clone();
-    let values = ["20", "20k", "2.00 kHz"];
-    assert_knob_readouts(&before, &caption, &values, false);
 
     // The default Saw disables pulse width, but its stored value and range
     // must still be readable without changing the oscillator.
@@ -260,6 +377,13 @@ fn knob_values_follow_hover_without_moving_the_panel_or_sticking_after_focus() {
     let over_disabled = pointer(&mut app, "move", center(&disabled));
     assert_knob_readouts(&over_disabled, &disabled, &["5", "95", "50 %"], true);
     unchanged(&over_disabled, &before);
+
+    app.click("Filter & amp");
+    let before = pointer(&mut app, "move", (2.0, 2.0));
+    let caption = label(&before, "Cutoff").clone();
+    let output = label(&before, "Volume").clone();
+    let values = ["20", "20k", "2.00 kHz"];
+    assert_knob_readouts(&before, &caption, &values, false);
 
     // The caption, dial and reserved value line form one hover footprint.
     let caption_point = center(&caption);
@@ -368,10 +492,19 @@ fn inline_knob_values_hide_on_leave_and_revealed_choice_values_remain_clickable(
 }
 
 #[test]
-fn tool_edits_keep_the_drum_task_and_show_the_silent_pad_readout() {
+fn the_selected_drum_pad_shows_its_entire_signal_path_and_silent_level() {
     let mut app = Harness::new();
-    open_device(&mut app, "r1-drums", true, false);
-    let before = app.click("Shape");
+    let before = open_device(&mut app, "r1-drums", true, false);
+    for stage in [
+        "TRIGGER",
+        "REGION",
+        "TUNING",
+        "PITCH ENV",
+        "AMP ENVELOPE",
+        "TONE",
+    ] {
+        visible_in_window(&before, label(&before, stage));
+    }
     let session = &before["song_session"];
     let edited = app.command(json!({"command":"song_tool","name":"set_device_parameters",
         "arguments":{"session_id":session["id"],"expected_revision":session["revision"],
@@ -393,5 +526,128 @@ fn tool_edits_keep_the_drum_task_and_show_the_silent_pad_readout() {
     let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(undone["project"], before["project"]);
     visible_in_window(&undone, label(&undone, "PITCH ENV"));
+    app.quit();
+}
+
+#[test]
+fn filter_circuit_and_both_cutoff_sources_share_one_editable_panel() {
+    use daw_devices::devices::filter::{ENV_AMOUNT, LFO_DEPTH};
+    let mut app = Harness::new();
+    let before = open_device(&mut app, "r1-filter", false, false);
+    for (left, right) in [("CIRCUIT", "FILTER"), ("LFO", "ENVELOPE FOLLOWER")] {
+        let a = center(label(&before, left));
+        let b = center(label(&before, right));
+        assert!(a.0 < b.0 && (a.1 - b.1).abs() < 1.0, "{left}, {right}");
+    }
+    let circuit_y = center(label(&before, "CIRCUIT")).1;
+    let lfo_y = center(label(&before, "LFO")).1;
+    assert!(circuit_y < lfo_y && lfo_y < center(label(&before, "Mix")).1);
+
+    for (caption, parameter) in [("Depth", LFO_DEPTH), ("Amount", ENV_AMOUNT)] {
+        let control = label(&before, caption);
+        visible_in_window(&before, control);
+        let (x, y) = center(control);
+        let y = y + 12.0 + f64::from(daw_ui::KnobSize::Standard.diameter()) * 0.5;
+        let edited = app.command(json!({"command":"pointer","phase":"drag",
+            "x":x,"y":y,"to_x":x,"to_y":y-36.0}));
+        let parameters = edited["project"]["tracks"][0]["inserts"][0]["parameters"]
+            .as_array()
+            .unwrap();
+        assert!(
+            parameters
+                .iter()
+                .any(|p| p["id"] == parameter && p["value"].as_f64().unwrap() > 0.5),
+            "{caption} drag missed: {parameters:?}"
+        );
+        assert_eq!(edited["history"]["undo"][0], "Effect parameter");
+        let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+        assert_eq!(undone["project"], before["project"]);
+    }
+    app.command(json!({"command":"viewport","width":800,"height":960}));
+    let compact = app.inspect();
+    for (kind, slope) in [("High-pass", "12 dB"), ("Notch", "24 dB")] {
+        let kind = label(&compact, kind);
+        let slope = label(&compact, slope);
+        assert!(kind["max"][0].as_f64().unwrap() < slope["min"][0].as_f64().unwrap());
+        assert!((center(kind).1 - center(slope).1).abs() < 1.0);
+    }
+    let high_pass = center(label(&compact, "High-pass"));
+    let resonance = label(&compact, "Resonance");
+    let drive = label(&compact, "Drive");
+    assert_eq!(resonance["max"][1], drive["max"][1], "Resonance wrapped");
+    app.click("Clean");
+    let fixed = app.click("Transistor Ladder");
+    // The popup can scroll when the circuit chooser takes focus.
+    let (old_left, old_top) = center(label(&compact, "CIRCUIT"));
+    let (new_left, new_top) = center(label(&fixed, "CIRCUIT"));
+    let x_shift = new_left - old_left;
+    let y_shift = new_top - old_top;
+    for caption in ["Type", "Slope", "Depth", "Mix"] {
+        let (x, y) = center(label(&compact, caption));
+        let (new_x, new_y) = center(label(&fixed, caption));
+        assert!(
+            (new_x - x - x_shift).abs() <= 1.0 && (new_y - y - y_shift).abs() <= 1.0,
+            "{caption} moved within the panel"
+        );
+    }
+    let inactive = (high_pass.0 + x_shift, high_pass.1 + y_shift);
+    unchanged(&pointer(&mut app, "click", inactive), &fixed);
+    app.quit();
+}
+
+#[test]
+fn equalizer_band_and_analyzer_choices_share_a_row_above_the_fixed_frequency_dial() {
+    let mut app = Harness::new();
+    let before = open_device(&mut app, "r1-equalizer", false, true);
+    let band = center(label(&before, "Band"));
+    for caption in ["Mode", "Analyzer"] {
+        let choice = center(label(&before, caption));
+        assert!(
+            band.0 < choice.0 && (band.1 - choice.1).abs() < 1.0,
+            "{caption}"
+        );
+    }
+    let frequency = label(&before, "Frequency");
+    assert!(center(frequency).1 > band.1);
+    for (band, shape) in [("HP", "Slope"), ("2", "Type"), ("LP", "Slope")] {
+        let selected = common::click_last_label(&mut app, band);
+        unchanged(&selected, &before);
+        assert_eq!(label(&selected, "Frequency"), frequency);
+        assert!(center(label(&selected, shape)).0 < center(frequency).0);
+    }
+    app.quit();
+}
+
+#[test]
+fn narrow_equalizer_wraps_its_global_choices_and_keeps_the_last_controls_reachable() {
+    use daw_devices::devices::equalizer::ANALYZER;
+    let mut app = Harness::new();
+    open_device(&mut app, "r1-equalizer", false, false);
+    app.command(json!({"command":"viewport","width":800,"height":960}));
+    let before = app.inspect();
+    let band_y = center(label(&before, "Band")).1;
+    let mode_y = center(label(&before, "Mode")).1;
+    let analyzer_y = center(label(&before, "Analyzer")).1;
+    assert!(band_y < mode_y && (mode_y - analyzer_y).abs() < 1.0);
+    visible_in_window(&before, label(&before, "Q"));
+    let analyzer = |state: &Value| {
+        state["project"]["tracks"][0]["inserts"][0]["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|parameter| parameter["id"] == ANALYZER)
+            .and_then(|parameter| parameter["value"].as_f64())
+    };
+    let changed = app.click("Input");
+    assert_eq!(analyzer(&changed), Some(0.5));
+    // Output also labels the trim at the bottom of the device.
+    let source = changed["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["text"] == "Output" && (center(entry).1 - analyzer_y).abs() < 1.0)
+        .expect("rightmost analyzer choice");
+    let restored = pointer(&mut app, "click", center(source));
+    assert_eq!(analyzer(&restored), Some(1.0));
     app.quit();
 }

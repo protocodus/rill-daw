@@ -938,11 +938,8 @@ impl DawApp {
                 daw_ui::form_grid(ui, "wav_delivery_choices", |ui| {
                     let label = daw_ui::form_label(ui, "Destination");
                     ui.horizontal(|ui| {
-                        if daw_ui::tab_choice(ui, !self.export_project_sample, "File").clicked() {
-                            self.export_project_sample = false;
-                        }
-                        if daw_ui::tab_choice(ui, self.export_project_sample, "Project samples").clicked() {
-                            self.export_project_sample = true;
+                        daw_ui::radio_value(ui, &mut self.export_project_sample, false, "File");
+                        if daw_ui::radio_value(ui, &mut self.export_project_sample, true, "Project samples").clicked() {
                             self.settings.export.what = ExportWhat::Mix;
                             self.settings.export.format = daw_engine::ExportFormat::Wav;
                         }
@@ -953,11 +950,10 @@ impl DawApp {
                     ui.end_row();
                     let label = daw_ui::form_label(ui, "What");
                     ui.horizontal(|ui| {
-                        for (what, name) in [(ExportWhat::Mix, "Mix"), (ExportWhat::Stems, "Stems")] {
-                            if ui.add_enabled_ui(!self.export_project_sample || what == ExportWhat::Mix, |ui| daw_ui::tab_choice(ui, self.settings.export.what == what, name)).inner.clicked() {
-                                self.settings.export.what = what;
-                            }
-                        }
+                        daw_ui::radio_value(ui, &mut self.settings.export.what, ExportWhat::Mix, "Mix");
+                        ui.add_enabled_ui(!self.export_project_sample, |ui| {
+                            daw_ui::radio_value(ui, &mut self.settings.export.what, ExportWhat::Stems, "Stems")
+                        });
                     }).response.labelled_by(label.id);
                     ui.end_row();
                     let label = daw_ui::form_label(ui, "File type");

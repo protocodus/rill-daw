@@ -164,7 +164,7 @@ fn loaded_samples_keep_task_output_and_keyboard_geometry() {
     use daw_dsp::sample_player::{PlayerKind, PlayerNode};
     for descriptor in [&sampler::DESCRIPTOR, &drums::DESCRIPTOR] {
         let mut panel = Panel::new(descriptor);
-        let pages = panels::workspaces::tabs(descriptor).len();
+        let pages = panels::workspaces::tabs(descriptor).len().max(1);
         let empty: Vec<_> = (0..pages)
             .map(|page| {
                 panel.state.page = page;

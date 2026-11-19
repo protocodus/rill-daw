@@ -29,6 +29,22 @@ fn labels(state: &Value) -> String {
     state["visible_labels"].to_string()
 }
 
+fn show_stem_checklist(app: &mut Harness, state: &Value, expected: &str) -> Value {
+    // Wheel over the delivery fields so the outer form scrolls, even when the
+    // channel checklist has its own scroll bar.
+    let row = state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rfind(|entry| entry["text"] == "Rate")
+        .unwrap();
+    let x = row["min"][0].as_f64().unwrap() + 1.0;
+    let y = row["min"][1].as_f64().unwrap() + 1.0;
+    app.command(json!({"command":"scroll","x":x,"y":y,"delta":-1000.0}));
+    common::wait_visible(app, expected);
+    app.inspect()
+}
+
 /// A song named "Stem song" with Drums, Bass and Keys (two seconds each).
 fn open_song(app: &mut Harness, master_gain: f32) -> Value {
     let mut project = Project::new();
@@ -213,17 +229,18 @@ fn stems_are_chosen_with_the_mouse_and_line_up_with_the_mix() {
     );
     let state = app.click("Stems");
     assert_eq!(state["export_preferences"]["what"], "stems");
-    assert!(has(&state, "3 of 3"));
     assert_eq!(state["export_stem_selection"].as_array().unwrap().len(), 3);
     assert!(has(&state, "Through Master processing"));
+    show_stem_checklist(&mut app, &state, "3 of 3");
 
     // Select none leaves nothing to export; the dialog says so and cannot start.
     let state = app.click("Select none");
-    assert!(has(&state, "0 of 3"));
-    assert!(has(
+    let state = show_stem_checklist(
+        &mut app,
         &state,
-        "Choose at least one channel or include the full mix"
-    ));
+        "Choose at least one channel or include the full mix",
+    );
+    assert!(has(&state, "0 of 3"));
     app.command(json!({"command":"file_dialog","kind":"export_stems","path":folder}));
     assert_eq!(app.click("Export…")["export_pending"], false);
     assert!(names(&folder).is_empty());

@@ -26,9 +26,11 @@ fn randomize_clicks_are_independent_whole_device_undo_steps() {
     app.click("Randomize test");
     app.click("Window");
     app.click("Instrument");
-    common::wait_visible(&mut app, "RANDOMIZE");
+    common::wait_visible(&mut app, "Randomize");
     let before = app.inspect();
+    app.click("Randomize");
     let first = app.click("100%");
+    app.click("Randomize");
     let second = app.click("100%");
     assert_ne!(parameters(&first, track), parameters(&before, track));
     assert_ne!(parameters(&second, track), parameters(&first, track));

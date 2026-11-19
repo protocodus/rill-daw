@@ -84,8 +84,8 @@ pub fn show(ui: &mut Ui, state: &mut State) {
             text::note(ui, "Quiet navigation keeps the current workspace clear.");
             ui.add_space(ui::tokens::SPACE_SM);
             ui.horizontal(|ui| {
-                ui::tab_choice(ui, true, "Arranger");
-                ui::tab_choice(ui, false, "Mixer");
+                ui::view_choice(ui, true, "Arranger");
+                ui::view_choice(ui, false, "Mixer");
                 ui::timeline_fit_button(ui);
             });
             ui.add_space(ui::tokens::SPACE_MD);
@@ -104,7 +104,6 @@ pub fn show(ui: &mut Ui, state: &mut State) {
                         "Browse processors for audio passing through a channel",
                     ),
                 ],
-                |_| (),
             );
             ui.add_space(ui::tokens::SPACE_MD);
             ui::quiet_toggle(ui, &mut state.looped, "Loop");
