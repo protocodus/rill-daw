@@ -21,7 +21,7 @@ pub(super) fn parallelism(tracks: &[RenderTrack], level_width: usize) -> (bool, 
     // an expensive exact maximum-antichain calculation; the CPU cap is applied
     // by the caller. The frontier can span multiple levels.
     let capacity = level_width.max(frontier);
-    (native_parallel || capacity >= 32, capacity)
+    (native_parallel || capacity >= 8, capacity)
 }
 
 fn analyze_parallelism<I: Iterator<Item = usize>>(

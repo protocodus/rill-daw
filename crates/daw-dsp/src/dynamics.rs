@@ -27,6 +27,18 @@ pub struct GainComputer {
 }
 
 impl GainComputer {
+    /// Lower knee edge in dB: strictly below this in Compress mode, reduction is 0.
+    #[inline]
+    pub fn foot_db(&self) -> f32 {
+        self.threshold_db - 0.5 * self.knee_db.max(0.0)
+    }
+
+    /// Linear amplitude corresponding to [`Self::foot_db`].
+    #[inline]
+    pub fn foot_linear(&self) -> f32 {
+        crate::db_to_gain(self.foot_db())
+    }
+
     /// Share of the overshoot that is taken away: 1 − 1/ratio.
     fn slope(&self) -> f32 {
         1.0 - 1.0 / self.ratio.max(1.0)

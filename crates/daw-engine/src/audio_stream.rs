@@ -34,7 +34,6 @@ impl StreamWindow {
         }
     }
     pub fn prepare(&mut self, file: &AudioFile, first: usize, last: usize) -> Result<()> {
-        file.check_unchanged()?;
         let info = file.info();
         ensure!(
             (1..=2).contains(&info.channels),
@@ -45,10 +44,12 @@ impl StreamWindow {
             "Invalid streamed source window"
         );
         let same = self.file.as_ref().is_some_and(|old| old.same_source(file));
-        if same && first >= self.start && last < self.start + self.frames {
-            return Ok(());
-        }
-        if !same {
+        if same {
+            file.check_unchanged()?;
+            if first >= self.start && last < self.start + self.frames {
+                return Ok(());
+            }
+        } else {
             self.reader = None;
             self.file = Some(file.clone());
             self.reader = Some(file.reader()?);

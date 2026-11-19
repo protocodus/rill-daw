@@ -82,6 +82,7 @@ impl Detail {
         let _ = std::thread::Builder::new()
             .name("rill-waveform-detail".into())
             .spawn(move || {
+                daw_core::thread_qos::set_background_utility_qos();
                 while let Ok(job) = jobs.recv() {
                     let path = job.file.path().to_string_lossy().into_owned();
                     let tile = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

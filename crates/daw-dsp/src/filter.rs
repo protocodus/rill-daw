@@ -4,8 +4,9 @@
 //! every model is delayed to the same [`FilterKernel::LATENCY`], so models and
 //! dry paths line up whatever is selected.
 use super::{
-    Complex, DelayLine, Ladder, Oversampler2x, SallenKey, StaticDelay, Svf, SvfOutputs, db_to_gain,
-    prewarp, tanh_fast,
+    Complex, DelayLine, Ladder, LadderCoeffs, LadderStereo, Oversampler2x, Oversampler2xStereo,
+    SallenKey, SallenKeyCoeffs, SallenKeyStereo, StaticDelay, Svf, SvfCoeffs, SvfOutputs,
+    SvfOutputsStereo, SvfStereo, db_to_gain, prewarp, tanh_fast,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -202,6 +203,16 @@ fn pick(out: SvfOutputs, filter_type: FilterType, band_gain: f32) -> f32 {
     }
 }
 
+#[inline]
+fn pick_stereo(out: SvfOutputsStereo, filter_type: FilterType, band_gain: f32) -> [f32; 2] {
+    match filter_type {
+        FilterType::LowPass => out.low,
+        FilterType::HighPass => out.high,
+        FilterType::BandPass => [out.band[0] * band_gain, out.band[1] * band_gain],
+        FilterType::Notch => out.notch(),
+    }
+}
+
 /// The Clean model's response, its stage dampings worked out once: for a
 /// caller that runs many of them with the corner moving every sample (the
 /// Sampler's voices), without [`FilterKernel`]'s drive and latency.
@@ -232,18 +243,69 @@ impl CleanShape {
     #[inline]
     pub fn process(&self, first: &mut Svf, second: &mut Svf, x: f32, g: f32) -> f32 {
         let [k1, k2] = self.k;
-        let y = pick(first.process(x, g, k1), self.filter_type, k1);
+        let c1 = SvfCoeffs::new(g, k1);
+        let y = pick(first.process_coeffs(x, c1), self.filter_type, k1);
         if self.steep {
-            pick(second.process(y, g, k2), self.filter_type, k2)
+            let c2 = if k2 == k1 { c1 } else { SvfCoeffs::new(g, k2) };
+            pick(second.process_coeffs(y, c2), self.filter_type, k2)
+        } else {
+            y
+        }
+    }
+
+    #[inline]
+    pub fn coeffs(&self, g: f32) -> [SvfCoeffs; 2] {
+        let [k1, k2] = self.k;
+        let c1 = SvfCoeffs::new(g, k1);
+        let c2 = if k2 == k1 { c1 } else { SvfCoeffs::new(g, k2) };
+        [c1, c2]
+    }
+
+    #[inline]
+    pub fn process_planar_pair(
+        &self,
+        stages: &mut [Svf; 4],
+        x: [f32; 2],
+        coeffs: [SvfCoeffs; 2],
+    ) -> [f32; 2] {
+        let [s0, s1, s2, s3] = stages;
+        let [k1, k2] = self.k;
+        let yl = pick(s0.process_coeffs(x[0], coeffs[0]), self.filter_type, k1);
+        let yr = pick(s2.process_coeffs(x[1], coeffs[0]), self.filter_type, k1);
+        if self.steep {
+            [
+                pick(s1.process_coeffs(yl, coeffs[1]), self.filter_type, k2),
+                pick(s3.process_coeffs(yr, coeffs[1]), self.filter_type, k2),
+            ]
+        } else {
+            [yl, yr]
+        }
+    }
+
+    #[inline]
+    pub fn process_stereo(
+        &self,
+        first: &mut SvfStereo,
+        second: &mut SvfStereo,
+        x: [f32; 2],
+        g: f32,
+    ) -> [f32; 2] {
+        let [k1, k2] = self.k;
+        let c1 = SvfCoeffs::new(g, k1);
+        let y = pick_stereo(first.process_coeffs(x, c1), self.filter_type, k1);
+        if self.steep {
+            let c2 = if k2 == k1 { c1 } else { SvfCoeffs::new(g, k2) };
+            pick_stereo(second.process_coeffs(y, c2), self.filter_type, k2)
         } else {
             y
         }
     }
 }
 
-/// Delays a signal by [`FilterKernel::LATENCY`]; for a dry path beside a
-/// kernel.
+/// The Clean model's latency; identical to [`FilterKernel::LATENCY`].
 pub type LatencyDelay = StaticDelay<{ Oversampler2x::LATENCY as usize }>;
+/// Stereo latency alignment delay matching [`FilterKernelStereo::LATENCY`].
+pub type LatencyDelayStereo = super::StaticDelayStereo<{ Oversampler2x::LATENCY as usize }>;
 
 /// The value last worked out and what it was worked out from: a setting
 /// that costs a library call per sample and seldom moves is then free while
@@ -273,6 +335,17 @@ impl<K: Copy + PartialEq, V: Copy> Memo<K, V> {
     }
 }
 
+/// Control-rate precomputed shape/resonance constants for [`FilterKernel::circuit_prepared`].
+#[derive(Clone, Copy, Debug)]
+pub struct CircuitPrepared {
+    model: FilterModel,
+    filter_type: FilterType,
+    steep: bool,
+    k: f32,
+    bass_gain: f32,
+    weights: [f32; 5],
+}
+
 /// One channel of filtering, every model.
 #[derive(Clone, Debug, Default)]
 pub struct FilterKernel {
@@ -283,10 +356,11 @@ pub struct FilterKernel {
     clean: Memo<(FilterType, bool, f32), CleanShape>,
     /// Each formant's integrator gain and level, of a morph, cutoff and rate.
     formants: Memo<(f32, f32, f32), [(f32, f32); 3]>,
+    comb: Memo<(f32, f32), (f32, f32, f32)>,
     svf: [Svf; 3],
     ladder: Ladder,
     sallen_key: SallenKey,
-    comb: DelayLine,
+    comb_line: DelayLine,
     comb_damping: f32,
     oversampler: Oversampler2x,
     latency: LatencyDelay,
@@ -297,7 +371,8 @@ impl FilterKernel {
 
     /// Allocates the comb for cutoffs down to 20 Hz. Call before audio runs.
     pub fn prepare(&mut self, sample_rate: f32) {
-        self.comb.allocate((sample_rate / 20.0).ceil() as usize + 4);
+        self.comb_line
+            .allocate((sample_rate / 20.0).ceil() as usize + 4);
         self.reset();
     }
 
@@ -307,7 +382,7 @@ impl FilterKernel {
         }
         self.ladder.reset();
         self.sallen_key.reset();
-        self.comb.reset();
+        self.comb_line.reset();
         self.comb_damping = 0.0;
         self.oversampler.reset();
         self.latency = LatencyDelay::default();
@@ -337,11 +412,11 @@ impl FilterKernel {
             let amount = s.drive_db / 24.0;
             input + amount * (tanh_fast(gain * input) / root - input)
         };
-        let g = self.g.get((cutoff, sample_rate), |(cutoff, rate)| {
-            prewarp(cutoff, rate)
-        });
         let wet = match s.model {
             FilterModel::StateVariable => {
+                let g = self.g.get((cutoff, sample_rate), |(cutoff, rate)| {
+                    prewarp(cutoff, rate)
+                });
                 let [k, _] = self
                     .clean
                     .get(
@@ -357,14 +432,17 @@ impl FilterKernel {
                 }
             }
             FilterModel::Comb => {
-                let feedback = comb_feedback(resonance);
+                let (feedback, damp, norm) = self.comb.get((resonance, morph), |(res, morph)| {
+                    let fb = comb_feedback(res);
+                    (fb, comb_damping(morph), (1.0 - fb * fb).sqrt())
+                });
                 // The read comes before this sample's write, so the line is
                 // already one sample longer than the delay asked of it.
-                let delayed = self.comb.read(sample_rate / cutoff - 1.0);
-                self.comb_damping += comb_damping(morph) * (delayed - self.comb_damping);
+                let delayed = self.comb_line.read(sample_rate / cutoff - 1.0);
+                self.comb_damping += damp * (delayed - self.comb_damping);
                 let y = x + feedback * self.comb_damping;
-                self.comb.write(y);
-                y * (1.0 - feedback * feedback).sqrt()
+                self.comb_line.write(y);
+                y * norm
             }
             FilterModel::Vowel => {
                 let k = vowel_k(resonance);
@@ -381,6 +459,9 @@ impl FilterKernel {
                 sum
             }
             _ => {
+                let g = self.g.get((cutoff, sample_rate), |(cutoff, rate)| {
+                    prewarp(cutoff, rate)
+                });
                 let clean = self.clean.get(
                     (s.filter_type, s.steep, resonance),
                     |(filter_type, steep, resonance)| {
@@ -409,8 +490,86 @@ impl FilterKernel {
             prewarp(cutoff, rate)
         });
         let upsampled = self.oversampler.upsample(input * gain);
-        let filtered = upsampled.map(|x| self.circuit(x, s, g, resonance));
+        let filtered = self.circuit_pair(upsampled, s, g, resonance);
         self.oversampler.downsample(filtered) / root
+    }
+
+    /// Processes a 2× oversampled pair sharing circuit coefficients.
+    #[inline]
+    fn circuit_pair(
+        &mut self,
+        pair: [f32; 2],
+        s: &FilterShape,
+        g: f32,
+        resonance: f32,
+    ) -> [f32; 2] {
+        match s.model {
+            FilterModel::TransistorLadder => {
+                let k = ladder_k(resonance);
+                let coeffs = LadderCoeffs::new(g, k);
+                let gain = bass_gain(FilterType::LowPass, k);
+                [
+                    self.ladder.process_coeffs(pair[0], coeffs)[4] * gain,
+                    self.ladder.process_coeffs(pair[1], coeffs)[4] * gain,
+                ]
+            }
+            FilterModel::OtaCascade => {
+                let k = ladder_k(resonance);
+                let coeffs = LadderCoeffs::new(g, k);
+                let weights = pole_mix(s.filter_type, s.steep);
+                let gain = bass_gain(s.filter_type, k);
+                pair.map(|x| {
+                    let taps = self.ladder.process_coeffs(x, coeffs);
+                    let mixed: f32 = weights.iter().zip(taps).map(|(w, tap)| w * tap).sum();
+                    mixed * gain
+                })
+            }
+            FilterModel::OtaMultimode => {
+                let k = ota_damping(resonance);
+                let coeffs = SvfCoeffs::new(g, k);
+                let band = resonant_band_gain(k);
+                pair.map(|x| {
+                    let first = pick(
+                        self.svf[0].process_saturated_coeffs(x, coeffs),
+                        s.filter_type,
+                        band,
+                    );
+                    if s.steep {
+                        pick(
+                            self.svf[1].process_saturated_coeffs(first, coeffs),
+                            s.filter_type,
+                            band,
+                        )
+                    } else {
+                        first
+                    }
+                })
+            }
+            FilterModel::DiodePair => {
+                let k = diode_damping(resonance);
+                let coeffs = SvfCoeffs::new(g, k);
+                let band = resonant_band_gain(k);
+                pair.map(|x| {
+                    let out = self.svf[0].process_clipped_coeffs(tanh_fast(x), coeffs);
+                    pick(out, s.filter_type, band)
+                })
+            }
+            FilterModel::SallenKey if s.filter_type == FilterType::HighPass => {
+                let coeffs = SallenKeyCoeffs::new(g, sallen_key_k(resonance));
+                [
+                    self.sallen_key.high_pass_coeffs(pair[0], coeffs),
+                    self.sallen_key.high_pass_coeffs(pair[1], coeffs),
+                ]
+            }
+            FilterModel::SallenKey => {
+                let coeffs = SallenKeyCoeffs::new(g, sallen_key_k(resonance));
+                [
+                    self.sallen_key.low_pass_coeffs(pair[0], coeffs),
+                    self.sallen_key.low_pass_coeffs(pair[1], coeffs),
+                ]
+            }
+            _ => pair,
+        }
     }
 
     /// The gain of a drive in dB and its square root, for the level
@@ -471,6 +630,688 @@ impl FilterKernel {
             FilterModel::SallenKey => self.sallen_key.low_pass(x, g, sallen_key_k(resonance)),
             _ => x,
         }
+    }
+
+    /// Per-voice prepared constants for [`Self::circuit_prepared`], hoisted
+    /// once per block across multiple voices.
+    #[inline]
+    pub fn prepare_circuit(s: &FilterShape, resonance: f32) -> CircuitPrepared {
+        CircuitPrepared {
+            model: s.model,
+            filter_type: s.filter_type,
+            steep: s.steep,
+            k: match s.model {
+                FilterModel::TransistorLadder | FilterModel::OtaCascade => ladder_k(resonance),
+                FilterModel::OtaMultimode => ota_damping(resonance),
+                FilterModel::DiodePair => diode_damping(resonance),
+                FilterModel::SallenKey => sallen_key_k(resonance),
+                _ => 0.0,
+            },
+            bass_gain: match s.model {
+                FilterModel::TransistorLadder => {
+                    bass_gain(FilterType::LowPass, ladder_k(resonance))
+                }
+                FilterModel::OtaCascade => bass_gain(s.filter_type, ladder_k(resonance)),
+                FilterModel::OtaMultimode => resonant_band_gain(ota_damping(resonance)),
+                FilterModel::DiodePair => resonant_band_gain(diode_damping(resonance)),
+                _ => 1.0,
+            },
+            weights: if s.model == FilterModel::OtaCascade {
+                pole_mix(s.filter_type, s.steep)
+            } else {
+                [0.0; 5]
+            },
+        }
+    }
+
+    /// Evaluates one sample using precomputed shape/resonance constants while
+    /// preserving outer-step ILP across polyphonic voices.
+    #[inline]
+    pub fn circuit_prepared(&mut self, x: f32, p: &CircuitPrepared, g: f32) -> f32 {
+        match p.model {
+            FilterModel::TransistorLadder => {
+                let coeffs = LadderCoeffs::new(g, p.k);
+                self.ladder.process_coeffs(x, coeffs)[4] * p.bass_gain
+            }
+            FilterModel::OtaCascade => {
+                let coeffs = LadderCoeffs::new(g, p.k);
+                let taps = self.ladder.process_coeffs(x, coeffs);
+                let mixed: f32 = p.weights.iter().zip(taps).map(|(w, tap)| w * tap).sum();
+                mixed * p.bass_gain
+            }
+            FilterModel::OtaMultimode => {
+                let coeffs = SvfCoeffs::new(g, p.k);
+                let first = pick(
+                    self.svf[0].process_saturated_coeffs(x, coeffs),
+                    p.filter_type,
+                    p.bass_gain,
+                );
+                if p.steep {
+                    pick(
+                        self.svf[1].process_saturated_coeffs(first, coeffs),
+                        p.filter_type,
+                        p.bass_gain,
+                    )
+                } else {
+                    first
+                }
+            }
+            FilterModel::DiodePair => {
+                let coeffs = SvfCoeffs::new(g, p.k);
+                let out = self.svf[0].process_clipped_coeffs(tanh_fast(x), coeffs);
+                pick(out, p.filter_type, p.bass_gain)
+            }
+            FilterModel::SallenKey if p.filter_type == FilterType::HighPass => {
+                let coeffs = SallenKeyCoeffs::new(g, p.k);
+                self.sallen_key.high_pass_coeffs(x, coeffs)
+            }
+            FilterModel::SallenKey => {
+                let coeffs = SallenKeyCoeffs::new(g, p.k);
+                self.sallen_key.low_pass_coeffs(x, coeffs)
+            }
+            _ => x,
+        }
+    }
+
+    /// Processes a block of oversampled samples with a linearly ramped `g`
+    /// (`g_start + g_step * step`) and constant `shape` / `resonance`.
+    #[inline]
+    pub fn circuit_block(
+        &mut self,
+        samples: &mut [f32],
+        s: &FilterShape,
+        g_start: f32,
+        g_step: f32,
+        resonance: f32,
+    ) {
+        if samples.is_empty() {
+            return;
+        }
+        let steady = g_step == 0.0;
+        match s.model {
+            FilterModel::TransistorLadder => {
+                let k = ladder_k(resonance);
+                let gain = bass_gain(FilterType::LowPass, k);
+                if steady {
+                    let coeffs = LadderCoeffs::new(g_start, k);
+                    for sample in samples {
+                        *sample = self.ladder.process_coeffs(*sample, coeffs)[4] * gain;
+                    }
+                } else {
+                    for (step, sample) in samples.iter_mut().enumerate() {
+                        let coeffs = LadderCoeffs::new(g_start + g_step * step as f32, k);
+                        *sample = self.ladder.process_coeffs(*sample, coeffs)[4] * gain;
+                    }
+                }
+            }
+            FilterModel::OtaCascade => {
+                let k = ladder_k(resonance);
+                let gain = bass_gain(s.filter_type, k);
+                let weights = pole_mix(s.filter_type, s.steep);
+                if steady {
+                    let coeffs = LadderCoeffs::new(g_start, k);
+                    for sample in samples {
+                        let taps = self.ladder.process_coeffs(*sample, coeffs);
+                        let mixed: f32 = weights.iter().zip(taps).map(|(w, tap)| w * tap).sum();
+                        *sample = mixed * gain;
+                    }
+                } else {
+                    for (step, sample) in samples.iter_mut().enumerate() {
+                        let coeffs = LadderCoeffs::new(g_start + g_step * step as f32, k);
+                        let taps = self.ladder.process_coeffs(*sample, coeffs);
+                        let mixed: f32 = weights.iter().zip(taps).map(|(w, tap)| w * tap).sum();
+                        *sample = mixed * gain;
+                    }
+                }
+            }
+            FilterModel::OtaMultimode => {
+                let k = ota_damping(resonance);
+                let band = resonant_band_gain(k);
+                if steady {
+                    let coeffs = SvfCoeffs::new(g_start, k);
+                    for sample in samples {
+                        let first = pick(
+                            self.svf[0].process_saturated_coeffs(*sample, coeffs),
+                            s.filter_type,
+                            band,
+                        );
+                        *sample = if s.steep {
+                            pick(
+                                self.svf[1].process_saturated_coeffs(first, coeffs),
+                                s.filter_type,
+                                band,
+                            )
+                        } else {
+                            first
+                        };
+                    }
+                } else {
+                    for (step, sample) in samples.iter_mut().enumerate() {
+                        let coeffs = SvfCoeffs::new(g_start + g_step * step as f32, k);
+                        let first = pick(
+                            self.svf[0].process_saturated_coeffs(*sample, coeffs),
+                            s.filter_type,
+                            band,
+                        );
+                        *sample = if s.steep {
+                            pick(
+                                self.svf[1].process_saturated_coeffs(first, coeffs),
+                                s.filter_type,
+                                band,
+                            )
+                        } else {
+                            first
+                        };
+                    }
+                }
+            }
+            FilterModel::DiodePair => {
+                let k = diode_damping(resonance);
+                let band = resonant_band_gain(k);
+                if steady {
+                    let coeffs = SvfCoeffs::new(g_start, k);
+                    for sample in samples {
+                        let out = self.svf[0].process_clipped_coeffs(tanh_fast(*sample), coeffs);
+                        *sample = pick(out, s.filter_type, band);
+                    }
+                } else {
+                    for (step, sample) in samples.iter_mut().enumerate() {
+                        let coeffs = SvfCoeffs::new(g_start + g_step * step as f32, k);
+                        let out = self.svf[0].process_clipped_coeffs(tanh_fast(*sample), coeffs);
+                        *sample = pick(out, s.filter_type, band);
+                    }
+                }
+            }
+            FilterModel::SallenKey if s.filter_type == FilterType::HighPass => {
+                let k = sallen_key_k(resonance);
+                if steady {
+                    let coeffs = SallenKeyCoeffs::new(g_start, k);
+                    for sample in samples {
+                        *sample = self.sallen_key.high_pass_coeffs(*sample, coeffs);
+                    }
+                } else {
+                    for (step, sample) in samples.iter_mut().enumerate() {
+                        let coeffs = SallenKeyCoeffs::new(g_start + g_step * step as f32, k);
+                        *sample = self.sallen_key.high_pass_coeffs(*sample, coeffs);
+                    }
+                }
+            }
+            FilterModel::SallenKey => {
+                let k = sallen_key_k(resonance);
+                if steady {
+                    let coeffs = SallenKeyCoeffs::new(g_start, k);
+                    for sample in samples {
+                        *sample = self.sallen_key.low_pass_coeffs(*sample, coeffs);
+                    }
+                } else {
+                    for (step, sample) in samples.iter_mut().enumerate() {
+                        let coeffs = SallenKeyCoeffs::new(g_start + g_step * step as f32, k);
+                        *sample = self.sallen_key.low_pass_coeffs(*sample, coeffs);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Stereo filter kernel sharing memoized control setup, coefficients, and 2× half-band FIR taps.
+#[derive(Clone, Debug, Default)]
+pub struct FilterKernelStereo {
+    g: Memo<(f32, f32), f32>,
+    drive: Memo<f32, (f32, f32)>,
+    clean: Memo<(FilterType, bool, f32), CleanShape>,
+    formants: Memo<(f32, f32, f32), [(f32, f32); 3]>,
+    comb: Memo<(f32, f32), (f32, f32, f32)>,
+    svf: [SvfStereo; 3],
+    ladder: LadderStereo,
+    sallen_key: SallenKeyStereo,
+    comb_line: [DelayLine; 2],
+    comb_damping: [f32; 2],
+    oversampler: Oversampler2xStereo,
+    latency: LatencyDelayStereo,
+}
+
+impl FilterKernelStereo {
+    pub const LATENCY: u32 = FilterKernel::LATENCY;
+
+    pub fn prepare(&mut self, sample_rate: f32) {
+        let len = (sample_rate / 20.0).ceil() as usize + 4;
+        self.comb_line[0].allocate(len);
+        self.comb_line[1].allocate(len);
+        self.reset();
+    }
+
+    pub fn reset(&mut self) {
+        for svf in &mut self.svf {
+            svf.reset();
+        }
+        self.ladder.reset();
+        self.sallen_key.reset();
+        self.comb_line[0].reset();
+        self.comb_line[1].reset();
+        self.comb_damping = [0.0; 2];
+        self.oversampler.reset();
+        self.latency = LatencyDelayStereo::default();
+    }
+
+    #[inline]
+    pub fn process_asym(
+        &mut self,
+        input: [f32; 2],
+        shape: &FilterShape,
+        cutoffs: [f32; 2],
+        resonance: f32,
+        morph: f32,
+        sample_rate: f32,
+    ) -> [f32; 2] {
+        if cutoffs[0] == cutoffs[1] {
+            return self.process(input, shape, cutoffs[0], resonance, morph, sample_rate);
+        }
+        if shape.model.oversampled() {
+            let (gain, root) = self.drive_gains(shape.drive_db);
+            let gs = [
+                prewarp(cutoffs[0], 2.0 * sample_rate),
+                prewarp(cutoffs[1], 2.0 * sample_rate),
+            ];
+            let upsampled = self
+                .oversampler
+                .upsample([input[0] * gain, input[1] * gain]);
+            let filtered = upsampled.map(|pair| match shape.model {
+                FilterModel::TransistorLadder => {
+                    let k = ladder_k(resonance);
+                    let c0 = LadderCoeffs::new(gs[0], k);
+                    let c1 = LadderCoeffs::new(gs[1], k);
+                    let bass = bass_gain(FilterType::LowPass, k);
+                    let out0 = self.ladder.process_asym(pair, [c0, c1])[4];
+                    [out0[0] * bass, out0[1] * bass]
+                }
+                FilterModel::OtaCascade => {
+                    let k = ladder_k(resonance);
+                    let c0 = LadderCoeffs::new(gs[0], k);
+                    let c1 = LadderCoeffs::new(gs[1], k);
+                    let weights = pole_mix(shape.filter_type, shape.steep);
+                    let bass = bass_gain(shape.filter_type, k);
+                    let taps = self.ladder.process_asym(pair, [c0, c1]);
+                    let mut mixed = [0.0; 2];
+                    for (w, tap) in weights.iter().zip(taps) {
+                        mixed[0] += w * tap[0];
+                        mixed[1] += w * tap[1];
+                    }
+                    [mixed[0] * bass, mixed[1] * bass]
+                }
+                FilterModel::OtaMultimode => {
+                    let k = ota_damping(resonance);
+                    let coeffs = [SvfCoeffs::new(gs[0], k), SvfCoeffs::new(gs[1], k)];
+                    let band = resonant_band_gain(k);
+                    let first = pick_stereo(
+                        self.svf[0].process_saturated_stereo_coeffs(pair, coeffs),
+                        shape.filter_type,
+                        band,
+                    );
+                    if shape.steep {
+                        pick_stereo(
+                            self.svf[1].process_saturated_stereo_coeffs(first, coeffs),
+                            shape.filter_type,
+                            band,
+                        )
+                    } else {
+                        first
+                    }
+                }
+                FilterModel::DiodePair => {
+                    let k = diode_damping(resonance);
+                    let coeffs = [SvfCoeffs::new(gs[0], k), SvfCoeffs::new(gs[1], k)];
+                    let band = resonant_band_gain(k);
+                    let shaped = [tanh_fast(pair[0]), tanh_fast(pair[1])];
+                    let out = self.svf[0].process_clipped_stereo_coeffs(shaped, coeffs);
+                    pick_stereo(out, shape.filter_type, band)
+                }
+                FilterModel::SallenKey if shape.filter_type == FilterType::HighPass => {
+                    let k = sallen_key_k(resonance);
+                    self.sallen_key.high_pass_asym(
+                        pair,
+                        [
+                            SallenKeyCoeffs::new(gs[0], k),
+                            SallenKeyCoeffs::new(gs[1], k),
+                        ],
+                    )
+                }
+                FilterModel::SallenKey => {
+                    let k = sallen_key_k(resonance);
+                    self.sallen_key.low_pass_asym(
+                        pair,
+                        [
+                            SallenKeyCoeffs::new(gs[0], k),
+                            SallenKeyCoeffs::new(gs[1], k),
+                        ],
+                    )
+                }
+                _ => pair,
+            });
+            let down = self.oversampler.downsample(filtered);
+            return [down[0] / root, down[1] / root];
+        }
+        let s = shape;
+        let x = if s.drive_db <= 0.0 {
+            input
+        } else {
+            let (gain, root) = self.drive_gains(s.drive_db);
+            let amount = s.drive_db / 24.0;
+            [
+                input[0] + amount * (tanh_fast(gain * input[0]) / root - input[0]),
+                input[1] + amount * (tanh_fast(gain * input[1]) / root - input[1]),
+            ]
+        };
+        let wet = match s.model {
+            FilterModel::StateVariable => {
+                let g0 = prewarp(cutoffs[0], sample_rate);
+                let g1 = prewarp(cutoffs[1], sample_rate);
+                let [k, _] = self
+                    .clean
+                    .get(
+                        (FilterType::LowPass, false, resonance),
+                        |(kind, steep, resonance)| CleanShape::new(kind, steep, resonance),
+                    )
+                    .k;
+                let out = self.svf[0]
+                    .process_stereo_coeffs(x, [SvfCoeffs::new(g0, k), SvfCoeffs::new(g1, k)]);
+                let notch = out.notch();
+                if morph < 0.5 {
+                    let a = 1.0 - 2.0 * morph;
+                    let b = 2.0 * morph;
+                    [out.low[0] * a + notch[0] * b, out.low[1] * a + notch[1] * b]
+                } else {
+                    let a = 2.0 - 2.0 * morph;
+                    let b = 2.0 * morph - 1.0;
+                    [
+                        notch[0] * a + out.high[0] * b,
+                        notch[1] * a + out.high[1] * b,
+                    ]
+                }
+            }
+            FilterModel::Comb => {
+                let (feedback, damp, norm) = self.comb.get((resonance, morph), |(res, morph)| {
+                    let fb = comb_feedback(res);
+                    (fb, comb_damping(morph), (1.0 - fb * fb).sqrt())
+                });
+                let delayed = [
+                    self.comb_line[0].read(sample_rate / cutoffs[0] - 1.0),
+                    self.comb_line[1].read(sample_rate / cutoffs[1] - 1.0),
+                ];
+                let mut out = [0.0; 2];
+                for c in 0..2 {
+                    self.comb_damping[c] += damp * (delayed[c] - self.comb_damping[c]);
+                    let y = x[c] + feedback * self.comb_damping[c];
+                    self.comb_line[c].write(y);
+                    out[c] = y * norm;
+                }
+                out
+            }
+            FilterModel::Vowel => {
+                let k = vowel_k(resonance);
+                let f0 = formants(morph, cutoffs[0]).map(|(f, g)| (prewarp(f, sample_rate), g));
+                let f1 = formants(morph, cutoffs[1]).map(|(f, g)| (prewarp(f, sample_rate), g));
+                let mut sum = [0.0; 2];
+                for (i, svf) in self.svf.iter_mut().enumerate() {
+                    let out = svf.process_stereo_coeffs(
+                        x,
+                        [SvfCoeffs::new(f0[i].0, k), SvfCoeffs::new(f1[i].0, k)],
+                    );
+                    sum[0] += f0[i].1 * k * out.band[0];
+                    sum[1] += f1[i].1 * k * out.band[1];
+                }
+                sum
+            }
+            _ => {
+                let g0 = prewarp(cutoffs[0], sample_rate);
+                let g1 = prewarp(cutoffs[1], sample_rate);
+                let clean = self.clean.get(
+                    (s.filter_type, s.steep, resonance),
+                    |(filter_type, steep, resonance)| {
+                        CleanShape::new(filter_type, steep, resonance)
+                    },
+                );
+                let (first, rest) = self.svf.split_at_mut(1);
+                let c1 = [
+                    SvfCoeffs::new(g0, clean.k[0]),
+                    SvfCoeffs::new(g1, clean.k[0]),
+                ];
+                let y = pick_stereo(
+                    first[0].process_stereo_coeffs(x, c1),
+                    clean.filter_type,
+                    clean.k[0],
+                );
+                if clean.steep {
+                    let c2 = [
+                        SvfCoeffs::new(g0, clean.k[1]),
+                        SvfCoeffs::new(g1, clean.k[1]),
+                    ];
+                    pick_stereo(
+                        rest[0].process_stereo_coeffs(y, c2),
+                        clean.filter_type,
+                        clean.k[1],
+                    )
+                } else {
+                    y
+                }
+            }
+        };
+        self.latency.process(wet)
+    }
+
+    #[inline]
+    pub fn process(
+        &mut self,
+        input: [f32; 2],
+        shape: &FilterShape,
+        cutoff: f32,
+        resonance: f32,
+        morph: f32,
+        sample_rate: f32,
+    ) -> [f32; 2] {
+        if shape.model.oversampled() {
+            return self.process_circuit(input, shape, cutoff, resonance, sample_rate);
+        }
+        let s = shape;
+        let x = if s.drive_db <= 0.0 {
+            input
+        } else {
+            let (gain, root) = self.drive_gains(s.drive_db);
+            let amount = s.drive_db / 24.0;
+            [
+                input[0] + amount * (tanh_fast(gain * input[0]) / root - input[0]),
+                input[1] + amount * (tanh_fast(gain * input[1]) / root - input[1]),
+            ]
+        };
+        let wet = match s.model {
+            FilterModel::StateVariable => {
+                let g = self.g.get((cutoff, sample_rate), |(cutoff, rate)| {
+                    prewarp(cutoff, rate)
+                });
+                let [k, _] = self
+                    .clean
+                    .get(
+                        (FilterType::LowPass, false, resonance),
+                        |(kind, steep, resonance)| CleanShape::new(kind, steep, resonance),
+                    )
+                    .k;
+                let coeffs = SvfCoeffs::new(g, k);
+                let out = self.svf[0].process_coeffs(x, coeffs);
+                let notch = out.notch();
+                if morph < 0.5 {
+                    let a = 1.0 - 2.0 * morph;
+                    let b = 2.0 * morph;
+                    [out.low[0] * a + notch[0] * b, out.low[1] * a + notch[1] * b]
+                } else {
+                    let a = 2.0 - 2.0 * morph;
+                    let b = 2.0 * morph - 1.0;
+                    [
+                        notch[0] * a + out.high[0] * b,
+                        notch[1] * a + out.high[1] * b,
+                    ]
+                }
+            }
+            FilterModel::Comb => {
+                let (feedback, damp, norm) = self.comb.get((resonance, morph), |(res, morph)| {
+                    let fb = comb_feedback(res);
+                    (fb, comb_damping(morph), (1.0 - fb * fb).sqrt())
+                });
+                let delay = sample_rate / cutoff - 1.0;
+                let delayed = [self.comb_line[0].read(delay), self.comb_line[1].read(delay)];
+                let mut out = [0.0; 2];
+                for c in 0..2 {
+                    self.comb_damping[c] += damp * (delayed[c] - self.comb_damping[c]);
+                    let y = x[c] + feedback * self.comb_damping[c];
+                    self.comb_line[c].write(y);
+                    out[c] = y * norm;
+                }
+                out
+            }
+            FilterModel::Vowel => {
+                let k = vowel_k(resonance);
+                let formants =
+                    self.formants
+                        .get((morph, cutoff, sample_rate), |(morph, cutoff, rate)| {
+                            formants(morph, cutoff)
+                                .map(|(frequency, gain)| (prewarp(frequency, rate), gain))
+                        });
+                let mut sum = [0.0; 2];
+                for (svf, (g, gain)) in self.svf.iter_mut().zip(formants) {
+                    let out = svf.process_coeffs(x, SvfCoeffs::new(g, k));
+                    sum[0] += gain * k * out.band[0];
+                    sum[1] += gain * k * out.band[1];
+                }
+                sum
+            }
+            _ => {
+                let g = self.g.get((cutoff, sample_rate), |(cutoff, rate)| {
+                    prewarp(cutoff, rate)
+                });
+                let clean = self.clean.get(
+                    (s.filter_type, s.steep, resonance),
+                    |(filter_type, steep, resonance)| {
+                        CleanShape::new(filter_type, steep, resonance)
+                    },
+                );
+                let (first, rest) = self.svf.split_at_mut(1);
+                clean.process_stereo(&mut first[0], &mut rest[0], x, g)
+            }
+        };
+        self.latency.process(wet)
+    }
+
+    #[inline]
+    fn process_circuit(
+        &mut self,
+        input: [f32; 2],
+        s: &FilterShape,
+        cutoff: f32,
+        resonance: f32,
+        sample_rate: f32,
+    ) -> [f32; 2] {
+        let (gain, root) = self.drive_gains(s.drive_db);
+        let g = self.g.get((cutoff, 2.0 * sample_rate), |(cutoff, rate)| {
+            prewarp(cutoff, rate)
+        });
+        let upsampled = self
+            .oversampler
+            .upsample([input[0] * gain, input[1] * gain]);
+        let filtered = self.circuit_pair(upsampled, s, g, resonance);
+        let down = self.oversampler.downsample(filtered);
+        [down[0] / root, down[1] / root]
+    }
+
+    #[inline]
+    fn circuit_pair(
+        &mut self,
+        pair: [[f32; 2]; 2],
+        s: &FilterShape,
+        g: f32,
+        resonance: f32,
+    ) -> [[f32; 2]; 2] {
+        match s.model {
+            FilterModel::TransistorLadder => {
+                let k = ladder_k(resonance);
+                let coeffs = LadderCoeffs::new(g, k);
+                let gain = bass_gain(FilterType::LowPass, k);
+                let out0 = self.ladder.process_coeffs(pair[0], coeffs)[4];
+                let out1 = self.ladder.process_coeffs(pair[1], coeffs)[4];
+                [
+                    [out0[0] * gain, out0[1] * gain],
+                    [out1[0] * gain, out1[1] * gain],
+                ]
+            }
+            FilterModel::OtaCascade => {
+                let k = ladder_k(resonance);
+                let coeffs = LadderCoeffs::new(g, k);
+                let weights = pole_mix(s.filter_type, s.steep);
+                let gain = bass_gain(s.filter_type, k);
+                pair.map(|x| {
+                    let taps = self.ladder.process_coeffs(x, coeffs);
+                    let mut mixed = [0.0; 2];
+                    for (w, tap) in weights.iter().zip(taps) {
+                        mixed[0] += w * tap[0];
+                        mixed[1] += w * tap[1];
+                    }
+                    [mixed[0] * gain, mixed[1] * gain]
+                })
+            }
+            FilterModel::OtaMultimode => {
+                let k = ota_damping(resonance);
+                let coeffs = SvfCoeffs::new(g, k);
+                let band = resonant_band_gain(k);
+                pair.map(|x| {
+                    let first = pick_stereo(
+                        self.svf[0].process_saturated_coeffs(x, coeffs),
+                        s.filter_type,
+                        band,
+                    );
+                    if s.steep {
+                        pick_stereo(
+                            self.svf[1].process_saturated_coeffs(first, coeffs),
+                            s.filter_type,
+                            band,
+                        )
+                    } else {
+                        first
+                    }
+                })
+            }
+            FilterModel::DiodePair => {
+                let k = diode_damping(resonance);
+                let coeffs = SvfCoeffs::new(g, k);
+                let band = resonant_band_gain(k);
+                pair.map(|x| {
+                    let shaped = [tanh_fast(x[0]), tanh_fast(x[1])];
+                    let out = self.svf[0].process_clipped_coeffs(shaped, coeffs);
+                    pick_stereo(out, s.filter_type, band)
+                })
+            }
+            FilterModel::SallenKey if s.filter_type == FilterType::HighPass => {
+                let coeffs = SallenKeyCoeffs::new(g, sallen_key_k(resonance));
+                [
+                    self.sallen_key.high_pass_coeffs(pair[0], coeffs),
+                    self.sallen_key.high_pass_coeffs(pair[1], coeffs),
+                ]
+            }
+            FilterModel::SallenKey => {
+                let coeffs = SallenKeyCoeffs::new(g, sallen_key_k(resonance));
+                [
+                    self.sallen_key.low_pass_coeffs(pair[0], coeffs),
+                    self.sallen_key.low_pass_coeffs(pair[1], coeffs),
+                ]
+            }
+            _ => pair,
+        }
+    }
+
+    #[inline]
+    fn drive_gains(&mut self, drive_db: f32) -> (f32, f32) {
+        self.drive.get(drive_db, |db| {
+            let gain = db_to_gain(db);
+            (gain, gain.sqrt())
+        })
     }
 }
 

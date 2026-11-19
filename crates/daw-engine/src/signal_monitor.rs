@@ -120,6 +120,7 @@ impl SignalMonitor {
                     thread::Builder::new()
                         .name("rill-signal-analysis".into())
                         .spawn(move || {
+                            daw_core::thread_qos::set_background_utility_qos();
                             let mut analysis = Analysis::new(sample_rate);
                             let mut identity = None;
                             let mut generation = 0;

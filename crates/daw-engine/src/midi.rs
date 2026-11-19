@@ -158,6 +158,9 @@ impl Queue {
         self.write.store(write.wrapping_add(1), Ordering::Release);
         true
     }
+    fn is_empty(&self) -> bool {
+        self.read.load(Ordering::Acquire) == self.write.load(Ordering::Acquire)
+    }
     fn peek(&self) -> Option<Event> {
         let read = self.read.load(Ordering::Relaxed);
         if read == self.write.load(Ordering::Acquire) {
@@ -223,6 +226,7 @@ pub(super) struct MidiShared {
     monitor_requested: AtomicBool,
     epoch: AtomicU64,
     reset: AtomicU64,
+    route_version: AtomicU64,
     fault: AtomicUsize,
     reported_fault: AtomicUsize,
     anchor_ns: AtomicU64,
@@ -256,6 +260,7 @@ impl MidiShared {
             monitor_requested: AtomicBool::new(false),
             epoch: AtomicU64::new(1),
             reset: AtomicU64::new(1),
+            route_version: AtomicU64::new(1),
             fault: AtomicUsize::new(0),
             reported_fault: AtomicUsize::new(0),
             anchor_ns: AtomicU64::new(0),
@@ -635,6 +640,7 @@ impl MidiController {
                     Ok(native) => {
                         self.native = Some(native);
                         self.controls.midi.ready.store(true, Ordering::Release);
+                        self.controls.wake_render();
                     }
                     Err(error) => {
                         self.error = Some(format!("{error:#}"));
@@ -746,6 +752,8 @@ impl AudioEngine {
             settings.routes.iter().any(|route| route.monitor),
             Ordering::Release,
         );
+        shared.route_version.fetch_add(1, Ordering::Release);
+        self.controls.wake_render();
         shared
             .sample_rate
             .store(self.sample_rate, Ordering::Relaxed);
@@ -776,6 +784,9 @@ impl AudioEngine {
                 NativeInput::open(&port_id, move |timestamp, words| {
                     let time = clock.map(timestamp, controls.input.now_ns());
                     controls.midi.enqueue_ump_words(words, time, epoch);
+                    if controls.midi.monitoring_requested() {
+                        controls.wake_render();
+                    }
                 })
             };
             #[cfg(not(target_os = "macos"))]
@@ -797,6 +808,9 @@ impl AudioEngine {
                             if let Some(data) = message(bytes) {
                                 let time = clock.map(timestamp, controls.input.now_ns());
                                 controls.midi.enqueue(data, time, epoch);
+                                if controls.midi.monitoring_requested() {
+                                    controls.wake_render();
+                                }
                             }
                         },
                         (),
@@ -821,6 +835,7 @@ impl AudioEngine {
         );
         self.midi.close();
         self.midi.settings = MidiSettings::default();
+        self.controls.wake_render();
         Ok(())
     }
     pub fn poll_midi(&mut self) {
@@ -920,6 +935,7 @@ impl AudioEngine {
     }
     pub(super) fn reset_midi_monitoring(&self) {
         self.controls.midi.reset.fetch_add(1, Ordering::AcqRel);
+        self.controls.wake_render();
     }
     pub fn take_midi_recording_result(&mut self) -> Option<MidiRecordingResult> {
         self.midi.poll();
@@ -967,6 +983,7 @@ impl AudioEngine {
             now.saturating_add(delta)
         };
         shared.enqueue_ump(packet, time, shared.epoch.load(Ordering::Acquire));
+        self.controls.wake_render();
         Ok(())
     }
     /// Simulate a driver callback arriving after its timestamped performance.
@@ -999,6 +1016,7 @@ impl AudioEngine {
             now.saturating_add(delta)
         };
         shared.enqueue(data, time, shared.epoch.load(Ordering::Acquire));
+        self.controls.wake_render();
         Ok(())
     }
     pub fn fail_virtual_midi(&self) -> Result<()> {

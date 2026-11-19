@@ -151,7 +151,7 @@ impl BuiltinDevice {
         right: &mut [f32],
     ) -> Result<()> {
         self.events.clear();
-        for message in midi {
+        let to_midi_event = |message: &MidiMessage| {
             let kind = if message.on {
                 EventKind::NoteOn {
                     note: u32::from(message.pitch),
@@ -163,24 +163,43 @@ impl BuiltinDevice {
                     note: u32::from(message.pitch),
                 }
             };
-            self.push(message.offset, kind);
-        }
-        for message in expressive {
-            if let Some(kind) = expressive_event(message.data) {
-                self.push(message.offset, kind);
+            Event {
+                offset: message.offset,
+                kind,
+            }
+        };
+        // Both inputs are offset-ordered; linear merge keeps midi before expressive on ties.
+        let mut midi_index = 0;
+        let mut exp_index = 0;
+        while self.events.len() < MAX_EVENTS {
+            while exp_index < expressive.len() {
+                if let Some(kind) = expressive_event(expressive[exp_index].data) {
+                    let exp_offset = expressive[exp_index].offset;
+                    if midi_index < midi.len() && midi[midi_index].offset <= exp_offset {
+                        self.events.push(to_midi_event(&midi[midi_index]));
+                        midi_index += 1;
+                    } else {
+                        self.events.push(Event {
+                            offset: exp_offset,
+                            kind,
+                        });
+                        exp_index += 1;
+                    }
+                    break;
+                }
+                exp_index += 1;
+            }
+            if exp_index >= expressive.len() {
+                while self.events.len() < MAX_EVENTS && midi_index < midi.len() {
+                    self.events.push(to_midi_event(&midi[midi_index]));
+                    midi_index += 1;
+                }
+                break;
             }
         }
-        // Both inputs are offset-ordered; a stable sort merges them.
-        self.events.sort_by_key(|event| event.offset);
         left.fill(0.0);
         right.fill(0.0);
         self.run(context, left, right, None)
-    }
-
-    fn push(&mut self, offset: u32, kind: EventKind) {
-        if self.events.len() < MAX_EVENTS {
-            self.events.push(Event { offset, kind });
-        }
     }
 
     fn run(

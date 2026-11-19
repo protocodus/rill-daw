@@ -22,6 +22,12 @@ pub fn popup_backdrop_color(ctx: &Context) -> Color32 {
 /// popup layers keep their order above the dimming. This adds no hit targets,
 /// focus, animation, or background processing. Tooltips do not dim the screen.
 pub fn paint_popup_backdrop(ctx: &Context, utility_open: bool) {
+    paint_popup_backdrop_cached(ctx, utility_open, None);
+}
+
+/// Like [`paint_popup_backdrop`], but reuses the GPU-blurred background when
+/// the frozen scene identified by `source` has not changed.
+pub fn paint_popup_backdrop_cached(ctx: &Context, utility_open: bool, source: Option<u64>) {
     crate::backdrop_blur::begin_blur_frame(ctx);
     let native_popup = egui::Popup::is_any_open(ctx);
     if !utility_open && !native_popup {
@@ -35,7 +41,7 @@ pub fn paint_popup_backdrop(ctx: &Context, utility_open: bool) {
         let bg_layer = backdrop_layer(Order::Background);
         ctx.move_to_top(bg_layer);
         let bg_painter = ctx.layer_painter(bg_layer);
-        crate::backdrop_blur::paint_modal_blur(ctx, &bg_painter);
+        crate::backdrop_blur::paint_blur(ctx, &bg_painter, ctx.content_rect(), source);
         if !native_popup {
             bg_painter.rect_filled(ctx.content_rect(), 0.0, popup_backdrop_color(ctx));
         }

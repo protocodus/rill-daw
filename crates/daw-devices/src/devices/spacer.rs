@@ -701,7 +701,7 @@ impl Spacer {
             mix: Smoothed::new(settings.mix),
             mix_gains: mix_gains(settings.mix),
             output: Smoothed::new(db_to_gain(settings.output_db)),
-            telemetry: Arc::new(Telemetry::default()),
+            telemetry: Arc::new(Telemetry::meter_only()),
         };
         spacer.prepare(48_000.0, 0);
         spacer

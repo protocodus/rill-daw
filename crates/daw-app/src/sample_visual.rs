@@ -187,6 +187,7 @@ impl SampleVisualState {
         let spawn = std::thread::Builder::new()
             .name("rill-sample-visual".into())
             .spawn(move || {
+                daw_core::thread_qos::set_background_utility_qos();
                 let result = std::panic::catch_unwind(|| {
                     analyse_source(&worker_path, &request.scratch, &worker_cancel)
                 })

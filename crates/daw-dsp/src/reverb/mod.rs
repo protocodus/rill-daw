@@ -53,6 +53,9 @@ pub fn hadamard<const N: usize>(values: &mut [f32; N]) {
 /// below 1 it loses, and never gains.
 #[inline]
 pub fn butterflies<const N: usize>(values: &mut [f32; N], cos: f32, sin: f32) {
+    if cos == 1.0 && sin == 0.0 {
+        return;
+    }
     let mut half = 1;
     while half < N {
         for start in (0..N).step_by(2 * half) {
@@ -109,6 +112,48 @@ pub fn nearest_prime(n: u32) -> u32 {
 /// longer, but never more than twice `t60_mid`, and that bound takes
 /// precedence where a first-order section cannot have both (1 kHz then
 /// decays faster than asked). Never above unit gain at any frequency.
+/// Precomputed control-rate absorption parameters shared across many line lengths.
+pub(crate) struct AbsorptionSpec {
+    inv_rate_mid: f64,
+    inv_rate_high: f64,
+    inv_rate_twice_mid: f64,
+    crossover: f64,
+    q: f64,
+}
+
+impl AbsorptionSpec {
+    pub(crate) fn new(t60_mid: f32, t60_high: f32, crossover_hz: f32, sample_rate: f32) -> Self {
+        let rate = f64::from(sample_rate);
+        let t60_mid = f64::from(t60_mid).max(1e-3);
+        let t60_high = f64::from(t60_high).clamp(1e-3, t60_mid);
+        let warp = |hz: f64| (std::f64::consts::PI * (hz / rate).clamp(1e-6, 0.45)).tan();
+        let crossover = warp(f64::from(crossover_hz));
+        let q = (warp(1000.0) / crossover).powi(2);
+        Self {
+            inv_rate_mid: -3.0 / (rate * t60_mid),
+            inv_rate_high: -3.0 / (rate * t60_high),
+            inv_rate_twice_mid: -3.0 / (rate * (2.0 * t60_mid)),
+            crossover,
+            q,
+        }
+    }
+
+    pub(crate) fn shelf(&self, length: u32) -> Shelf1 {
+        let len = f64::from(length);
+        let mid = 10.0_f64.powf(len * self.inv_rate_mid);
+        let high = 10.0_f64.powf(len * self.inv_rate_high);
+        let max_low = 10.0_f64.powf(len * self.inv_rate_twice_mid);
+        let b = self.q * (high * high - mid * mid);
+        let low =
+            ((-b + (b * b + 4.0 * high * high * mid * mid).sqrt()) / (2.0 * high)).min(max_low);
+        Shelf1::with_gains(
+            (self.crossover * (high / low).sqrt()) as f32,
+            low as f32,
+            high as f32,
+        )
+    }
+}
+
 pub fn absorption_shelf(
     length: u32,
     t60_mid: f32,
@@ -116,24 +161,7 @@ pub fn absorption_shelf(
     crossover_hz: f32,
     sample_rate: f32,
 ) -> Shelf1 {
-    let rate = f64::from(sample_rate);
-    let t60_mid = f64::from(t60_mid).max(1e-3);
-    let t60_high = f64::from(t60_high).clamp(1e-3, t60_mid);
-    let gain = |t60: f64| 10.0_f64.powf(-3.0 * f64::from(length) / (rate * t60));
-    let (mid, high) = (gain(t60_mid), gain(t60_high));
-    let warp = |hz: f64| (std::f64::consts::PI * (hz / rate).clamp(1e-6, 0.45)).tan();
-    let crossover = warp(f64::from(crossover_hz));
-    let q = (warp(1000.0) / crossover).powi(2);
-    // With pole and zero centred on the crossover, the magnitude at 1 kHz is
-    // `low·high·(low + q·high)/(high + q·low)`, squared; solved for `low`.
-    let b = q * (high * high - mid * mid);
-    let low = (-b + (b * b + 4.0 * high * high * mid * mid).sqrt()) / (2.0 * high);
-    let low = low.min(gain(2.0 * t60_mid));
-    Shelf1::with_gains(
-        (crossover * (high / low).sqrt()) as f32,
-        low as f32,
-        high as f32,
-    )
+    AbsorptionSpec::new(t60_mid, t60_high, crossover_hz, sample_rate).shelf(length)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

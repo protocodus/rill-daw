@@ -2,7 +2,8 @@
 //! envelope follower on the cutoff. See `docs/R1_DEVICES.md#r1-filter`.
 use super::param;
 use crate::dsp::filter::{
-    self, FilterKernel, FilterModel, FilterShape, FilterType, LatencyDelay, Memo,
+    self, FilterKernel, FilterKernelStereo, FilterModel, FilterShape, FilterType,
+    LatencyDelayStereo, Memo,
 };
 use crate::dsp::{Complex, EnvelopeFollower, Lfo, LfoShape, Smoothed, db_to_gain};
 use crate::{
@@ -379,19 +380,13 @@ pub fn type_options(model: FilterModel) -> &'static [&'static str] {
     &TYPES[..model.type_count()]
 }
 
-/// Per channel: the kernel and its aligned dry path.
-#[derive(Clone, Debug, Default)]
-struct Channel {
-    kernel: FilterKernel,
-    dry: LatencyDelay,
-}
-
 pub struct Filter {
     values: [f32; PARAMETERS.len()],
     settings: Settings,
     dirty: bool,
     sample_rate: f32,
-    channels: [Channel; 2],
+    kernel: FilterKernelStereo,
+    dry: LatencyDelayStereo,
     /// log2 of the cutoff, so sweeps move evenly in pitch.
     cutoff: Smoothed,
     resonance: Smoothed,
@@ -424,7 +419,8 @@ impl Filter {
             settings,
             dirty: false,
             sample_rate: 48_000.0,
-            channels: Default::default(),
+            kernel: FilterKernelStereo::default(),
+            dry: LatencyDelayStereo::default(),
             cutoff: Smoothed::new(settings.cutoff.log2()),
             resonance: Smoothed::new(settings.resonance),
             morph: Smoothed::new(settings.morph),
@@ -435,7 +431,7 @@ impl Filter {
             lfo: Lfo::new(0x005E_EDF1),
             follower: EnvelopeFollower::default(),
             hertz: Default::default(),
-            telemetry: Arc::new(Telemetry::default()),
+            telemetry: Arc::new(Telemetry::meter_only()),
         };
         filter.prepare(48_000.0, 0);
         filter
@@ -447,9 +443,7 @@ impl Filter {
             values[PARAMETERS.iter().position(|spec| spec.id == id).unwrap()]
         });
         if settings.model != self.settings.model {
-            for channel in &mut self.channels {
-                channel.kernel.reset();
-            }
+            self.kernel.reset();
         }
         self.settings = settings;
         self.cutoff.set_target(settings.cutoff.log2());
@@ -488,9 +482,7 @@ impl Device for Filter {
         for smoothed in self.smoothers() {
             smoothed.set_time(5.0, rate);
         }
-        for channel in &mut self.channels {
-            channel.kernel.prepare(rate);
-        }
+        self.kernel.prepare(rate);
         self.update_settings();
         self.reset();
     }
@@ -546,23 +538,37 @@ impl Device for Filter {
             let output = self.output.next_value();
             let lfo_depth = self.lfo_depth.next_value();
             let env_amount = self.env_amount.next_value();
-            for (channel, sample) in [&mut *left, &mut *right].into_iter().enumerate() {
+            if s.lfo_stereo == 0.0 || lfo_depth == 0.0 {
                 let lfo = if lfo_depth == 0.0 {
                     0.0
                 } else {
-                    self.lfo.value(s.lfo_shape, stereo * channel as f64)
+                    self.lfo.value(s.lfo_shape, 0.0)
                 };
                 let octaves = base + lfo_depth * lfo + env_amount * envelope;
-                let cutoff = self.hertz[channel]
-                    .get(octaves, |octaves| octaves.exp2().clamp(20.0, 20_000.0));
-                cutoffs[channel] = cutoff;
-                let input = sample[index];
-                let state = &mut self.channels[channel];
-                let wet = state
+                let cutoff =
+                    self.hertz[0].get(octaves, |octaves| octaves.exp2().clamp(20.0, 20_000.0));
+                cutoffs = [cutoff, cutoff];
+                let input = [left[index], right[index]];
+                let wet = self
                     .kernel
                     .process(input, &shape, cutoff, resonance, morph, rate);
-                let dry = state.dry.process(input);
-                sample[index] = (dry + mix * (wet - dry)) * output;
+                let dry = self.dry.process(input);
+                left[index] = (dry[0] + mix * (wet[0] - dry[0])) * output;
+                right[index] = (dry[1] + mix * (wet[1] - dry[1])) * output;
+            } else {
+                for (channel, slot) in cutoffs.iter_mut().enumerate() {
+                    let lfo = self.lfo.value(s.lfo_shape, stereo * channel as f64);
+                    let octaves = base + lfo_depth * lfo + env_amount * envelope;
+                    *slot = self.hertz[channel]
+                        .get(octaves, |octaves| octaves.exp2().clamp(20.0, 20_000.0));
+                }
+                let input = [left[index], right[index]];
+                let wet = self
+                    .kernel
+                    .process_asym(input, &shape, cutoffs, resonance, morph, rate);
+                let dry = self.dry.process(input);
+                left[index] = (dry[0] + mix * (wet[0] - dry[0])) * output;
+                right[index] = (dry[1] + mix * (wet[1] - dry[1])) * output;
             }
         }
         self.telemetry.set_value(TELEMETRY_CUTOFF_LEFT, cutoffs[0]);
@@ -576,10 +582,8 @@ impl Device for Filter {
         if self.dirty {
             self.update_settings();
         }
-        for channel in &mut self.channels {
-            channel.kernel.reset();
-            channel.dry = LatencyDelay::default();
-        }
+        self.kernel.reset();
+        self.dry = LatencyDelayStereo::default();
         for smoothed in self.smoothers() {
             smoothed.snap();
         }

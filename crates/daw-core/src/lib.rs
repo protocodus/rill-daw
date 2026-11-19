@@ -34,6 +34,7 @@ mod routing;
 mod sample_favorites;
 mod song_timeline;
 mod spectrogram;
+pub mod thread_qos;
 mod track_colors;
 mod track_order;
 mod warp;

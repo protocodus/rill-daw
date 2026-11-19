@@ -35,7 +35,9 @@ pub use allpass::{AbsorbentAllpass, Allpass1, AllpassChain, DelayAllpass};
 pub use biquad::Biquad;
 pub use complex::Complex;
 pub use cutoff::CutoffGlide;
-pub use delay::{AllpassInterp, DelayLine, FadeTap, SincTable, StaticDelay, glide_length};
+pub use delay::{
+    AllpassInterp, DelayLine, FadeTap, SincTable, StaticDelay, StaticDelayStereo, glide_length,
+};
 pub use dynamics::{Ballistics, Compander, CurveKind, GainComputer, ProgramRelease};
 pub use echo::{
     BucketFilter, BucketLine, EchoKernel, EchoModel, EchoSettings, EchoStereo, TapPattern,
@@ -43,17 +45,23 @@ pub use echo::{
 };
 pub use envelope::{Adsr, Stage};
 pub use filter::{
-    CleanShape, FilterKernel, FilterModel, FilterShape, FilterType, LatencyDelay, sweep_corner,
-    sweep_mix,
+    CircuitPrepared, CleanShape, FilterKernel, FilterKernelStereo, FilterModel, FilterShape,
+    FilterType, LatencyDelay, LatencyDelayStereo, sweep_corner, sweep_mix,
 };
 pub use follower::EnvelopeFollower;
 pub use lfo::{Lfo, LfoShape};
-pub use limiter::{BoxSmoother, SlidingMax, TruePeak4x};
+pub use limiter::{BoxSmoother, SlidingMax, TruePeak4x, TruePeak4xStereo};
 pub use matched::{BUTTERWORTH_Q, Fit, MatchedDesigner, Prototype};
 pub use modulation::{ModulationKernel, ModulationMode, ModulationSettings};
-pub use nonlinear::{Ladder, SallenKey, soft_limit, tanh_fast};
+pub use nonlinear::{
+    Ladder, LadderCoeffs, LadderStereo, SallenKey, SallenKeyCoeffs, SallenKeyStereo, soft_limit,
+    tanh_fast,
+};
 pub use oscillator::{Drift, Oscillator, OscillatorModel, SubOscillator, Waveform};
-pub use oversample::{HalfBand, OversampleFactor, Oversampler, Oversampler2x};
+pub use oversample::{
+    HalfBand, HalfBandStereo, OversampleFactor, Oversampler, Oversampler2x, Oversampler2xStereo,
+    OversamplerStereo,
+};
 pub use playback::{LoopMode, Markers, Playhead, Region};
 pub use random::{Random, hash32};
 pub use real::Real;
@@ -67,7 +75,10 @@ pub use shaper::{
     DriveGains, DroopCorrector, HyperbolicClip, Shape,
 };
 pub use smooth::{LinearRamp, Smoothed};
-pub use svf::{OnePole, Shelf1, ShelfGlide, Svf, SvfMix, SvfMixRamp, SvfOutputs};
+pub use svf::{
+    OnePole, Shelf1, Shelf1Stereo, ShelfBank, ShelfGlide, Svf, SvfCoeffs, SvfMix, SvfMixRamp,
+    SvfOutputs, SvfOutputsStereo, SvfStereo,
+};
 
 /// Below this, filter states are flushed to zero so decays never reach
 /// denormal numbers.

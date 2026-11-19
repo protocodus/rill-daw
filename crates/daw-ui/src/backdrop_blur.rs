@@ -62,7 +62,7 @@ pub(crate) fn paint_modal_blur(ctx: &Context, painter: &Painter) {
     paint_blur(ctx, painter, ctx.content_rect(), None);
 }
 
-fn paint_blur(ctx: &Context, painter: &Painter, bounds: Rect, source: Option<u64>) {
+pub(crate) fn paint_blur(ctx: &Context, painter: &Painter, bounds: Rect, source: Option<u64>) {
     let bounds = bounds
         .intersect(ctx.content_rect())
         .intersect(painter.clip_rect());

@@ -1,5 +1,5 @@
 use super::{butterflies, hadamard};
-use crate::{DelayLine, FadeTap, LinearRamp, Shelf1, ShelfGlide, flush, glide_length};
+use crate::{DelayLine, FadeTap, LinearRamp, Shelf1, ShelfBank, flush, glide_length};
 
 const GLIDE_SECONDS: f64 = 0.1;
 /// Cosine and sine of no rotation.
@@ -21,7 +21,7 @@ const IDENTITY: [LinearRamp; 2] = [LinearRamp::new(1.0), LinearRamp::new(0.0)];
 #[derive(Clone, Debug)]
 pub struct Fdn<const N: usize> {
     lines: [DelayLine; N],
-    absorb: [ShelfGlide; N],
+    absorb: ShelfBank<N>,
     /// In samples; equals the target when at rest.
     length: [f64; N],
     target: [u32; N],
@@ -60,7 +60,7 @@ impl<const N: usize> Fdn<N> {
     pub fn new(permutation: [usize; N], signs: [f32; N]) -> Self {
         Self {
             lines: std::array::from_fn(|_| DelayLine::default()),
-            absorb: std::array::from_fn(|_| ShelfGlide::default()),
+            absorb: ShelfBank::default(),
             length: [2.0; N],
             target: [2; N],
             max_length: 0,
@@ -109,10 +109,10 @@ impl<const N: usize> Fdn<N> {
     /// Clears the audio state and ends every ramp and crossfade; lengths
     /// and absorption stay.
     pub fn reset(&mut self) {
-        for (line, absorb) in self.lines.iter_mut().zip(&mut self.absorb) {
+        for line in &mut self.lines {
             line.reset();
-            absorb.reset();
         }
+        self.absorb.reset();
         if let Some(scatter) = &mut self.scatter {
             for (line, tap) in scatter.lines.iter_mut().zip(&mut scatter.taps) {
                 line.reset();
@@ -160,7 +160,7 @@ impl<const N: usize> Fdn<N> {
     /// Moves a line to the filter's coefficients over `samples` (at once
     /// with 0) and keeps its state.
     pub fn set_absorption(&mut self, line: usize, filter: &Shelf1, samples: u32) {
-        self.absorb[line].set(filter, samples);
+        self.absorb.set(line, filter, samples);
     }
 
     /// The scattering delay of each channel in samples (0 is none); the
@@ -212,10 +212,12 @@ impl<const N: usize> Fdn<N> {
                 self.lines[index].read_at(whole as usize, (length - 1.0 - whole).max(0.0) as f32)
             };
         }
+        let mut absorbed = outputs;
+        self.absorb.process_all(&mut absorbed);
         let mut mixed = [0.0; N];
         for (index, mixed) in mixed.iter_mut().enumerate() {
             let source = self.permutation[index];
-            *mixed = self.signs[index] * self.absorb[source].process(outputs[source]);
+            *mixed = self.signs[index] * absorbed[source];
         }
         hadamard(&mut mixed);
         if let Some(scatter) = &mut self.scatter {

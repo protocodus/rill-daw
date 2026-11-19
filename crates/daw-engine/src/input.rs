@@ -554,6 +554,9 @@ impl InputShared {
         playback_ns: u64,
         capture_allowed: bool,
     ) -> [f32; 2] {
+        if !self.ready.load(Ordering::Acquire) && self.phase.load(Ordering::Acquire) == IDLE {
+            return [0.0; 2];
+        }
         // Preserve an already-scheduled ADC/DAC tail after the common gate closes.
         let capture_allowed = capture_allowed
             || (self.stop.load(Ordering::Acquire)
@@ -1263,6 +1266,7 @@ impl AudioEngine {
         self.controls
             .finished_generation
             .store(u64::MAX, Ordering::Release);
+        self.controls.wake_render();
         let controls = Arc::clone(&self.controls);
         let sample_rate = self.sample_rate;
         let buffer = self.input.buffer_frames as usize;

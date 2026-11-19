@@ -21,13 +21,13 @@ fn live(
     state: &mut PanelState,
 ) -> Option<std::sync::Arc<Telemetry>> {
     let telemetry = telemetry?;
-    ui.ctx()
-        .request_repaint_after(std::time::Duration::from_secs_f32(1.0 / REFRESH));
     let seconds = ui.input(|input| input.stable_dt).min(0.1);
-    state
-        .activity
-        .live(telemetry.output_position(), seconds)
-        .then(|| telemetry.clone())
+    let active = state.activity.live(telemetry.output_position(), seconds);
+    if active {
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_secs_f32(1.0 / REFRESH));
+    }
+    active.then(|| telemetry.clone())
 }
 
 /// R1 Saturator: the static curve with the span the signal sweeps on it,

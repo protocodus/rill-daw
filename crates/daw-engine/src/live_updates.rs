@@ -6,7 +6,7 @@ use crate::render::{
 use anyhow::{Result, ensure};
 use daw_core::Project;
 use std::sync::{
-    Arc, Condvar, Mutex,
+    Arc, Condvar, Mutex, OnceLock,
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
 use std::thread::{self, JoinHandle};
@@ -33,6 +33,7 @@ pub(super) struct LiveMailbox {
     request: Mutex<Option<Request>>,
     ready: Mutex<Option<Ready>>,
     has_ready: AtomicBool,
+    pub render_wake: OnceLock<thread::Thread>,
     #[cfg(test)]
     prepare_gate: Mutex<Option<PreparationGate>>,
     #[cfg(test)]
@@ -342,6 +343,9 @@ fn prepare_loop(mut preparer: LiveEditPreparer, shared: Arc<LiveMailbox>) {
                     let mut ready = shared.ready.lock().unwrap_or_else(|e| e.into_inner());
                     *ready = Some(next);
                     shared.has_ready.store(true, Ordering::Release);
+                    if let Some(thread) = shared.render_wake.get() {
+                        thread.unpark();
+                    }
                     // A cache hit or short/neutral source was already prepared at
                     // final quality. Do not duplicate that work or publish twice.
                     if !refining {

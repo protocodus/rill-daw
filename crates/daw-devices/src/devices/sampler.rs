@@ -869,7 +869,7 @@ impl Sampler {
             pan: Smoothed::new(0.0),
             velocity_level: Smoothed::new(0.0),
             gain: Smoothed::new(0.0),
-            telemetry: Arc::new(Telemetry::default()),
+            telemetry: Arc::new(Telemetry::meter_only()),
         };
         sampler.prepare(48_000.0, 0);
         sampler
@@ -1282,12 +1282,15 @@ impl Sampler {
         let shape = CleanShape::new(s.filter_type, s.steep, self.modulation.resonance);
         let fade_step = 1.0 / (STEAL_FADE_MS * 0.001 * self.sample_rate);
         let end_fade = f64::from(END_FADE_MS * 0.001 * self.sample_rate);
+        let filter_on = s.filter_on;
         let bank = self.bank;
         for index in 0..MAX_VOICES {
             let voice = &mut self.voices[index];
             if !voice.active() {
                 continue;
             }
+            let fixed_coeffs =
+                (filter_on && voice.g.step == 0.0).then(|| shape.coeffs(voice.g.value));
             for (out_left, out_right) in left.iter_mut().zip(right.iter_mut()) {
                 let (mut l, mut r) = (0.0, 0.0);
                 for layer in &mut voice.layers[..voice.layer_count] {
@@ -1304,32 +1307,32 @@ impl Sampler {
                     let stereo = sample.channel_count() > 1;
                     let step = f64::from(layer.step.next());
                     let reads = layer.playhead.reads(&layer.region);
-                    let tap = first.tap(bank, &reader, reads.first.0);
-                    let mut leaf_left = first.read(&tap) * reads.first.1;
-                    let mut leaf_right = if stereo {
-                        second.read(&tap) * reads.first.1
-                    } else {
-                        0.0
-                    };
-                    if reads.second.1 > 0.0 {
-                        let tap = first.tap(bank, &reader, reads.second.0);
-                        leaf_left += reads.second.1 * first.read(&tap);
-                        if stereo {
-                            leaf_right += reads.second.1 * second.read(&tap);
+                    let (leaf_left, leaf_right) = if stereo {
+                        let [l0, r0] = first.read_stereo(second, bank, &reader, reads.first.0);
+                        let mut pair = [l0 * reads.first.1, r0 * reads.first.1];
+                        if reads.second.1 > 0.0 {
+                            let [l1, r1] = first.read_stereo(second, bank, &reader, reads.second.0);
+                            pair[0] += reads.second.1 * l1;
+                            pair[1] += reads.second.1 * r1;
                         }
-                    }
-                    if !stereo {
-                        leaf_right = leaf_left;
-                    }
+                        (pair[0], pair[1])
+                    } else {
+                        let tap = first.tap(bank, &reader, reads.first.0);
+                        let mut val = first.read(&tap) * reads.first.1;
+                        if reads.second.1 > 0.0 {
+                            let tap = first.tap(bank, &reader, reads.second.0);
+                            val += reads.second.1 * first.read(&tap);
+                        }
+                        (val, val)
+                    };
                     l += leaf_left * layer.source.gain;
                     r += leaf_right * layer.source.gain;
                     layer.playhead.advance(&layer.region, step, end_fade);
                 }
                 let g = voice.g.next();
-                if s.filter_on {
-                    let [a, b, c, d] = &mut voice.filters;
-                    l = shape.process(a, b, l, g);
-                    r = shape.process(c, d, r, g);
+                if filter_on {
+                    let coeffs = fixed_coeffs.unwrap_or_else(|| shape.coeffs(g));
+                    [l, r] = shape.process_planar_pair(&mut voice.filters, [l, r], coeffs);
                 }
                 let mut amp = voice.amp.next_value();
                 if voice.pending.is_some() {

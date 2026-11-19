@@ -110,7 +110,12 @@ impl Lfo {
         if shape == LfoShape::Smooth {
             // The offset reaches into the next cycle instead of wrapping,
             // so an offset channel follows the same curve later.
-            let u = (self.phase + offset.rem_euclid(1.0)) as f32;
+            let off = if (0.0..1.0).contains(&offset) {
+                offset
+            } else {
+                offset.rem_euclid(1.0)
+            };
+            let u = (self.phase + off) as f32;
             let (from, to, t) = if u < 1.0 {
                 (self.smooth[0], self.smooth[1], u)
             } else {
@@ -118,7 +123,14 @@ impl Lfo {
             };
             return from + (to - from) * t * t * (3.0 - 2.0 * t);
         }
-        let phase = (self.phase + offset).rem_euclid(1.0) as f32;
+        let raw = self.phase + offset;
+        let phase = if (0.0..1.0).contains(&raw) {
+            raw
+        } else if (1.0..2.0).contains(&raw) {
+            raw - 1.0
+        } else {
+            raw.rem_euclid(1.0)
+        } as f32;
         match shape {
             LfoShape::Sine => (std::f32::consts::TAU * phase).sin(),
             LfoShape::Triangle => 1.0 - 4.0 * (phase - 0.5).abs(),

@@ -194,11 +194,18 @@ impl BucketLine {
             return [0.0; 2];
         }
         let mask = Self::QUEUE - 1;
+        let head1_active = gains[0] != 0.0
+            || gains[1] != 0.0
+            || gains[2] != 0.0
+            || self.held[1] != 0.0
+            || self.output[1][0] != ZERO
+            || self.output[1][1] != ZERO;
         for pole in 0..2 {
             self.input[pole] =
                 flushed(self.input[pole] * filter.advance[pole] + Complex::real(f64::from(input)));
-            for output in &mut self.output {
-                output[pole] = flushed(output[pole] * filter.advance[pole]);
+            self.output[0][pole] = flushed(self.output[0][pole] * filter.advance[pole]);
+            if head1_active {
+                self.output[1][pole] = flushed(self.output[1][pole] * filter.advance[pole]);
             }
         }
         let half_period = half_period.max(Self::SHORTEST_HALF_PERIOD);
@@ -212,21 +219,29 @@ impl BucketLine {
                 self.queue[self.written] = bucket(2.0 * value as f32);
             } else {
                 let stage = |offset: usize| self.queue[self.written.wrapping_sub(offset) & mask];
-                let mut others = 0.0;
-                for (offset, gain) in offsets.iter().zip(gains) {
-                    if *gain != 0.0 {
-                        others += gain * stage(*offset);
+                let main_read = stage(offsets[Self::MAIN]);
+                let power = filter.power(1.0 - self.next);
+                let step0 = main_read - self.held[0];
+                if step0 != 0.0 {
+                    self.held[0] = main_read;
+                    for (pole, power) in power.into_iter().enumerate() {
+                        self.output[0][pole] = self.output[0][pole]
+                            + (filter.steps[pole] * power).scale(f64::from(step0));
                     }
                 }
-                let read = [stage(offsets[Self::MAIN]), others];
-                let power = filter.power(1.0 - self.next);
-                for (head, read) in read.into_iter().enumerate() {
-                    let step = read - self.held[head];
-                    if step != 0.0 {
-                        self.held[head] = read;
+                if head1_active {
+                    let mut others = 0.0;
+                    for (offset, gain) in offsets.iter().zip(gains) {
+                        if *gain != 0.0 {
+                            others += gain * stage(*offset);
+                        }
+                    }
+                    let step1 = others - self.held[1];
+                    if step1 != 0.0 {
+                        self.held[1] = others;
                         for (pole, power) in power.into_iter().enumerate() {
-                            self.output[head][pole] = self.output[head][pole]
-                                + (filter.steps[pole] * power).scale(f64::from(step));
+                            self.output[1][pole] = self.output[1][pole]
+                                + (filter.steps[pole] * power).scale(f64::from(step1));
                         }
                     }
                 }
@@ -235,9 +250,13 @@ impl BucketLine {
             self.next += half_period;
         }
         self.next -= 1.0;
-        [0, 1].map(|head| {
-            self.held[head] + 2.0 * (self.output[head][0].re + self.output[head][1].re) as f32
-        })
+        let out0 = self.held[0] + 2.0 * (self.output[0][0].re + self.output[0][1].re) as f32;
+        let out1 = if head1_active {
+            self.held[1] + 2.0 * (self.output[1][0].re + self.output[1][1].re) as f32
+        } else {
+            0.0
+        };
+        [out0, out1]
     }
 }
 

@@ -1,10 +1,9 @@
 //! The Hall model: a ring of absorbent allpasses and delays after Dattorro,
 //! with the decay law of Dahl and Jot.
 use super::rooms::Move;
-use super::{HALL_TAPS, Layout, TAP_FADE_SECONDS, absorption_shelf};
+use super::{AbsorptionSpec, HALL_TAPS, Layout, TAP_FADE_SECONDS};
 use crate::{
-    AbsorbentAllpass, DelayAllpass, FadeTap, Lfo, LfoShape, LinearRamp, Shelf1, ShelfGlide,
-    soft_limit,
+    AbsorbentAllpass, DelayAllpass, FadeTap, Lfo, LfoShape, LinearRamp, ShelfBank, soft_limit,
 };
 
 pub(super) const DIFFUSER_SECONDS: [[f32; 4]; 2] = [
@@ -68,7 +67,7 @@ pub(super) struct Hall {
     ring: [[AbsorbentAllpass; 4]; 2],
     taps: [[FadeTap; HALL_TAPS]; 2],
     /// The decay each tap's signal has not yet received.
-    tap_shelves: [[ShelfGlide; HALL_TAPS]; 2],
+    tap_shelves: [ShelfBank<HALL_TAPS>; 2],
     lfos: [Lfo; 2],
     phases: [f32; 2],
     rates: [f32; 2],
@@ -83,7 +82,7 @@ impl Hall {
             diffusers: std::array::from_fn(|_| std::array::from_fn(|_| DelayAllpass::default())),
             ring: std::array::from_fn(|_| std::array::from_fn(|_| AbsorbentAllpass::default())),
             taps: [[FadeTap::default(); HALL_TAPS]; 2],
-            tap_shelves: std::array::from_fn(|_| std::array::from_fn(|_| ShelfGlide::default())),
+            tap_shelves: [ShelfBank::default(), ShelfBank::default()],
             lfos: [Lfo::new(0x00AE_0001), Lfo::new(0x00AE_0002)],
             phases: [0.0; 2],
             rates: [0.0; 2],
@@ -164,10 +163,7 @@ impl Hall {
         for tap in self.taps.iter_mut().flatten() {
             tap.snap(tap.target());
         }
-        self.tap_shelves
-            .iter_mut()
-            .flatten()
-            .for_each(ShelfGlide::reset);
+        self.tap_shelves.iter_mut().for_each(ShelfBank::reset);
     }
 
     /// New absorption and tap gains for the lengths and tap places as
@@ -180,10 +176,11 @@ impl Hall {
         sample_rate: f32,
         ramp: u32,
     ) -> bool {
+        let spec = AbsorptionSpec::new(decay, high, crossover_hz, sample_rate);
         let mut gliding = false;
         for element in self.ring.iter_mut().flatten() {
             let samples = element.heard_length().round() as u32;
-            let shelf: Shelf1 = absorption_shelf(samples, decay, high, crossover_hz, sample_rate);
+            let shelf = spec.shelf(samples);
             element.set_absorption(&shelf, ramp);
             gliding |= element.is_gliding() || element.is_fading();
         }
@@ -193,15 +190,9 @@ impl Hall {
         // its signal has passed since the last one, and a tap that
         // crossfades to another place takes its absorption along.
         for channel in 0..2 {
-            for (tap, shelf) in self.taps[channel]
-                .iter()
-                .zip(&mut self.tap_shelves[channel])
-            {
+            for (index, tap) in self.taps[channel].iter().enumerate() {
                 let place = tap.place().round() as u32;
-                shelf.set(
-                    &absorption_shelf(place, decay, high, crossover_hz, sample_rate),
-                    ramp,
-                );
+                self.tap_shelves[channel].set(index, &spec.shelf(place), ramp);
                 gliding |= tap.is_fading();
             }
         }
@@ -239,12 +230,17 @@ impl Hall {
         }
         let mut outputs = [0.0; 2];
         for channel in 0..2 {
-            for (index, (branch, element, sign)) in TAPS[channel].iter().enumerate() {
+            let mut tap_values = [0.0; HALL_TAPS];
+            for (index, (branch, element, _)) in TAPS[channel].iter().enumerate() {
                 let line = self.ring[*branch][*element].line();
-                let heard = self.taps[channel][index].read(line);
-                outputs[channel] +=
-                    sign * TAP_GAIN * self.tap_shelves[channel][index].process(heard);
+                tap_values[index] = self.taps[channel][index].read(line);
             }
+            self.tap_shelves[channel].process_all(&mut tap_values);
+            let mut sum = 0.0;
+            for (index, (_, _, sign)) in TAPS[channel].iter().enumerate() {
+                sum += sign * TAP_GAIN * tap_values[index];
+            }
+            outputs[channel] = sum;
         }
         outputs
     }

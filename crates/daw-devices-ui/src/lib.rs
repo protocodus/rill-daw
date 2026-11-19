@@ -239,7 +239,7 @@ impl SpectrumState {
         telemetry: &Telemetry,
         sample_rate: f32,
         seconds: f32,
-    ) -> &[f32] {
+    ) -> (&[f32], bool) {
         if self
             .analyzer
             .as_ref()
@@ -248,20 +248,19 @@ impl SpectrumState {
             self.analyzer = Some((sample_rate, SpectrumAnalyzer::new(sample_rate)));
         }
         let (_, analyzer) = self.analyzer.as_mut().expect("created above");
-        self.frames.resize(analyzer.size(), 0.0);
         let position = match tap {
             panels::Tap::Input => telemetry.input_position(),
             panels::Tap::Output => telemetry.output_position(),
         };
         if !self.activity.live(position, seconds) {
-            self.frames.fill(0.0);
-        } else {
-            match tap {
-                panels::Tap::Input => telemetry.read_input(&mut self.frames),
-                panels::Tap::Output => telemetry.read_output(&mut self.frames),
-            }
+            return analyzer.decay_silence(seconds);
         }
-        analyzer.update(&self.frames, seconds)
+        self.frames.resize(analyzer.size(), 0.0);
+        match tap {
+            panels::Tap::Input => telemetry.read_input(&mut self.frames),
+            panels::Tap::Output => telemetry.read_output(&mut self.frames),
+        }
+        (analyzer.update(&self.frames, seconds), true)
     }
 }
 
@@ -1338,20 +1337,20 @@ fn response(
             .zip(telemetry.as_ref())
             .map(|(tap, telemetry)| {
                 let seconds = ui.input(|input| input.stable_dt).min(0.1);
-                ui.ctx()
-                    .request_repaint_after(std::time::Duration::from_secs_f32(
-                        1.0 / SPECTRUM_REFRESH,
-                    ));
-                state
-                    .spectrum
-                    .update(tap, telemetry, rate, seconds)
-                    .to_vec()
+                let (bins, animating) = state.spectrum.update(tap, telemetry, rate, seconds);
+                if animating {
+                    ui.ctx()
+                        .request_repaint_after(std::time::Duration::from_secs_f32(
+                            1.0 / SPECTRUM_REFRESH,
+                        ));
+                }
+                bins
             });
         let output = daw_ui::frequency_plot(
             ui,
             &daw_ui::FrequencyPlot {
                 curves: &curves,
-                spectrum: bins.as_deref().map(|bins| daw_ui::Spectrum {
+                spectrum: bins.map(|bins| daw_ui::Spectrum {
                     bins_db: bins,
                     sample_rate: rate,
                     tilt_db_per_octave: SPECTRUM_TILT,

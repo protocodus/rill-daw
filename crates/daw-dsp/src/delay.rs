@@ -87,13 +87,22 @@ impl DelayLine {
         let phase = (place as usize).min(SincTable::PHASES - 1);
         let t = place - phase as f32;
         let (near, far) = (&table.rows[phase], &table.rows[phase + 1]);
-        let base = self.cursor.wrapping_sub(whole - SincTable::REACH);
-        let mut sum = 0.0;
-        for tap in 0..SincTable::TAPS {
-            let weight = near[tap] + t * (far[tap] - near[tap]);
-            sum += weight * self.buffer[base.wrapping_sub(tap) & self.mask];
+        let base = self.cursor.wrapping_sub(whole - SincTable::REACH) & self.mask;
+        let mut sums = [0.0_f32; 4];
+        if base >= SincTable::TAPS - 1 {
+            // Contiguous reverse slice inside buffer: zero wrap bitmasks.
+            let slice = &self.buffer[base + 1 - SincTable::TAPS..=base];
+            for tap in 0..SincTable::TAPS {
+                let weight = near[tap] + t * (far[tap] - near[tap]);
+                sums[tap & 3] += weight * slice[SincTable::TAPS - 1 - tap];
+            }
+        } else {
+            for tap in 0..SincTable::TAPS {
+                let weight = near[tap] + t * (far[tap] - near[tap]);
+                sums[tap & 3] += weight * self.buffer[base.wrapping_sub(tap) & self.mask];
+            }
         }
-        sum
+        (sums[0] + sums[1]) + (sums[2] + sums[3])
     }
 
     /// Response of the interpolation at a fraction, relative to the whole
@@ -263,11 +272,17 @@ pub struct FadeTap {
     queued: Option<usize>,
     step: u32,
     length: u32,
+    inv_length: f32,
 }
 
 impl FadeTap {
     pub fn set_fade(&mut self, samples: u32) {
         self.length = samples;
+        self.inv_length = if samples > 0 {
+            1.0 / samples as f32
+        } else {
+            0.0
+        };
     }
 
     /// The delay the tap is at or fading to.
@@ -295,6 +310,7 @@ impl FadeTap {
             queued: None,
             step: 0,
             length: self.length,
+            inv_length: self.inv_length,
         };
     }
 
@@ -327,7 +343,7 @@ impl FadeTap {
             }
             return 1.0;
         }
-        self.step as f32 / self.length as f32
+        self.step as f32 * self.inv_length
     }
 
     #[inline]
@@ -389,7 +405,60 @@ impl<const N: usize> StaticDelay<N> {
         let output = if delay == 0 {
             input
         } else {
-            self.buffer[(self.cursor + N - delay.min(N)) % N]
+            let d = delay.min(N);
+            let idx = if self.cursor >= d {
+                self.cursor - d
+            } else {
+                self.cursor + N - d
+            };
+            self.buffer[idx]
+        };
+        self.buffer[self.cursor] = input;
+        self.cursor += 1;
+        if self.cursor == N {
+            self.cursor = 0;
+        }
+        output
+    }
+}
+
+/// Stereo fixed delay of `N` samples with a shared cursor.
+#[derive(Clone, Debug)]
+pub struct StaticDelayStereo<const N: usize> {
+    buffer: [[f32; 2]; N],
+    cursor: usize,
+}
+
+impl<const N: usize> Default for StaticDelayStereo<N> {
+    fn default() -> Self {
+        Self {
+            buffer: [[0.0; 2]; N],
+            cursor: 0,
+        }
+    }
+}
+
+impl<const N: usize> StaticDelayStereo<N> {
+    #[inline]
+    pub fn process(&mut self, input: [f32; 2]) -> [f32; 2] {
+        self.process_at(input, N)
+    }
+
+    #[inline]
+    pub fn process_at(&mut self, input: [f32; 2], delay: usize) -> [f32; 2] {
+        if N == 0 {
+            return input;
+        }
+        let output = if delay == 0 {
+            input
+        } else {
+            let d = delay.min(N);
+            let idx = if self.cursor >= d {
+                self.cursor - d
+            } else {
+                self.cursor + N - d
+            };
+            self.buffer[idx]
         };
         self.buffer[self.cursor] = input;
         self.cursor += 1;

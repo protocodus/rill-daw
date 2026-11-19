@@ -301,9 +301,13 @@ impl Oscillator {
         let mut level = 1.0;
         let target = match self.model {
             OscillatorModel::Vco => {
-                let cents = self.drift_amount
-                    * (VCO_DRIFT_CENTS * wander + VCO_TOLERANCE_CENTS * self.tolerance);
-                let tuned = frequency * (cents / 1200.0).exp2();
+                let tuned = if self.drift_amount == 0.0 {
+                    frequency
+                } else {
+                    let cents = self.drift_amount
+                        * (VCO_DRIFT_CENTS * wander + VCO_TOLERANCE_CENTS * self.tolerance);
+                    frequency * (cents / 1200.0).exp2()
+                };
                 tuned / (1.0 + tuned * VCO_RESET_SECONDS)
             }
             OscillatorModel::Dco => {

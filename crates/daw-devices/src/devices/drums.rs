@@ -11,8 +11,8 @@
 use super::param;
 use crate::dsp::playback::{Markers, Playhead, Region};
 use crate::dsp::{
-    Adsr, Drive, DriveGains, LoopMode, SincBank, Smoothed, Stage, Step, Svf, SvfMixRamp,
-    db_to_gain, sweep_mix,
+    Adsr, Drive, DriveGains, LoopMode, SincBank, Smoothed, Stage, Step, SvfMixRamp, db_to_gain,
+    sweep_mix,
 };
 use crate::{
     Device, DeviceDescriptor, DeviceKind, Event, EventKind, ParamRange, ParamSpec, ProcessContext,
@@ -482,7 +482,7 @@ struct Chain {
     resonance: Smoothed,
     drive_db: Smoothed,
     filter: SvfMixRamp,
-    filters: [Svf; 2],
+    filters: crate::dsp::SvfStereo,
     filtering: bool,
     drive: [Drive; 2],
     /// Now, per sample on the way, and where the ramp ends.
@@ -559,7 +559,7 @@ impl Drums {
             volume: Smoothed::new(0.0),
             countdown: 0,
             age: 0,
-            telemetry: Arc::new(Telemetry::default()),
+            telemetry: Arc::new(Telemetry::meter_only()),
         };
         drums.prepare(48_000.0, 0);
         drums
@@ -851,9 +851,7 @@ impl Drums {
                 let (mut l, mut r) = (*l, *r);
                 if chain.filtering {
                     let mix = chain.filter.advance();
-                    let [a, b] = &mut chain.filters;
-                    l = a.tick(l, mix);
-                    r = b.tick(r, mix);
+                    [l, r] = chain.filters.tick([l, r], mix);
                 }
                 if chain.driving {
                     let step = chain.drive_step;
@@ -951,12 +949,12 @@ fn render_voices(
                 let step = f64::from(playing.step.next());
                 let (position, level) = playing.playhead.reads(&playing.region).first;
                 let first = sample.channel(0);
-                let tap = first.tap(bank, &reader, position);
-                let l = first.read(&tap);
-                let r = if sample.channel_count() > 1 {
-                    sample.channel(1).read(&tap)
+                let [l, r] = if sample.channel_count() > 1 {
+                    first.read_stereo(sample.channel(1), bank, &reader, position)
                 } else {
-                    l
+                    let tap = first.tap(bank, &reader, position);
+                    let s = first.read(&tap);
+                    [s, s]
                 };
                 let gain = level * playing.sample.gain;
                 sum_left += l * gain;

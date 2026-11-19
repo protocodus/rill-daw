@@ -17,6 +17,7 @@ pub struct SpectrumAnalyzer {
     buffer: Vec<Complex32>,
     scratch: Vec<Complex32>,
     levels: Vec<f32>,
+    settled: bool,
 }
 
 impl SpectrumAnalyzer {
@@ -36,6 +37,7 @@ impl SpectrumAnalyzer {
             buffer: vec![Complex32::default(); size],
             scratch: vec![Complex32::default(); fft.get_inplace_scratch_len()],
             levels: vec![SPECTRUM_FLOOR_DB; size / 2 + 1],
+            settled: true,
             fft,
         }
     }
@@ -43,6 +45,30 @@ impl SpectrumAnalyzer {
     /// Frames one analysis takes; read this many from the telemetry ring.
     pub fn size(&self) -> usize {
         self.window.len()
+    }
+
+    pub fn is_settled(&self) -> bool {
+        self.settled
+    }
+
+    /// Decays the spectrum smoothly when no new audio telemetry arrived,
+    /// skipping FFT work once all bins have settled at the floor. Returns the
+    /// levels slice and whether any bin is still above the floor.
+    pub fn decay_silence(&mut self, seconds: f32) -> (&[f32], bool) {
+        if self.settled {
+            return (&self.levels, false);
+        }
+        let fall = RELEASE_DB_PER_SECOND * seconds.max(0.0);
+        let mut active = false;
+        for level in &mut self.levels {
+            let next = (*level - fall).max(SPECTRUM_FLOOR_DB);
+            *level = next;
+            if next > SPECTRUM_FLOOR_DB {
+                active = true;
+            }
+        }
+        self.settled = !active;
+        (&self.levels, active)
     }
 
     /// Analyzes the latest frames (oldest first; fewer than [`Self::size`]
@@ -73,10 +99,18 @@ impl SpectrumAnalyzer {
         // The Hann window halves a sine's peak and the one-sided spectrum
         // halves it again.
         let scale = 4.0 / size as f32;
+        let scale2 = scale * scale;
+        const MIN_SQR: f32 = 1e-12;
+        let mut active = false;
         for (level, bin) in self.levels.iter_mut().zip(&self.buffer) {
-            let db = 20.0 * (bin.norm() * scale).max(1e-6).log10();
-            *level = db.max(*level - fall).max(SPECTRUM_FLOOR_DB);
+            let db = 10.0 * (bin.norm_sqr() * scale2).max(MIN_SQR).log10();
+            let next = db.max(*level - fall).max(SPECTRUM_FLOOR_DB);
+            *level = next;
+            if next > SPECTRUM_FLOOR_DB {
+                active = true;
+            }
         }
+        self.settled = !active;
         &self.levels
     }
 }

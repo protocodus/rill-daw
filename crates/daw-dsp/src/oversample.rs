@@ -25,7 +25,7 @@ impl History {
 
     #[inline]
     fn push(&mut self, sample: f32) {
-        self.cursor = (self.cursor + 1) % SPAN;
+        self.cursor = (self.cursor + 1) & (SPAN - 1);
         self.samples[self.cursor] = sample;
         self.samples[self.cursor + SPAN] = sample;
     }
@@ -37,6 +37,83 @@ impl History {
             .try_into()
             .expect("a window of SPAN samples")
     }
+}
+
+#[derive(Clone, Debug)]
+struct HistoryStereo {
+    samples: [[f32; 2]; 2 * SPAN],
+    cursor: usize,
+}
+
+impl HistoryStereo {
+    const fn new() -> Self {
+        Self {
+            samples: [[0.0; 2]; 2 * SPAN],
+            cursor: 0,
+        }
+    }
+
+    #[inline]
+    fn push(&mut self, sample: [f32; 2]) {
+        self.cursor = (self.cursor + 1) & (SPAN - 1);
+        self.samples[self.cursor] = sample;
+        self.samples[self.cursor + SPAN] = sample;
+    }
+
+    #[inline]
+    fn window(&self) -> &[[f32; 2]; SPAN] {
+        self.samples[self.cursor + 1..self.cursor + 1 + SPAN]
+            .try_into()
+            .expect("a window of SPAN samples")
+    }
+}
+
+fn compute_even_taps<const TAPS: usize>(beta: f64) -> [f32; MAX_HALF] {
+    let center = TAPS / 2;
+    let half = {
+        assert!(TAPS % 4 == 3 && TAPS <= 2 * SPAN);
+        center.div_ceil(2)
+    };
+    let mut even = [0.0; MAX_HALF];
+    for (index, slot) in even[..half].iter_mut().enumerate() {
+        let n = (2 * index) as f64 - center as f64;
+        let sinc = (std::f64::consts::PI * n / 2.0).sin() / (std::f64::consts::PI * n);
+        let ratio = n / center as f64;
+        let window = bessel_i0(beta * (1.0 - ratio * ratio).max(0.0).sqrt()) / bessel_i0(beta);
+        *slot = (sinc * window) as f32;
+    }
+    even
+}
+
+#[inline]
+fn taps_mono<const TAPS: usize>(even: &[f32; MAX_HALF], window: &[f32; SPAN]) -> f32 {
+    let center = TAPS / 2;
+    let half = center.div_ceil(2);
+    let newest = &window[SPAN - 1 - center..];
+    let mut sums = [0.0_f32; 4];
+    for (index, &tap) in even[..half].iter().enumerate() {
+        sums[index & 3] += tap * (newest[center - index] + newest[index]);
+    }
+    (sums[0] + sums[1]) + (sums[2] + sums[3])
+}
+
+#[inline]
+fn taps_stereo<const TAPS: usize>(even: &[f32; MAX_HALF], window: &[[f32; 2]; SPAN]) -> [f32; 2] {
+    let center = TAPS / 2;
+    let half = center.div_ceil(2);
+    let newest = &window[SPAN - 1 - center..];
+    let mut sums = [[0.0_f32; 2]; 4];
+    for (index, &tap) in even[..half].iter().enumerate() {
+        let a = newest[center - index];
+        let b = newest[index];
+        let slot = &mut sums[index & 3];
+        slot[0] += tap * (a[0] + b[0]);
+        slot[1] += tap * (a[1] + b[1]);
+    }
+    [
+        (sums[0][0] + sums[1][0]) + (sums[2][0] + sums[3][0]),
+        (sums[0][1] + sums[1][1]) + (sums[2][1] + sums[3][1]),
+    ]
 }
 
 /// One half-band stage of `TAPS` taps (4k + 3, at most 63): doubles or halves
@@ -84,16 +161,9 @@ impl<const TAPS: usize> HalfBand<TAPS> {
     /// `beta` is the Kaiser window's: more stopband depth for a wider
     /// transition.
     pub fn with_beta(beta: f64) -> Self {
-        let mut even = [0.0; MAX_HALF];
-        for (index, slot) in even[..Self::HALF].iter_mut().enumerate() {
-            let n = (2 * index) as f64 - Self::CENTER as f64;
-            let sinc = (std::f64::consts::PI * n / 2.0).sin() / (std::f64::consts::PI * n);
-            let ratio = n / Self::CENTER as f64;
-            let window = bessel_i0(beta * (1.0 - ratio * ratio).max(0.0).sqrt()) / bessel_i0(beta);
-            *slot = (sinc * window) as f32;
-        }
+        let _ = Self::HALF;
         Self {
-            even,
+            even: compute_even_taps::<TAPS>(beta),
             up: History::new(),
             down: [History::new(), History::new()],
         }
@@ -110,12 +180,7 @@ impl<const TAPS: usize> HalfBand<TAPS> {
     /// products add up side by side instead of in one chain.
     #[inline]
     fn taps(&self, window: &[f32; SPAN]) -> f32 {
-        let newest = &window[SPAN - 1 - Self::CENTER..];
-        let mut sums = [0.0_f32; 4];
-        for (index, &tap) in self.even[..Self::HALF].iter().enumerate() {
-            sums[index % 4] += tap * (newest[Self::CENTER - index] + newest[index]);
-        }
-        (sums[0] + sums[1]) + (sums[2] + sums[3])
+        taps_mono::<TAPS>(&self.even, window)
     }
 
     /// One sample in, two at twice the rate out, oldest first.
@@ -140,6 +205,136 @@ impl<const TAPS: usize> HalfBand<TAPS> {
         // sample of an earlier pair.
         let center = self.down[1].window()[SPAN - 1 - Self::CENTER.div_ceil(2)];
         self.taps(self.down[0].window()) + 0.5 * center
+    }
+}
+
+/// Upsample-only half-band stage without unused downsampling histories.
+#[derive(Clone, Debug)]
+pub struct HalfBandUp<const TAPS: usize> {
+    even: [f32; MAX_HALF],
+    up: History,
+}
+
+impl<const TAPS: usize> HalfBandUp<TAPS> {
+    const CENTER: usize = TAPS / 2;
+
+    pub fn with_beta(beta: f64) -> Self {
+        let _ = HalfBand::<TAPS>::HALF;
+        Self {
+            even: compute_even_taps::<TAPS>(beta),
+            up: History::new(),
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.up = History::new();
+    }
+
+    #[inline]
+    pub fn upsample(&mut self, input: f32) -> [f32; 2] {
+        self.up.push(2.0 * input);
+        let window = self.up.window();
+        [
+            taps_mono::<TAPS>(&self.even, window),
+            0.5 * window[SPAN - 1 - Self::CENTER / 2],
+        ]
+    }
+}
+
+/// Stereo [`HalfBand`] stage with shared FIR coefficients and 2-lane state.
+#[derive(Clone, Debug)]
+pub struct HalfBandStereo<const TAPS: usize> {
+    even: [f32; MAX_HALF],
+    up: HistoryStereo,
+    down: [HistoryStereo; 2],
+}
+
+/// Stereo [`Oversampler2x`].
+pub type Oversampler2xStereo = HalfBandStereo<63>;
+
+impl Default for Oversampler2xStereo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Oversampler2xStereo {
+    pub const LATENCY: u32 = HalfBand::<63>::ROUND_TRIP / 2;
+
+    pub fn new() -> Self {
+        Self::with_beta(8.0)
+    }
+}
+
+impl<const TAPS: usize> HalfBandStereo<TAPS> {
+    const CENTER: usize = TAPS / 2;
+
+    pub fn with_beta(beta: f64) -> Self {
+        let _ = HalfBand::<TAPS>::HALF;
+        Self {
+            even: compute_even_taps::<TAPS>(beta),
+            up: HistoryStereo::new(),
+            down: [HistoryStereo::new(), HistoryStereo::new()],
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.up = HistoryStereo::new();
+        self.down = [HistoryStereo::new(), HistoryStereo::new()];
+    }
+
+    #[inline]
+    pub fn upsample(&mut self, input: [f32; 2]) -> [[f32; 2]; 2] {
+        self.up.push([2.0 * input[0], 2.0 * input[1]]);
+        let window = self.up.window();
+        let direct = window[SPAN - 1 - Self::CENTER / 2];
+        [
+            taps_stereo::<TAPS>(&self.even, window),
+            [0.5 * direct[0], 0.5 * direct[1]],
+        ]
+    }
+
+    #[inline]
+    pub fn downsample(&mut self, input: [[f32; 2]; 2]) -> [f32; 2] {
+        self.down[0].push(input[0]);
+        self.down[1].push(input[1]);
+        let center = self.down[1].window()[SPAN - 1 - Self::CENTER.div_ceil(2)];
+        let filtered = taps_stereo::<TAPS>(&self.even, self.down[0].window());
+        [filtered[0] + 0.5 * center[0], filtered[1] + 0.5 * center[1]]
+    }
+}
+
+/// Stereo upsample-only half-band stage without downsampling histories.
+#[derive(Clone, Debug)]
+pub struct HalfBandUpStereo<const TAPS: usize> {
+    even: [f32; MAX_HALF],
+    up: HistoryStereo,
+}
+
+impl<const TAPS: usize> HalfBandUpStereo<TAPS> {
+    const CENTER: usize = TAPS / 2;
+
+    pub fn with_beta(beta: f64) -> Self {
+        let _ = HalfBand::<TAPS>::HALF;
+        Self {
+            even: compute_even_taps::<TAPS>(beta),
+            up: HistoryStereo::new(),
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.up = HistoryStereo::new();
+    }
+
+    #[inline]
+    pub fn upsample(&mut self, input: [f32; 2]) -> [[f32; 2]; 2] {
+        self.up.push([2.0 * input[0], 2.0 * input[1]]);
+        let window = self.up.window();
+        let direct = window[SPAN - 1 - Self::CENTER / 2];
+        [
+            taps_stereo::<TAPS>(&self.even, window),
+            [0.5 * direct[0], 0.5 * direct[1]],
+        ]
     }
 }
 
@@ -199,8 +394,12 @@ impl Oversampler {
 
     pub fn reset(&mut self) {
         self.first.reset();
-        self.second.reset();
-        self.third.reset();
+        if matches!(self.factor, OversampleFactor::X4 | OversampleFactor::X8) {
+            self.second.reset();
+        }
+        if self.factor == OversampleFactor::X8 {
+            self.third.reset();
+        }
     }
 
     /// Up plus down, in top-rate samples.
@@ -260,6 +459,95 @@ impl Oversampler {
             ],
             OversampleFactor::X8 => {
                 let mut quad = [0.0; 4];
+                for (slot, pair) in quad.iter_mut().zip(input.as_chunks::<2>().0) {
+                    *slot = self.third.downsample(*pair);
+                }
+                [
+                    self.second.downsample([quad[0], quad[1]]),
+                    self.second.downsample([quad[2], quad[3]]),
+                ]
+            }
+        };
+        self.first.downsample(pair)
+    }
+}
+
+/// Stereo cascade of [`Oversampler2xStereo`] and shorter half-band stages.
+#[derive(Clone, Debug)]
+pub struct OversamplerStereo {
+    factor: OversampleFactor,
+    first: Oversampler2xStereo,
+    second: HalfBandStereo<31>,
+    third: HalfBandStereo<19>,
+}
+
+impl OversamplerStereo {
+    pub const MAX: usize = Oversampler::MAX;
+
+    pub fn new(factor: OversampleFactor) -> Self {
+        Self {
+            factor,
+            first: Oversampler2xStereo::new(),
+            second: HalfBandStereo::with_beta(10.0),
+            third: HalfBandStereo::with_beta(10.0),
+        }
+    }
+
+    pub fn factor(&self) -> OversampleFactor {
+        self.factor
+    }
+
+    pub fn set_factor(&mut self, factor: OversampleFactor) {
+        self.factor = factor;
+        self.reset();
+    }
+
+    pub fn reset(&mut self) {
+        self.first.reset();
+        if matches!(self.factor, OversampleFactor::X4 | OversampleFactor::X8) {
+            self.second.reset();
+        }
+        if self.factor == OversampleFactor::X8 {
+            self.third.reset();
+        }
+    }
+
+    #[inline]
+    pub fn upsample(&mut self, input: [f32; 2], out: &mut [[f32; 2]; Self::MAX]) -> usize {
+        let first = self.first.upsample(input);
+        match self.factor {
+            OversampleFactor::X2 => out[..2].copy_from_slice(&first),
+            OversampleFactor::X4 => {
+                for (pair, sample) in out.as_chunks_mut::<2>().0.iter_mut().zip(first) {
+                    pair.copy_from_slice(&self.second.upsample(sample));
+                }
+            }
+            OversampleFactor::X8 => {
+                for (quad, sample) in out.as_chunks_mut::<4>().0.iter_mut().zip(first) {
+                    for (pair, sample) in quad
+                        .as_chunks_mut::<2>()
+                        .0
+                        .iter_mut()
+                        .zip(self.second.upsample(sample))
+                    {
+                        pair.copy_from_slice(&self.third.upsample(sample));
+                    }
+                }
+            }
+        }
+        self.factor.factor()
+    }
+
+    #[inline]
+    pub fn downsample(&mut self, input: &[[f32; 2]; Self::MAX]) -> [f32; 2] {
+        let pair = match self.factor {
+            OversampleFactor::X2 => [input[0], input[1]],
+            OversampleFactor::X4 => [
+                self.second.downsample([input[0], input[1]]),
+                self.second.downsample([input[2], input[3]]),
+            ],
+            OversampleFactor::X8 => {
+                let mut quad = [[0.0; 2]; 4];
                 for (slot, pair) in quad.iter_mut().zip(input.as_chunks::<2>().0) {
                     *slot = self.third.downsample(*pair);
                 }

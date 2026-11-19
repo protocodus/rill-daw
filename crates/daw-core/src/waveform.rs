@@ -23,6 +23,38 @@ impl Peak {
     }
 }
 
+fn compute_base_peaks(
+    out: &mut [Peak],
+    samples: &[f32],
+    source_channels: usize,
+    channels: usize,
+    source_frames: usize,
+    start_bin: usize,
+    cancel: &AtomicBool,
+) -> Result<()> {
+    let bins = out.len() / channels;
+    for local_bin in 0..bins {
+        if local_bin & 127 == 0 {
+            ensure!(
+                !cancel.load(Ordering::Relaxed),
+                "Waveform refinement cancelled"
+            );
+        }
+        let bin = start_bin + local_bin;
+        let start = bin * BLOCK_FRAMES;
+        let end = (start + BLOCK_FRAMES).min(source_frames);
+        for channel in 0..channels {
+            let mut peak = Peak::EMPTY;
+            for frame in start..end {
+                let value = samples[frame * source_channels + channel];
+                peak.add(value, value);
+            }
+            out[local_bin * channels + channel] = peak;
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug)]
 pub struct AudioWaveformPeaks {
     pub sample_rate: u32,
@@ -51,23 +83,54 @@ impl AudioWaveformPeaks {
         audio.validate()?;
         let channels = audio.channels.min(2);
         let source_frames = audio.frames();
-        let mut base = Vec::with_capacity(source_frames.div_ceil(BLOCK_FRAMES) * channels);
-        for start in (0..source_frames).step_by(BLOCK_FRAMES) {
-            if start % 8192 == 0 {
-                ensure!(
-                    !cancel.load(Ordering::Relaxed),
-                    "Waveform refinement cancelled"
-                );
-            }
-            let end = (start + BLOCK_FRAMES).min(source_frames);
-            for channel in 0..channels {
-                let mut peak = Peak::EMPTY;
-                for frame in start..end {
-                    let value = audio.samples[frame * audio.channels + channel];
-                    peak.add(value, value);
+        let total_bins = source_frames.div_ceil(BLOCK_FRAMES);
+        let mut base = vec![Peak::EMPTY; total_bins * channels];
+        let workers = if source_frames >= 65_536 {
+            std::thread::available_parallelism()
+                .map_or(1, usize::from)
+                .clamp(1, 8)
+                .min(total_bins.div_ceil(1024))
+        } else {
+            1
+        };
+        if workers <= 1 {
+            compute_base_peaks(
+                &mut base,
+                &audio.samples,
+                audio.channels,
+                channels,
+                source_frames,
+                0,
+                cancel,
+            )?;
+        } else {
+            let bins_per_worker = total_bins.div_ceil(workers);
+            std::thread::scope(|scope| {
+                let mut offset_bins = 0;
+                let mut handles = Vec::with_capacity(workers);
+                for chunk in base.chunks_mut(bins_per_worker * channels) {
+                    let start_bin = offset_bins;
+                    offset_bins += chunk.len() / channels;
+                    handles.push(scope.spawn(move || {
+                        crate::thread_qos::set_background_utility_qos();
+                        compute_base_peaks(
+                            chunk,
+                            &audio.samples,
+                            audio.channels,
+                            channels,
+                            source_frames,
+                            start_bin,
+                            cancel,
+                        )
+                    }));
                 }
-                base.push(peak);
-            }
+                for handle in handles {
+                    handle
+                        .join()
+                        .unwrap_or_else(|_| Err(anyhow::anyhow!("Waveform worker failed")))?;
+                }
+                Ok::<(), anyhow::Error>(())
+            })?;
         }
         let mut levels = vec![base];
         while levels.last().unwrap().len() > channels {

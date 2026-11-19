@@ -122,6 +122,7 @@ impl WorkerPool {
             let thread = thread::Builder::new()
                 .name(format!("rill-graph-{worker}"))
                 .spawn(move || {
+                    daw_core::thread_qos::set_realtime_audio_qos();
                     while let Ok(work) = receiver.recv() {
                         if results.send(work.process(Some(worker))).is_err() {
                             break;
@@ -221,14 +222,31 @@ impl WorkerPool {
                     Ok(done) => done,
                     Err(mpsc::TryRecvError::Empty) => {
                         let waiting = Instant::now();
-                        let result = self
-                            .completed
-                            .recv()
-                            .context("Persistent graph workers exited");
+                        let mut spun = None;
+                        for _ in 0..32 {
+                            std::hint::spin_loop();
+                            match self.completed.try_recv() {
+                                Ok(done) => {
+                                    spun = Some(done);
+                                    break;
+                                }
+                                Err(mpsc::TryRecvError::Empty) => {}
+                                Err(mpsc::TryRecvError::Disconnected) => {
+                                    return Err(anyhow::anyhow!("Persistent graph workers exited"));
+                                }
+                            }
+                        }
+                        let done = if let Some(done) = spun {
+                            done
+                        } else {
+                            self.completed
+                                .recv()
+                                .context("Persistent graph workers exited")?
+                        };
                         stats.coordinator_wait_ns = stats
                             .coordinator_wait_ns
                             .saturating_add(nanoseconds(waiting.elapsed()));
-                        result?
+                        done
                     }
                     Err(mpsc::TryRecvError::Disconnected) => {
                         return Err(anyhow::anyhow!("Persistent graph workers exited"));

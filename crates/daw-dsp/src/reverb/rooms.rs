@@ -2,8 +2,8 @@
 //! diffuser cascade into a short network, and Room, a network that
 //! scatters.
 use super::{
-    DiffuserStep, Fdn, Layout, ROOM_SCATTER_PERMUTATION, ROOM_SCATTER_SIGNS, TAP_FADE_SECONDS,
-    absorption_shelf, hadamard_sign,
+    AbsorptionSpec, DiffuserStep, Fdn, Layout, ROOM_SCATTER_PERMUTATION, ROOM_SCATTER_SIGNS,
+    TAP_FADE_SECONDS, hadamard_sign,
 };
 use crate::{DelayAllpass, LinearRamp};
 
@@ -129,10 +129,11 @@ fn absorb(
     sample_rate: f32,
     ramp: u32,
 ) -> bool {
+    let spec = AbsorptionSpec::new(decay, high_decay, crossover_hz, sample_rate);
     let lengths = *network.current_lengths();
     for (line, length) in lengths.iter().enumerate() {
         let samples = (length + f64::from(extra)).round() as u32;
-        let shelf = absorption_shelf(samples, decay, high_decay, crossover_hz, sample_rate);
+        let shelf = spec.shelf(samples);
         network.set_absorption(line, &shelf, ramp);
     }
     network.is_gliding()

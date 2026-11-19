@@ -3,7 +3,7 @@
 use serde::Serialize;
 use std::time::Duration;
 
-#[derive(Clone, Copy, Debug, Default, Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct RenderPerformanceSnapshot {
     pub sequence: u64,
     pub block_frames: usize,

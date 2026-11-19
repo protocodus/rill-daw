@@ -1798,6 +1798,7 @@ impl Harness {
                 "applied_revision": s.applied_revision, "edit_errors": s.edit_errors,
                 "rendered_frames": s.rendered_frames, "consumed_frames": s.consumed_frames,
                 "generation": s.generation, "refining_audio": s.refining_audio,
+                "render_performance": s.render_performance,
                 "audio_streaming": {
                     "streamed_clips": s.audio_streaming.streamed_clips,
                     "resident_bytes": s.audio_streaming.resident_bytes,

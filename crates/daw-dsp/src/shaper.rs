@@ -17,27 +17,40 @@ pub struct Adaa1<S: Shape> {
     shape: S,
     previous: f64,
     previous_integral: f64,
+    zero_integral: f64,
+    zero_value: f64,
 }
 
 impl<S: Shape> Adaa1<S> {
     pub fn new(shape: S) -> Self {
-        let previous_integral = shape.antiderivative(0.0);
+        let zero_integral = shape.antiderivative(0.0);
+        let zero_value = shape.value(0.0);
         Self {
             shape,
             previous: 0.0,
-            previous_integral,
+            previous_integral: zero_integral,
+            zero_integral,
+            zero_value,
         }
     }
 
     pub fn reset(&mut self) {
         self.previous = 0.0;
-        self.previous_integral = self.shape.antiderivative(0.0);
+        self.previous_integral = self.zero_integral;
     }
 
     #[inline]
     pub fn process(&mut self, input: f64) -> f64 {
-        let integral = self.shape.antiderivative(input);
         let difference = input - self.previous;
+        if difference == 0.0 {
+            self.previous = input;
+            return if input == 0.0 {
+                self.zero_value
+            } else {
+                self.shape.value(input)
+            };
+        }
+        let integral = self.shape.antiderivative(input);
         // The quotient is ill-conditioned for nearly equal samples; the
         // shaper at their midpoint is its limit.
         let output = if difference.abs() >= 1e-6 {
@@ -65,17 +78,22 @@ pub struct AdaaCentered<S: Shape> {
     /// Antiderivative at `x1` and at the midpoint of `x1` and `x2`.
     integral_x1: f64,
     integral_mid: f64,
+    zero_integral: f64,
+    zero_value: f64,
 }
 
 impl<S: Shape> AdaaCentered<S> {
     pub fn new(shape: S) -> Self {
-        let at_zero = shape.antiderivative(0.0);
+        let zero_integral = shape.antiderivative(0.0);
+        let zero_value = shape.value(0.0);
         Self {
             shape,
             x1: 0.0,
             x2: 0.0,
-            integral_x1: at_zero,
-            integral_mid: at_zero,
+            integral_x1: zero_integral,
+            integral_mid: zero_integral,
+            zero_integral,
+            zero_value,
         }
     }
 
@@ -88,6 +106,8 @@ impl<S: Shape> AdaaCentered<S> {
     /// curves by a small step.
     pub fn set_shape(&mut self, shape: S) {
         self.shape = shape;
+        self.zero_integral = self.shape.antiderivative(0.0);
+        self.zero_value = self.shape.value(0.0);
         self.integral_x1 = self.shape.antiderivative(self.x1);
         self.integral_mid = self.shape.antiderivative(0.5 * (self.x1 + self.x2));
     }
@@ -95,15 +115,25 @@ impl<S: Shape> AdaaCentered<S> {
     pub fn reset(&mut self) {
         self.x1 = 0.0;
         self.x2 = 0.0;
-        self.integral_x1 = self.shape.antiderivative(0.0);
-        self.integral_mid = self.integral_x1;
+        self.integral_x1 = self.zero_integral;
+        self.integral_mid = self.zero_integral;
     }
 
     #[inline]
     pub fn process(&mut self, input: f64) -> f64 {
         let (x1, x2) = (self.x1, self.x2);
+        if input == 0.0 && x1 == 0.0 && x2 == 0.0 {
+            return self.zero_value;
+        }
         let mid = 0.5 * (input + x1);
-        let integral_mid = self.shape.antiderivative(mid);
+        let (integral_mid, integral_next) = if input == x1 && mid == x1 {
+            (self.integral_x1, self.integral_x1)
+        } else {
+            (
+                self.shape.antiderivative(mid),
+                self.shape.antiderivative(input),
+            )
+        };
         // The antiderivative grows with the input, so the bound below which
         // the quotient loses to rounding is relative. The midpoint rule it
         // falls back to is exact to the second order of the step.
@@ -120,7 +150,7 @@ impl<S: Shape> AdaaCentered<S> {
         };
         self.x2 = x1;
         self.x1 = input;
-        self.integral_x1 = self.shape.antiderivative(input);
+        self.integral_x1 = integral_next;
         self.integral_mid = integral_mid;
         first + second
     }
@@ -204,8 +234,8 @@ impl<S: Shape> AntialiasedShaper<S> {
 /// makes even harmonics.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AlgebraicSigmoid {
-    up: f64,
-    down: f64,
+    inv_up_sq: f64,
+    inv_down_sq: f64,
     bias: f64,
     /// `g(bias)` and `1/g′(bias)`.
     offset: f64,
@@ -218,28 +248,32 @@ impl AlgebraicSigmoid {
     /// positive); the limits of the shape itself also depend on `bias`.
     pub fn new(up: f64, down: f64, bias: f64) -> Self {
         let mut shape = Self {
-            up,
-            down,
+            inv_up_sq: 1.0 / (up * up),
+            inv_down_sq: 1.0 / (down * down),
             bias,
             offset: 0.0,
             scale: 1.0,
             integral_offset: 0.0,
         };
-        let limit = shape.limit(bias);
+        let inv_limit_sq = if bias >= 0.0 {
+            shape.inv_up_sq
+        } else {
+            shape.inv_down_sq
+        };
         shape.offset = shape.g(bias);
-        shape.scale = (1.0 + (bias / limit).powi(2)).powf(1.5);
+        shape.scale = (1.0 + bias * bias * inv_limit_sq).powf(1.5);
         shape.integral_offset = shape.big_g(bias);
         shape
     }
 
     #[inline]
-    fn limit(&self, u: f64) -> f64 {
-        if u >= 0.0 { self.up } else { self.down }
-    }
-
-    #[inline]
     fn root(&self, u: f64) -> f64 {
-        (1.0 + (u / self.limit(u)).powi(2)).sqrt()
+        let inv_sq = if u >= 0.0 {
+            self.inv_up_sq
+        } else {
+            self.inv_down_sq
+        };
+        (1.0 + u * u * inv_sq).sqrt()
     }
 
     #[inline]
@@ -276,6 +310,8 @@ pub struct HyperbolicClip {
     up: f64,
     down: f64,
     soft: f64,
+    s_sq: f64,
+    inv_soft: f64,
     /// `h(0)` and `1/h′(0)`.
     offset: f64,
     scale: f64,
@@ -287,6 +323,8 @@ impl HyperbolicClip {
             up,
             down,
             soft,
+            s_sq: soft * soft,
+            inv_soft: if soft > 0.0 { 1.0 / soft } else { 0.0 },
             offset: 0.0,
             scale: 1.0,
         };
@@ -297,7 +335,7 @@ impl HyperbolicClip {
 
     #[inline]
     fn h(&self, x: f64) -> f64 {
-        let s2 = self.soft * self.soft;
+        let s2 = self.s_sq;
         let (a, b) = (x + self.down, x - self.up);
         0.5 * ((a * a + s2).sqrt() - (b * b + s2).sqrt())
     }
@@ -305,8 +343,16 @@ impl HyperbolicClip {
     /// Antiderivative of `√(u² + s²)`.
     #[inline]
     fn p(&self, u: f64) -> f64 {
-        let s = self.soft;
-        0.5 * (u * (u * u + s * s).sqrt() + s * s * (u / s).asinh())
+        if self.soft <= 0.0 {
+            return 0.5 * u * u.abs();
+        }
+        let u2 = u * u;
+        let r = (u2 + self.s_sq).sqrt();
+        // Avoid `.asinh()` libm division/sqrt: asinh(u/s) = sign(u) * ln_1p((|u| + u^2/(r+s)) / s).
+        let asinh_term = ((u.abs() + u2 / (r + self.soft)) * self.inv_soft)
+            .ln_1p()
+            .copysign(u);
+        0.5 * (u * r + self.s_sq * asinh_term)
     }
 }
 

@@ -76,6 +76,9 @@ impl Shared {
     /// the source onset. No source objects are read or destroyed here.
     pub(super) fn consume(&self, sample_rate: u32) -> [f32; 2] {
         let epoch = self.epoch.load(Ordering::Acquire);
+        if epoch == 0 {
+            return [0.0; 2];
+        }
         if self.output_epoch.load(Ordering::Relaxed) != epoch {
             self.output_epoch.store(epoch, Ordering::Relaxed);
             self.fade_from

@@ -8,8 +8,8 @@
 use super::param;
 use crate::dsp::matched::{decay_rate, impulse_invariant};
 use crate::dsp::{
-    Adaa1, BUTTERWORTH_Q, Biquad, BoundedCubic, Fit, LinearRamp, MatchedDesigner, Oversampler2x,
-    Prototype, Smoothed, Svf, SvfMix, SvfMixRamp, db_to_gain, flush,
+    Adaa1, BUTTERWORTH_Q, Biquad, BoundedCubic, Fit, LinearRamp, MatchedDesigner, Prototype,
+    Smoothed, SvfMix, SvfMixRamp, db_to_gain, flush,
 };
 use crate::{
     Device, DeviceDescriptor, DeviceKind, Event, ParamRange, ParamSpec, ProcessContext, StereoIo,
@@ -637,8 +637,7 @@ const KNEE: f64 = 2.0;
 
 struct Section {
     ramp: SvfMixRamp<f64>,
-    /// Left, right.
-    state: [Svf<f64>; 2],
+    state: crate::dsp::SvfStereo<f64>,
     /// 0 out of the path, 1 in.
     wet: LinearRamp<f64>,
     /// Samples left of the crossfade that covers a discrete change.
@@ -676,9 +675,7 @@ impl Section {
     }
 
     fn clear(&mut self) {
-        for state in &mut self.state {
-            state.reset();
-        }
+        self.state.reset();
     }
 
     /// Fades the section into or out of the path.
@@ -736,30 +733,35 @@ impl Section {
         };
     }
 
-    fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
+    fn process(&mut self, stereo: &mut [[f64; 2]]) {
         if self.idle() {
             return;
         }
-        let [state_left, state_right] = &mut self.state;
-        for (left, right) in left.iter_mut().zip(right) {
-            let mix = self.ramp.advance();
-            let filtered = [state_left.tick(*left, mix), state_right.tick(*right, mix)];
-            // A fade can end inside the block, at either end.
-            if self.wet.settled() && self.wet.value() == 1.0 {
-                [*left, *right] = filtered;
-            } else {
-                let wet = if self.wet.settled() {
-                    self.wet.value()
-                } else {
-                    self.wet.next()
-                };
-                *left += wet * (filtered[0] - *left);
-                *right += wet * (filtered[1] - *right);
+        if self.ramp.done() && self.wet.settled() && self.wet.value() == 1.0 {
+            let mix = self.ramp.mix();
+            for frame in stereo {
+                *frame = self.state.tick(*frame, mix);
             }
-        }
-        self.leave();
-        if self.idle() {
-            self.clear();
+        } else {
+            for frame in stereo {
+                let mix = self.ramp.advance();
+                let filtered = self.state.tick(*frame, mix);
+                if self.wet.settled() && self.wet.value() == 1.0 {
+                    *frame = filtered;
+                } else {
+                    let wet = if self.wet.settled() {
+                        self.wet.value()
+                    } else {
+                        self.wet.next()
+                    };
+                    frame[0] += wet * (filtered[0] - frame[0]);
+                    frame[1] += wet * (filtered[1] - frame[1]);
+                }
+            }
+            self.leave();
+            if self.idle() {
+                self.clear();
+            }
         }
     }
 }
@@ -828,7 +830,7 @@ pub struct Equalizer {
     tick_phase: u32,
     /// Amount of the Analog colour, 0–1.
     saturation: LinearRamp<f64>,
-    oversamplers: [Oversampler2x; 2],
+    oversamplers: crate::dsp::Oversampler2xStereo,
     shapers: [Adaa1<BoundedCubic>; 2],
     /// Linear gains.
     auto_gain: Smoothed,
@@ -1015,24 +1017,35 @@ impl Equalizer {
     /// residual passes the oversampler, so the linear signal keeps its level,
     /// response and timing; the residual is bounded at 2 % of the signal, so
     /// arriving 31 samples late it cannot comb-filter audibly.
-    fn saturate(&mut self, left: &mut [f64], right: &mut [f64]) {
+    fn saturate(&mut self, stereo: &mut [[f64; 2]]) {
         if self.saturation.settled() && self.saturation.value() == 0.0 {
             return;
         }
-        for index in 0..left.len() {
-            let amount = self.saturation.next();
-            for (channel, buffer) in [&mut *left, &mut *right].into_iter().enumerate() {
-                let oversampler = &mut self.oversamplers[channel];
-                let shaper = &mut self.shapers[channel];
-                // Flushed on the way in and out, so the FIR histories never
-                // hold denormals.
-                // The clamp keeps the conversion finite; the colour is long
-                // gone up there.
-                let input = buffer[index].clamp(-SHAPER_LIMIT, SHAPER_LIMIT);
-                let up = oversampler.upsample(flush(input as f32));
-                let shaped = up.map(|sample| flush(shaper.process(f64::from(sample)) as f32));
-                buffer[index] += amount * f64::from(oversampler.downsample(shaped));
-            }
+        let settled = self.saturation.settled();
+        let fixed_amount = self.saturation.value();
+        for frame in stereo {
+            let amount = if settled {
+                fixed_amount
+            } else {
+                self.saturation.next()
+            };
+            let up = self.oversamplers.upsample([
+                flush(frame[0].clamp(-SHAPER_LIMIT, SHAPER_LIMIT) as f32),
+                flush(frame[1].clamp(-SHAPER_LIMIT, SHAPER_LIMIT) as f32),
+            ]);
+            let shaped = [
+                [
+                    flush(self.shapers[0].process(f64::from(up[0][0])) as f32),
+                    flush(self.shapers[1].process(f64::from(up[0][1])) as f32),
+                ],
+                [
+                    flush(self.shapers[0].process(f64::from(up[1][0])) as f32),
+                    flush(self.shapers[1].process(f64::from(up[1][1])) as f32),
+                ],
+            ];
+            let down = self.oversamplers.downsample(shaped);
+            frame[0] += amount * f64::from(down[0]);
+            frame[1] += amount * f64::from(down[1]);
         }
         if self.saturation.settled() && self.saturation.value() == 0.0 {
             self.clear_saturation();
@@ -1040,9 +1053,7 @@ impl Equalizer {
     }
 
     fn clear_saturation(&mut self) {
-        for oversampler in &mut self.oversamplers {
-            oversampler.reset();
-        }
+        self.oversamplers.reset();
         for shaper in &mut self.shapers {
             shaper.reset();
         }
@@ -1102,28 +1113,29 @@ impl Device for Equalizer {
                 &mut left[offset..offset + count],
                 &mut right[offset..offset + count],
             );
-            let mut chunk = [[0.0_f64; TICK as usize]; 2];
-            for (chunk, input) in chunk.iter_mut().zip([&*left, &*right]) {
-                for (sample, input) in chunk.iter_mut().zip(input) {
-                    // One bad sample must not poison the filter states.
-                    *sample = if input.is_finite() {
-                        f64::from(*input)
-                    } else {
-                        0.0
-                    };
-                }
+            let mut chunk = [[0.0_f64; 2]; TICK as usize];
+            let chunk_slice = &mut chunk[..count];
+            for (slot, (&l, &r)) in chunk_slice.iter_mut().zip(left.iter().zip(right.iter())) {
+                slot[0] = if l.is_finite() { f64::from(l) } else { 0.0 };
+                slot[1] = if r.is_finite() { f64::from(r) } else { 0.0 };
             }
-            let [chunk_left, chunk_right] = &mut chunk;
-            let (chunk_left, chunk_right) = (&mut chunk_left[..count], &mut chunk_right[..count]);
             for section in &mut self.sections {
-                section.process(chunk_left, chunk_right);
+                section.process(chunk_slice);
             }
-            self.saturate(chunk_left, chunk_right);
-            for index in 0..count {
-                let gain =
-                    f64::from(self.auto_gain.next_value()) * f64::from(self.output.next_value());
-                left[index] = flush((chunk_left[index] * gain).clamp(-LIMIT, LIMIT) as f32);
-                right[index] = flush((chunk_right[index] * gain).clamp(-LIMIT, LIMIT) as f32);
+            self.saturate(chunk_slice);
+            if self.auto_gain.is_settled() && self.output.is_settled() {
+                let gain = f64::from(self.auto_gain.value()) * f64::from(self.output.value());
+                for (index, &frame) in chunk_slice.iter().enumerate() {
+                    left[index] = flush((frame[0] * gain).clamp(-LIMIT, LIMIT) as f32);
+                    right[index] = flush((frame[1] * gain).clamp(-LIMIT, LIMIT) as f32);
+                }
+            } else {
+                for (index, &frame) in chunk_slice.iter().enumerate() {
+                    let gain = f64::from(self.auto_gain.next_value())
+                        * f64::from(self.output.next_value());
+                    left[index] = flush((frame[0] * gain).clamp(-LIMIT, LIMIT) as f32);
+                    right[index] = flush((frame[1] * gain).clamp(-LIMIT, LIMIT) as f32);
+                }
             }
             self.tick_phase = (self.tick_phase + count as u32) % TICK;
             offset += count;

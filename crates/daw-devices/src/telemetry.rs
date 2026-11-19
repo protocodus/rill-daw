@@ -45,6 +45,22 @@ impl Default for Telemetry {
 }
 
 impl Telemetry {
+    /// Telemetry with waveform ring buffers disabled, keeping peaks, cursor
+    /// progress, scalar values and meter history (zero ring writes/frame).
+    pub fn meter_only() -> Self {
+        Self {
+            values: std::array::from_fn(|_| AtomicU32::new(0)),
+            input_peak: AtomicU32::new(0),
+            output_peak: AtomicU32::new(0),
+            input: Ring::meter_only(),
+            output: Ring::meter_only(),
+            history: (0..HISTORY_COLUMNS)
+                .map(|_| std::array::from_fn(|_| AtomicU32::new(0)))
+                .collect(),
+            history_count: AtomicUsize::new(0),
+        }
+    }
+
     pub fn set_value(&self, index: usize, value: f32) {
         if let Some(slot) = self.values.get(index) {
             slot.store(value.to_bits(), Relaxed);
@@ -175,24 +191,48 @@ impl Default for Ring {
 }
 
 impl Ring {
+    fn meter_only() -> Self {
+        Self {
+            frames: Box::new([]),
+            cursor: AtomicUsize::new(0),
+        }
+    }
+
     fn push(&self, left: &[f32], right: &[f32]) -> f32 {
+        const MASK: usize = TELEMETRY_FRAMES - 1;
+        debug_assert!(TELEMETRY_FRAMES.is_power_of_two());
         let mut cursor = self.cursor.load(Relaxed);
         let mut peak = 0.0_f32;
-        for (left, right) in left.iter().zip(right) {
-            peak = peak.max(left.abs()).max(right.abs());
-            self.frames[cursor].store((0.5 * (left + right)).to_bits(), Relaxed);
-            cursor = (cursor + 1) % TELEMETRY_FRAMES;
+        if self.frames.is_empty() {
+            for (&l, &r) in left.iter().zip(right) {
+                peak = peak.max(l.abs()).max(r.abs());
+            }
+            self.cursor.store(
+                cursor.wrapping_add(left.len().min(right.len())) & MASK,
+                Relaxed,
+            );
+            return peak;
+        }
+        for (&l, &r) in left.iter().zip(right) {
+            peak = peak.max(l.abs()).max(r.abs());
+            self.frames[cursor].store((0.5 * (l + r)).to_bits(), Relaxed);
+            cursor = (cursor + 1) & MASK;
         }
         self.cursor.store(cursor, Relaxed);
         peak
     }
 
     fn read(&self, out: &mut [f32]) {
+        if self.frames.is_empty() {
+            out.fill(0.0);
+            return;
+        }
+        const MASK: usize = TELEMETRY_FRAMES - 1;
         let count = out.len().min(TELEMETRY_FRAMES);
         let end = self.cursor.load(Relaxed);
-        let start = (end + TELEMETRY_FRAMES - count) % TELEMETRY_FRAMES;
+        let start = end.wrapping_add(TELEMETRY_FRAMES - count) & MASK;
         for (index, value) in out[..count].iter_mut().enumerate() {
-            *value = f32::from_bits(self.frames[(start + index) % TELEMETRY_FRAMES].load(Relaxed));
+            *value = f32::from_bits(self.frames[(start + index) & MASK].load(Relaxed));
         }
     }
 }

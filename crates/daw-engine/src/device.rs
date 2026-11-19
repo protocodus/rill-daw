@@ -38,8 +38,8 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use daw_core::Project;
 use std::{
     sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering},
+        Arc, Mutex, OnceLock,
+        atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering, fence},
         mpsc,
     },
     thread::{self, JoinHandle},
@@ -208,6 +208,207 @@ fn merge_buffer_range(
 
 static NEXT_ENGINE_ID: AtomicU64 = AtomicU64::new(1);
 
+#[derive(Default)]
+struct AuditionNoteSlot {
+    present: AtomicBool,
+    track: AtomicU64,
+    pitch_velocity: AtomicU32,
+}
+
+type AuditionNoteWriteState = (usize, Option<(u64, u8, u8)>);
+
+#[derive(Default)]
+struct AtomicAuditionNote {
+    slots: [AuditionNoteSlot; 8],
+    published: AtomicUsize,
+    write_lock: Mutex<AuditionNoteWriteState>,
+}
+
+impl AtomicAuditionNote {
+    fn store(&self, note: Option<(u64, u8, u8)>) -> bool {
+        let mut guard = self
+            .write_lock
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if guard.1 == note {
+            return false;
+        }
+        let next = guard.0.wrapping_add(1);
+        let slot = &self.slots[next & 7];
+        if let Some((track, pitch, velocity)) = note {
+            slot.track.store(track, Ordering::Relaxed);
+            slot.pitch_velocity.store(
+                (u32::from(pitch) << 8) | u32::from(velocity),
+                Ordering::Relaxed,
+            );
+            slot.present.store(true, Ordering::Relaxed);
+        } else {
+            slot.present.store(false, Ordering::Relaxed);
+        }
+        self.published.store(next, Ordering::Release);
+        guard.0 = next;
+        guard.1 = note;
+        true
+    }
+
+    fn load(&self) -> Option<(u64, u8, u8)> {
+        loop {
+            let seq = self.published.load(Ordering::Acquire);
+            let slot = &self.slots[seq & 7];
+            let value = slot.present.load(Ordering::Relaxed).then(|| {
+                let packed = slot.pitch_velocity.load(Ordering::Relaxed);
+                (
+                    slot.track.load(Ordering::Relaxed),
+                    (packed >> 8) as u8,
+                    packed as u8,
+                )
+            });
+            fence(Ordering::Acquire);
+            if self.published.load(Ordering::Relaxed) == seq {
+                return value;
+            }
+        }
+    }
+}
+
+#[derive(Default)]
+struct AuditionWheelsSlot {
+    present: AtomicBool,
+    track: AtomicU64,
+    pitch: AtomicU32,
+    modulation: AtomicU32,
+}
+
+type AuditionWheelsWriteState = (usize, Option<(u64, f32, f32)>);
+
+#[derive(Default)]
+struct AtomicAuditionWheels {
+    slots: [AuditionWheelsSlot; 8],
+    published: AtomicUsize,
+    write_lock: Mutex<AuditionWheelsWriteState>,
+}
+
+impl AtomicAuditionWheels {
+    fn store(&self, wheels: Option<(u64, f32, f32)>) -> bool {
+        let mut guard = self
+            .write_lock
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if guard.1 == wheels {
+            return false;
+        }
+        let next = guard.0.wrapping_add(1);
+        let slot = &self.slots[next & 7];
+        if let Some((track, pitch, modulation)) = wheels {
+            slot.track.store(track, Ordering::Relaxed);
+            slot.pitch.store(pitch.to_bits(), Ordering::Relaxed);
+            slot.modulation
+                .store(modulation.to_bits(), Ordering::Relaxed);
+            slot.present.store(true, Ordering::Relaxed);
+        } else {
+            slot.present.store(false, Ordering::Relaxed);
+        }
+        self.published.store(next, Ordering::Release);
+        guard.0 = next;
+        guard.1 = wheels;
+        true
+    }
+
+    fn load(&self) -> Option<(u64, f32, f32)> {
+        loop {
+            let seq = self.published.load(Ordering::Acquire);
+            let slot = &self.slots[seq & 7];
+            let value = slot.present.load(Ordering::Relaxed).then(|| {
+                (
+                    slot.track.load(Ordering::Relaxed),
+                    f32::from_bits(slot.pitch.load(Ordering::Relaxed)),
+                    f32::from_bits(slot.modulation.load(Ordering::Relaxed)),
+                )
+            });
+            fence(Ordering::Acquire);
+            if self.published.load(Ordering::Relaxed) == seq {
+                return value;
+            }
+        }
+    }
+}
+
+#[derive(Default)]
+struct PerfSlot {
+    sequence: AtomicU64,
+    block_frames: AtomicUsize,
+    worker_count: AtomicUsize,
+    nodes: AtomicUsize,
+    peak_active_workers: AtomicUsize,
+    track_timings_measured: AtomicBool,
+    wall_ns: AtomicU64,
+    processing_ns: AtomicU64,
+    ready_wait_ns: AtomicU64,
+    coordinator_wait_ns: AtomicU64,
+    max_track_ns: AtomicU64,
+}
+
+#[derive(Default)]
+struct AtomicRenderPerformance {
+    slots: [PerfSlot; 4],
+    published: AtomicUsize,
+    write_seq: AtomicUsize,
+}
+
+impl AtomicRenderPerformance {
+    fn store(&self, snap: crate::RenderPerformanceSnapshot) {
+        let next = self
+            .write_seq
+            .fetch_add(1, Ordering::Relaxed)
+            .wrapping_add(1);
+        let slot = &self.slots[next & 3];
+        slot.sequence.store(snap.sequence, Ordering::Relaxed);
+        slot.block_frames
+            .store(snap.block_frames, Ordering::Relaxed);
+        slot.worker_count
+            .store(snap.worker_count, Ordering::Relaxed);
+        slot.nodes.store(snap.nodes, Ordering::Relaxed);
+        slot.peak_active_workers
+            .store(snap.peak_active_workers, Ordering::Relaxed);
+        slot.track_timings_measured
+            .store(snap.track_timings_measured, Ordering::Relaxed);
+        slot.wall_ns.store(snap.wall_ns, Ordering::Relaxed);
+        slot.processing_ns
+            .store(snap.processing_ns, Ordering::Relaxed);
+        slot.ready_wait_ns
+            .store(snap.ready_wait_ns, Ordering::Relaxed);
+        slot.coordinator_wait_ns
+            .store(snap.coordinator_wait_ns, Ordering::Relaxed);
+        slot.max_track_ns
+            .store(snap.max_track_ns, Ordering::Relaxed);
+        self.published.store(next, Ordering::Release);
+    }
+
+    fn load(&self) -> crate::RenderPerformanceSnapshot {
+        loop {
+            let seq = self.published.load(Ordering::Acquire);
+            let slot = &self.slots[seq & 3];
+            let snap = crate::RenderPerformanceSnapshot {
+                sequence: slot.sequence.load(Ordering::Relaxed),
+                block_frames: slot.block_frames.load(Ordering::Relaxed),
+                worker_count: slot.worker_count.load(Ordering::Relaxed),
+                nodes: slot.nodes.load(Ordering::Relaxed),
+                peak_active_workers: slot.peak_active_workers.load(Ordering::Relaxed),
+                track_timings_measured: slot.track_timings_measured.load(Ordering::Relaxed),
+                wall_ns: slot.wall_ns.load(Ordering::Relaxed),
+                processing_ns: slot.processing_ns.load(Ordering::Relaxed),
+                ready_wait_ns: slot.ready_wait_ns.load(Ordering::Relaxed),
+                coordinator_wait_ns: slot.coordinator_wait_ns.load(Ordering::Relaxed),
+                max_track_ns: slot.max_track_ns.load(Ordering::Relaxed),
+            };
+            fence(Ordering::Acquire);
+            if self.published.load(Ordering::Relaxed) == seq {
+                return snap;
+            }
+        }
+    }
+}
+
 struct Controls {
     sample_audition: sample_audition::Shared,
     timing: TimingShared,
@@ -234,7 +435,8 @@ struct Controls {
     finished_generation: AtomicU64,
     audio_streaming: crate::audio_stream::SharedStreaming,
     streamed_clips: Mutex<Arc<Vec<(u64, u64)>>>,
-    render_performance: Mutex<crate::RenderPerformanceSnapshot>,
+    render_performance: AtomicRenderPerformance,
+    render_thread: OnceLock<thread::Thread>,
 }
 impl Controls {
     #[cfg(test)]
@@ -269,7 +471,14 @@ impl Controls {
             finished_generation: AtomicU64::new(u64::MAX),
             audio_streaming: crate::audio_stream::SharedStreaming::default(),
             streamed_clips: Mutex::new(Arc::new(Vec::new())),
-            render_performance: Mutex::default(),
+            render_performance: AtomicRenderPerformance::default(),
+            render_thread: OnceLock::new(),
+        }
+    }
+
+    fn wake_render(&self) {
+        if let Some(thread) = self.render_thread.get() {
+            thread.unpark();
         }
     }
 
@@ -285,12 +494,7 @@ impl Controls {
     }
 
     fn publish_performance(&self, snapshot: crate::RenderPerformanceSnapshot) {
-        // Readers run on the control side. A slow reader can skip a diagnostic
-        // update, but cannot hold up audio delivery. The callback never uses
-        // this lock, and the writer only copies a fixed-size value.
-        if let Ok(mut current) = self.render_performance.try_lock() {
-            *current = snapshot;
-        }
+        self.render_performance.store(snapshot);
     }
 
     /// Only the background render worker publishes text. The device callback
@@ -459,8 +663,8 @@ pub struct AudioEngine {
     controls: Arc<Controls>,
     sample_rate: u32,
     parameters: mpsc::SyncSender<ParameterChange>,
-    audition: Arc<Mutex<Option<(u64, u8, u8)>>>,
-    audition_wheels: Arc<Mutex<Option<(u64, f32, f32)>>>,
+    audition: Arc<AtomicAuditionNote>,
+    audition_wheels: Arc<AtomicAuditionWheels>,
     channel_meters: Arc<ChannelMeters>,
     device_telemetry: Arc<crate::builtin::DeviceTelemetry>,
 }
@@ -553,6 +757,7 @@ fn wait_for_renderer(
     };
     cancel.store(true, Ordering::Release);
     controls.shutdown.store(true, Ordering::Release);
+    controls.wake_render();
     // A failed/timed-out preparation cannot release ownership while a plugin
     // host is still loading. Individual native calls have bounded IPC deadlines.
     let _ = worker.join();
@@ -700,9 +905,9 @@ impl AudioEngine {
         let live_mailbox = Arc::new(LiveMailbox::default());
         let worker_edits = Arc::clone(&live_mailbox);
         let (parameter_tx, parameter_rx) = mpsc::sync_channel::<ParameterChange>(128);
-        let audition = Arc::new(Mutex::new(None));
+        let audition = Arc::new(AtomicAuditionNote::default());
         let worker_audition = Arc::clone(&audition);
-        let audition_wheels = Arc::new(Mutex::new(None));
+        let audition_wheels = Arc::new(AtomicAuditionWheels::default());
         let worker_wheels = Arc::clone(&audition_wheels);
         let worker_cancel = Arc::clone(&cancel);
         #[cfg(test)]
@@ -710,6 +915,9 @@ impl AudioEngine {
         let worker = thread::Builder::new()
             .name("daw-render".into())
             .spawn(move || {
+                daw_core::thread_qos::set_realtime_audio_qos();
+                let _ = worker_controls.render_thread.set(thread::current());
+                let _ = worker_edits.render_wake.set(thread::current());
                 // Plugins are created, processed, and destroyed on this owning thread.
                 // Capture the renderer's initial generation before publishing
                 // readiness. An immediate caller seek must remain a pending
@@ -754,6 +962,7 @@ impl AudioEngine {
                         worker_controls
                             .finished_generation
                             .store(u64::MAX, Ordering::Release);
+                        worker_controls.publish_streaming(&renderer);
                         devices_changed = true;
                     }
                     // A panel holds the list only for a lookup; if it does
@@ -762,7 +971,6 @@ impl AudioEngine {
                         renderer.device_telemetry(&mut devices);
                         devices_changed = false;
                     }
-                    worker_controls.publish_streaming(&renderer);
                     // UI edits never touch the callback. Coalesce rapid drags before
                     // issuing bounded IPC on the render worker, including while paused.
                     collect_parameter_changes(&parameter_rx, &mut pending_parameters);
@@ -792,9 +1000,7 @@ impl AudioEngine {
                     if worker_controls.shutdown.load(Ordering::Acquire) {
                         break;
                     }
-                    let held = *worker_audition
-                        .lock()
-                        .unwrap_or_else(|error| error.into_inner());
+                    let held = worker_audition.load();
                     let next_preview = !worker_controls.playing.load(Ordering::Acquire)
                         && !worker_controls.timing.suspends_midi_monitor()
                         && (held.is_some() || worker_controls.midi.monitoring_requested());
@@ -809,7 +1015,7 @@ impl AudioEngine {
                         if !render_failure.attempt(&worker_controls, generation, || {
                             renderer.set_preview(preview, beat)
                         }) {
-                            thread::sleep(Duration::from_micros(250));
+                            thread::park_timeout(Duration::from_micros(250));
                             continue;
                         }
                         // Publish only after the new queue generation and seek:
@@ -824,7 +1030,7 @@ impl AudioEngine {
                         if !render_failure
                             .attempt(&worker_controls, generation, || renderer.seek(beat))
                         {
-                            thread::sleep(Duration::from_micros(250));
+                            thread::park_timeout(Duration::from_micros(250));
                             continue;
                         }
                         worker_controls
@@ -835,20 +1041,14 @@ impl AudioEngine {
                         .attempt(&worker_controls, generation, || renderer.set_audition(held))
                     {
                         worker_controls.auditioning.store(false, Ordering::Release);
-                        thread::sleep(Duration::from_micros(250));
+                        thread::park_timeout(Duration::from_micros(250));
                         continue;
                     }
-                    renderer.set_audition_wheels(
-                        *worker_wheels
-                            .lock()
-                            .unwrap_or_else(|error| error.into_inner()),
-                    );
+                    renderer.set_audition_wheels(worker_wheels.load());
                     {
-                        let current = worker_audition
-                            .lock()
-                            .unwrap_or_else(|error| error.into_inner());
+                        let current = worker_audition.load();
                         worker_controls.auditioning.store(
-                            preview && ((current.is_some() && *current == held) || worker_controls.midi.monitoring_requested()),
+                            preview && ((current.is_some() && current == held) || worker_controls.midi.monitoring_requested()),
                             Ordering::Release,
                         );
                     }
@@ -856,18 +1056,32 @@ impl AudioEngine {
                         midi_monitor.update_suspended(&worker_controls.midi);
                     }
                     if worker_queue.free() < BLOCK {
-                        thread::sleep(refill_wait);
+                        let active = worker_controls.playing.load(Ordering::Relaxed)
+                            || preview
+                            || worker_controls.auditioning.load(Ordering::Relaxed)
+                            || worker_controls.sample_audition.active()
+                            || worker_controls.midi.monitoring_requested()
+                            || worker_controls.timing.busy();
+                        thread::park_timeout(if active {
+                            refill_wait
+                        } else {
+                            Duration::from_millis(20)
+                        });
                         continue;
                     }
                     if !worker_controls.timing.suspends_midi_monitor() && !render_failure.attempt(&worker_controls, generation, || midi_monitor.update(&worker_controls.midi, &mut renderer)) {
-                        thread::sleep(Duration::from_micros(250));
+                        thread::park_timeout(Duration::from_micros(250));
                         continue;
                     }
                     if !preview && renderer.finished() && !worker_controls.input.capture_requested() && !worker_controls.midi.capture_requested() && !worker_controls.timing.keeps_clock_running() {
                         worker_controls
                             .finished_generation
                             .store(generation, Ordering::Release);
-                        thread::sleep(Duration::from_micros(250));
+                        thread::park_timeout(if worker_controls.playing.load(Ordering::Relaxed) {
+                            Duration::from_millis(2)
+                        } else {
+                            Duration::from_millis(20)
+                        });
                         continue;
                     }
                     renderer.signal_monitor_transport(generation,
@@ -880,7 +1094,7 @@ impl AudioEngine {
                             renderer.render(&mut frames, &mut positions)
                         }
                     }) {
-                        thread::sleep(Duration::from_micros(250));
+                        thread::park_timeout(Duration::from_micros(250));
                         continue;
                     }
                     let (unsupported_midi,unsupported_groups)=renderer.unsupported_midi();
@@ -914,6 +1128,7 @@ impl AudioEngine {
             Ok(preparer) => preparer,
             Err(error) => {
                 controls.shutdown.store(true, Ordering::Release);
+                controls.wake_render();
                 let _ = worker.join();
                 return Err(error.into());
             }
@@ -922,6 +1137,7 @@ impl AudioEngine {
             Ok(updates) => updates,
             Err(error) => {
                 controls.shutdown.store(true, Ordering::Release);
+                controls.wake_render();
                 let _ = worker.join();
                 return Err(error);
             }
@@ -1028,6 +1244,7 @@ impl AudioEngine {
         let mut output = Vec::with_capacity(frames);
         let mut samples = [0.0_f32; BLOCK * 2];
         while output.len() < frames {
+            self.controls.wake_render();
             let count = (frames - output.len()).min(BLOCK).min(
                 self.controls
                     .timing
@@ -1119,6 +1336,7 @@ impl AudioEngine {
             );
         }
         self.controls.sample_audition.request(sample);
+        self.controls.wake_render();
         Ok(())
     }
 
@@ -1138,10 +1356,9 @@ impl AudioEngine {
                 "Invalid audition note"
             );
         }
-        *self
-            .audition
-            .lock()
-            .unwrap_or_else(|error| error.into_inner()) = note;
+        if self.audition.store(note) {
+            self.controls.wake_render();
+        }
         // The ready preview queue also carries live MIDI monitoring. Releasing
         // the piano-roll key must not mute that independent source while the
         // render worker is waiting for queue space. The worker still owns mode
@@ -1162,10 +1379,9 @@ impl AudioEngine {
                 "Invalid wheel position"
             );
         }
-        *self
-            .audition_wheels
-            .lock()
-            .unwrap_or_else(|error| error.into_inner()) = wheels;
+        if self.audition_wheels.store(wheels) {
+            self.controls.wake_render();
+        }
         Ok(())
     }
 
@@ -1214,6 +1430,7 @@ impl AudioEngine {
         if self.controls.output_failed.load(Ordering::Acquire) {
             self.controls.playing.store(false, Ordering::Release);
         }
+        self.controls.wake_render();
     }
     pub fn seek(&self, beat: f64) {
         self.request_stop_midi_recording();
@@ -1237,6 +1454,7 @@ impl AudioEngine {
             .store(beat.to_bits(), Ordering::Release);
         self.controls.generation.fetch_add(1, Ordering::AcqRel);
         self.controls.output_meter.clear();
+        self.controls.wake_render();
     }
     pub fn position_beats(&self) -> f64 {
         f64::from_bits(self.controls.position.load(Ordering::Relaxed))
@@ -1305,6 +1523,7 @@ impl AudioEngine {
         if let Some(updates) = &self.live_updates {
             updates.acknowledge_parameter(track, effect, parameter, value);
         }
+        self.controls.wake_render();
         Ok(())
     }
     /// Actual streamed backing is known after graph/plan admission; the UI can
@@ -1351,11 +1570,7 @@ impl AudioEngine {
             rendered_frames: self.controls.rendered_frames.load(Ordering::Relaxed),
             consumed_frames: self.controls.consumed_frames.load(Ordering::Relaxed),
             audio_streaming: self.controls.audio_streaming.snapshot(),
-            render_performance: *self
-                .controls
-                .render_performance
-                .lock()
-                .unwrap_or_else(|error| error.into_inner()),
+            render_performance: self.controls.render_performance.load(),
         }
     }
 
@@ -1452,6 +1667,7 @@ impl AudioEngine {
         self.controls.playing.store(false, Ordering::Release);
         self.controls.auditioning.store(false, Ordering::Release);
         self.controls.shutdown.store(true, Ordering::Release);
+        self.controls.wake_render();
         self.controls.sample_audition.abort();
         self.stream.take();
         self.controls.output_meter.clear();
@@ -1737,8 +1953,8 @@ mod tests {
             controls,
             sample_rate: 48_000,
             parameters,
-            audition: Arc::new(Mutex::new(None)),
-            audition_wheels: Arc::new(Mutex::new(None)),
+            audition: Arc::new(AtomicAuditionNote::default()),
+            audition_wheels: Arc::new(AtomicAuditionWheels::default()),
             channel_meters: meters,
             device_telemetry: Default::default(),
         };
@@ -1850,8 +2066,8 @@ mod tests {
             controls: Arc::clone(&controls),
             sample_rate: 48_000,
             parameters,
-            audition: Arc::new(Mutex::new(None)),
-            audition_wheels: Arc::new(Mutex::new(None)),
+            audition: Arc::new(AtomicAuditionNote::default()),
+            audition_wheels: Arc::new(AtomicAuditionWheels::default()),
             channel_meters: Arc::new(ChannelMeters::new(&project)),
             device_telemetry: Default::default(),
         };
@@ -1907,8 +2123,8 @@ mod tests {
             controls,
             sample_rate: 48_000,
             parameters,
-            audition: Arc::new(Mutex::new(None)),
-            audition_wheels: Arc::new(Mutex::new(None)),
+            audition: Arc::new(AtomicAuditionNote::default()),
+            audition_wheels: Arc::new(AtomicAuditionWheels::default()),
             channel_meters: Arc::new(ChannelMeters::default()),
             device_telemetry: Default::default(),
         };
@@ -2091,15 +2307,26 @@ mod tests {
     #[test]
     fn performance_publication_does_not_wait_for_a_control_reader() {
         let controls = Controls::new();
-        let reader = controls.render_performance.lock().unwrap();
+        let initial = controls.render_performance.load();
+        assert_eq!(initial.wall_ns, 0);
         let next = crate::RenderPerformanceSnapshot {
+            sequence: 7,
+            block_frames: BLOCK,
+            worker_count: 4,
+            nodes: 12,
+            peak_active_workers: 4,
+            track_timings_measured: true,
             wall_ns: 42,
-            ..Default::default()
+            processing_ns: 30,
+            ready_wait_ns: 5,
+            coordinator_wait_ns: 7,
+            max_track_ns: 15,
         };
-        controls.publish_performance(next);
-        assert_eq!(reader.wall_ns, 0);
-        drop(reader);
-        controls.publish_performance(next);
-        assert_eq!(controls.render_performance.lock().unwrap().wall_ns, 42);
+        let count = crate::allocation_test_support::count_allocations(|| {
+            controls.publish_performance(next);
+            let loaded = controls.render_performance.load();
+            assert_eq!(loaded, next);
+        });
+        assert_eq!(count, 0);
     }
 }

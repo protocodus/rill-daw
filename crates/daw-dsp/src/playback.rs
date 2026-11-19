@@ -214,15 +214,20 @@ impl Playhead {
     pub fn advance(&mut self, region: &Region, step: f64, fade: f64) {
         let Some(looped) = region.looped else {
             self.position += step;
-            let (target, drop) = if fade > 0.0 {
-                (
-                    ((region.end - self.position) / step.max(1e-9) / fade).clamp(0.0, 1.0),
-                    1.0 / fade,
-                )
+            let remaining = region.end - self.position;
+            let step_safe = step.max(1e-9);
+            if fade > 0.0 {
+                if self.level == 1.0 && remaining >= step_safe * fade * 1.001 {
+                    self.done = false;
+                    return;
+                }
+                let target = (remaining / step_safe / fade).clamp(0.0, 1.0);
+                let drop = 1.0 / fade;
+                self.level = target.max(self.level - drop);
             } else {
-                (f64::from(self.position < region.end), 1.0)
-            };
-            self.level = target.max(self.level - drop);
+                let target = f64::from(remaining > 0.0);
+                self.level = target.max(self.level - 1.0);
+            }
             // Steps of 1/fade do not add up to exactly 1.
             self.done = self.level <= 1e-9;
             return;

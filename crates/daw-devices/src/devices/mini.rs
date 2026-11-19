@@ -1042,7 +1042,7 @@ impl Mini {
             volume: Smoothed::new(0.0),
             downsampler: Oversampler2x::new(),
             silent: DOWNSAMPLER_SPAN,
-            telemetry: Arc::new(Telemetry::default()),
+            telemetry: Arc::new(Telemetry::meter_only()),
         };
         mini.prepare(48_000.0, 0);
         mini
@@ -1421,6 +1421,10 @@ impl Mini {
             coupling: coupling_g(self.sample_rate),
         };
         let sounding: [bool; MAX_VOICES] = std::array::from_fn(|index| self.voices[index].active());
+        let any_sounding = sounding.contains(&true);
+        if !any_sounding && self.silent >= DOWNSAMPLER_SPAN {
+            return;
+        }
         let steps = 2 * out.len();
         debug_assert!(out.len() <= CONTROL);
         // In three passes over the span, so the filters, each a serial chain
@@ -1438,6 +1442,7 @@ impl Mini {
                 *slot = voice.source(step, &context);
             }
         }
+        let prepared = FilterKernel::prepare_circuit(&context.shape, context.resonance);
         for step in 0..steps {
             for ((voice, signal), _) in self
                 .voices
@@ -1446,12 +1451,10 @@ impl Mini {
                 .zip(&sounding)
                 .filter(|(_, sounding)| **sounding)
             {
-                signal[step] = voice.filter.circuit(
-                    signal[step],
-                    &context.shape,
-                    voice.g.at(step),
-                    context.resonance,
-                );
+                signal[step] =
+                    voice
+                        .filter
+                        .circuit_prepared(signal[step], &prepared, voice.g.at(step));
             }
         }
         let mut mixed = [0.0_f32; 2 * CONTROL];

@@ -4,8 +4,8 @@
 use super::param;
 use crate::dsp::{
     Ballistics, BoundedCubic, BoundedSquare, BoxSmoother, CurveKind, DelayLine, GainComputer,
-    LinearRamp, Oversampler2x, ProgramRelease, Shape, Shelf1, SlidingMax, Smoothed, Svf,
-    TruePeak4x, db_to_gain, flush, prewarp,
+    LinearRamp, Oversampler2xStereo, ProgramRelease, Shape, Shelf1, Shelf1Stereo, SlidingMax,
+    Smoothed, SvfCoeffs, SvfStereo, TruePeak4xStereo, db_to_gain, flush, prewarp,
 };
 use crate::{
     Device, DeviceDescriptor, DeviceKind, Event, HistoryMeter, ParamRange, ParamSpec,
@@ -437,7 +437,7 @@ pub fn latency(settings: &Settings, sample_rate: f32) -> u32 {
     let effective = effective(settings);
     let lookahead = lookahead_samples(&effective, sample_rate);
     match effective.path {
-        Path::Limiter => lookahead + TruePeak4x::DELAY,
+        Path::Limiter => lookahead + TruePeak4xStereo::DELAY,
         _ => lookahead,
     }
 }
@@ -527,15 +527,13 @@ impl Structure {
 
     /// The limiter's lookahead without its detector delay.
     fn lookahead(&self) -> usize {
-        self.tap.saturating_sub(TruePeak4x::DELAY as usize)
+        self.tap.saturating_sub(TruePeak4xStereo::DELAY as usize)
     }
 }
 
-/// Detector state of one channel.
+/// Detector state of one channel (post-link envelope & lookahead stages).
 #[derive(Clone, Debug, Default)]
 struct Detector {
-    high_pass: Svf,
-    true_peak: TruePeak4x,
     /// The expander's peak follower, in linear amplitude: instant rise,
     /// Release fall.
     level: Ballistics,
@@ -550,6 +548,16 @@ struct Detector {
 }
 
 impl Detector {
+    fn copy_from(&mut self, other: &Self) {
+        self.level = other.level;
+        self.fast = other.fast;
+        self.second = other.second;
+        self.slow = other.slow;
+        self.hold.copy_from(&other.hold);
+        self.box1.copy_from(&other.box1);
+        self.box2.copy_from(&other.box2);
+    }
+
     /// Starts a path from `reduction`, so the gain continues from where the
     /// previous path left it.
     fn enter(&mut self, structure: &Structure, reduction: f32) {
@@ -561,7 +569,6 @@ impl Detector {
             // Two boxes spanning the lookahead together: an S-shaped attack
             // that ends exactly at the delayed peak.
             let first = 2 * lookahead / 3;
-            self.true_peak.reset();
             self.hold.set_window(lookahead + 3, reduction);
             self.box1.set_length(first + 1, reduction);
             self.box2.set_length(lookahead - first + 1, reduction);
@@ -576,15 +583,11 @@ impl Detector {
         curve: &GainComputer,
         magnitude: f32,
         feedback_rise: f32,
+        compress_foot: f32,
     ) -> f32 {
         // Always running, so entering Expander mode finds the level.
         let level = self.level.process(magnitude);
         match structure.path {
-            // The reduction of an expander swings to the floor at every
-            // zero crossing, so the curve reads a held peak: a steady tone
-            // sits on the drawn curve whatever the times. Attack then slows
-            // only the opening, in linear gain: 63 % of the amplitude after
-            // the set time, from however deep the gate was.
             Path::Expander => {
                 let target = curve.reduction_db(to_db(level));
                 let previous = self.fast.value();
@@ -599,26 +602,38 @@ impl Detector {
                 reduction
             }
             Path::Digital => {
-                let fast = self.fast.process(curve.reduction_db(to_db(magnitude)));
+                let target = if magnitude <= compress_foot {
+                    0.0
+                } else {
+                    curve.reduction_db(to_db(magnitude))
+                };
+                let fast = self.fast.process(target);
                 self.slow.process(fast)
             }
             Path::Feedback(character) => {
-                let level_db = to_db(magnitude);
-                let fast = if structure.external {
-                    // No loop to close on another signal.
-                    self.fast.process(curve.reduction_db(level_db))
-                } else {
-                    let previous = self.fast.value();
-                    // The solve's residual is negative at the previous
-                    // value exactly when the reduction is about to rise.
-                    let k = if curve.feedback_reduction_db(level_db - previous) > previous {
-                        feedback_rise
+                let fast = if magnitude <= compress_foot {
+                    if structure.external {
+                        self.fast.process(0.0)
                     } else {
-                        self.fast.fall
-                    };
-                    let solved = flush(curve.solve_feedback(level_db, (1.0 - k) * previous, k));
-                    self.fast.set(solved);
-                    solved
+                        let solved = flush((1.0 - self.fast.fall) * self.fast.value());
+                        self.fast.set(solved);
+                        solved
+                    }
+                } else {
+                    let level_db = to_db(magnitude);
+                    if structure.external {
+                        self.fast.process(curve.reduction_db(level_db))
+                    } else {
+                        let previous = self.fast.value();
+                        let k = if curve.feedback_reduction_db(level_db - previous) > previous {
+                            feedback_rise
+                        } else {
+                            self.fast.fall
+                        };
+                        let solved = flush(curve.solve_feedback(level_db, (1.0 - k) * previous, k));
+                        self.fast.set(solved);
+                        solved
+                    }
                 };
                 let reduction = self.slow.process(fast);
                 if character == Character::Tube {
@@ -628,7 +643,11 @@ impl Detector {
                 }
             }
             Path::Limiter => {
-                let target = curve.reduction_db(to_db(magnitude));
+                let target = if magnitude <= compress_foot {
+                    0.0
+                } else {
+                    curve.reduction_db(to_db(magnitude))
+                };
                 let released = self.slow.process(self.fast.process(target));
                 let held = self.hold.process(released);
                 self.box2.process(self.box1.process(held))
@@ -637,30 +656,34 @@ impl Detector {
     }
 }
 
-/// The oversampled residual of the Tube and FET characters.
+/// Stereo oversampled residual of the Tube and FET characters.
 #[derive(Clone, Debug)]
-struct Colour {
-    oversampler: Oversampler2x,
-    dc: Shelf1,
+struct ColourStereo {
+    oversampler: Oversampler2xStereo,
+    dc: Shelf1Stereo,
 }
 
-impl Colour {
+impl ColourStereo {
     #[inline]
-    fn residual(&mut self, input: f32, character: Character) -> f32 {
-        // A square or a cube of a band-limited signal folds nothing below
-        // the base Nyquist at 2×, so the shapes need no antialiasing.
-        let shaped = self.oversampler.upsample(flush(input)).map(|sample| {
-            let x = f64::from(sample);
-            let y = if character == Character::Tube {
-                BoundedSquare { knee: 1.0 }.value(x) / 16.0
-            } else {
-                BoundedCubic { knee: 1.0 }.value(x)
-            };
-            flush(y as f32)
+    fn residual(&mut self, input: [f32; 2], character: Character) -> [f32; 2] {
+        let up = self
+            .oversampler
+            .upsample([flush(input[0]), flush(input[1])]);
+        let shaped = up.map(|pair| {
+            let mut out = [0.0_f32; 2];
+            for c in 0..2 {
+                let x = f64::from(pair[c]);
+                let y = if character == Character::Tube {
+                    BoundedSquare { knee: 1.0 }.value(x) / 16.0
+                } else {
+                    BoundedCubic { knee: 1.0 }.value(x)
+                };
+                out[c] = flush(y as f32);
+            }
+            out
         });
         let residual = self.oversampler.downsample(shaped);
         if character == Character::Tube {
-            // A square has a mean.
             self.dc.process(residual)
         } else {
             residual
@@ -679,8 +702,11 @@ pub struct Compressor {
     effective: Effective,
     dirty: bool,
     sample_rate: f32,
+    high_pass: SvfStereo,
+    true_peak: TruePeak4xStereo,
     detectors: [Detector; 2],
-    colours: [Colour; 2],
+    detectors_synced: bool,
+    colour: ColourStereo,
     colour_idle: u32,
     /// The signal the gain is applied to, and the untouched input.
     audio: [DelayLine; 2],
@@ -698,6 +724,8 @@ pub struct Compressor {
     knee: Smoothed,
     /// The linear ceiling for the threshold it was computed from.
     ceiling: (f32, f32),
+    /// Cached `(threshold_db, knee_db, foot_linear_safe)` for fast foot bypass.
+    foot_cache: (f32, f32, f32),
     feedback_rise: f32,
     /// log2 of the sidechain high-pass frequency.
     hp_cutoff: LinearRamp,
@@ -734,9 +762,9 @@ impl Compressor {
         let values = PARAMETERS.map(|spec| spec.default_normalized());
         let settings = decode(&values);
         let effective = effective(&settings);
-        let colour = Colour {
-            oversampler: Oversampler2x::new(),
-            dc: Shelf1::default(),
+        let colour = ColourStereo {
+            oversampler: Oversampler2xStereo::new(),
+            dc: Shelf1Stereo::default(),
         };
         let mut compressor = Self {
             values,
@@ -744,8 +772,11 @@ impl Compressor {
             effective,
             dirty: false,
             sample_rate: 48_000.0,
+            high_pass: SvfStereo::default(),
+            true_peak: TruePeak4xStereo::default(),
             detectors: Default::default(),
-            colours: [colour.clone(), colour],
+            detectors_synced: true,
+            colour,
             colour_idle: COLOUR_IDLE,
             audio: Default::default(),
             dry: Default::default(),
@@ -759,6 +790,7 @@ impl Compressor {
             ratio: Smoothed::new(settings.ratio),
             knee: Smoothed::new(effective.curve.knee_db),
             ceiling: (0.0, 1.0),
+            foot_cache: (f32::NAN, f32::NAN, 0.0),
             feedback_rise: 1.0,
             hp_cutoff: LinearRamp::new(settings.high_pass_hz.log2()),
             hp_applied: 0.0,
@@ -772,7 +804,7 @@ impl Compressor {
             tick: 0,
             history: HistoryMeter::default(),
             held_level: 0.0,
-            telemetry: Arc::new(Telemetry::default()),
+            telemetry: Arc::new(Telemetry::meter_only()),
         };
         compressor.prepare(48_000.0, 0);
         compressor
@@ -860,12 +892,17 @@ impl Compressor {
             self.threshold.snap();
             self.ratio.snap();
             self.knee.snap();
+            self.true_peak.reset();
             for (detector, reduction) in self.detectors.iter_mut().zip(self.reduction) {
                 detector.enter(&structure, reduction);
             }
-            for colour in &mut self.colours {
-                colour.reset();
+            if structure.path == Path::Limiter
+                && self.detectors_synced
+                && self.reduction[0] != self.reduction[1]
+            {
+                self.detectors_synced = false;
             }
+            self.colour.reset();
             self.colour_idle = COLOUR_IDLE;
         }
         self.switch = LinearRamp::new(0.0);
@@ -900,9 +937,7 @@ impl Device for Compressor {
             detector.box1.allocate(longest);
             detector.box2.allocate(longest);
         }
-        for colour in &mut self.colours {
-            colour.dc = Shelf1::high_pass(5.0, rate);
-        }
+        self.colour.dc = Shelf1Stereo::from_shelf(&Shelf1::high_pass(5.0, rate));
         for smoothed in [
             &mut self.threshold,
             &mut self.ratio,
@@ -983,24 +1018,20 @@ impl Device for Compressor {
             } else {
                 audio
             };
-            let mut magnitude = [0.0_f32; 2];
-            for (channel, detector) in self.detectors.iter_mut().enumerate() {
-                magnitude[channel] = if limiter {
-                    // Always the signal itself, unfiltered: anything else
-                    // could not guarantee the ceiling.
-                    detector.true_peak.process(audio[channel])
-                } else {
-                    let mut x = source[channel];
-                    if hp_mix > 0.0 {
-                        let high = detector
-                            .high_pass
-                            .process(x, hp_g, std::f32::consts::SQRT_2)
-                            .high;
-                        x -= hp_mix * (x - high);
-                    }
-                    x.abs()
-                };
-            }
+            let magnitude = if limiter {
+                self.true_peak.process(audio)
+            } else if hp_mix > 0.0 {
+                let high = self
+                    .high_pass
+                    .process_coeffs(source, SvfCoeffs::new(hp_g, std::f32::consts::SQRT_2))
+                    .high;
+                [
+                    (source[0] - hp_mix * (source[0] - high[0])).abs(),
+                    (source[1] - hp_mix * (source[1] - high[1])).abs(),
+                ]
+            } else {
+                [source[0].abs(), source[1].abs()]
+            };
             // The linked value is never below the channel's own, so the
             // limiter's guarantee survives a partial link.
             let link = self.link.next_value();
@@ -1027,11 +1058,46 @@ impl Device for Compressor {
                 },
                 knee_db: self.knee.next_value(),
             };
-            let mut reduction = [0.0_f32; 2];
-            for (channel, detector) in self.detectors.iter_mut().enumerate() {
-                reduction[channel] =
-                    detector.process(&structure, &curve, linked[channel], self.feedback_rise);
+            if curve.threshold_db != self.foot_cache.0 || curve.knee_db != self.foot_cache.1 {
+                self.foot_cache = (
+                    curve.threshold_db,
+                    curve.knee_db,
+                    db_to_gain(curve.foot_db() - 0.05),
+                );
             }
+            let compress_foot = self.foot_cache.2;
+            let reduction = if link == 1.0 && self.detectors_synced {
+                let r = self.detectors[0].process(
+                    &structure,
+                    &curve,
+                    linked[0],
+                    self.feedback_rise,
+                    compress_foot,
+                );
+                [r, r]
+            } else {
+                if self.detectors_synced {
+                    let (first, rest) = self.detectors.split_at_mut(1);
+                    rest[0].copy_from(&first[0]);
+                    self.detectors_synced = false;
+                }
+                [
+                    self.detectors[0].process(
+                        &structure,
+                        &curve,
+                        linked[0],
+                        self.feedback_rise,
+                        compress_foot,
+                    ),
+                    self.detectors[1].process(
+                        &structure,
+                        &curve,
+                        linked[1],
+                        self.feedback_rise,
+                        compress_foot,
+                    ),
+                ]
+            };
 
             let fade = self.switch.next();
             let fading = fade < 1.0;
@@ -1047,14 +1113,17 @@ impl Device for Compressor {
             let delayed = [tap(&self.audio[0]), tap(&self.audio[1])];
             let dry = [tap(&self.dry[0]), tap(&self.dry[1])];
 
+            let mut reduction = reduction;
             if limiter {
                 // The reduction the delayed sample itself needs: the
                 // sample-peak bound does not depend on rounding in the
                 // smoothers.
                 let needed = link_to(delayed.map(f32::abs));
                 for channel in 0..2 {
-                    reduction[channel] =
-                        reduction[channel].max(curve.reduction_db(to_db(needed[channel])));
+                    if needed[channel] > compress_foot {
+                        reduction[channel] =
+                            reduction[channel].max(curve.reduction_db(to_db(needed[channel])));
+                    }
                 }
                 if self.ceiling.0 != curve.threshold_db {
                     self.ceiling = (curve.threshold_db, db_to_gain(curve.threshold_db));
@@ -1071,9 +1140,7 @@ impl Device for Compressor {
                 } else if self.colour_idle < COLOUR_IDLE {
                     self.colour_idle += 1;
                     if self.colour_idle == COLOUR_IDLE {
-                        for colour in &mut self.colours {
-                            colour.reset();
-                        }
+                        self.colour.reset();
                     }
                 }
             }
@@ -1081,43 +1148,37 @@ impl Device for Compressor {
             let makeup = self.makeup.next_value();
             let mix = self.mix.next_value();
             let output = self.output.next_value();
-            let mut peaks = [0.0_f32; 2];
-            for (channel, sample) in [&mut *left, &mut *right].into_iter().enumerate() {
-                let mut gain = reduction_gain(reduction[channel]);
-                if fading {
-                    gain = self.frozen[channel] + fade * (gain - self.frozen[channel]);
-                }
-                self.gain[channel] = gain;
-                let mut wet = delayed[channel] * gain;
-                if let Some(character) = coloured
-                    && self.colour_idle < COLOUR_IDLE
-                {
-                    // Grows with the reduction and is absent at rest. The
-                    // stage is driven by the level into the gain element, so
-                    // deeper reduction does not thin the colour out again.
-                    // Only the residual passes the oversampler; bounded at a
-                    // few percent, arriving 31 samples late it cannot comb.
-                    // A character that was just switched in fades in.
-                    let amount = (reduction[channel] / COLOUR_FULL_DB).min(1.0) * fade;
-                    wet +=
-                        amount * gain * self.colours[channel].residual(delayed[channel], character);
-                }
-                wet *= makeup;
-                if limiter {
-                    // Rounding, and the gain of a fade, only.
-                    wet = wet.clamp(-self.ceiling.1, self.ceiling.1);
-                }
-                let dry = dry[channel];
-                let out = ((dry + mix * (wet - dry)) * output).clamp(-LIMIT, LIMIT);
-                peaks[0] = peaks[0].max(input[channel].abs());
-                peaks[1] = peaks[1].max(out.abs());
-                sample[index] = out;
+            let mut gain = [reduction_gain(reduction[0]), reduction_gain(reduction[1])];
+            if fading {
+                gain[0] = self.frozen[0] + fade * (gain[0] - self.frozen[0]);
+                gain[1] = self.frozen[1] + fade * (gain[1] - self.frozen[1]);
             }
+            self.gain = gain;
+            let mut wet = [delayed[0] * gain[0], delayed[1] * gain[1]];
+            if let Some(character) = coloured
+                && self.colour_idle < COLOUR_IDLE
+            {
+                let res = self.colour.residual(delayed, character);
+                wet[0] += (reduction[0] / COLOUR_FULL_DB).min(1.0) * fade * gain[0] * res[0];
+                wet[1] += (reduction[1] / COLOUR_FULL_DB).min(1.0) * fade * gain[1] * res[1];
+            }
+            wet[0] *= makeup;
+            wet[1] *= makeup;
+            if limiter {
+                wet[0] = wet[0].clamp(-self.ceiling.1, self.ceiling.1);
+                wet[1] = wet[1].clamp(-self.ceiling.1, self.ceiling.1);
+            }
+            let out0 = ((dry[0] + mix * (wet[0] - dry[0])) * output).clamp(-LIMIT, LIMIT);
+            let out1 = ((dry[1] + mix * (wet[1] - dry[1])) * output).clamp(-LIMIT, LIMIT);
+            let peak_in = input[0].abs().max(input[1].abs());
+            let peak_out = out0.abs().max(out1.abs());
+            left[index] = out0;
+            right[index] = out1;
             self.reduction = reduction;
             let deepest = reduction[0].max(reduction[1]);
             block_reduction = block_reduction.max(deepest);
             self.history
-                .add(peaks[0], peaks[1], deepest, &self.telemetry);
+                .add(peak_in, peak_out, deepest, &self.telemetry);
         }
         // Held with a 300 ms fall, so the panel's dot does not flicker.
         let fall = (-(frames as f32) / (0.3 * self.sample_rate)).exp();
@@ -1158,15 +1219,14 @@ impl Device for Compressor {
         self.hp_applied = self.hp_cutoff.value();
         self.hp_g = LinearRamp::new(prewarp(self.settings.high_pass_hz, self.sample_rate));
         let structure = self.active;
+        self.high_pass.reset();
+        self.true_peak.reset();
         for detector in &mut self.detectors {
-            detector.high_pass.reset();
             detector.level.reset();
             detector.enter(&structure, 0.0);
-            detector.true_peak.reset();
         }
-        for colour in &mut self.colours {
-            colour.reset();
-        }
+        self.detectors_synced = true;
+        self.colour.reset();
         self.colour_idle = COLOUR_IDLE;
         for line in self.audio.iter_mut().chain(&mut self.dry) {
             line.reset();

@@ -372,14 +372,15 @@ impl AudioFileReader {
             "Audio read exceeds bounded window size"
         );
         self.check_unchanged()?;
-        output.fill(0.0);
         let frames = (output.len() / info.channels).min(info.frames.saturating_sub(start));
         if frames == 0 {
+            output.fill(0.0);
             return Ok(0);
         }
         self.reader
             .seek(u32::try_from(start).context("Audio seek exceeds WAV frame range")?)?;
         let count = frames * info.channels;
+        output[count..].fill(0.0);
         match self.reader.spec().sample_format {
             hound::SampleFormat::Float => {
                 let mut samples = self.reader.samples::<f32>();

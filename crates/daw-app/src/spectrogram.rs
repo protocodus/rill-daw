@@ -371,6 +371,7 @@ impl Cache {
         let _ = std::thread::Builder::new()
             .name("rill-spectrogram".into())
             .spawn(move || {
+                daw_core::thread_qos::set_background_utility_qos();
                 while let Ok(job) = jobs.recv() {
                     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         prepare(&job, &generation, &results)

@@ -215,19 +215,48 @@ fn solve(u: &[f64; GRID], v: &[f64; GRID], r: &[f64; GRID]) -> Option<(f64, f64)
     (x1.is_finite() && x2.is_finite()).then_some((x1, x2))
 }
 
+fn grid_ratios() -> &'static [f64; GRID] {
+    static RATIOS: std::sync::LazyLock<[f64; GRID]> = std::sync::LazyLock::new(|| {
+        std::array::from_fn(|i| 1000.0_f64.powf(i as f64 / (GRID - 1) as f64 - 1.0))
+    });
+    &RATIOS
+}
+
+fn build_designer(sample_rate: f64) -> MatchedDesigner {
+    let top = (std::f64::consts::TAU * 20_000.0 / sample_rate).min(0.999 * std::f64::consts::PI);
+    let ratios = grid_ratios();
+    let omega: [f64; GRID] = std::array::from_fn(|i| top * ratios[i]);
+    MatchedDesigner {
+        sample_rate,
+        omega,
+        basis: omega.map(basis),
+        cosine: omega.map(f64::cos),
+    }
+}
+
+fn standard_designers() -> &'static [(f32, MatchedDesigner); 6] {
+    static TABLE: std::sync::LazyLock<[(f32, MatchedDesigner); 6]> =
+        std::sync::LazyLock::new(|| {
+            [
+                (44_100.0, build_designer(44_100.0)),
+                (48_000.0, build_designer(48_000.0)),
+                (88_200.0, build_designer(88_200.0)),
+                (96_000.0, build_designer(96_000.0)),
+                (176_400.0, build_designer(176_400.0)),
+                (192_000.0, build_designer(192_000.0)),
+            ]
+        });
+    &TABLE
+}
+
 impl MatchedDesigner {
     pub fn new(sample_rate: f32) -> Self {
-        let sample_rate = f64::from(sample_rate);
-        let top =
-            (std::f64::consts::TAU * 20_000.0 / sample_rate).min(0.999 * std::f64::consts::PI);
-        let omega: [f64; GRID] =
-            std::array::from_fn(|i| top * 1000.0_f64.powf(i as f64 / (GRID - 1) as f64 - 1.0));
-        Self {
-            sample_rate,
-            omega,
-            basis: omega.map(basis),
-            cosine: omega.map(f64::cos),
+        for (rate, cached) in standard_designers() {
+            if sample_rate == *rate {
+                return cached.clone();
+            }
         }
+        build_designer(f64::from(sample_rate))
     }
 
     pub fn sample_rate(&self) -> f64 {

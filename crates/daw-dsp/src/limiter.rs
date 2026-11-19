@@ -1,7 +1,6 @@
 //! The pieces of a lookahead limiter: a sliding maximum that holds each peak
 //! for the lookahead, a moving average that turns the held steps into
 //! ramps, and a detector for peaks between the samples.
-use super::{OversampleFactor, Oversampler};
 
 /// Maximum of the last `window` values: a monotonic wedge (Lemire) on a ring
 /// allocated once. Amortised constant time; one call never does more work
@@ -56,6 +55,16 @@ impl SlidingMax {
         self.len += 1;
         self.wedge[self.head].0
     }
+
+    pub fn copy_from(&mut self, other: &Self) {
+        if self.wedge.len() == other.wedge.len() {
+            self.wedge.copy_from_slice(&other.wedge);
+        }
+        self.head = other.head;
+        self.len = other.len;
+        self.window = other.window;
+        self.time = other.time;
+    }
 }
 
 /// Moving average over the last `length` values. The running sum is `f64`
@@ -73,6 +82,17 @@ pub struct BoxSmoother {
 const REBUILD: u32 = 4096;
 
 impl BoxSmoother {
+    /// Copies state without allocating when ring capacities match.
+    pub fn copy_from(&mut self, other: &Self) {
+        if self.ring.len() == other.ring.len() {
+            self.ring.copy_from_slice(&other.ring);
+        }
+        self.length = other.length;
+        self.cursor = other.cursor;
+        self.sum = other.sum;
+        self.until_rebuild = other.until_rebuild;
+    }
+
     /// Room for lengths up to `max`. Call from `prepare` only.
     pub fn allocate(&mut self, max: usize) {
         self.ring = vec![0.0; max.max(1)];
@@ -119,13 +139,17 @@ impl BoxSmoother {
 /// `20·log10(cos(π·f/(4·fs)))`, 0.47 dB at 20 kHz and 48 kHz.
 #[derive(Clone, Debug)]
 pub struct TruePeak4x {
-    oversampler: Oversampler,
+    first: crate::oversample::HalfBandUp<63>,
+    second: crate::oversample::HalfBandUp<31>,
+    zero_run: u32,
 }
 
 impl Default for TruePeak4x {
     fn default() -> Self {
         Self {
-            oversampler: Oversampler::new(OversampleFactor::X4),
+            first: crate::oversample::HalfBandUp::with_beta(8.0),
+            second: crate::oversample::HalfBandUp::with_beta(10.0),
+            zero_run: 64,
         }
     }
 }
@@ -134,18 +158,83 @@ impl TruePeak4x {
     /// A peak at sample `m` and the half samples around it is read in the
     /// calls for samples `m + 18` to `m + 20`.
     pub const DELAY: u32 = 20;
+    const SILENCE_RUN: u32 = 64;
 
     pub fn reset(&mut self) {
-        self.oversampler.reset();
+        self.first.reset();
+        self.second.reset();
+        self.zero_run = Self::SILENCE_RUN;
     }
 
     #[inline]
     pub fn process(&mut self, input: f32) -> f32 {
-        let mut buffer = [0.0; Oversampler::MAX];
-        let count = self.oversampler.upsample(input, &mut buffer);
-        buffer[..count]
-            .iter()
-            .fold(0.0, |peak, sample| peak.max(sample.abs()))
+        if input == 0.0 {
+            if self.zero_run >= Self::SILENCE_RUN {
+                return 0.0;
+            }
+            self.zero_run += 1;
+        } else {
+            self.zero_run = 0;
+        }
+        let first = self.first.upsample(input);
+        let a = self.second.upsample(first[0]);
+        let b = self.second.upsample(first[1]);
+        a[0].abs().max(a[1].abs()).max(b[0].abs()).max(b[1].abs())
+    }
+}
+
+/// Stereo pair of 4× true-peak detectors sharing filter taps across channels.
+#[derive(Clone, Debug)]
+pub struct TruePeak4xStereo {
+    first: crate::oversample::HalfBandUpStereo<63>,
+    second: crate::oversample::HalfBandUpStereo<31>,
+    zero_run: u32,
+}
+
+impl Default for TruePeak4xStereo {
+    fn default() -> Self {
+        Self {
+            first: crate::oversample::HalfBandUpStereo::with_beta(8.0),
+            second: crate::oversample::HalfBandUpStereo::with_beta(10.0),
+            zero_run: TruePeak4x::SILENCE_RUN,
+        }
+    }
+}
+
+impl TruePeak4xStereo {
+    pub const DELAY: u32 = TruePeak4x::DELAY;
+
+    pub fn reset(&mut self) {
+        self.first.reset();
+        self.second.reset();
+        self.zero_run = TruePeak4x::SILENCE_RUN;
+    }
+
+    #[inline]
+    pub fn process(&mut self, input: [f32; 2]) -> [f32; 2] {
+        if input[0] == 0.0 && input[1] == 0.0 {
+            if self.zero_run >= TruePeak4x::SILENCE_RUN {
+                return [0.0, 0.0];
+            }
+            self.zero_run += 1;
+        } else {
+            self.zero_run = 0;
+        }
+        let first = self.first.upsample(input);
+        let a = self.second.upsample(first[0]);
+        let b = self.second.upsample(first[1]);
+        [
+            a[0][0]
+                .abs()
+                .max(a[1][0].abs())
+                .max(b[0][0].abs())
+                .max(b[1][0].abs()),
+            a[0][1]
+                .abs()
+                .max(a[1][1].abs())
+                .max(b[0][1].abs())
+                .max(b[1][1].abs()),
+        ]
     }
 }
 

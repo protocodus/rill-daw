@@ -22,27 +22,57 @@ impl<T: Real> SvfOutputs<T> {
     }
 }
 
+/// Precomputed integration coefficients of an [`Svf`] at one `(g, k)` point.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SvfCoeffs<T: Real = f32> {
+    pub a1: T,
+    pub a2: T,
+    pub a3: T,
+    pub k: T,
+}
+
+impl<T: Real> SvfCoeffs<T> {
+    #[inline]
+    pub fn new(g: T, k: T) -> Self {
+        let a1 = T::ONE / (T::ONE + g * (g + k));
+        let a2 = g * a1;
+        let a3 = g * a2;
+        Self { a1, a2, a3, k }
+    }
+}
+
 impl<T: Real> Svf<T> {
     pub fn reset(&mut self) {
         *self = Self::default();
     }
 
-    /// `g` from [`super::prewarp`]; `k` = 1/Q.
+    /// One sample through precomputed `(g, k)` coefficients.
     #[inline]
-    pub fn process(&mut self, input: T, g: T, k: T) -> SvfOutputs<T> {
-        let a1 = T::ONE / (T::ONE + g * (g + k));
-        let a2 = g * a1;
-        let a3 = g * a2;
+    pub fn process_coeffs(&mut self, input: T, coeffs: SvfCoeffs<T>) -> SvfOutputs<T> {
         let v3 = input - self.ic2;
-        let v1 = a1 * self.ic1 + a2 * v3;
-        let v2 = self.ic2 + a2 * self.ic1 + a3 * v3;
+        let v1 = coeffs.a1 * self.ic1 + coeffs.a2 * v3;
+        let v2 = self.ic2 + coeffs.a2 * self.ic1 + coeffs.a3 * v3;
         self.ic1 = (T::TWO * v1 - self.ic1).flush();
         self.ic2 = (T::TWO * v2 - self.ic2).flush();
         SvfOutputs {
             low: v2,
             band: v1,
-            high: input - k * v1 - v2,
+            high: input - coeffs.k * v1 - v2,
         }
+    }
+
+    /// `g` from [`super::prewarp`]; `k` = 1/Q.
+    #[inline]
+    pub fn process(&mut self, input: T, g: T, k: T) -> SvfOutputs<T> {
+        self.process_coeffs(input, SvfCoeffs::new(g, k))
+    }
+
+    /// [`Self::process_coeffs`] with the band state soft-clipped.
+    #[inline]
+    pub fn process_clipped_coeffs(&mut self, input: T, coeffs: SvfCoeffs<T>) -> SvfOutputs<T> {
+        let outputs = self.process_coeffs(input, coeffs);
+        self.ic1 = self.ic1.tanh_fast();
+        outputs
     }
 
     /// [`Self::process`] with the band state soft-clipped, like a diode pair
@@ -50,8 +80,15 @@ impl<T: Real> Svf<T> {
     /// negative damping, which self-oscillates.
     #[inline]
     pub fn process_clipped(&mut self, input: T, g: T, k: T) -> SvfOutputs<T> {
-        let outputs = self.process(input, g, k);
+        self.process_clipped_coeffs(input, SvfCoeffs::new(g, k))
+    }
+
+    /// [`Self::process_coeffs`] with both integrator states saturating.
+    #[inline]
+    pub fn process_saturated_coeffs(&mut self, input: T, coeffs: SvfCoeffs<T>) -> SvfOutputs<T> {
+        let outputs = self.process_coeffs(input, coeffs);
         self.ic1 = self.ic1.tanh_fast();
+        self.ic2 = self.ic2.tanh_fast();
         outputs
     }
 
@@ -59,10 +96,7 @@ impl<T: Real> Svf<T> {
     /// OTAs of an analog state-variable filter: bounded at any damping.
     #[inline]
     pub fn process_saturated(&mut self, input: T, g: T, k: T) -> SvfOutputs<T> {
-        let outputs = self.process(input, g, k);
-        self.ic1 = self.ic1.tanh_fast();
-        self.ic2 = self.ic2.tanh_fast();
-        outputs
+        self.process_saturated_coeffs(input, SvfCoeffs::new(g, k))
     }
 
     /// One sample through precomputed coefficients and an output mix: any
@@ -75,6 +109,175 @@ impl<T: Real> Svf<T> {
         self.ic1 = (T::TWO * v1 - self.ic1).flush();
         self.ic2 = (T::TWO * v2 - self.ic2).flush();
         mix.m0 * input + mix.m1 * v1 + mix.m2 * v2
+    }
+}
+
+/// Stereo pair of [`Svf`] states packed as `[T; 2]` for 2-lane vectorization.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SvfStereo<T: Real = f32> {
+    ic1: [T; 2],
+    ic2: [T; 2],
+}
+
+/// Stereo outputs from [`SvfStereo`].
+#[derive(Clone, Copy, Debug)]
+pub struct SvfOutputsStereo<T: Real = f32> {
+    pub low: [T; 2],
+    pub band: [T; 2],
+    pub high: [T; 2],
+}
+
+impl<T: Real> SvfOutputsStereo<T> {
+    #[inline]
+    pub fn notch(self) -> [T; 2] {
+        [self.low[0] + self.high[0], self.low[1] + self.high[1]]
+    }
+}
+
+impl<T: Real> SvfStereo<T> {
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+
+    #[inline]
+    pub fn process_coeffs(&mut self, input: [T; 2], coeffs: SvfCoeffs<T>) -> SvfOutputsStereo<T> {
+        let v3 = [input[0] - self.ic2[0], input[1] - self.ic2[1]];
+        let v1 = [
+            coeffs.a1 * self.ic1[0] + coeffs.a2 * v3[0],
+            coeffs.a1 * self.ic1[1] + coeffs.a2 * v3[1],
+        ];
+        let v2 = [
+            self.ic2[0] + coeffs.a2 * self.ic1[0] + coeffs.a3 * v3[0],
+            self.ic2[1] + coeffs.a2 * self.ic1[1] + coeffs.a3 * v3[1],
+        ];
+        self.ic1 = [
+            (T::TWO * v1[0] - self.ic1[0]).flush(),
+            (T::TWO * v1[1] - self.ic1[1]).flush(),
+        ];
+        self.ic2 = [
+            (T::TWO * v2[0] - self.ic2[0]).flush(),
+            (T::TWO * v2[1] - self.ic2[1]).flush(),
+        ];
+        SvfOutputsStereo {
+            low: v2,
+            band: v1,
+            high: [
+                input[0] - coeffs.k * v1[0] - v2[0],
+                input[1] - coeffs.k * v1[1] - v2[1],
+            ],
+        }
+    }
+
+    #[inline]
+    pub fn process_stereo_coeffs(
+        &mut self,
+        input: [T; 2],
+        coeffs: [SvfCoeffs<T>; 2],
+    ) -> SvfOutputsStereo<T> {
+        let v3 = [input[0] - self.ic2[0], input[1] - self.ic2[1]];
+        let v1 = [
+            coeffs[0].a1 * self.ic1[0] + coeffs[0].a2 * v3[0],
+            coeffs[1].a1 * self.ic1[1] + coeffs[1].a2 * v3[1],
+        ];
+        let v2 = [
+            self.ic2[0] + coeffs[0].a2 * self.ic1[0] + coeffs[0].a3 * v3[0],
+            self.ic2[1] + coeffs[1].a2 * self.ic1[1] + coeffs[1].a3 * v3[1],
+        ];
+        self.ic1 = [
+            (T::TWO * v1[0] - self.ic1[0]).flush(),
+            (T::TWO * v1[1] - self.ic1[1]).flush(),
+        ];
+        self.ic2 = [
+            (T::TWO * v2[0] - self.ic2[0]).flush(),
+            (T::TWO * v2[1] - self.ic2[1]).flush(),
+        ];
+        SvfOutputsStereo {
+            low: v2,
+            band: v1,
+            high: [
+                input[0] - coeffs[0].k * v1[0] - v2[0],
+                input[1] - coeffs[1].k * v1[1] - v2[1],
+            ],
+        }
+    }
+
+    #[inline]
+    pub fn process(&mut self, input: [T; 2], g: T, k: T) -> SvfOutputsStereo<T> {
+        self.process_coeffs(input, SvfCoeffs::new(g, k))
+    }
+
+    #[inline]
+    pub fn process_clipped_coeffs(
+        &mut self,
+        input: [T; 2],
+        coeffs: SvfCoeffs<T>,
+    ) -> SvfOutputsStereo<T> {
+        let outputs = self.process_coeffs(input, coeffs);
+        self.ic1 = [self.ic1[0].tanh_fast(), self.ic1[1].tanh_fast()];
+        outputs
+    }
+
+    #[inline]
+    pub fn process_saturated_coeffs(
+        &mut self,
+        input: [T; 2],
+        coeffs: SvfCoeffs<T>,
+    ) -> SvfOutputsStereo<T> {
+        let outputs = self.process_coeffs(input, coeffs);
+        self.ic1 = [self.ic1[0].tanh_fast(), self.ic1[1].tanh_fast()];
+        self.ic2 = [self.ic2[0].tanh_fast(), self.ic2[1].tanh_fast()];
+        outputs
+    }
+
+    #[inline]
+    pub fn process_clipped_stereo_coeffs(
+        &mut self,
+        input: [T; 2],
+        coeffs: [SvfCoeffs<T>; 2],
+    ) -> SvfOutputsStereo<T> {
+        let outputs = self.process_stereo_coeffs(input, coeffs);
+        self.ic1 = [self.ic1[0].tanh_fast(), self.ic1[1].tanh_fast()];
+        outputs
+    }
+
+    #[inline]
+    pub fn process_saturated_stereo_coeffs(
+        &mut self,
+        input: [T; 2],
+        coeffs: [SvfCoeffs<T>; 2],
+    ) -> SvfOutputsStereo<T> {
+        let outputs = self.process_stereo_coeffs(input, coeffs);
+        self.ic1 = [self.ic1[0].tanh_fast(), self.ic1[1].tanh_fast()];
+        self.ic2 = [self.ic2[0].tanh_fast(), self.ic2[1].tanh_fast()];
+        outputs
+    }
+
+    #[inline]
+    pub fn tick(&mut self, input: [T; 2], mix: &SvfMix<T>) -> [T; 2] {
+        let v3 = [
+            mix.drive * input[0] - self.ic2[0],
+            mix.drive * input[1] - self.ic2[1],
+        ];
+        let v1 = [
+            mix.a1 * self.ic1[0] + mix.a2 * v3[0],
+            mix.a1 * self.ic1[1] + mix.a2 * v3[1],
+        ];
+        let v2 = [
+            self.ic2[0] + mix.a2 * self.ic1[0] + mix.a3 * v3[0],
+            self.ic2[1] + mix.a2 * self.ic1[1] + mix.a3 * v3[1],
+        ];
+        self.ic1 = [
+            (T::TWO * v1[0] - self.ic1[0]).flush(),
+            (T::TWO * v1[1] - self.ic1[1]).flush(),
+        ];
+        self.ic2 = [
+            (T::TWO * v2[0] - self.ic2[0]).flush(),
+            (T::TWO * v2[1] - self.ic2[1]).flush(),
+        ];
+        [
+            mix.m0 * input[0] + mix.m1 * v1[0] + mix.m2 * v2[0],
+            mix.m0 * input[1] + mix.m1 * v1[1] + mix.m2 * v2[1],
+        ]
     }
 }
 
@@ -439,6 +642,190 @@ impl ShelfGlide {
             (self.shelf.big_g, self.shelf.low_gain, self.shelf.high_gain) = (big_g, low, high);
         }
         self.shelf.process(input)
+    }
+}
+
+/// Stereo [`Shelf1`] with shared coefficients and two-lane state.
+#[derive(Clone, Debug)]
+pub struct Shelf1Stereo {
+    pub big_g: f32,
+    pub low_gain: f32,
+    pub high_gain: f32,
+    state: [f32; 2],
+}
+
+impl Default for Shelf1Stereo {
+    fn default() -> Self {
+        Self::from_shelf(&Shelf1::default())
+    }
+}
+
+impl Shelf1Stereo {
+    pub fn from_shelf(shelf: &Shelf1) -> Self {
+        Self {
+            big_g: shelf.big_g,
+            low_gain: shelf.low_gain,
+            high_gain: shelf.high_gain,
+            state: [0.0; 2],
+        }
+    }
+
+    pub fn set(&mut self, other: &Shelf1) {
+        self.big_g = other.big_g;
+        self.low_gain = other.low_gain;
+        self.high_gain = other.high_gain;
+    }
+
+    pub fn reset(&mut self) {
+        self.state = [0.0; 2];
+    }
+
+    #[inline]
+    pub fn low(&mut self, input: [f32; 2]) -> [f32; 2] {
+        let mut out = [0.0; 2];
+        for c in 0..2 {
+            let v = (input[c] - self.state[c]) * self.big_g;
+            let low = v + self.state[c];
+            self.state[c] = super::flush(low + v);
+            out[c] = low;
+        }
+        out
+    }
+
+    #[inline]
+    pub fn process(&mut self, input: [f32; 2]) -> [f32; 2] {
+        let low = self.low(input);
+        [
+            self.low_gain * low[0] + self.high_gain * (input[0] - low[0]),
+            self.low_gain * low[1] + self.high_gain * (input[1] - low[1]),
+        ]
+    }
+}
+
+/// Struct-of-Arrays bank of `N` gliding [`Shelf1`] filters for SIMD processing.
+#[derive(Clone, Debug)]
+pub struct ShelfBank<const N: usize> {
+    big_g: [f32; N],
+    low_gain: [f32; N],
+    high_gain: [f32; N],
+    state: [f32; N],
+    target_big_g: [f32; N],
+    target_low_gain: [f32; N],
+    target_high_gain: [f32; N],
+    step_big_g: [f32; N],
+    step_low_gain: [f32; N],
+    step_high_gain: [f32; N],
+    left: [u32; N],
+    any_left: u32,
+}
+
+impl<const N: usize> Default for ShelfBank<N> {
+    fn default() -> Self {
+        Self {
+            big_g: [0.5; N],
+            low_gain: [1.0; N],
+            high_gain: [1.0; N],
+            state: [0.0; N],
+            target_big_g: [0.0; N],
+            target_low_gain: [0.0; N],
+            target_high_gain: [0.0; N],
+            step_big_g: [0.0; N],
+            step_low_gain: [0.0; N],
+            step_high_gain: [0.0; N],
+            left: [0; N],
+            any_left: 0,
+        }
+    }
+}
+
+impl<const N: usize> ShelfBank<N> {
+    pub fn set(&mut self, index: usize, other: &Shelf1, samples: u32) {
+        self.target_big_g[index] = other.big_g;
+        self.target_low_gain[index] = other.low_gain;
+        self.target_high_gain[index] = other.high_gain;
+        self.left[index] = samples;
+        if samples == 0 {
+            self.big_g[index] = other.big_g;
+            self.low_gain[index] = other.low_gain;
+            self.high_gain[index] = other.high_gain;
+            self.any_left = self.left.iter().copied().max().unwrap_or(0);
+        } else {
+            let inv = samples as f32;
+            self.step_big_g[index] = (other.big_g - self.big_g[index]) / inv;
+            self.step_low_gain[index] = (other.low_gain - self.low_gain[index]) / inv;
+            self.step_high_gain[index] = (other.high_gain - self.high_gain[index]) / inv;
+            self.any_left = self.any_left.max(samples);
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.state = [0.0; N];
+    }
+
+    #[inline]
+    pub fn state_is_zero(&self) -> bool {
+        self.state.iter().all(|&s| s == 0.0)
+    }
+
+    #[inline]
+    pub fn advance_glides(&mut self) {
+        if self.any_left == 0 {
+            return;
+        }
+        let mut max_left = 0u32;
+        for i in 0..N {
+            let rem = self.left[i];
+            if rem > 0 {
+                let next = rem - 1;
+                self.left[i] = next;
+                if next == 0 {
+                    self.big_g[i] = self.target_big_g[i];
+                    self.low_gain[i] = self.target_low_gain[i];
+                    self.high_gain[i] = self.target_high_gain[i];
+                } else {
+                    self.big_g[i] += self.step_big_g[i];
+                    self.low_gain[i] += self.step_low_gain[i];
+                    self.high_gain[i] += self.step_high_gain[i];
+                    max_left = max_left.max(next);
+                }
+            }
+        }
+        self.any_left = max_left;
+    }
+
+    #[inline]
+    pub fn process_all(&mut self, values: &mut [f32; N]) {
+        self.advance_glides();
+        for (i, slot) in values.iter_mut().enumerate() {
+            let x = *slot;
+            let v = (x - self.state[i]) * self.big_g[i];
+            let low = v + self.state[i];
+            self.state[i] = super::flush(low + v);
+            *slot = self.low_gain[i] * low + self.high_gain[i] * (x - low);
+        }
+    }
+
+    #[inline]
+    pub fn process_one(&mut self, index: usize, input: f32) -> f32 {
+        let rem = self.left[index];
+        if rem > 0 {
+            let next = rem - 1;
+            self.left[index] = next;
+            if next == 0 {
+                self.big_g[index] = self.target_big_g[index];
+                self.low_gain[index] = self.target_low_gain[index];
+                self.high_gain[index] = self.target_high_gain[index];
+                self.any_left = self.left.iter().copied().max().unwrap_or(0);
+            } else {
+                self.big_g[index] += self.step_big_g[index];
+                self.low_gain[index] += self.step_low_gain[index];
+                self.high_gain[index] += self.step_high_gain[index];
+            }
+        }
+        let v = (input - self.state[index]) * self.big_g[index];
+        let low = v + self.state[index];
+        self.state[index] = super::flush(low + v);
+        self.low_gain[index] * low + self.high_gain[index] * (input - low)
     }
 }
 

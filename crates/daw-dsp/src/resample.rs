@@ -232,6 +232,35 @@ impl MipMap {
         }
     }
 
+    /// Reads `position` across `self` (left) and `right` sharing the kernel tap calculation.
+    #[inline]
+    pub fn read_stereo(
+        &self,
+        right: &Self,
+        bank: &SincBank,
+        step: &Step,
+        position: f64,
+    ) -> [f32; 2] {
+        let level = step.level.min(self.levels.len() - 1);
+        let frames = self.levels[level].len() - 2 * PAD;
+        let place = (position * step.scale).clamp(-(BEFORE as f64 + 2.0), (frames + BEFORE) as f64);
+        let whole = place.floor();
+        let frac = (place - whole) as f32;
+        let base = (PAD as isize + whole as isize - BEFORE as isize) as usize;
+        let left_data: &[f32; TAPS] = self.levels[level][base..base + TAPS]
+            .try_into()
+            .expect("a read of TAPS samples");
+        let right_data: &[f32; TAPS] = right.levels[level][base..base + TAPS]
+            .try_into()
+            .expect("a read of TAPS samples");
+        let place_phase = frac.clamp(0.0, 1.0) * PHASES as f32;
+        let phase = (place_phase as usize).min(PHASES - 1);
+        let t = place_phase - phase as f32;
+        let row = step.table * (PHASES + 1) + phase;
+        let (near, far) = (&bank.rows[row], &bank.rows[row + 1]);
+        dot_stereo(near, far, t, left_data, right_data)
+    }
+
     /// The read a [`Self::tap`] of this or a recording of the same length
     /// describes.
     #[inline]
@@ -241,6 +270,38 @@ impl MipMap {
             .expect("a read of TAPS samples");
         dot(&tap.weights, data)
     }
+}
+
+#[inline]
+fn dot_stereo(
+    near: &[f32; TAPS],
+    far: &[f32; TAPS],
+    t: f32,
+    left: &[f32; TAPS],
+    right: &[f32; TAPS],
+) -> [f32; 2] {
+    let mut sums_l = [0.0_f32; LANES];
+    let mut sums_r = [0.0_f32; LANES];
+    for (((near_c, far_c), left_c), right_c) in near
+        .as_chunks::<LANES>()
+        .0
+        .iter()
+        .zip(far.as_chunks::<LANES>().0)
+        .zip(left.as_chunks::<LANES>().0)
+        .zip(right.as_chunks::<LANES>().0)
+    {
+        for lane in 0..LANES {
+            let weight = near_c[lane] + t * (far_c[lane] - near_c[lane]);
+            sums_l[lane] += weight * left_c[lane];
+            sums_r[lane] += weight * right_c[lane];
+        }
+    }
+    let [la, lb, lc, ld, le, lf, lg, lh] = sums_l;
+    let [ra, rb, rc, rd, re, rf, rg, rh] = sums_r;
+    [
+        ((la + lb) + (lc + ld)) + ((le + lf) + (lg + lh)),
+        ((ra + rb) + (rc + rd)) + ((re + rf) + (rg + rh)),
+    ]
 }
 
 /// Σ weight·sample in eight running sums, so the products add up side by

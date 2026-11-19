@@ -129,12 +129,25 @@ fn sweep_law(mode: ModulationMode, depth: f32, center: f32, lfo: f32, sample_rat
             ((center + depth * CHORUS_SWING_SECONDS * lfo).max(SHORTEST_CHORUS_SECONDS) * doubled)
                 .min(longest)
         }
-        ModulationMode::Flanger => (center * (FLANGER_OCTAVES * depth * lfo).exp2() * doubled)
-            .clamp(SHORTEST_DELAY, longest),
-        ModulationMode::Phaser => (center * (PHASER_OCTAVES * depth * lfo).exp2()).clamp(
-            LOWEST_CORNER_HZ,
-            HIGHEST_CORNER_HZ.min(HIGHEST_CORNER_SHARE * sample_rate),
-        ),
+        ModulationMode::Flanger => {
+            let ratio = if depth == 0.0 {
+                1.0
+            } else {
+                (FLANGER_OCTAVES * depth * lfo).exp2()
+            };
+            (center * ratio * doubled).clamp(SHORTEST_DELAY, longest)
+        }
+        ModulationMode::Phaser => {
+            let ratio = if depth == 0.0 {
+                1.0
+            } else {
+                (PHASER_OCTAVES * depth * lfo).exp2()
+            };
+            (center * ratio).clamp(
+                LOWEST_CORNER_HZ,
+                HIGHEST_CORNER_HZ.min(HIGHEST_CORNER_SHARE * sample_rate),
+            )
+        }
     }
 }
 
@@ -297,6 +310,7 @@ pub struct ModulationKernel {
     low_pass_out: [Svf; 2],
     blocker: [Shelf1; 2],
     analog_g: f32,
+    analog_coeffs: crate::SvfCoeffs,
     saturator: AlgebraicSigmoid,
     chain: [AllpassChain<MAX_STAGES>; 2],
 }
@@ -329,6 +343,7 @@ impl Default for ModulationKernel {
             low_pass_out: [Svf::default(), Svf::default()],
             blocker: [Shelf1::default(), Shelf1::default()],
             analog_g: 0.0,
+            analog_coeffs: crate::SvfCoeffs::new(0.0, std::f32::consts::SQRT_2),
             saturator: AlgebraicSigmoid::new(1.0, 1.0, ANALOG_BIAS),
             chain: [AllpassChain::default(), AllpassChain::default()],
         }
@@ -345,6 +360,7 @@ impl ModulationKernel {
         }
         self.sweep_coefficient = 1.0 - (-1.0 / (SWEEP_SMOOTHING_SECONDS * sample_rate)).exp();
         self.analog_g = prewarp(ANALOG_CUTOFF_HZ, doubled);
+        self.analog_coeffs = crate::SvfCoeffs::new(self.analog_g, std::f32::consts::SQRT_2);
         let blocker = Shelf1::high_pass(ANALOG_DC_HZ, doubled);
         self.blocker = [blocker.clone(), blocker];
         for smoother in [
@@ -547,42 +563,64 @@ impl ModulationKernel {
         };
         let input = [left, right];
         let mut wet = [0.0; 2];
+        let shared_sweep = stereo == 0.0
+            && self.held[0][..core.voices] == self.held[1][..core.voices]
+            && self.sweep[0][..core.voices] == self.sweep[1][..core.voices]
+            && self.previous[0][..core.voices] == self.previous[1][..core.voices];
+        let mut cached_positions = [[0.0; MAX_VOICES]; 2];
         for channel in 0..2 {
-            let mut positions = [[0.0; MAX_VOICES]; 2];
-            let [first, second] = &mut positions;
-            for (voice, (first, second)) in first
-                .iter_mut()
-                .zip(second.iter_mut())
-                .enumerate()
-                .take(core.voices)
-            {
-                let live = self.live(channel, voice, stereo);
-                let held = self.held[channel][voice];
-                let value = if blend < 1.0 {
-                    held + blend * (live - held)
-                } else {
-                    live
-                };
-                self.blended[channel][voice] = value;
-                let sweep = &mut self.sweep[channel][voice];
-                *sweep += self.sweep_coefficient * (value - *sweep);
-                let mut now = sweep_law(core.mode, depth, center, *sweep, self.sample_rate);
-                let before = self.previous[channel][voice];
-                if core.mode != ModulationMode::Phaser {
-                    now = now.clamp(before - 2.0 * MAX_SLEW, before + 2.0 * MAX_SLEW);
+            if channel == 0 || !shared_sweep {
+                let [first, second] = &mut cached_positions;
+                for (voice, (first, second)) in first
+                    .iter_mut()
+                    .zip(second.iter_mut())
+                    .enumerate()
+                    .take(core.voices)
+                {
+                    let live = self.live(channel, voice, stereo);
+                    let held = self.held[channel][voice];
+                    let value = if blend < 1.0 {
+                        held + blend * (live - held)
+                    } else {
+                        live
+                    };
+                    self.blended[channel][voice] = value;
+                    let sweep = &mut self.sweep[channel][voice];
+                    *sweep += self.sweep_coefficient * (value - *sweep);
+                    let mut now = sweep_law(core.mode, depth, center, *sweep, self.sample_rate);
+                    let before = self.previous[channel][voice];
+                    if core.mode != ModulationMode::Phaser {
+                        now = now.clamp(before - 2.0 * MAX_SLEW, before + 2.0 * MAX_SLEW);
+                    }
+                    self.previous[channel][voice] = now;
+                    *first = 0.5 * (before + now);
+                    *second = now;
                 }
-                self.previous[channel][voice] = now;
-                *first = 0.5 * (before + now);
-                *second = now;
+                if channel == 0 && shared_sweep {
+                    for voice in 0..core.voices {
+                        self.blended[1][voice] = self.blended[0][voice];
+                        self.sweep[1][voice] = self.sweep[0][voice];
+                        self.previous[1][voice] = self.previous[0][voice];
+                    }
+                }
             }
+            let positions = cached_positions;
             let mut pair = self.over[channel].upsample(flush(input[channel]));
             for (index, sample) in pair.iter_mut().enumerate() {
                 let x = *sample;
                 let y = if core.mode == ModulationMode::Phaser {
-                    let mut gains = stage_gains(positions[index][0], core.analog, doubled);
-                    for g in &mut gains[..core.stages] {
-                        *g /= 1.0 + *g;
-                    }
+                    let gains = if core.analog {
+                        let mut gains = stage_gains(positions[index][0], true, doubled);
+                        for g in &mut gains[..core.stages] {
+                            *g /= 1.0 + *g;
+                        }
+                        gains
+                    } else {
+                        let g = tan_fast(
+                            (std::f32::consts::PI * positions[index][0] / doubled).min(0.7),
+                        );
+                        [g / (1.0 + g); MAX_STAGES]
+                    };
                     let chain = &mut self.chain[channel];
                     ducks[index]
                         * if core.analog {
@@ -604,13 +642,13 @@ impl ModulationKernel {
                     delayed *= ducks[index] / core.voices as f32;
                     if core.analog {
                         delayed = self.low_pass_out[channel]
-                            .process(delayed, self.analog_g, std::f32::consts::SQRT_2)
+                            .process_coeffs(delayed, self.analog_coeffs)
                             .low;
                     }
                     let mut stored = ducks[index] * x + feedback * delayed;
                     if core.analog {
                         stored = self.low_pass_in[channel]
-                            .process(stored, self.analog_g, std::f32::consts::SQRT_2)
+                            .process_coeffs(stored, self.analog_coeffs)
                             .low;
                         if stored.abs() > SATURATOR_FLOOR {
                             stored = self

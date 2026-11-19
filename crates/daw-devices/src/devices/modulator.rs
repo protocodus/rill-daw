@@ -5,9 +5,7 @@
 //! `docs/R1_DEVICES.md#r1-modulator`.
 use super::param;
 use crate::dsp::modulation::{self, ModulationKernel, ModulationSettings};
-use crate::dsp::{
-    Complex, CutoffGlide, LfoShape, Smoothed, StaticDelay, Svf, SvfMix, db_to_gain, prewarp,
-};
+use crate::dsp::{Complex, CutoffGlide, LfoShape, Smoothed, SvfMix, db_to_gain, prewarp};
 use crate::{
     Device, DeviceDescriptor, DeviceKind, Event, ParamRange, ParamSpec, ProcessContext, StereoIo,
     Telemetry,
@@ -556,8 +554,8 @@ pub struct Modulator {
     dirty: bool,
     sample_rate: f32,
     kernel: ModulationKernel,
-    dry: [StaticDelay<{ LATENCY as usize }>; 2],
-    low_cut: [Svf; 2],
+    dry: crate::dsp::StaticDelayStereo<{ LATENCY as usize }>,
+    low_cut: crate::dsp::SvfStereo,
     low_cut_g: CutoffGlide,
     mix: Smoothed,
     output: Smoothed,
@@ -587,13 +585,13 @@ impl Modulator {
             dirty: false,
             sample_rate: 48_000.0,
             kernel: ModulationKernel::default(),
-            dry: [StaticDelay::default(), StaticDelay::default()],
-            low_cut: [Svf::default(), Svf::default()],
+            dry: Default::default(),
+            low_cut: Default::default(),
             low_cut_g: CutoffGlide::new(settings.low_cut_hz),
             mix: Smoothed::new(settings.mix),
             output: Smoothed::new(db_to_gain(settings.output_db)),
             loudness: Smoothed::new(settings.loudness()),
-            telemetry: Arc::new(Telemetry::default()),
+            telemetry: Arc::new(Telemetry::meter_only()),
         };
         modulator.prepare(48_000.0, 0);
         modulator
@@ -667,20 +665,19 @@ impl Device for Modulator {
             let low_cut_off = !self.settings.low_cut_on && self.low_cut_g.is_settled();
             let mix = self.mix.next_value();
             let gain = self.loudness.next_value() * self.output.next_value();
-            for (channel, (sample, wet)) in [&mut *left, &mut *right]
-                .into_iter()
-                .zip([wet_left, wet_right])
-                .enumerate()
-            {
-                // The filter runs while it is off, so it comes in on a
-                // signal it already knows.
-                let cut = self.low_cut[channel]
-                    .process(wet, low_cut_g, std::f32::consts::SQRT_2)
-                    .high;
-                let wet = if low_cut_off { wet } else { cut };
-                let dry = self.dry[channel].process(input[channel]);
-                sample[index] = (dry + mix * (wet - dry)) * gain;
-            }
+            let coeffs = crate::dsp::SvfCoeffs::new(low_cut_g, std::f32::consts::SQRT_2);
+            let cut = self
+                .low_cut
+                .process_coeffs([wet_left, wet_right], coeffs)
+                .high;
+            let wet = if low_cut_off {
+                [wet_left, wet_right]
+            } else {
+                cut
+            };
+            let dry = self.dry.process(input);
+            left[index] = (dry[0] + mix * (wet[0] - dry[0])) * gain;
+            right[index] = (dry[1] + mix * (wet[1] - dry[1])) * gain;
         }
         self.telemetry
             .set_value(TELEMETRY_PHASE, self.kernel.phase() as f32);
@@ -698,10 +695,8 @@ impl Device for Modulator {
     fn reset(&mut self) {
         self.update_settings();
         self.kernel.reset();
-        self.dry = [StaticDelay::default(), StaticDelay::default()];
-        for filter in &mut self.low_cut {
-            filter.reset();
-        }
+        self.dry = Default::default();
+        self.low_cut.reset();
         self.low_cut_g.snap();
         self.mix.snap();
         self.output.snap();

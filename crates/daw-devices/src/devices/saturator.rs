@@ -4,8 +4,8 @@
 use super::param;
 use crate::dsp::{
     AlgebraicSigmoid, AntialiasedShaper, Ballistics, CurveKind, DroopCorrector, GainComputer,
-    HyperbolicClip, LinearRamp, OversampleFactor, Oversampler, Shape, Shelf1, Smoothed,
-    StaticDelay, Svf, db_to_gain, flush, prewarp,
+    HyperbolicClip, LinearRamp, OversampleFactor, Oversampler, OversamplerStereo, Shape, Shelf1,
+    Shelf1Stereo, Smoothed, StaticDelayStereo, SvfCoeffs, SvfStereo, db_to_gain, flush, prewarp,
 };
 use crate::{
     Device, DeviceDescriptor, DeviceKind, Event, ParamRange, ParamSpec, ProcessContext, StereoIo,
@@ -408,49 +408,54 @@ const DC_BLOCKER_HZ: f32 = 5.0;
 const PAD: usize = (LATENCY - Oversampler::latency(OversampleFactor::X2)) as usize;
 
 #[derive(Clone, Debug)]
-struct Channel {
-    focus: Svf,
-    low_delay: StaticDelay<{ LATENCY as usize }>,
-    dry_delay: StaticDelay<{ LATENCY as usize }>,
-    pre: Shelf1,
-    post: Shelf1,
-    bump: Shelf1,
-    bloom: Shelf1,
-    dc: Shelf1,
-    tone: Shelf1,
-    oversampler: Oversampler,
-    shaper: AntialiasedShaper<Curve>,
+struct ChannelStereo {
+    focus: SvfStereo,
+    low_delay: StaticDelayStereo<{ LATENCY as usize }>,
+    dry_delay: StaticDelayStereo<{ LATENCY as usize }>,
+    pre: Shelf1Stereo,
+    post: Shelf1Stereo,
+    bump: Shelf1Stereo,
+    bloom: Shelf1Stereo,
+    dc: Shelf1Stereo,
+    tone: Shelf1Stereo,
+    oversampler: OversamplerStereo,
+    shapers: [AntialiasedShaper<Curve>; 2],
     /// Makes up the latency of the shorter oversamplers.
-    pad: StaticDelay<PAD>,
+    pad: StaticDelayStereo<PAD>,
 }
 
-impl Channel {
+impl ChannelStereo {
     fn new(model: Model, character: f32, quality: OversampleFactor) -> Self {
+        let shaper = AntialiasedShaper::new(curve(model, character));
         Self {
-            focus: Svf::default(),
-            low_delay: StaticDelay::default(),
-            dry_delay: StaticDelay::default(),
-            pre: Shelf1::default(),
-            post: Shelf1::default(),
-            bump: Shelf1::default(),
-            bloom: Shelf1::default(),
-            dc: Shelf1::default(),
-            tone: Shelf1::default(),
-            oversampler: Oversampler::new(quality),
-            shaper: AntialiasedShaper::new(curve(model, character)),
-            pad: StaticDelay::default(),
+            focus: SvfStereo::default(),
+            low_delay: StaticDelayStereo::default(),
+            dry_delay: StaticDelayStereo::default(),
+            pre: Shelf1Stereo::default(),
+            post: Shelf1Stereo::default(),
+            bump: Shelf1Stereo::default(),
+            bloom: Shelf1Stereo::default(),
+            dc: Shelf1Stereo::default(),
+            tone: Shelf1Stereo::default(),
+            oversampler: OversamplerStereo::new(quality),
+            shapers: [shaper.clone(), shaper],
+            pad: StaticDelayStereo::default(),
         }
     }
 
     #[inline]
-    fn shape(&mut self, input: f32) -> f32 {
-        let mut buffer = [0.0; Oversampler::MAX];
+    fn shape(&mut self, input: [f32; 2]) -> [f32; 2] {
+        let mut buffer = [[0.0; 2]; Oversampler::MAX];
         // Flushed on the way in and out, so the FIR histories never hold
         // denormals.
-        let count = self.oversampler.upsample(flush(input), &mut buffer);
-        for sample in &mut buffer[..count] {
-            let x = f64::from(*sample).clamp(-SHAPER_LIMIT, SHAPER_LIMIT);
-            *sample = flush(self.shaper.process(x) as f32);
+        let count = self
+            .oversampler
+            .upsample([flush(input[0]), flush(input[1])], &mut buffer);
+        for pair in &mut buffer[..count] {
+            let x0 = f64::from(pair[0]).clamp(-SHAPER_LIMIT, SHAPER_LIMIT);
+            let x1 = f64::from(pair[1]).clamp(-SHAPER_LIMIT, SHAPER_LIMIT);
+            pair[0] = flush(self.shapers[0].process(x0) as f32);
+            pair[1] = flush(self.shapers[1].process(x1) as f32);
         }
         self.oversampler.downsample(&buffer)
     }
@@ -461,7 +466,7 @@ pub struct Saturator {
     settings: Settings,
     dirty: bool,
     sample_rate: f32,
-    channels: [Channel; 2],
+    channels: ChannelStereo,
     /// The model and quality the audio path runs now; a change waits for the
     /// swap fade to reach zero.
     active: (Model, OversampleFactor),
@@ -532,13 +537,13 @@ impl Saturator {
     pub fn new() -> Self {
         let values = PARAMETERS.map(|spec| spec.default_normalized());
         let settings = decode(&values);
-        let channel = Channel::new(settings.model, settings.character, settings.quality);
+        let channel = ChannelStereo::new(settings.model, settings.character, settings.quality);
         let mut saturator = Self {
             values,
             settings,
             dirty: false,
             sample_rate: 48_000.0,
-            channels: [channel.clone(), channel],
+            channels: channel,
             active: (settings.model, settings.quality),
             pending: None,
             swap: LinearRamp::new(1.0),
@@ -563,7 +568,7 @@ impl Saturator {
             correctors: [0.0; 3],
             tick: 0,
             level: 0.0,
-            telemetry: Arc::new(Telemetry::default()),
+            telemetry: Arc::new(Telemetry::meter_only()),
         };
         saturator.prepare(48_000.0, 0);
         saturator
@@ -613,18 +618,20 @@ impl Saturator {
         let (pre, post) = emphasis_pair(model, rate);
         let shape = curve(model, self.character.value());
         let corrector = self.correctors[quality_index(quality)];
-        for channel in &mut self.channels {
-            channel.oversampler.set_factor(quality);
-            channel.shaper.set_shape(shape);
-            channel.shaper.reset();
-            channel.shaper.corrector.c = corrector;
-            channel.pre = pre.clone();
-            channel.post = post.clone();
-            channel.pad = StaticDelay::default();
-            channel.bump.reset();
-            channel.bloom.reset();
-            channel.dc.reset();
+        self.channels.oversampler.set_factor(quality);
+        for shaper in &mut self.channels.shapers {
+            shaper.set_shape(shape);
+            shaper.reset();
+            shaper.corrector.c = corrector;
         }
+        self.channels.pre.set(&pre);
+        self.channels.pre.reset();
+        self.channels.post.set(&post);
+        self.channels.post.reset();
+        self.channels.pad = StaticDelayStereo::default();
+        self.channels.bump.reset();
+        self.channels.bloom.reset();
+        self.channels.dc.reset();
         self.character_applied = self.character.value();
         self.tape_power.reset();
         self.bloom_level.reset();
@@ -653,8 +660,8 @@ impl Saturator {
         if character != self.character_applied {
             self.character_applied = character;
             let shape = curve(self.active.0, character);
-            for channel in &mut self.channels {
-                channel.shaper.set_shape(shape);
+            for shaper in &mut self.channels.shapers {
+                shaper.set_shape(shape);
             }
         }
     }
@@ -686,12 +693,12 @@ impl Saturator {
         self.swap = LinearRamp::new(1.0);
         self.swap_hold = 0;
         self.pending = None;
-        let mut channel = Channel::new(settings.model, settings.character, settings.quality);
-        channel.bump = Shelf1::low_shelf(1.5, 90.0, rate);
-        channel.bloom = Shelf1::low_shelf(0.0, BLOOM_HZ, rate);
-        channel.dc = Shelf1::high_pass(DC_BLOCKER_HZ, rate);
-        channel.tone = tilt;
-        self.channels = [channel.clone(), channel];
+        let mut channel = ChannelStereo::new(settings.model, settings.character, settings.quality);
+        channel.bump = Shelf1Stereo::from_shelf(&Shelf1::low_shelf(1.5, 90.0, rate));
+        channel.bloom = Shelf1Stereo::from_shelf(&Shelf1::low_shelf(0.0, BLOOM_HZ, rate));
+        channel.dc = Shelf1Stereo::from_shelf(&Shelf1::high_pass(DC_BLOCKER_HZ, rate));
+        channel.tone = Shelf1Stereo::from_shelf(&tilt);
+        self.channels = channel;
         self.apply_swap((settings.model, settings.quality));
         self.tick = 0;
         self.level = 0.0;
@@ -787,22 +794,12 @@ impl Device for Saturator {
                     0.0
                 }
             });
-            let mut dry = [0.0; 2];
-            let mut low = [0.0; 2];
-            let mut driven = [0.0; 2];
-            for (channel, state) in self.channels.iter_mut().enumerate() {
-                let x = input[channel];
-                dry[channel] = state.dry_delay.process(x);
-                // A subtractive split sums back to the input exactly, so
-                // with a linear shaper the device is a pure delay.
-                let high = state
-                    .focus
-                    .process(x, focus_g, std::f32::consts::SQRT_2)
-                    .high;
-                let clean = split * (x - high);
-                low[channel] = state.low_delay.process(clean);
-                driven[channel] = (x - clean) * drive;
-            }
+            let dry = self.channels.dry_delay.process(input);
+            let focus_coeffs = SvfCoeffs::new(focus_g, std::f32::consts::SQRT_2);
+            let high = self.channels.focus.process_coeffs(input, focus_coeffs).high;
+            let clean = [split * (input[0] - high[0]), split * (input[1] - high[1])];
+            let low = self.channels.low_delay.process(clean);
+            let driven = [(input[0] - clean[0]) * drive, (input[1] - clean[1]) * drive];
             peak = peak.max(driven[0].abs()).max(driven[1].abs());
 
             let compression = if model == Model::Tape {
@@ -818,8 +815,6 @@ impl Device for Saturator {
             } else {
                 1.0
             };
-            // A level-dependent low shelf as a parallel low-pass: only a
-            // scalar moves, so it cannot click. At most +2 dB.
             let bloom = if model == Model::Tube {
                 let level = self
                     .bloom_level
@@ -829,25 +824,35 @@ impl Device for Saturator {
                 0.0
             };
 
-            for (channel, sample) in [&mut *left, &mut *right].into_iter().enumerate() {
-                let state = &mut self.channels[channel];
-                let mut wet = state.pre.process(driven[channel] * compression);
-                wet = state.shape(wet);
-                wet = state.pad.process_at(wet, pad);
-                wet = state.post.process(wet);
-                match model {
-                    Model::Transistor => {}
-                    Model::Tube => wet += bloom * state.bloom.low(wet),
-                    Model::Tape => wet = state.bump.process(wet),
+            let mut wet = self
+                .channels
+                .pre
+                .process([driven[0] * compression, driven[1] * compression]);
+            wet = self.channels.shape(wet);
+            wet = self.channels.pad.process_at(wet, pad);
+            wet = self.channels.post.process(wet);
+            match model {
+                Model::Transistor => {}
+                Model::Tube => {
+                    let b = self.channels.bloom.low(wet);
+                    wet[0] += bloom * b[0];
+                    wet[1] += bloom * b[1];
                 }
-                wet = state.dc.process(wet);
-                wet = (wet + rho * low[channel]) * comp;
-                [state.tone.big_g, state.tone.low_gain, state.tone.high_gain] = tone;
-                wet = state.tone.process(wet);
-                let dry = dry[channel];
-                wet = dry + wet_share * (wet - dry);
-                sample[index] = (dry + mix * (wet - dry)) * output;
+                Model::Tape => wet = self.channels.bump.process(wet),
             }
+            wet = self.channels.dc.process(wet);
+            wet = [
+                (wet[0] + rho * low[0]) * comp,
+                (wet[1] + rho * low[1]) * comp,
+            ];
+            self.channels.tone.big_g = tone[0];
+            self.channels.tone.low_gain = tone[1];
+            self.channels.tone.high_gain = tone[2];
+            wet = self.channels.tone.process(wet);
+            let out0 = dry[0] + wet_share * (wet[0] - dry[0]);
+            let out1 = dry[1] + wet_share * (wet[1] - dry[1]);
+            left[index] = (dry[0] + mix * (out0 - dry[0])) * output;
+            right[index] = (dry[1] + mix * (out1 - dry[1])) * output;
         }
         // Held with a 300 ms fall, so the panel's dot does not flicker.
         let fall = (-(frames as f32) / (0.3 * self.sample_rate)).exp();

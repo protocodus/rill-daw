@@ -10,8 +10,11 @@
 pub struct TapeTransport {
     /// Position at every tick, newest at `cursor`.
     history: Vec<f64>,
+    mask: usize,
+    max_ticks: usize,
     cursor: usize,
     tick_seconds: f64,
+    inv_tick_seconds: f64,
     position: f64,
     motor: f64,
     lag: f64,
@@ -27,8 +30,12 @@ impl TapeTransport {
     /// only.
     pub fn prepare(&mut self, sample_rate: f32, longest_seconds: f32) {
         self.tick_seconds = f64::from(Self::TICK) / f64::from(sample_rate);
-        let ticks = (f64::from(longest_seconds) / self.tick_seconds).ceil() as usize + 4;
-        self.history = vec![0.0; ticks];
+        self.inv_tick_seconds = 1.0 / self.tick_seconds;
+        let max_ticks = (f64::from(longest_seconds) / self.tick_seconds).ceil() as usize + 4;
+        let cap = max_ticks.next_power_of_two();
+        self.max_ticks = max_ticks;
+        self.history = vec![0.0; cap];
+        self.mask = cap - 1;
         self.lag = 1.0 - (-self.tick_seconds / Self::LAG_SECONDS).exp();
         self.reset(1.0);
     }
@@ -55,7 +62,7 @@ impl TapeTransport {
         }
         self.motor += (speed - self.motor) * self.lag;
         self.position += self.motor * (1.0 + deviation) * self.tick_seconds;
-        self.cursor = (self.cursor + 1) % self.history.len();
+        self.cursor = (self.cursor + 1) & self.mask;
         self.history[self.cursor] = self.position;
     }
 
@@ -66,14 +73,13 @@ impl TapeTransport {
 
     /// Position and speed of the tape `seconds` ago.
     fn past(&self, seconds: f64) -> (f64, f64) {
-        let length = self.history.len();
-        let ticks = (seconds / self.tick_seconds).clamp(0.0, (length - 2) as f64);
+        let ticks = (seconds * self.inv_tick_seconds).clamp(0.0, (self.max_ticks - 2) as f64);
         let whole = ticks as usize;
-        let at = |back: usize| self.history[(self.cursor + length - back) % length];
-        let (near, far) = (at(whole), at(whole + 1));
+        let near = self.history[self.cursor.wrapping_sub(whole) & self.mask];
+        let far = self.history[self.cursor.wrapping_sub(whole + 1) & self.mask];
         (
             near + (far - near) * (ticks - whole as f64),
-            (near - far) / self.tick_seconds,
+            (near - far) * self.inv_tick_seconds,
         )
     }
 
@@ -85,7 +91,7 @@ impl TapeTransport {
             return delay;
         }
         let (position, speed) = self.past(delay);
-        let longest = (self.history.len() - 2) as f64 * self.tick_seconds;
+        let longest = (self.max_ticks - 2) as f64 * self.tick_seconds;
         (delay + (position - (self.position - distance)) / speed.max(1e-6)).clamp(0.0, longest)
     }
 }

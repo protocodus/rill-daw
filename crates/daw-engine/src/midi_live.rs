@@ -41,6 +41,10 @@ pub(crate) struct MidiMonitor {
     pending: Vec<Pending>,
     releases: Vec<Release>,
     reset: u64,
+    route_version: u64,
+    monitoring_active: bool,
+    was_suspended: bool,
+    snapshot_clean: bool,
     next_id: i32,
     snapshot: Vec<(u64, u8, u8, Data)>,
     routed_releases: Vec<(u64, Data)>,
@@ -106,6 +110,10 @@ impl MidiMonitor {
             pending: Vec::with_capacity(4096),
             releases: Vec::with_capacity(2048),
             reset: 0,
+            route_version: 0,
+            monitoring_active: false,
+            was_suspended: false,
+            snapshot_clean: false,
             next_id: 0x40000000,
             snapshot: Vec::with_capacity(16384),
             routed_releases: Vec::with_capacity(4096),
@@ -423,6 +431,17 @@ impl MidiMonitor {
         Ok(())
     }
     pub(crate) fn update_suspended(&mut self, shared: &MidiShared) {
+        if self.reset == shared.reset.load(Ordering::Acquire)
+            && self.voices.is_empty()
+            && self.states.is_empty()
+            && self.pending.is_empty()
+            && self.releases.is_empty()
+            && self.unsupported.is_empty()
+            && shared.monitoring.is_empty()
+            && self.was_suspended
+        {
+            return;
+        }
         self.reset(shared);
         let epoch = shared.epoch.load(Ordering::Acquire);
         for _ in 0..256 {
@@ -435,10 +454,30 @@ impl MidiMonitor {
         }
         self.releases.clear();
         shared.held.store(0, Ordering::Relaxed);
+        self.was_suspended = true;
+        self.snapshot_clean = false;
     }
     pub(crate) fn update(&mut self, shared: &MidiShared, renderer: &mut Renderer) -> Result<()> {
+        let reset = shared.reset.load(Ordering::Acquire);
+        let route_version = shared.route_version.load(Ordering::Acquire);
+        let monitoring_active = shared.monitoring_requested();
+        if self.snapshot_clean
+            && !self.was_suspended
+            && self.reset == reset
+            && self.route_version == route_version
+            && self.monitoring_active == monitoring_active
+            && self.voices.is_empty()
+            && self.states.is_empty()
+            && self.releases.is_empty()
+            && shared.monitoring.is_empty()
+        {
+            return Ok(());
+        }
         self.reset(shared);
         self.refresh(shared, renderer, 0)?;
+        self.route_version = route_version;
+        self.monitoring_active = monitoring_active;
+        self.was_suspended = false;
         let epoch = shared.epoch.load(Ordering::Acquire);
         let mut first = None;
         for _ in 0..256 {
@@ -456,6 +495,8 @@ impl MidiMonitor {
             self.apply(event);
             self.refresh(shared, renderer, offset)?;
         }
+        self.snapshot_clean =
+            self.voices.is_empty() && self.states.is_empty() && self.releases.is_empty();
         Ok(())
     }
 }

@@ -125,11 +125,22 @@ impl SampleData {
     /// One or two channels of equal length; more are dropped. Allocates and
     /// filters about twice the recording, so call it off the audio thread.
     pub fn new(sample_rate: f32, channels: &[&[f32]]) -> Self {
-        let mut maps: Vec<MipMap> = channels
-            .iter()
-            .take(2)
-            .map(|samples| MipMap::new(samples))
-            .collect();
+        let mut maps: Vec<MipMap> = match channels {
+            [] => vec![MipMap::new(&[])],
+            [single] => vec![MipMap::new(single)],
+            [left, right, ..] => {
+                if left.len().max(right.len()) >= 32_768 {
+                    let (left_map, right_map) = std::thread::scope(|scope| {
+                        let right_job = scope.spawn(|| MipMap::new(right));
+                        let left_map = MipMap::new(left);
+                        (left_map, right_job.join().expect("mipmap builder"))
+                    });
+                    vec![left_map, right_map]
+                } else {
+                    vec![MipMap::new(left), MipMap::new(right)]
+                }
+            }
+        };
         if maps.is_empty() {
             maps.push(MipMap::new(&[]));
         }

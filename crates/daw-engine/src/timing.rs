@@ -358,6 +358,7 @@ impl AudioEngine {
                 .finished_generation
                 .store(u64::MAX, Ordering::Release);
         }
+        self.controls.wake_render();
         Ok(())
     }
     /// Arm before preparing either backend. While already playing, preparation
@@ -389,6 +390,7 @@ impl AudioEngine {
         timing.remaining.store(frames, Ordering::Relaxed);
         timing.captured.store(0, Ordering::Relaxed);
         timing.phase.store(ARMED, Ordering::Release);
+        self.controls.wake_render();
         Ok(())
     }
     /// Called once both audio and MIDI backends have finished preparation.
@@ -415,10 +417,12 @@ impl AudioEngine {
         if phase == STARTING {
             self.controls.playing.store(true, Ordering::Release);
         }
+        self.controls.wake_render();
         Ok(())
     }
     pub fn cancel_recording_timing(&self) {
         self.controls.timing.cancel(&self.controls);
+        self.controls.wake_render();
     }
     pub fn timing_snapshot(&self) -> RecordingTimingSnapshot {
         let timing = &self.controls.timing;

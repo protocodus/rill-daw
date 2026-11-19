@@ -82,12 +82,15 @@ pub fn utility_header<L, A>(
 /// active view. Arc sharing keeps nested navigation snapshots inexpensive.
 #[derive(Clone)]
 pub struct ViewBackdrop {
+    id: u64,
     shapes: Arc<Vec<egui::epaint::ClippedShape>>,
     // Keep preview textures alive even if their originating library view closes.
     _textures: Arc<Vec<egui::TextureHandle>>,
     paint_cache: Arc<Mutex<Option<BackdropPaint>>>,
     pub bounds: Rect,
 }
+
+static NEXT_BACKDROP_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 struct BackdropPaint {
     density: f32,
@@ -98,6 +101,7 @@ struct BackdropPaint {
 impl Default for ViewBackdrop {
     fn default() -> Self {
         Self {
+            id: 0,
             shapes: Arc::default(),
             _textures: Arc::default(),
             paint_cache: Arc::default(),
@@ -206,11 +210,16 @@ impl ViewBackdrop {
             })
             .collect();
         Self {
+            id: NEXT_BACKDROP_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             shapes: Arc::new(shapes),
             _textures: Arc::new(retained),
             paint_cache: Arc::default(),
             bounds,
         }
+    }
+
+    pub fn id(&self) -> u64 {
+        self.id
     }
 
     pub fn shape_count(&self) -> usize {

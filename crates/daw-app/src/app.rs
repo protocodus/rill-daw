@@ -250,6 +250,8 @@ pub struct DawApp {
     output_dropout_notice: Option<u64>,
     midi_advisory_ack: Option<(u64, u64, u64)>,
     live_edit_error: Option<(u64, String)>,
+    sent_audition_wheels: (u64, Option<(u64, f32, f32)>),
+    pub(crate) frame_engine_snapshot: Option<daw_engine::EngineSnapshot>,
     pub devices: Vec<DeviceInfo>,
     pub(crate) audio_hosts: Vec<daw_engine::HostInfo>,
     /// Headless stand-ins for drivers; set from `RILL_E2E_AUDIO_HOSTS`.
@@ -431,6 +433,8 @@ impl DawApp {
             output_dropout_notice: None,
             midi_advisory_ack: None,
             live_edit_error: None,
+            sent_audition_wheels: (0, None),
+            frame_engine_snapshot: None,
             devices: Vec::new(),
             audio_hosts: Vec::new(),
             virtual_hosts: vec![crate::audio_driver::VirtualHost {
@@ -1104,8 +1108,12 @@ impl DawApp {
             self.project.meter_map().initial(),
         )
     }
+    pub(crate) fn cached_snapshot(&self) -> Option<daw_engine::EngineSnapshot> {
+        self.frame_engine_snapshot
+            .or_else(|| self.engine.as_ref().map(|e| e.snapshot()))
+    }
     pub fn playing(&self) -> bool {
-        self.engine.as_ref().is_some_and(|e| e.snapshot().playing)
+        self.cached_snapshot().is_some_and(|s| s.playing)
     }
     pub fn play(&mut self) {
         if self.recording_busy() {
@@ -1125,6 +1133,7 @@ impl DawApp {
             } else {
                 self.desired_playing = !state.playing;
                 e.set_playing(self.desired_playing);
+                self.frame_engine_snapshot = Some(e.snapshot());
             }
         } else {
             self.prepare_engine(true);
@@ -1133,6 +1142,8 @@ impl DawApp {
 
     pub(crate) fn prepare_engine(&mut self, playing: bool) {
         self.desired_playing = playing;
+        self.frame_engine_snapshot = None;
+        self.sent_audition_wheels = (0, None);
         self.retain_mixer_peak_holds(&self.render_context);
         let previous = self.engine.take();
         if let Some(engine) = &previous {
@@ -1224,16 +1235,27 @@ impl DawApp {
                 self.prepare_engine(false);
             }
         }
-        if let Some(engine) = &self.engine
-            && let Err(error) = engine
-                .audition_note(note)
-                .and_then(|()| engine.audition_wheels(self.panel_wheels))
-        {
-            self.message(Err(error), "");
+        if let Some(engine) = &self.engine {
+            let engine_id = self
+                .cached_snapshot()
+                .map_or_else(|| engine.snapshot().engine_id, |s| s.engine_id);
+            let wheels_changed = self.sent_audition_wheels != (engine_id, self.panel_wheels);
+            let mut result = engine.audition_note(note);
+            if result.is_ok() && wheels_changed {
+                result = engine.audition_wheels(self.panel_wheels);
+                if result.is_ok() {
+                    self.sent_audition_wheels = (engine_id, self.panel_wheels);
+                }
+            }
+            if let Err(error) = result {
+                self.message(Err(error), "");
+            }
         }
     }
     pub fn retire_engine(&mut self) {
         self.stop_sample_preview();
+        self.frame_engine_snapshot = None;
+        self.sent_audition_wheels = (0, None);
         self.retain_mixer_peak_holds(&self.render_context);
         let previous = self.engine.take();
         if let Some(engine) = &previous {
@@ -1280,6 +1302,7 @@ impl DawApp {
                     self.last_render_errors = 0;
                     engine.seek(self.cursor);
                     engine.set_playing(self.desired_playing);
+                    self.frame_engine_snapshot = Some(engine.snapshot());
                     self.engine = Some(engine);
                     if !self.error {
                         self.status = "Audio ready".into();
@@ -1389,8 +1412,9 @@ impl DawApp {
         }
     }
     fn poll_live_edits(&mut self) {
-        let Some(engine) = &self.engine else { return };
-        let snapshot = engine.snapshot();
+        let (Some(engine), Some(snapshot)) = (&self.engine, self.cached_snapshot()) else {
+            return;
+        };
         if let Some(error) = engine.take_edit_error() {
             self.live_edit_error = Some((snapshot.engine_id, error.clone()));
             self.message(Err(anyhow::anyhow!(error)), "");
@@ -1814,9 +1838,7 @@ impl DawApp {
             }
         });
         let output_dropouts = self
-            .engine
-            .as_ref()
-            .map(|engine| engine.snapshot())
+            .cached_snapshot()
             .filter(|snapshot| {
                 self.output_dropout_notice == Some(snapshot.engine_id) && !snapshot.output_failed
             })
@@ -1825,10 +1847,11 @@ impl DawApp {
         let midi_advisory = self
             .engine
             .as_ref()
-            .map(|engine| {
+            .zip(self.cached_snapshot())
+            .map(|(engine, snapshot)| {
                 let midi = engine.midi_snapshot();
                 (
-                    engine.snapshot().engine_id,
+                    snapshot.engine_id,
                     midi.unsupported_events,
                     midi.unsupported_groups,
                 )
@@ -2465,7 +2488,7 @@ impl DawApp {
                     let timing = engine.timing_snapshot();
                     timing.counting.then(|| format!("Count-in · {}", timing.remaining_beats.ceil().max(1.0) as u32))
                 });
-                let refining = self.engine.as_ref().is_some_and(|engine| engine.snapshot().refining_audio);
+                let refining = self.cached_snapshot().is_some_and(|s| s.refining_audio);
                 ui.horizontal_wrapped(|ui| {
                     let row_height = control_height + daw_ui::tokens::SPACE_XS * 2.0;
                     ui.set_min_height(row_height);
@@ -3631,6 +3654,7 @@ Current loop: beats {:.2}–{:.2}", self.project.loop_start + 1.0, self.project.
 
 impl DawApp {
     pub fn ui_frame(&mut self, ctx: &egui::Context) {
+        self.frame_engine_snapshot = None;
         crate::theme::set_appearance(ctx, self.settings.appearance);
         self.frame_count += 1;
         // Opening the view only after the first frames lets a popup's blurred
@@ -3702,6 +3726,9 @@ impl DawApp {
         }
         self.keyboard(ctx);
         self.poll_engine();
+        if let Some(e) = &self.engine {
+            self.frame_engine_snapshot = Some(e.snapshot());
+        }
         self.sync_signal_analysis();
         self.poll_live_edits();
         self.poll_instrument_editor(ctx);
@@ -3717,7 +3744,8 @@ impl DawApp {
         let mut render_error = None;
         if let Some(e) = &self.engine {
             self.cursor = e.position_beats();
-            let s = e.snapshot();
+            let s = self.frame_engine_snapshot.unwrap_or_else(|| e.snapshot());
+            self.frame_engine_snapshot = Some(s);
             if s.output_failed || self.output_dropout_notice != Some(s.engine_id) {
                 self.output_dropout_notice = None;
             }
@@ -4022,16 +4050,29 @@ impl DawApp {
         self.audio_batch_fades_dialog(ctx);
         self.rename_overlay(ctx);
         self.meter_change_dialog(ctx);
-        self.last_scene = if utility_open {
-            daw_ui::ViewBackdrop::capture_overlay(ctx, scene_bounds, &self.popup_backdrop)
-        } else {
-            daw_ui::ViewBackdrop::capture(ctx, scene_bounds)
-        };
+        if !utility_open {
+            self.last_scene = daw_ui::ViewBackdrop::capture(ctx, scene_bounds);
+        } else if self.last_scene.shape_count() == 0
+            || focused_before_draw != self.focused_view()
+            || ctx.input(|i| {
+                i.pointer.any_pressed() || i.pointer.any_released() || !i.events.is_empty()
+            })
+        {
+            self.last_scene =
+                daw_ui::ViewBackdrop::capture_overlay(ctx, scene_bounds, &self.popup_backdrop);
+        }
         // Full screens replace the workspace and leave the transport as it
         // is; a dialog or device panel softens what lies beneath it.
-        daw_ui::paint_popup_backdrop(
+        let blur_source = if !self.playing() && self.popup_backdrop.id() != 0 {
+            let dark_bit = u64::from(ctx.style().visuals.dark_mode);
+            Some((self.popup_backdrop.id() << 1) | dark_bit)
+        } else {
+            None
+        };
+        daw_ui::paint_popup_backdrop_cached(
             ctx,
             matches!(self.focused_view(), FocusedView::Popup(kind) if !kind.full_screen()),
+            blur_source,
         );
         self.update_note_audition(ctx);
         // Utility windows own their close button and Apply/Cancel flags. Restore
@@ -4098,6 +4139,7 @@ impl DawApp {
                 1000
             },
         ));
+        self.frame_engine_snapshot = None;
     }
     /// Open the workspace or popup named by the `--view` command-line option.
     pub fn open_screenshot_view(&mut self, view: &str) {
