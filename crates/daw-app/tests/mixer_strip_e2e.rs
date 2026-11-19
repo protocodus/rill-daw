@@ -178,9 +178,9 @@ fn strips_align_sections_and_the_fader_unit_and_list_sends_compactly() {
         assert_eq!(setup["project"], original["project"]);
         app.key("Escape");
 
-        // An empty chain's "Add insert…" row opens the effect library for its channel.
+        // "Insert…" in the add row opens the effect library for its channel.
         let mixer = app.inspect();
-        let library = click(&mut app, &mixer["mixer"]["channels"][1]["insert_summary"]);
+        let library = click(&mut app, &mixer["mixer"]["channels"][1]["add_effect"][0]);
         assert_eq!(library["popups"]["library"], true);
         assert_eq!(library["project"], original["project"]);
         app.key("Escape");

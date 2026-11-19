@@ -380,6 +380,9 @@ bus input counts, insert summaries and mouse access to output/send routing.
 `mixer_insert_power_e2e` bypasses channel and Master inserts with their lamps
 in place, checks the Effects count, Undo and re-enabling, and that built-in
 equalizers and compressors (not hosted plug-ins) report their curve miniature.
+`mixer_add_effect_e2e` checks the Insert…/EQ/Comp add row on channel and Master
+strips in both themes and densities: EQ and Comp append R1 Equalizer or R1
+Compressor as one Undo step and open its editor, and Insert… opens the library.
 `effect_chain_layout_e2e` covers bounded effect names, status, pinned insertion,
 before/after placement and append through the chooser, card context actions, cancel, Undo/Redo, and calibrated fader interaction. `studio_windows_e2e`
 opens and closes on-demand utilities in both appearances and at narrow/wide
@@ -392,7 +395,7 @@ reaches **Add send…** and **New return with effect…** at the end, and
 checks mouse edits and Undo at 800×600 and 1100×850.
 
 ```sh
-cargo test --locked -p daw-app --test mixer_readability_e2e --test mixer_insert_power_e2e --test effect_chain_layout_e2e --test routing_layout_e2e --test studio_windows_e2e --test control_roles_e2e -- --test-threads=1
+cargo test --locked -p daw-app --test mixer_readability_e2e --test mixer_insert_power_e2e --test mixer_add_effect_e2e --test effect_chain_layout_e2e --test routing_layout_e2e --test studio_windows_e2e --test control_roles_e2e -- --test-threads=1
 ```
 
 `stretch_duration_range_e2e` verifies mode-specific duration limits before Apply, invalid drafts without document/history changes, exact supported bounds, already-stretched and trimmed linked audio/MIDI occurrences, consistent numeric/stepper/drag behavior, timeline bounds, and unchanged stored precision during inspection.

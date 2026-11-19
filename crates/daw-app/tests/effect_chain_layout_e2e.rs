@@ -259,9 +259,8 @@ fn mixer_fader_stops_match_native_gain_and_empty_chains_offer_insertion() {
     let mut app = Harness::new();
     fixture(&mut app, 0);
     let mixer = app.click("Mixer");
-    // An empty chain shows one "Add insert…" action under the Effects header,
-    // styled like "Add send…".
-    let slot = label(&mixer, "Add insert…").clone();
+    // The Effects section ends with "Insert…", styled like "Add send…".
+    let slot = label(&mixer, "Insert…").clone();
     let summary = &mixer["mixer"]["channels"][0]["insert_summary"];
     assert!(slot["min"][1].as_f64().unwrap() >= summary["min"][1].as_f64().unwrap());
     assert!(slot["max"][1].as_f64().unwrap() <= summary["max"][1].as_f64().unwrap());

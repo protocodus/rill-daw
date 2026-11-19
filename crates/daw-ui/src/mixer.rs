@@ -407,21 +407,88 @@ fn mixer_name_plate_inner(
     }
 }
 
-/// The empty-chain slot: an "Add insert…" action row, styled like "Add send…";
-/// one click adds the first insert.
-pub fn mixer_insert_slot(ui: &mut Ui, width: f32) -> Response {
-    crate::hover_text(
-        mixer_row(
-            ui,
-            width,
-            MIXER_SLOT_HEIGHT,
+pub struct MixerAddEffectResponse {
+    pub insert: Response,
+    pub eq: Response,
+    pub comp: Response,
+}
+
+/// The row that ends every strip's Effects section: "Insert…" opens the
+/// effect library, "EQ" and "Comp" add the built-in equalizer and compressor
+/// and open it. The cells share the row's width, so each target spans its
+/// part of it, with a muted dot between them.
+pub fn mixer_add_effect_row(ui: &mut Ui, width: f32) -> MixerAddEffectResponse {
+    let cells = [
+        (
+            "Insert…",
             "Add insert…",
-            MixerRowText::Action,
-            None,
-            None,
+            "Choose an effect for this channel",
         ),
-        "Add an effect to this channel",
-    )
+        (
+            "EQ",
+            "Add EQ…",
+            "Add R1 Equalizer to this channel and open it",
+        ),
+        (
+            "Comp",
+            "Add Comp…",
+            "Add R1 Compressor to this channel and open it",
+        ),
+    ];
+    let font = FontId::proportional(crate::tokens::FONT_CAPTION);
+    let colors = crate::theme::palette(ui.ctx());
+    let galleys = cells.map(|(label, _, _)| {
+        ui.painter()
+            .layout_no_wrap(label.to_owned(), font.clone(), colors.action)
+    });
+    let text: f32 = galleys.iter().map(|galley| galley.size().x).sum();
+    let slack = ((width - text) / cells.len() as f32).max(0.0);
+    let (row, _) = ui.allocate_exact_size(Vec2::new(width, MIXER_SLOT_HEIGHT), Sense::hover());
+    let mut left = row.left();
+    let [insert, eq, comp] = std::array::from_fn(|index| {
+        let (_, name, hint) = cells[index];
+        let galley = galleys[index].clone();
+        let rect = Rect::from_min_size(
+            Pos2::new(left, row.top()),
+            Vec2::new(
+                (galley.size().x + slack).min(row.right() - left),
+                row.height(),
+            ),
+        );
+        left = rect.right();
+        if index > 0 && ui.is_rect_visible(rect) {
+            ui.painter()
+                .circle_filled(Pos2::new(rect.left(), rect.center().y), 1.5, colors.muted);
+        }
+        let response = ui.interact(
+            rect,
+            ui.id().with(("mixer_add_effect", name)),
+            Sense::click(),
+        );
+        if ui.is_rect_visible(rect) {
+            let surface =
+                egui::emath::GuiRounding::round_to_pixels(rect, ui.painter().pixels_per_point());
+            if response.hovered() || response.has_focus() {
+                ui.painter()
+                    .rect_filled(surface, crate::tokens::RADIUS, colors.control_hover);
+            }
+            if response.has_focus() {
+                ui.painter().rect_stroke(
+                    surface,
+                    crate::tokens::RADIUS,
+                    egui::Stroke::new(crate::tokens::FOCUS_WIDTH, colors.accent),
+                    egui::StrokeKind::Inside,
+                );
+            }
+            ui.painter()
+                .galley(rect.center() - galley.size() * 0.5, galley, colors.action);
+        }
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), name)
+        });
+        crate::hover_text(response, hint)
+    });
+    MixerAddEffectResponse { insert, eq, comp }
 }
 
 /// The source row's caption after an input arrow: the kind plus the actual source, e.g. "Audio · In 1".

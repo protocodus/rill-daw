@@ -1217,6 +1217,33 @@ impl DawApp {
         crate::plugin_details::show_window(ctx);
     }
 
+    /// Appends a built-in effect (`device` is its registry id) to a
+    /// channel's chain as one Undo step and opens its editor: the mixer's
+    /// "EQ…" and "Comp…" shortcuts.
+    pub(crate) fn add_builtin_insert(&mut self, track: u64, device: &str) {
+        let Some(entry) = crate::builtin_devices::catalog()
+            .iter()
+            .find(|entry| entry.plugin.class_id.as_deref() == Some(device))
+        else {
+            return;
+        };
+        if self.project.track(track).is_none() {
+            return;
+        }
+        self.begin_edit();
+        let slot = EffectSlot::new(
+            &entry.plugin.name,
+            crate::builtin_devices::effect(&entry.plugin),
+        );
+        let effect = slot.id;
+        self.project.track_mut(track).unwrap().inserts.push(slot);
+        self.selected_track = Some(track);
+        self.selected_clip = None;
+        self.changed();
+        self.record_plugin_use(&entry.plugin);
+        self.open_effect_editor(track, effect);
+    }
+
     fn add_library_device(
         &mut self,
         plugin: daw_plugins::PluginInfo,
