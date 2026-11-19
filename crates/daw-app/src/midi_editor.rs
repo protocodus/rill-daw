@@ -906,7 +906,10 @@ impl DawApp {
                     &supported,
                     daw_ui::ToolHintContext::Midi,
                 );
-                ui.add_space(daw_ui::tokens::SPACE_SM);
+                // A trailing gap must fit the current row before the next group wraps.
+                ui.add_space(
+                    daw_ui::tokens::SPACE_SM.min(ui.available_size_before_wrap().x.max(0.0)),
+                );
                 daw_ui::snap_choice(ui, &mut self.snap, &clip_meter, None);
                 daw_ui::drawing_note_length(ui, &mut state.draw_length);
                 if !state.note_names.is_empty() {
@@ -1007,7 +1010,9 @@ impl DawApp {
                     state.chord.name()
                 ));
                 }
-                ui.add_space(daw_ui::tokens::SPACE_SM);
+                ui.add_space(
+                    daw_ui::tokens::SPACE_SM.min(ui.available_size_before_wrap().x.max(0.0)),
+                );
                 daw_ui::measured_toolbar_group(
                     ui,
                     "midi_clip_actions",

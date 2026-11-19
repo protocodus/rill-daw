@@ -84,9 +84,13 @@ fn every_tool_is_visible_and_one_click_away_without_moving_adjacent_controls() {
                 let initial: Vec<_> = controls.iter().map(|response| response.rect).collect();
                 assert_eq!(controls.len(), EditorTool::ALL.len());
                 let viewport = Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 600.0));
+                let font = egui::TextStyle::Button.resolve(&ctx.style());
+                let measured = ctx.fonts_mut(|fonts| fonts.row_height(&font));
+                let expected_height = daw_ui::tokens::TOOLBAR_CONTROL_HEIGHT
+                    .max((measured + 2.0 * daw_ui::tokens::TOOLBAR_BUTTON_PADDING_Y).ceil());
                 for (index, response) in controls.iter().enumerate() {
                     assert!(viewport.contains_rect(response.rect));
-                    assert!(response.rect.height() >= daw_ui::tokens::CONTROL_HEIGHT);
+                    assert!((response.rect.height() - expected_height).abs() <= 1.0 / density);
                     for other in &controls[..index] {
                         assert!(!other.rect.intersects(response.rect));
                     }
