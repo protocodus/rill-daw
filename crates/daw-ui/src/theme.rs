@@ -57,7 +57,7 @@ pub struct Palette {
     pub automation_override: Color32,
     /// Reserved for modulation sources, depth arcs and mod-matrix rows.
     pub modulation: Color32,
-    /// The border and title bar of a device's frame.
+    /// The rule below a device's title and preset bar.
     pub device: Color32,
     /// Armed inputs and active recording. Never used for ordinary commands.
     pub recording: Color32,

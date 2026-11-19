@@ -31,16 +31,20 @@ fn high_band_db(app: &mut Harness) -> f64 {
 }
 
 fn label_center(state: &Value, label: &str) -> (f64, f64) {
-    let rect = state["label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .rfind(|entry| entry["text"] == label)
-        .unwrap_or_else(|| panic!("Missing {label}: {}", state["visible_labels"]));
+    let rect = label_rect(state, label);
     (
         (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5,
         (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5,
     )
+}
+
+fn label_rect<'a>(state: &'a Value, label: &str) -> &'a Value {
+    state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rfind(|entry| entry["text"] == label)
+        .unwrap_or_else(|| panic!("Missing {label}: {}", state["visible_labels"]))
 }
 
 /// Opens a project with one audio track playing a second of white noise.
@@ -539,7 +543,8 @@ fn insert_device(app: &mut Harness, track: u64, name: &str, device: &str) -> (Va
 }
 
 fn open_effect_editor(app: &mut Harness, clip: &str, label: &str) {
-    app.command(json!({"command":"viewport","width":1480,"height":960,"pixels_per_point":1.0}));
+    // Use the minimum native width, with enough height to see all signal stages.
+    app.command(json!({"command":"viewport","width":1100,"height":960,"pixels_per_point":1.0}));
     app.click(clip);
     app.click("Window");
     app.click("Effects");
@@ -547,19 +552,50 @@ fn open_effect_editor(app: &mut Harness, clip: &str, label: &str) {
     common::wait_visible(app, label);
 }
 
+/// At the shortest native height, reach the output through the popup's body scroll.
+fn check_compact_output(app: &mut Harness) {
+    let opened =
+        app.command(json!({"command":"viewport","width":1100,"height":720,"pixels_per_point":1.0}));
+    let (x, y) = label_center(&opened, "PRESET");
+    let bottom = app.command(json!({"command":"scroll","x":x,"y":y,"delta":-2000.0}));
+    let rect = label_rect(&bottom, "Output");
+    let knob_x = rect["max"][0].as_f64().unwrap() + 18.0;
+    let knob_y = label_center(&bottom, "Output").1;
+    let menu = app.command(
+        json!({"command":"pointer","phase":"click","button":"secondary","x":knob_x,"y":knob_y}),
+    );
+    assert!(visible(&menu, "Automate"), "{}", menu["visible_labels"]);
+    app.command(json!({"command":"key","key":"Escape"}));
+    assert_eq!(app.inspect()["project"], opened["project"]);
+    app.command(json!({"command":"viewport","width":1100,"height":960,"pixels_per_point":1.0}));
+}
+
+/// The labels of one signal path must fit the window and read across one line.
+fn assert_signal_row(state: &Value, labels: &[&str]) {
+    let mut previous: Option<(f64, f64)> = None;
+    for label in labels {
+        let rect = label_rect(state, label);
+        let left = rect["min"][0].as_f64().unwrap();
+        let right = rect["max"][0].as_f64().unwrap();
+        let y = (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5;
+        assert!(
+            left >= 0.0 && right <= 1100.0 && (0.0..960.0).contains(&y),
+            "{label}: {rect}"
+        );
+        if let Some((last_right, last_y)) = previous {
+            assert!(
+                left > last_right && (y - last_y).abs() <= 2.0,
+                "{labels:?}: {label} at {rect}"
+            );
+        }
+        previous = Some((right, y));
+    }
+}
+
 /// Clicks the last drawn label with this text: the one on top.
 fn click_top(app: &mut Harness, label: &str) -> Value {
-    let state = app.inspect();
-    let rect = state["label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .rfind(|entry| entry["text"] == label)
-        .unwrap_or_else(|| panic!("Missing {label}: {}", state["visible_labels"]));
-    let center = |axis: usize| {
-        (rect["min"][axis].as_f64().unwrap() + rect["max"][axis].as_f64().unwrap()) * 0.5
-    };
-    app.command(json!({"command":"pointer","phase":"click","x":center(0),"y":center(1)}))
+    let (x, y) = label_center(&app.inspect(), label);
+    app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}))
 }
 
 #[test]
@@ -668,6 +704,19 @@ fn r1_saturator_adds_harmonics_holds_level_and_drives_from_its_panel() {
     // The panel: Drive is the large knob, drawn right under its name.
     open_effect_editor(&mut app, "Pad tone", "Drive");
     let state = app.inspect();
+    assert_signal_row(
+        &state,
+        &[
+            "Low bypass",
+            "Drive",
+            "Model",
+            "Hardness",
+            "Quality",
+            "Auto gain",
+            "Tone",
+        ],
+    );
+    assert_signal_row(&state, &["Mix", "Output"]);
     let (x, name) = label_center(&state, "Drive");
     let knob = name + 12.0 + f64::from(daw_devices_ui::KNOB_HERO) * 0.5;
     let drive = |state: &Value| {
@@ -689,7 +738,12 @@ fn r1_saturator_adds_harmonics_holds_level_and_drives_from_its_panel() {
     assert!(visible(&undone, "Hardness"), "{}", undone["visible_labels"]);
     let tube = app.click("Tube");
     assert!(visible(&tube, "Bias"), "{}", tube["visible_labels"]);
+    assert_eq!(
+        label_center(&tube, "Output"),
+        label_center(&state, "Output")
+    );
     assert_eq!(tube["history"]["undo"][0], "Effect parameter");
+    check_compact_output(&mut app);
 
     // Save and reopen: the same device, the same sound.
     let saved = analysis(&mut app);
@@ -816,8 +870,22 @@ fn r1_compressor_reduces_limits_and_ducks_under_a_routed_sidechain() {
     // The panel names the source under Sidechain; clicking it opens Routing
     // on this device, where the mouse removes and adds sources.
     open_effect_editor(&mut app, "Pad tone", "Threshold");
-    let state = app.click("Detector");
+    let state = app.inspect();
     assert!(visible(&state, "External"), "{}", state["visible_labels"]);
+    assert_signal_row(
+        &state,
+        &[
+            "Source",
+            "High-pass",
+            "Lookahead",
+            "Threshold",
+            "Ratio",
+            "Attack",
+            "Release",
+        ],
+    );
+    assert_signal_row(&state, &["Makeup", "Auto makeup", "Mix", "Output"]);
+    assert!(label_center(&state, "Mode").1 < label_center(&state, "Source").1);
 
     // The curve's handle is the Threshold: its "T" stands up and to the
     // left of it. Dragged to the left it lowers, in one Undo step.
@@ -852,6 +920,7 @@ fn r1_compressor_reduces_limits_and_ducks_under_a_routed_sidechain() {
     assert!(low(&mut app) < ducked - 1.0);
     let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(undone["project"], state["project"]);
+    check_compact_output(&mut app);
     let routing = click_top(&mut app, "Trigger");
     assert_eq!(routing["popups"]["routing"], true, "{}", routing["popups"]);
     assert!(
@@ -994,9 +1063,21 @@ fn r1_modulator_combs_sweeps_and_takes_mode_defaults_from_its_panel() {
     // Center, as one step.
     open_effect_editor(&mut app, "Pad tone", "Character");
     let state = app.inspect();
+    assert_signal_row(&state, &["Mode", "Character"]);
+    assert_signal_row(
+        &state,
+        &[
+            "Shape", "Sync", "Depth", "Stereo", "Center", "Voices", "Feedback", "Low cut",
+        ],
+    );
+    assert_signal_row(&state, &["Mix", "Output"]);
     assert!(visible(&state, "Voices"), "{}", state["visible_labels"]);
     let phaser = app.click("Phaser");
     assert!(visible(&phaser, "Stages"), "{}", phaser["visible_labels"]);
+    assert_eq!(
+        label_center(&phaser, "Output"),
+        label_center(&state, "Output")
+    );
     use daw_devices::devices::modulator::{DESCRIPTOR, FEEDBACK, MODE};
     assert_eq!(stored(&phaser, MODE), Some(1.0));
     let feedback = DESCRIPTOR.parameter(FEEDBACK).unwrap();
@@ -1008,6 +1089,7 @@ fn r1_modulator_combs_sweeps_and_takes_mode_defaults_from_its_panel() {
     app.command(json!({"command":"key","key":"Z","cmd":true,"shift":true}));
 
     // Save and reopen: the same device, the same sound.
+    check_compact_output(&mut app);
     let saved = level_between(&mut app, 0.5, 2.0);
     let path = app.directory.path().join("modulated.rill");
     app.command(json!({"command":"save","path":path}));
@@ -1144,20 +1226,41 @@ fn r1_spacer_rings_longer_with_decay_and_feedback_and_switches_from_its_panel() 
     assert_eq!(undone["project"], before["project"]);
     app.command(json!({"command":"key","key":"Z","cmd":true,"shift":true}));
 
-    // The panel: each section's title is its switch.
+    // Each engine has its own editor and can be bypassed from either one.
     open_effect_editor(&mut app, "Pad tone", "Routing");
     let state = app.inspect();
+    assert_signal_row(&state, &["REPEATS", "DELAY LINE", "RETURN"]);
+    assert_signal_row(&state, &["Routing", "Echo on", "Reverb on"]);
+    assert!(!visible(&state, "Seed"));
     use daw_devices::devices::spacer::{ECHO_MODEL, REVERB_MODEL, REVERB_ON, SEED};
     assert_eq!(stored(&state, REVERB_ON), Some(1.0), "{}", state["project"]);
-    let off = click_top(&mut app, "REVERB");
+    let power = label_rect(&state, "Reverb on");
+    let x = power["max"][0].as_f64().unwrap() + 18.0;
+    let y = label_center(&state, "Reverb on").1;
+    let off = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
     assert_eq!(stored(&off, REVERB_ON), Some(0.0), "{}", off["project"]);
     assert_eq!(off["history"]["undo"][0], "Effect parameter");
     assert!(tail(&mut app) < -90.0);
     let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(undone["project"], state["project"]);
 
-    // Beside the title stands the section's model. A studio is dense at
-    // once; a hall of this size first sends a few reflections.
+    // A studio is dense at once; a hall first sends a few reflections.
+    let reverb = app.click("Reverb");
+    assert_eq!(reverb["project"], state["project"]);
+    assert_signal_row(&reverb, &["ROOM", "REVERB TAIL", "RETURN"]);
+    assert_signal_row(
+        &reverb,
+        &["Model", "Seed", "Diffusion", "Movement", "Width"],
+    );
+    assert!(!visible(&reverb, "Taps"));
+    assert_eq!(
+        label_center(&reverb, "Routing"),
+        label_center(&state, "Routing")
+    );
+    assert_eq!(
+        label_center(&reverb, "Output"),
+        label_center(&state, "Output")
+    );
     set_parameters(
         &mut app,
         track,
@@ -1181,8 +1284,7 @@ fn r1_spacer_rings_longer_with_decay_and_feedback_and_switches_from_its_panel() 
 
     // Seed: another hall of the same size and decay. The stepper stands
     // over its number; its right button is Next.
-    let texture = app.click("Texture");
-    let number = label_center(&texture, "#1");
+    let number = label_center(&undone, "#1");
     let next = app.command(json!({"command":"pointer","phase":"click",
         "x":number.0 + 21.0,"y":number.1 - 34.0}));
     let seed = stored(&next, SEED).unwrap();
@@ -1207,7 +1309,7 @@ fn r1_spacer_rings_longer_with_decay_and_feedback_and_switches_from_its_panel() 
             {"parameter":"echo.feedback","value":"0 %"},{"parameter":"echo.stereo","value":"Mono"},
             {"parameter":"echo.color","value":"-100 %"}]),
     );
-    let digital = app.inspect();
+    let digital = app.click("Echo");
     assert_eq!(stored(&digital, ECHO_MODEL), Some(0.0));
     // The one repeat of the tone's last quarter second.
     let repeat = |app: &mut Harness| level_between(app, 2.0, 2.5);
@@ -1220,6 +1322,7 @@ fn r1_spacer_rings_longer_with_decay_and_feedback_and_switches_from_its_panel() 
     assert!(squashed > clean - 12.0, "digital {clean}, tape {squashed}");
 
     // Save and reopen: the same device, the same sound.
+    check_compact_output(&mut app);
     let saved = repeat(&mut app);
     let path = app.directory.path().join("spaced.rill");
     app.command(json!({"command":"save","path":path}));

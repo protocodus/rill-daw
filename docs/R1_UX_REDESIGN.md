@@ -1,19 +1,30 @@
 # R1 device UX redesign
 
-This implementation proposal replaces the original all-controls-at-once panel
-grammar in `R1_DEVICES.md`. It covers the nine devices in
-`daw-devices/src/registry.rs`: Mini, Sampler, Drums, Filter, Equalizer,
-Saturator, Compressor, Modulator and Spacer. R1 Maxi is not registered or
-implemented and is outside this redesign. Sound engines, saved parameters,
-parameter IDs, presets and automation retain their existing meaning.
+The nine built-in devices use a common preset header, signal-stage headings and
+output strip. The interactive plots and controls edit the same parameters.
+Instruments keep the audition keyboard and wheels below the output strip.
 
-**Implemented and verified on 2026-11-15.** Three coding agents delivered the
-individual layouts and shared controls. The complete device frames fit within
-620 logical points at their declared width in both themes, including every
-task, EQ band and drum pad. Task selection survives parameter edits and Undo.
-The design lead reviewed native screenshots of all nine devices. See the
-[dark overview](../artifacts/r1-ux-redesign/overview-dark.png) and
-[light overview](../artifacts/r1-ux-redesign/overview-light.png).
+## Current panels
+
+| Device | Editing layout |
+| --- | --- |
+| Mini | Both oscillators and the source mixer share **Oscillators**. **Filter & amp** groups the filter and its envelope with the amp envelope. **Modulation** pairs the LFO with its destinations. **Voices** covers voice allocation, glide and pitch response. |
+| Sampler | **Sample** covers region and loop editing. **Pitch & voices** groups keyboard mapping and voice settings. **Filter & amp** contains the filter and envelopes. **Modulation** groups the LFO and its destinations. The waveform stays visible on every page. |
+| Drums | Select a pad in the kit to see its waveform, trigger, playback region, tuning, envelopes and tone controls together. The footer holds pad level, pan and mute alongside kit volume. |
+| Filter | Circuit and filter controls sit below the response. The LFO and envelope follower share the next row so you can adjust both while watching the cutoff. |
+| Equalizer | Choose HP, one of four bands, or LP below the response. The inspector starts with shape or slope. Frequency stays in the same position across selections. |
+| Saturator | Follow the input through low bypass and drive into the waveshaper, then adjust wet gain compensation and tone before mixing with the dry signal. |
+| Compressor | Mode and character sit above the transfer curve, level history and reduction meter. The sidechain, gain curve and timing share one row. Makeup, mix and output follow. |
+| Modulator | Choose mode and character above the plots. The LFO controls lead into the wet path, with mode-specific center, voices or stages, feedback and low cut. |
+| Spacer | **Echo** groups repeats, the delay line and the echo return. **Reverb** groups the room, tail and reverb return. Each page opens with routing and the two engine switches above the timing display. Mix and output sit below the engine controls. |
+
+The **Randomize** menu in the preset header offers 1%, 10% and 100% variations.
+Each choice creates one Undo step. [Dark panels](../artifacts/r1-ux-redesign/overview-dark.png) · [Light panels](../artifacts/r1-ux-redesign/overview-light.png)
+
+## November 15 design record
+
+<details>
+<summary>Original proposal, implementation and verification</summary>
 
 ## Design team and agreement
 
@@ -294,3 +305,5 @@ change to audio processing or a promise of new synthesis/sample features.
 Integration retains the stable-Rust automation-clipboard fix already on main.
 The sample-player and browser additions remain available alongside task
 navigation, including composite players and the larger drum-pad targets.
+
+</details>

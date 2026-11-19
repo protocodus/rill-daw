@@ -151,6 +151,10 @@ fn assert_controls_fit(state: &Value, width: f64, height: f64) {
             "{name} is clipped at {width}×{height}: {rect}"
         );
     }
+    let tab_bottom = label(state, "Tips")["max"][1].as_f64().unwrap();
+    for action in ["AI settings", "More"] {
+        assert!(label(state, action)["min"][1].as_f64().unwrap() > tab_bottom);
+    }
     let prompt = &state["assistant"]["prompt_rect"];
     assert!(prompt["min"][0].as_f64().unwrap() >= 0.0);
     assert!(prompt["min"][1].as_f64().unwrap() >= 0.0);

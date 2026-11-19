@@ -1,7 +1,5 @@
 use daw_ui::{self as controls, IconButton, theme};
-use egui::{
-    Context, Event, FullOutput, Key, Modifiers, PointerButton, RawInput, Rect, Response, Shape,
-};
+use egui::{Context, Event, FullOutput, Key, Modifiers, PointerButton, RawInput, Rect, Shape};
 
 fn input(events: Vec<Event>, width: f32) -> RawInput {
     RawInput {
@@ -36,11 +34,11 @@ fn pointer(position: egui::Pos2, pressed: bool) -> Vec<Event> {
     ]
 }
 
-fn frame(
+fn frame<R>(
     ctx: &Context,
     events: Vec<Event>,
-    mut control: impl FnMut(&mut egui::Ui) -> Response,
-) -> (Response, FullOutput) {
+    mut control: impl FnMut(&mut egui::Ui) -> R,
+) -> (R, FullOutput) {
     let mut response = None;
     let output = ctx.run(input(events, 480.0), |ctx| {
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -336,6 +334,174 @@ fn quiet_commands_and_guides_keep_native_activation_and_disabled_guards() {
     }
 }
 
+fn check_page_tab_surface(ctx: &Context, output: &FullOutput, active: Rect, inactive: Rect) {
+    let colors = theme::palette(ctx);
+    let baseline = output
+        .shapes
+        .iter()
+        .position(|painted| {
+            matches!(&painted.shape, Shape::LineSegment { points, stroke }
+            if stroke.color == colors.line
+                && points[0].x <= active.left() && points[1].x >= active.right()
+                && (points[0].y - active.bottom()).abs() <= controls::tokens::BORDER_WIDTH)
+        })
+        .expect("strip baseline");
+    assert!(
+        output.shapes[baseline + 1..].iter().any(|painted| {
+            matches!(&painted.shape, Shape::Rect(fill)
+            if fill.rect.left_top() == active.left_top() && fill.rect.right() == active.right()
+                && fill.rect.bottom() >= active.bottom() && fill.fill == colors.panel
+                && fill.corner_radius.nw > 0 && fill.corner_radius.ne > 0
+                && fill.corner_radius.sw == 0 && fill.corner_radius.se == 0)
+        }),
+        "the active face covers the baseline and joins the panel"
+    );
+    if let Some((fill, _)) = rectangle_style(output, inactive) {
+        assert!(
+            fill.a() < colors.panel.a(),
+            "inactive tab fill stays translucent"
+        );
+    }
+
+    assert!(
+        output.shapes.iter().any(|painted| {
+            matches!(&painted.shape, Shape::Mesh(mesh)
+            if mesh.vertices.iter().any(|v| v.color.a() > 0 && v.pos.y < active.top()
+                && active.x_range().contains(v.pos.x))
+                && mesh.vertices.iter().all(|v| v.color.a() == 0 || v.pos.y < active.bottom()))
+        }),
+        "the mode halo rises above the tab and fades into the panel"
+    );
+
+    let (painted, outline) = output
+        .shapes
+        .iter()
+        .find_map(|painted| match &painted.shape {
+            Shape::Path(path)
+                if path.stroke.width == controls::tokens::FOCUS_WIDTH
+                    && active
+                        .expand(1.0)
+                        .contains_rect(Rect::from_points(&path.points)) =>
+            {
+                Some((painted, path))
+            }
+            _ => None,
+        })
+        .expect("same outline width as a selected mode");
+    assert!(!outline.closed);
+    assert!(
+        !outline.points.windows(2).any(|segment| {
+            segment
+                .iter()
+                .all(|p| p.y >= active.bottom() - controls::tokens::FOCUS_WIDTH)
+                && (segment[0].x - segment[1].x).abs() > active.width() * 0.5
+        }),
+        "the active outline leaves the bottom open"
+    );
+
+    let primitives = ctx.tessellate(vec![painted.clone()], output.pixels_per_point);
+    let egui::epaint::Primitive::Mesh(mesh) = &primitives[0].primitive else {
+        panic!("tab outline should render as a mesh");
+    };
+    // Antialiasing offsets stroke vertices slightly from the path's endpoints.
+    let has_color_at = |corner: egui::Pos2, expected: egui::Color32, radius: f32| {
+        mesh.vertices.iter().any(|v| {
+            v.pos.distance(corner) <= radius
+                && v.color
+                    .to_array()
+                    .into_iter()
+                    .zip(expected.to_array())
+                    .all(|(actual, target)| actual.abs_diff(target) <= 8)
+        })
+    };
+    for (crown, foot) in [
+        (active.left_top(), active.left_bottom()),
+        (active.right_top(), active.right_bottom()),
+    ] {
+        assert!(
+            has_color_at(
+                crown,
+                colors.accent,
+                f32::from(controls::tokens::RADIUS) + 2.0
+            ),
+            "the crown matches the selected mode accent"
+        );
+        assert!(
+            has_color_at(foot, colors.line, 2.5),
+            "both sides fade into the panel rule"
+        );
+    }
+}
+
+#[test]
+fn page_tabs_join_the_selected_page_to_the_panel_on_mouse_and_keyboard_activation() {
+    for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
+        let ctx = Context::default();
+        theme::apply(&ctx);
+        theme::set_appearance(&ctx, appearance);
+        let mut page = 0;
+        let mut draw = |ui: &mut egui::Ui| {
+            let tabs = controls::page_tab_bar(ui, &["Echo", "Reverb"], page);
+            if let Some(selected) = tabs.iter().position(|tab| tab.clicked()) {
+                page = selected;
+            }
+            tabs
+        };
+        let (tabs, output) = frame(&ctx, vec![], &mut draw);
+        let [echo, reverb] = tabs.as_slice() else {
+            panic!("each page title should have one tab");
+        };
+        assert!(echo.rect.height() >= controls::tokens::CONTROL_HEIGHT);
+        assert_eq!(echo.rect.height(), reverb.rect.height());
+        check_page_tab_surface(&ctx, &output, echo.rect, reverb.rect);
+
+        let (_, hover) = frame(
+            &ctx,
+            vec![Event::PointerMoved(reverb.rect.center())],
+            &mut draw,
+        );
+        assert_eq!(
+            rectangle_style(&hover, reverb.rect).unwrap().0,
+            theme::palette(&ctx).control_hover.gamma_multiply(0.385)
+        );
+        frame(&ctx, pointer(reverb.rect.center(), true), &mut draw);
+        let (clicked, _) = frame(&ctx, pointer(reverb.rect.center(), false), &mut draw);
+        assert!(clicked[1].clicked());
+        let (_, hovered) = frame(&ctx, vec![], &mut draw);
+        check_page_tab_surface(&ctx, &hovered, reverb.rect, echo.rect);
+
+        echo.request_focus();
+        let (activated, _) = frame(&ctx, key(Key::Enter, true), &mut draw);
+        assert!(activated[0].clicked());
+        let (_, chosen) = frame(&ctx, vec![Event::PointerGone], &mut draw);
+        check_page_tab_surface(&ctx, &chosen, echo.rect, reverb.rect);
+    }
+}
+
+#[test]
+fn wrapped_page_tabs_join_their_own_row_and_use_the_enclosing_surface() {
+    let ctx = Context::default();
+    theme::apply(&ctx);
+    let surface = theme::palette(&ctx).raised;
+    let (tabs, output) = frame(&ctx, vec![], |ui| {
+        egui::Frame::new()
+            .fill(surface)
+            .show(ui, |ui| {
+                ui.set_width(115.0);
+                controls::page_tab_bar(ui, &["Conversation", "Examples", "Settings"], 1)
+            })
+            .inner
+    });
+    let mut rows: Vec<_> = tabs.iter().map(|tab| tab.rect.bottom()).collect();
+    rows.dedup();
+    assert!(rows.len() > 1);
+    assert_eq!(rectangle_style(&output, tabs[1].rect).unwrap().0, surface);
+    assert!(output.shapes.iter().any(|shape| matches!(&shape.shape, Shape::Vec(lines)
+        if lines.len() == rows.len() && lines.iter().zip(&rows).all(|(line, bottom)| {
+            matches!(line, Shape::LineSegment { points, .. } if points[0].y == bottom - 0.5 * controls::tokens::BORDER_WIDTH)
+        }))));
+}
+
 #[test]
 fn quiet_tabs_keep_full_targets_selection_and_native_activation() {
     for appearance in [theme::Appearance::Light, theme::Appearance::Dark] {
@@ -343,36 +509,28 @@ fn quiet_tabs_keep_full_targets_selection_and_native_activation() {
             let ctx = Context::default();
             theme::apply(&ctx);
             theme::set_appearance(&ctx, appearance);
-            let (idle, output) = frame(&ctx, vec![], |ui| {
-                controls::tab_choice(ui, selected, "Examples")
-            });
+            let draw = |ui: &mut egui::Ui| {
+                controls::page_tab_bar(ui, &["Examples", "Tools"], usize::from(!selected)).remove(0)
+            };
+            let (idle, output) = frame(&ctx, vec![], draw);
             assert!(idle.rect.height() >= controls::tokens::CONTROL_HEIGHT);
-            if let Some((fill, stroke)) = rectangle_style(&output, idle.rect) {
-                assert_eq!(fill, egui::Color32::TRANSPARENT);
-                assert_eq!(
-                    stroke,
-                    if selected {
-                        egui::Stroke::new(
-                            controls::tokens::FOCUS_WIDTH,
-                            theme::palette(&ctx).accent,
-                        )
-                    } else {
-                        egui::Stroke::NONE
-                    }
-                );
-            }
+            let title = output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    Shape::Text(title) if title.galley.text() == "Examples" => Some(title),
+                    _ => None,
+                })
+                .expect("tab title");
+            let colors = theme::palette(&ctx);
+            let ink = if selected { colors.text } else { colors.muted };
+            assert_eq!(title.fallback_color, ink.gamma_multiply(0.8));
             let target = idle.rect.center();
-            frame(&ctx, pointer(target, true), |ui| {
-                controls::tab_choice(ui, selected, "Examples")
-            });
-            let (clicked, _) = frame(&ctx, pointer(target, false), |ui| {
-                controls::tab_choice(ui, selected, "Examples")
-            });
+            frame(&ctx, pointer(target, true), draw);
+            let (clicked, _) = frame(&ctx, pointer(target, false), draw);
             assert!(clicked.clicked());
             clicked.request_focus();
-            let (activated, output) = frame(&ctx, key(Key::Enter, true), |ui| {
-                controls::tab_choice(ui, selected, "Examples")
-            });
+            let (activated, output) = frame(&ctx, key(Key::Enter, true), draw);
             assert!(activated.clicked());
             let events = &output.platform_output.events;
             assert_eq!(events.len(), 1);
@@ -380,12 +538,9 @@ fn quiet_tabs_keep_full_targets_selection_and_native_activation() {
             assert_eq!(info.typ, egui::WidgetType::RadioButton);
             assert_eq!(info.label.as_deref(), Some("Examples"));
             assert_eq!(info.selected, Some(selected));
-            frame(&ctx, key(Key::Enter, false), |ui| {
-                controls::tab_choice(ui, selected, "Examples")
-            });
+            frame(&ctx, key(Key::Enter, false), draw);
             let (disabled, _) = frame(&ctx, key(Key::Space, true), |ui| {
-                ui.add_enabled_ui(false, |ui| controls::tab_choice(ui, selected, "Examples"))
-                    .inner
+                ui.add_enabled_ui(false, draw).inner
             });
             assert!(!disabled.enabled() && !disabled.clicked());
         }

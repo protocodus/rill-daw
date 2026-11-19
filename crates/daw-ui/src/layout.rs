@@ -161,11 +161,31 @@ pub struct GridCell {
 pub fn grid_row_cells<R>(
     ui: &mut Ui,
     cells: &[GridCell],
-    mut cell: impl FnMut(&mut Ui, usize) -> R,
+    cell: impl FnMut(&mut Ui, usize) -> R,
 ) -> Vec<R> {
     let frame = crate::card(ui.ctx());
+    grid_cells(ui, cells, frame, tokens::SPACE_SM, cell)
+}
+
+/// A device's signal stages share a surface. Each section has a heading
+/// and a wider gutter to its neighbour. Bare picture cells track their height.
+pub fn device_stage_row<R>(
+    ui: &mut Ui,
+    cells: &[GridCell],
+    cell: impl FnMut(&mut Ui, usize) -> R,
+) -> Vec<R> {
+    let frame = egui::Frame::NONE.inner_margin(egui::Margin::symmetric(0, tokens::SPACE_XS as i8));
+    grid_cells(ui, cells, frame, tokens::SPACE_MD, cell)
+}
+
+fn grid_cells<R>(
+    ui: &mut Ui,
+    cells: &[GridCell],
+    frame: egui::Frame,
+    gap: f32,
+    mut cell: impl FnMut(&mut Ui, usize) -> R,
+) -> Vec<R> {
     let margin = frame.total_margin();
-    let gap = tokens::SPACE_SM;
     let origin = ui.cursor().min;
     let width = ui.available_width();
     let columns = cells

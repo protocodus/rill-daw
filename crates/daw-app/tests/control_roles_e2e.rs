@@ -337,7 +337,7 @@ fn tools_keep_a_visible_active_mode_while_commands_and_views_keep_their_own_role
 }
 
 #[test]
-fn workspace_tabs_keep_the_same_targets_and_persistent_glowing_selection() {
+fn workspace_shortcuts_keep_the_same_targets_and_show_the_active_home_view() {
     for (dark, density) in [(false, 1.0), (true, 1.25), (true, 2.0)] {
         let mut app = fixture(1100, 900, density, dark);
         let original = app.inspect();
@@ -352,8 +352,27 @@ fn workspace_tabs_keep_the_same_targets_and_persistent_glowing_selection() {
                 bounds(label(&state, "Mixer")),
             ];
             assert_eq!(*labels.get_or_insert(current), current);
-            for tab in ["Arranger", "Mixer"] {
-                assert_eq!(glowing_border(&state, tab, dark), tab == chosen);
+            let palette = if dark {
+                daw_ui::theme::DARK
+            } else {
+                daw_ui::theme::LIGHT
+            };
+            for home in ["Arranger", "Mixer"] {
+                let [left, top, right, bottom] = bounds(label(&state, home));
+                let selected = state["painted_rects"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|rect| {
+                        let [x0, y0, x1, y1] = bounds(&rect["rect"]);
+                        rect["fill"] == json!(palette.track_selected.to_array())
+                            && x0 <= left
+                            && x1 >= right
+                            && y0 <= top
+                            && y1 >= bottom
+                            && y1 - y0 < f64::from(daw_ui::tokens::CONTROL_HEIGHT)
+                    });
+                assert_eq!(selected, home == chosen);
             }
         }
         app.click("Arranger");

@@ -79,10 +79,116 @@ pub fn view_choice(ui: &mut Ui, selected: bool, label: impl Into<WidgetText>) ->
     ui.add(button_widget(label).presentation().selected(selected))
 }
 
-/// A quiet page choice with an active glowing border, native keyboard activation,
-/// and the same full-size target as other controls. The host owns navigation.
-pub fn tab_choice(ui: &mut Ui, selected: bool, label: impl Into<WidgetText>) -> Response {
-    ui.add(crate::IconButton::tab(selected, label))
+/// Draw page titles in order and return each tab's response in the same order.
+pub fn page_tab_bar(ui: &mut Ui, titles: &[&str], selected: usize) -> Vec<Response> {
+    if titles.is_empty() {
+        return Vec::new();
+    }
+    let panel = ui
+        .stack()
+        .iter()
+        .map(|ancestor| ancestor.frame().fill)
+        .find(|fill| fill.is_opaque())
+        .unwrap_or(ui.visuals().panel_fill);
+    let baseline = ui.painter().add(egui::Shape::Noop);
+    let width = ui.available_width();
+    let row = crate::control_row_wrapped(ui, |ui| {
+        ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+        titles
+            .iter()
+            .enumerate()
+            .map(|(index, title)| page_tab(ui, index == selected, title, panel))
+            .collect::<Vec<_>>()
+    });
+    let rect = row.response.rect;
+    let rule = |bottom: f32| {
+        egui::Shape::hline(
+            rect.left()..=rect.left() + width,
+            bottom - 0.5 * tokens::BORDER_WIDTH,
+            egui::Stroke::new(tokens::BORDER_WIDTH, theme::palette(ui.ctx()).line),
+        )
+    };
+    let lines = if row.inner[0].rect.bottom() == row.inner.last().unwrap().rect.bottom() {
+        rule(rect.bottom())
+    } else {
+        egui::Shape::Vec(
+            row.inner
+                .chunk_by(|a, b| a.rect.bottom() == b.rect.bottom())
+                .map(|line| rule(line[0].rect.bottom()))
+                .collect(),
+        )
+    };
+    ui.painter().set(baseline, lines);
+    row.inner
+}
+
+/// A page in a [`page_tab_bar`]. Its selected face opens onto the panel below.
+fn page_tab(ui: &mut Ui, selected: bool, title: &str, panel: egui::Color32) -> Response {
+    let colors = theme::palette(ui.ctx());
+    let label = |role: crate::text::TextRole| {
+        ui.painter()
+            .layout_no_wrap(title.to_owned(), role.font(), egui::Color32::PLACEHOLDER)
+    };
+    // Reserve the emphasized title's width so switching pages never shifts its neighbors.
+    let selected_label = label(crate::text::TextRole::Label);
+    let size = egui::vec2(
+        selected_label.size().x + 2.0 * tokens::SPACE_MD,
+        tokens::CONTROL_HEIGHT,
+    );
+    let text = if selected {
+        selected_label
+    } else {
+        label(crate::text::TextRole::Body)
+    };
+    let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::RadioButton,
+            ui.is_enabled(),
+            selected,
+            title,
+        )
+    });
+    let corners = egui::CornerRadius {
+        nw: tokens::RADIUS,
+        ne: tokens::RADIUS,
+        sw: 0,
+        se: 0,
+    };
+    let hot = response.hovered() || response.has_focus();
+    let fill = if selected {
+        panel
+    } else if hot {
+        colors.control_hover.gamma_multiply(0.385)
+    } else {
+        let resting = if panel == colors.trough {
+            colors.control_fill
+        } else {
+            colors.trough
+        };
+        resting.gamma_multiply(0.245)
+    };
+    ui.painter().rect_filled(rect, corners, fill);
+    if selected {
+        crate::surface::paint_tab_outline(
+            ui.painter(),
+            rect,
+            ui.style()
+                .interact_selectable(&response, true)
+                .fg_stroke
+                .color,
+            ui.is_enabled(),
+        );
+    }
+    let ink = if selected || hot {
+        colors.text
+    } else {
+        colors.muted
+    };
+    let origin = rect.center() - text.size() * 0.5;
+    ui.painter()
+        .galley(origin, text, ink.gamma_multiply(tokens::TAB_LABEL_OPACITY));
+    response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
 /// A presentation or playback-guide toggle with the same view affordance.
@@ -120,59 +226,41 @@ pub fn primary_button_widget(ui: &Ui, label: impl Into<WidgetText>) -> crate::Ic
         .label_color(theme::contrast_text(action))
 }
 
-/// One page-switch row for popups: quiet tabs with a glowing active border,
-/// an optional trailing slot (contextual AI, counts) and one separator with
-/// fixed spacing, so every tabbed window starts its body at the same offset.
-pub fn popup_tabs<T: PartialEq + Copy, R>(
-    ui: &mut Ui,
-    page: &mut T,
-    pages: &[(T, &str)],
-    trailing: impl FnOnce(&mut Ui) -> R,
-) -> R {
-    popup_tab_row(ui, trailing, |ui| {
-        for (value, label) in pages {
-            if tab_choice(ui, *page == *value, *label).clicked() {
-                *page = *value;
-            }
-        }
-    })
+/// Switch between the named pages of a popup. Page controls belong in its body.
+pub fn popup_tabs<T: PartialEq + Copy>(ui: &mut Ui, page: &mut T, pages: &[(T, &str)]) {
+    popup_page_choices(ui, page, pages.iter().copied());
 }
 
-/// The same popup tabs with caller-supplied explanations of each destination.
-/// Hints stay attached to their tab, including the currently selected page.
-pub fn popup_tabs_with_hints<T: PartialEq + Copy, R>(
+/// Switch pages and explain each destination on hover, including the selected one.
+pub fn popup_tabs_with_hints<T: PartialEq + Copy>(
     ui: &mut Ui,
     page: &mut T,
     pages: &[(T, &str, &str)],
-    trailing: impl FnOnce(&mut Ui) -> R,
-) -> R {
-    popup_tab_row(ui, trailing, |ui| {
-        for (value, label, hint) in pages {
-            if tab_choice(ui, *page == *value, *label)
-                .on_hover_text(*hint)
-                .clicked()
-            {
-                *page = *value;
-            }
-        }
-    })
+) {
+    let responses = popup_page_choices(
+        ui,
+        page,
+        pages.iter().map(|&(value, title, _)| (value, title)),
+    );
+    for (response, &(_, _, hint)) in responses.into_iter().zip(pages) {
+        response.on_hover_text(hint);
+    }
 }
 
-fn popup_tab_row<R>(
+fn popup_page_choices<'a, T: PartialEq + Copy>(
     ui: &mut Ui,
-    trailing: impl FnOnce(&mut Ui) -> R,
-    tabs: impl FnOnce(&mut Ui),
-) -> R {
-    let result = action_row(ui, trailing, |ui| {
-        ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
-        tabs(ui);
-    })
-    .inner
-    .0;
-    // The window title already draws one line above the tabs; the body is
-    // separated from the tab row by space alone.
-    ui.add_space(tokens::SPACE_LG - ui.spacing().item_spacing.y);
-    result
+    page: &mut T,
+    choices: impl Iterator<Item = (T, &'a str)> + Clone,
+) -> Vec<Response> {
+    let selected = choices.clone().position(|(value, _)| value == *page);
+    let titles: Vec<_> = choices.clone().map(|(_, title)| title).collect();
+    let responses = page_tab_bar(ui, &titles, selected.unwrap_or(titles.len()));
+    for ((value, _), response) in choices.zip(&responses) {
+        if response.clicked() {
+            *page = value;
+        }
+    }
+    responses
 }
 
 /// The gap between two groups of a popup body: SPACE_LG from the previous

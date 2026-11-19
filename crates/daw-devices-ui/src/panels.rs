@@ -1268,6 +1268,8 @@ fn spacer_layout(mut layout: Layout) -> Layout {
     layout.steppers = &[SEED];
     // The cards name the section.
     layout.captions = &[
+        (ECHO_MODEL, "Model"),
+        (REVERB_MODEL, "Model"),
         (ECHO_SYNC, "Sync"),
         (ECHO_TIME, "Time"),
         (ECHO_DIVISION, "Division"),

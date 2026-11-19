@@ -222,7 +222,7 @@ variants. The API reference and interaction rules continue below.
 
 ## Workspace conventions
 
-Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Large views (the Automation editor, Device browser, Assistant, Signal analysis and Audio takes) open on demand as full screens (`page`) in the central workspace, in place of their caller, with **Back** in a workspace header; Back and Escape return to the caller with its selection. Single actions and forms (Export, Join, Crossfade, Properties, Routing, Recording, History, Setup, Note expression, About) and the device panels, Instrument and Effects, are `popup` dialogs: fixed in size, sized by their content and bounded by the window. They soften the inactive context with a bounded GPU blur beneath a light scrim, and only the foreground dialog accepts editing input. Menus, parameter editors, dropdowns, and color pickers share this focus treatment. Explicit modal decisions retain stronger dimming. Tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles name the window and its subject, such as **Properties · Bass**, **Join clips · Drums** or **Crossfade · Take 2**; the subject is not repeated as a body heading, and Properties keeps the same title on every tab. Number steppers (−/+) and header actions inside a popup stay frameless until hover; only inputs and the selected tab carry an outline. The Assistant follows the tabbed-popup order: Conversation/Examples/Tools/Tips with **AI settings** and a quiet **More** trailing, then the scope and its live context. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text. Explicit primary-action fills remain visible inside menus so their contrasting text stays legible; ordinary menu rows stay quiet.
+Arrangement, Clip Editor, and Mixer each own the central workspace. Clip Editor and Mixer have a Back action; returning restores the prior selection and viewport. Large views (the Automation editor, Device browser, Assistant, Signal analysis and Audio takes) open on demand as full screens (`page`) in the central workspace, in place of their caller, with **Back** in a workspace header; Back and Escape return to the caller with its selection. Single actions and forms (Export, Join, Crossfade, Properties, Routing, Recording, History, Setup, Note expression, About) and the device panels, Instrument and Effects, are `popup` dialogs: fixed in size, sized by their content and bounded by the window. They soften the inactive context with a bounded GPU blur beneath a light scrim, and only the foreground dialog accepts editing input. Menus, parameter editors, dropdowns, and color pickers share this focus treatment. Explicit modal decisions retain stronger dimming. Tooltips remain unobtrusive. Transport and the File, Edit, Track, and Window menus remain available. Persistent **Arranger** and **Mixer** choices in the transport switch workspaces directly, including while a utility is open. Window titles name the window and its subject, such as **Properties · Bass**, **Join clips · Drums** or **Crossfade · Take 2**; the subject is not repeated as a body heading, and Properties keeps the same title on every tab. Number steppers (−/+) and header actions inside a popup stay frameless until hover; only inputs and the selected tab carry an outline. The Assistant opens with Conversation, Examples, Tools and Tips tabs. The scope, **AI settings** and **More** share the first row below them. Components keep labels short; explanations belong in tooltips or the relevant utility rather than permanent interface text. Explicit primary-action fills remain visible inside menus so their contrasting text stays legible; ordinary menu rows stay quiet.
 
 `empty_workspace(ui, title, description, actions)` offers the next step when a
 workspace has no content. `EmptyWorkspaceAction` supplies a stable `id`, concise
@@ -310,7 +310,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Searchable choice lists | `searchable_select` (query, mouse selection and empty state) |
 | Presentation commands | `view_button`, `view_button_widget` |
 | Exclusive interaction modes | `tool_value`, `IconButton::tool` |
-| Quiet page navigation | `tab_choice`, `IconButton::tab`, `popup_tabs`, `popup_tabs_with_hints` (explicit `(value, label, hint)` destinations; tab row and trailing slot keep the same layout) |
+| Page tabs | `page_tab_bar` returns each title's response. `popup_tabs` and `popup_tabs_with_hints` select a typed page and accept optional per-page hover hints. |
 | Search-result choice without native menu navigation | `picker_button` |
 | Button builder for sized/disabled placement | `button_widget` |
 | Application and contextual menus | `menu_bar`, `command_menu_button`, `menu_button` |
@@ -390,7 +390,7 @@ view, followed by any shortcut. Disabled actions explain their prerequisite
 through `on_disabled_hover_text`. Keep generic button and menu builders free of
 automatic label-based hints: the caller knows the action's scope and should add
 one complete explanation. `popup_tabs_with_hints` accepts explicit destination
-hints while preserving `popup_tabs` sizing, selection and trailing-slot behavior.
+hints on the same title-only strip as `popup_tabs`.
 
 `number_stepper` adds visible minus/plus actions to a caller-supplied numeric
 field. Users can drag, type directly, or right-click the field to stage a
@@ -565,7 +565,7 @@ must never include it in diagnostic or conversation text.
 
 `paint_ambient` adds a broad, faint radial tint to quiet utility backdrops. `soft_surface` places that same tint between a native frame and its contents, preserving layout and input behavior. Workspace headers and selected mixer channels use this treatment. Music canvases retain flat fills; selected clips and channels add a soft track-colored outline glow. The tint uses golden-ratio light placement, one bounded mesh (at most 308 vertices), transparent edges, and no textures, blur, animation, or extra repaint requests. Use it on large surfaces rather than individual controls.
 
-`paint_selection_glow` adds a six-point halo using one fixed mesh (128 vertices, 576 indices). It respects the parent clip and culls hidden items. Selected clips and mixer channels use their track color; selected tools, tool choosers, tabs, and M/S controls use the theme accent. This treatment preserves layout, input, and playback.
+`paint_selection_glow` adds a six-point halo using one fixed mesh (128 vertices, 576 indices). It respects the parent clip and culls hidden items. Selected clips and mixer channels use their track color; selected tools, tool choosers and M/S controls use the theme accent. Page tabs use the same glow around their top and sides. This treatment preserves layout, input, and playback.
 
 `view_links` presents a wrapping row of related destinations with the active one marked. The caller supplies destinations and handles the returned selection. `ViewBackdrop` retains the caller's paint for a utility background without creating widgets, hit targets, or keyboard focus; cached context cannot edit the project or duplicate active accessibility controls. Nested utilities keep their parent context and restore the prior selection and inspector page when dismissed.
 
@@ -1671,9 +1671,10 @@ Its optional Samples sidebar reuses `sample_search`, `sample_results` and
 `sample_project_drop_target` preserves project admission in every source scope;
 Browse opens the full browser with the same navigation context.
 
-`sample_actions`, `sample_identity` and `sample_name_editor` share compact load,
-trim, reverse, export and naming controls between R1 Sampler and R1 Drums. Pad
-names remain distinct from recording names. Library indexing is an explicit
+`sample_recording_header` groups the recording identity, duration, naming,
+sample actions and player editor for R1 Sampler and R1 Drums. A narrow pad
+inspector moves management actions to a second row. Pad names remain distinct
+from recording names. Library indexing is an explicit
 Scan folders action; painting or searching a tree never starts a scan.
 
 `sample_browser_workspace` divides the available viewport into Sources (196 points initially), flexible Results, and a 280-point inspector.
@@ -1736,9 +1737,9 @@ and show their range in the hover hint. Disabled knobs can still be inspected;
 fader and variation-stepper readouts remain visible. Shared components opt in
 with `Knob::endpoint_labels_on_hover(rect)` and `InlineKnob::value_on_hover()`.
 
-`device_frame` is the one frame every device sits in: a thick rounded border
-and a bar in the border's color (`Palette::device`) with the device's name at
-the left and its presets at the right; nothing in the body repeats them.
+`device_frame` is the one frame every device sits in: a thin rounded outline
+with the device name and presets in a shared header. A fine rule in
+`Palette::device` separates it from the controls.
 `device_frame(ui, name)` returns the bar (`DeviceFrame::bar`) to draw the
 `preset_group` into, and `DeviceFrame::body` draws the device under it,
 `DEVICE_FRAME_INSET` narrower. `device_panel` builds on it: `preset_bar` in
@@ -1760,9 +1761,20 @@ heading's response and the choice's;
 `control_caption` names one control in sentence-case text in the full text
 color, so the two levels never read alike. Built-in device cards use the same
 pair.
-`preset_group` holds every preset control in one bordered group with its own
-dimmed **Preset** title: previous and next, the preset menu, **Save as…**
-(the name is typed in the group), **Reset**, and **Randomize** 1% · 10% · 100%
+`page_tab_bar` takes the page titles and selected index. It returns a response
+for each title in order. Place parameter controls in the page below the strip.
+The selected tab shares the panel fill. Its open lower edge interrupts the
+strip's rule, and the sides graduate from that rule to the selected mode
+button's accent stroke and glow around the title. Inactive tabs use translucent
+fills and regular-weight titles. All tab titles use 80% of their theme text opacity across selection, hover and focus. Compact devices show their controls on one surface.
+
+`device_stage_row` uses the same column spans as `grid_row_cells`. R1 signal
+stages share one surface with a `SPACE_MD` gutter. A plain section header can
+reserve its neighbour’s model-selector height with `device_section_header_sized`.
+
+`preset_group` groups previous and next, the preset menu, **Save as…**,
+**Reset** and **Randomize**. Save as opens a name field in the header.
+The Randomize menu offers 1%, 10% and 100% variations
 (`PresetAction::Randomize`). It returns a `PresetAction` and is the same
 wherever presets appear.
 `preset_browser` provides search, category and tag filters, Factory/User,
@@ -1912,9 +1924,8 @@ neither project history nor playback. Peak and geometry caches keep it bounded.
 
 The piano-roll **Generate…** action opens a movable dialog docked at the right of the
 current clip, `POPUP_WIDTH_SM` wide at every window size so the live preview stays
-visible beside it. `popup_tabs` switches Chord, Arpeggio and Melody with the AI
-button trailing; Start bar and Length are the first rows of the same form grid as
-every other setting.
+visible beside it. `popup_tabs` switches between Chord, Arpeggio and Melody.
+Start bar and Length lead the settings form, and the contextual AI action sits in the footer.
 Start bar and Length initially cover only complete visible bars, in clip-local
 time. Choices, harmony, preview state and range are remembered per clip for the
 app session after apply or cancel; New/Open clears that memory. **Next range**
@@ -2086,9 +2097,7 @@ component does not depend on a provider, project, or tool registry. Tool transcr
 rows are labeled **Activity**, since starting a tool is not proof that an edit
 succeeded. Context and long status rows retain their full bounded text on hover.
 The compact header keeps scope beside **AI settings** and **More**, with provider
-readiness on the settings tooltip. Page navigation uses shared `tab_choice`
-controls: full-height targets, an active glowing border, and a surface on hover or
-keyboard focus. The primary action stays at the right of the composer footer;
+readiness on the settings tooltip. A shared page tab strip sits above this row. The primary action stays at the right of the composer footer;
 **Stop** appears only during a run, and **Undo** only when available and idle.
 Absent footer actions return disabled, zero-size responses to the host.
 
@@ -2206,8 +2215,9 @@ change the result (Export's **Include effect tails**) belong in the body.
 uses the same centered title row and separator as popups; operation dialogs
 such as Strip silence and Boundary fades are popups with footers.
 
-Tabbed utilities (Setup, Library, Properties, Assistant) switch pages with
-`popup_tabs`; contextual AI, counts or management actions use its trailing slot.
+Setup, Device browser, Properties, Assistant, Generate notes and Signal analysis
+switch pages with the shared tab strip. Contextual actions, filters and status
+belong in the selected page's body or footer.
 `text::section_heading` names groups in sentence case (**Collections**,
 **Recovery folder**); `form_label` captions one row. `form_grid` reserves a
 fixed 144-point label column (`FORM_LABEL_WIDTH`, longer captions truncate with

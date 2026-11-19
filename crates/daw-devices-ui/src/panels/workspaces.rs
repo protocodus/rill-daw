@@ -18,12 +18,9 @@ pub(crate) struct Workspace {
 
 pub(crate) fn tabs(descriptor: &DeviceDescriptor) -> &'static [&'static str] {
     match descriptor.id {
-        "r1-mini" => &["Sound", "Motion"],
-        "r1-sampler" => &["Sample", "Shape", "Motion"],
-        "r1-drums" => &["Sample", "Shape"],
-        "r1-filter" => &["Tone", "Motion"],
-        "r1-compressor" => &["Shape", "Detector"],
-        "r1-spacer" => &["Space", "Texture"],
+        "r1-mini" => &["Oscillators", "Filter & amp", "Modulation", "Voices"],
+        "r1-sampler" => &["Sample", "Pitch & voices", "Filter & amp", "Modulation"],
+        "r1-spacer" => &["Echo", "Reverb"],
         _ => &[],
     }
 }
@@ -37,7 +34,7 @@ pub(crate) fn build(
     let layout = super::layout_for(descriptor, pad);
     match descriptor.id {
         "r1-mini" | "r1-sampler" | "r1-drums" => instruments::build(layout, descriptor, pad, page),
-        "r1-filter" | "r1-equalizer" => tone::build(layout, descriptor, page, band),
+        "r1-filter" | "r1-equalizer" => tone::build(layout, descriptor, band),
         "r1-saturator" | "r1-compressor" | "r1-modulator" | "r1-spacer" => {
             effects::build(layout, descriptor, page)
         }

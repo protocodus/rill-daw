@@ -2498,13 +2498,13 @@ impl DawApp {
                             FocusedView::Workspace(view) => Some(view),
                             _ => None,
                         }).filter(|_| matches!(self.focused_view(), FocusedView::Popup(_))).unwrap_or(self.view);
-                        for (view, label, icon, hint) in [
-                            (WorkspaceView::Arrangement, "Arranger", daw_ui::Icon::Arranger,
+                        for (view, label, hint) in [
+                            (WorkspaceView::Arrangement, "Arranger",
                                 "Arrange clips on the song timeline."),
-                            (WorkspaceView::Mixer, "Mixer", daw_ui::Icon::Mixer,
+                            (WorkspaceView::Mixer, "Mixer",
                                 "Mix channel volume and pan, add effects, and route audio."),
                         ] {
-                            if ui.add(daw_ui::IconButton::tab(active == view, label).icon(icon))
+                            if ui.add(daw_ui::view_button_widget(label).selected(active == view).quiet())
                                 .on_hover_text(hint)
                                 .clicked()
                             {
@@ -3482,7 +3482,7 @@ Current loop: beats {:.2}–{:.2}", self.project.loop_start + 1.0, self.project.
                 (SetupPage::Storage, "Storage"),
                 (SetupPage::Plugins, "Plug-ins"),
                 (SetupPage::Ai, "AI"),
-            ], |_| {});
+            ]);
             let mut footer = daw_ui::popup_footer(ui, "setup_actions");
             let window_ui = ui;
             let ui = footer.body();

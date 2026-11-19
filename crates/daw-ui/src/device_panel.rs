@@ -231,9 +231,9 @@ pub struct PresetChoice<'a> {
     pub description: &'a str,
 }
 
-/// Every preset control of a device in one bordered group, set apart from
-/// the device's own controls: previous and next, the preset menu, **Save
-/// as…** and **Reset**. `draft` is the name being typed while saving; the
+/// Every preset control of a device in one group: previous and next, the
+/// preset menu, **Save as…**, **Reset** and the variation amounts under
+/// **Randomize**. `draft` is the name being typed while saving; the
 /// group opens and closes it. Identical wherever presets appear.
 pub fn preset_group(
     ui: &mut Ui,
@@ -251,7 +251,7 @@ pub fn preset_group(
     let row_width = ui.data(|data| data.get_temp::<f32>(row_id));
     let one_row = ui.available_width() + 0.5
         >= row_width.unwrap_or(tokens::POPUP_WIDTH_SM + tokens::SPACE_XL * 4.0);
-    crate::inset(ui.ctx())
+    egui::Frame::NONE
         .inner_margin(egui::Margin::symmetric(
             tokens::SPACE_SM as i8,
             tokens::SPACE_XS as i8,
@@ -335,13 +335,13 @@ pub fn preset_group(
                         *draft = Some(name);
                     }
                 } else {
-                    if crate::small_button(ui, "Save as…")
+                    if crate::quiet_button(ui, "Save as…")
                         .on_hover_text("Name and save the device's current parameter values as a reusable preset")
                         .clicked()
                     {
                         *draft = Some(String::new());
                     }
-                    if crate::small_button(ui, "Reset")
+                    if crate::quiet_button(ui, "Reset")
                         .on_hover_text("Return every parameter to its default")
                         .clicked()
                     {
@@ -350,28 +350,23 @@ pub fn preset_group(
                     ui.add_space(tokens::SPACE_XS);
                     ui.separator();
                     ui.add_space(tokens::SPACE_XS);
-                    let title = group_title(ui, "Randomize");
-                    let (rect, _) = ui.allocate_exact_size(
-                        title.size() + vec2(tokens::SPACE_XS, 0.0),
-                        egui::Sense::hover(),
-                    );
-                    ui.painter().galley(
-                        egui::pos2(rect.left(), rect.center().y - title.size().y * 0.5),
-                        title,
-                        egui::Color32::PLACEHOLDER,
-                    );
-                    for (label, amount) in [("1%", 0.01), ("10%", 0.1), ("100%", 1.0)] {
-                        if crate::small_button(ui, label)
-                            .on_hover_text(format!(
-                                "Make a random variation of this sound. Controls move by up to {label} of their range; \
-                                 a choice or switch changes with a {label} chance. \
-                                 Output, volume, and protected controls stay unchanged."
-                            ))
-                            .clicked()
-                        {
-                            *action = Some(PresetAction::Randomize(amount));
+                    crate::quiet_action_menu(ui, "Randomize", |ui| {
+                        for (label, amount) in [("1%", 0.01), ("10%", 0.1), ("100%", 1.0)] {
+                            if crate::menu_item(ui, label, None)
+                                .on_hover_text(format!(
+                                    "Make a random variation of this sound. Controls move by up to {label} of their range. \
+                                     Each choice or switch changes with a {label} chance. \
+                                     Output, volume, and protected controls stay unchanged."
+                                ))
+                                .clicked()
+                            {
+                                *action = Some(PresetAction::Randomize(amount));
+                                ui.close();
+                            }
                         }
-                    }
+                    })
+                    .response
+                    .on_hover_text("Choose how much to vary this sound");
                 }
             };
             if one_row {
@@ -384,8 +379,7 @@ pub fn preset_group(
                 });
                 // Saving swaps the actions for a wider name field.
                 if draft.is_none() {
-                    // With the group's own margin and border.
-                    let width = row.response.rect.width() + 2.0 * (tokens::SPACE_SM + 1.0);
+                    let width = row.response.rect.width() + 2.0 * tokens::SPACE_SM;
                     ui.data_mut(|data| data.insert_temp(row_id, width));
                 }
             } else {
@@ -616,14 +610,13 @@ impl<'a> DevicePanel<'a> {
 }
 
 /// Thickness of a [`device_frame`]'s border.
-pub const DEVICE_FRAME_BORDER: f32 = 3.0;
+pub const DEVICE_FRAME_BORDER: f32 = tokens::BORDER_WIDTH;
 /// The width a [`device_frame`] takes from its contents, both sides together.
 pub const DEVICE_FRAME_INSET: f32 = 2.0 * (DEVICE_FRAME_BORDER + tokens::PADDING_X);
 const DEVICE_FRAME_RADIUS: u8 = 10;
 
-/// The frame every device sits in, so each one reads as one unit: a thick
-/// rounded border, and a bar in the border's color across the top with the
-/// device's name at the left and its presets at the right. Draw the presets
+/// The frame every device sits in, with its name and presets on a single
+/// neutral header above a fine device-colored rule. Draw the presets
 /// into [`DeviceFrame::bar`], then the device with [`DeviceFrame::body`],
 /// [`DEVICE_FRAME_INSET`] narrower than the frame. Nothing in the body
 /// repeats the name or the presets.
@@ -654,7 +647,7 @@ pub fn device_frame(ui: &mut Ui, name: &str) -> DeviceFrame {
             .max_rect(inner)
             .layout(Layout::left_to_right(Align::Center)),
     );
-    let color = theme::contrast_text(colors.device);
+    let color = colors.text;
     let name_width = title
         .add(egui::Label::new(TextRole::Subtitle.rich(title.ctx(), name).color(color)).truncate())
         .rect
@@ -728,12 +721,16 @@ impl DeviceFrame {
                         se: 0,
                         ..radius
                     },
-                    colors.device,
+                    colors.panel,
+                ),
+                egui::Shape::line_segment(
+                    [bar_rect.left_bottom(), bar_rect.right_bottom()],
+                    egui::Stroke::new(tokens::BORDER_WIDTH, colors.device),
                 ),
                 egui::Shape::rect_stroke(
                     frame,
                     radius,
-                    egui::Stroke::new(DEVICE_FRAME_BORDER, colors.device),
+                    egui::Stroke::new(DEVICE_FRAME_BORDER, colors.line),
                     egui::StrokeKind::Inside,
                 ),
             ]),
@@ -790,15 +787,28 @@ pub fn device_section_header(
     enable: Option<&mut bool>,
     mark: Option<AutomationMark>,
 ) -> Response {
+    device_section_header_sized(ui, title, enable, mark, 0.0)
+}
+
+/// Reserve the same title line as an adjacent header with model choices.
+pub fn device_section_header_sized(
+    ui: &mut Ui,
+    title: &str,
+    enable: Option<&mut bool>,
+    mark: Option<AutomationMark>,
+    min_line_height: f32,
+) -> Response {
     let galley = group_title(ui, title);
+    let line = galley.size().y.max(min_line_height);
     let (rect, response) = ui.allocate_exact_size(
         vec2(
             ui.available_width(),
-            galley.size().y + tokens::SPACE_SM + tokens::BORDER_WIDTH,
+            line + tokens::SPACE_SM + tokens::BORDER_WIDTH,
         ),
         egui::Sense::hover(),
     );
-    header_title(ui, rect, rect.top(), galley, title, enable, mark, response)
+    let top = rect.top() + (line - galley.size().y) * 0.5;
+    header_title(ui, rect, top, galley, title, enable, mark, response)
 }
 
 /// A [`device_section_header`] whose section comes in a few models: the

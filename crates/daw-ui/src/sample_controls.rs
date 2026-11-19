@@ -54,6 +54,15 @@ pub fn sample_actions(ui: &mut Ui, loaded: bool, audible: bool) -> Option<Sample
 /// Empty names ask the owner to restore its automatic source-derived label.
 pub fn sample_name_editor(ui: &mut Ui, current: &str, hint: &str) -> Option<String> {
     let button = crate::button(ui, "Rename…");
+    sample_name_popup(ui, button, current, hint)
+}
+
+fn sample_name_popup(
+    ui: &mut Ui,
+    button: egui::Response,
+    current: &str,
+    hint: &str,
+) -> Option<String> {
     let id = button.id.with("name");
     let mut draft = if button.clicked() {
         current.to_owned()
@@ -120,6 +129,75 @@ pub fn sample_identity(ui: &mut Ui, name: &str, detail: &str) {
     response.on_hover_text(name);
 }
 
+/// Actions from the selected recording's identity row.
+#[derive(Default)]
+pub struct SampleRecordingResponse {
+    pub renamed: Option<String>,
+    pub edit_player: bool,
+    pub action: Option<SampleAction>,
+}
+
+/// A recording and its actions on one line above the waveform. A numbered
+/// slot uses a compact rename button to leave space for the recording name.
+pub fn sample_recording_header(
+    ui: &mut Ui,
+    slot: Option<&str>,
+    name: &str,
+    seconds: Option<f32>,
+    audible: bool,
+) -> SampleRecordingResponse {
+    let mut result = SampleRecordingResponse::default();
+    let compact = slot.is_some();
+    // On a narrow pad, reserve a whole row for the source name and duration.
+    let wrap = compact && ui.available_width() < 520.0;
+    crate::control_row(ui, |ui| {
+        if compact {
+            ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+        }
+        if let Some(slot) = slot {
+            crate::text::note(ui, slot);
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if !wrap {
+                result.edit_player = if compact {
+                    ui.add(crate::IconButton::icon_only(
+                        crate::Icon::Editor,
+                        "Edit player…",
+                    ))
+                    .on_hover_text("Edit sample player")
+                    .clicked()
+                } else {
+                    crate::button(ui, "Edit player…").clicked()
+                };
+                result.action = sample_actions(ui, seconds.is_some(), audible);
+            }
+            result.renamed = if compact {
+                let button = ui
+                    .add(crate::IconButton::icon_only(crate::Icon::Pencil, "Rename…"))
+                    .on_hover_text("Rename pad");
+                sample_name_popup(ui, button, name, "Pad name")
+            } else {
+                sample_name_editor(ui, name, "Sample name")
+            };
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                sample_identity(
+                    ui,
+                    if name.is_empty() { "No sample" } else { name },
+                    &seconds.map_or(String::new(), |s| format!("{s:.2} s")),
+                );
+            });
+        });
+    });
+    if wrap {
+        crate::control_row(ui, |ui| {
+            ui.spacing_mut().item_spacing.x = tokens::SPACE_XS;
+            result.action = sample_actions(ui, seconds.is_some(), audible);
+            result.edit_player = crate::button(ui, "Edit player…").clicked();
+        });
+    }
+    result
+}
+
 /// A slot name and context with actions that retain their width on narrow cards.
 pub fn sample_slot_header(
     ui: &mut Ui,
@@ -169,17 +247,23 @@ pub fn sample_group_overview(
     );
     child.add_space(((size.y - 112.0) * 0.5).max(0.0));
     crate::text::label(&mut child, title);
-    crate::text::note(
-        &mut child,
-        format!(
-            "{samples} sample {} · {loaded} loaded",
-            if samples == 1 { "player" } else { "players" }
-        ),
+    let count = format!(
+        "{samples} sample {} · {loaded} loaded",
+        if samples == 1 { "player" } else { "players" }
     );
-    if crate::button(&mut child, "Edit player…").clicked() {
-        edit = true;
+    if size.y < 108.0 {
+        crate::control_row(&mut child, |ui| {
+            crate::text::note(ui, count);
+            edit = crate::button(ui, "Edit player…").clicked();
+        });
+        response
+            .clone()
+            .on_hover_text("Drop a sample here to add it");
+    } else {
+        crate::text::note(&mut child, count);
+        edit = crate::button(&mut child, "Edit player…").clicked();
+        crate::text::note(&mut child, "Drop a sample here to add it");
     }
-    crate::text::note(&mut child, "Drop a sample here to add it");
     let dropped = response
         .dnd_release_payload::<crate::SampleDrop>()
         .map(|payload| (*payload).clone());

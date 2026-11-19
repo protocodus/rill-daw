@@ -3150,12 +3150,6 @@ impl DawApp {
                     daw_ui::text::note(ui, "Select a track or clip");
                     return;
                 };
-                let ai_scope = match self.inspector_page {
-                    InspectorPage::Clip => self.selected_clip_ai_scope(),
-                    InspectorPage::Channel => Some(daw_tools::ToolScope::Channel { track_id: id }),
-                    InspectorPage::Track => None,
-                };
-                let mut page = self.inspector_page;
                 let mut pages = Vec::with_capacity(3);
                 if has_clip {
                     pages.push((InspectorPage::Clip, "Clip"));
@@ -3164,19 +3158,16 @@ impl DawApp {
                 if has_channel {
                     pages.push((InspectorPage::Channel, "Channel"));
                 }
-                let open_ai = daw_ui::popup_tabs(ui, &mut page, &pages, |ui| {
-                    ai_scope.is_some_and(|scope| daw_ui::contextual_ai_button(ui, &scope.label(&self.project)).clicked())
-                });
-                self.inspector_page = page;
-                if open_ai && let Some(scope) = ai_scope {
-                    self.open_context_assistant(scope);
-                    navigated = true;
-                    return;
-                }
+                daw_ui::popup_tabs(ui, &mut self.inspector_page, &pages);
                 if self.inspector_page == InspectorPage::Channel {
-                    // The channel page keeps its mouse route to the related
-                    // windows; the tab row above switches only this window's pages.
-                    if self.channel_navigation(ui, crate::app::ChannelDestination::Channel) {
+                    let scope = daw_tools::ToolScope::Channel { track_id: id };
+                    let (destination, open_ai) = self.utility_header(
+                        ui, crate::app::ChannelDestination::Channel, Some(&scope.label(&self.project)),
+                    );
+                    if open_ai {
+                        self.open_context_assistant(scope);
+                    }
+                    if destination || open_ai {
                         navigated = true;
                         return;
                     }
@@ -3208,6 +3199,8 @@ impl DawApp {
                                 .filter(|clip| clip.link_group == Some(group))
                                 .count()
                         });
+                        let ai_scope = self.selected_clip_ai_scope().map(|scope| (scope, scope.label(&self.project)));
+                        let mut open_ai = None;
                         let mut make_independent = false;
                         let timing_tempo = self.project.tempo;
                         let timing_meter = self.project.meter_map();
@@ -3225,13 +3218,21 @@ impl DawApp {
                             }
                             daw_ui::form_grid(ui, "clip_properties", |ui| {
                                 let label = daw_ui::form_label(ui, "Name");
-                                let name = daw_ui::form_text_field(ui, &mut clip.name, "Clip name")
-                                    .labelled_by(label.id)
-                                    .on_hover_text(if linked.is_some() {
-                                        "Shared name · renaming any ghost renames the whole group"
-                                    } else {
-                                        "Name of this independent clip"
-                                    });
+                                let name = ui.horizontal(|ui| {
+                                    let name = daw_ui::form_text_field(ui, &mut clip.name, "Clip name")
+                                        .labelled_by(label.id)
+                                        .on_hover_text(if linked.is_some() {
+                                            "Shared name · renaming any ghost renames the whole group"
+                                        } else {
+                                            "Name of this independent clip"
+                                        });
+                                    if let Some((scope, label)) = &ai_scope
+                                        && daw_ui::contextual_ai_button(ui, label).clicked()
+                                    {
+                                        open_ai = Some(*scope);
+                                    }
+                                    name
+                                }).inner;
                                 ctx.data_mut(|data| {
                                     data.insert_temp(egui::Id::new("clip_name_rect"), name.rect)
                                 });
@@ -3318,6 +3319,11 @@ impl DawApp {
                                     ui, clip.start, clip.length, timing_tempo, &timing_meter,
                                 );
                             });
+                        }
+                        if let Some(scope) = open_ai {
+                            self.open_context_assistant(scope);
+                            navigated = true;
+                            return;
                         }
                         if timing_edit.new_gesture {
                             self.history.seal_group();

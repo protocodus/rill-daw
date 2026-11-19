@@ -76,7 +76,7 @@ fn hinted_tabs_keep_layout_and_mouse_navigation_in_both_themes_and_densities() {
             let mut time = 0.0;
             let mut page = 0;
             let draw = |ui: &mut egui::Ui, page: &mut usize, hints| {
-                let result = if hints {
+                if hints {
                     daw_ui::popup_tabs_with_hints(
                         ui,
                         page,
@@ -88,18 +88,11 @@ fn hinted_tabs_keep_layout_and_mouse_navigation_in_both_themes_and_densities() {
                             ),
                             (1, "Effects", "Browse processors for channel audio"),
                         ],
-                        |ui| {
-                            daw_ui::quiet_button(ui, "Refresh");
-                            42
-                        },
                     )
                 } else {
-                    daw_ui::popup_tabs(ui, page, &[(0, "Instruments"), (1, "Effects")], |ui| {
-                        daw_ui::quiet_button(ui, "Refresh");
-                        42
-                    })
-                };
-                assert_eq!(result, 42);
+                    daw_ui::popup_tabs(ui, page, &[(0, "Instruments"), (1, "Effects")])
+                }
+                daw_ui::quiet_button(ui, "Refresh");
                 ui.label("Page body");
             };
             let ordinary = frame(&ctx, &mut time, vec![], |ui| draw(ui, &mut page, false));
@@ -107,6 +100,7 @@ fn hinted_tabs_keep_layout_and_mouse_navigation_in_both_themes_and_densities() {
             for label in ["Instruments", "Effects", "Refresh", "Page body"] {
                 assert_eq!(text_rect(&ordinary, label), text_rect(&hinted, label));
             }
+            assert!(text_rect(&hinted, "Refresh").top() > text_rect(&hinted, "Effects").bottom());
             for (label, hint, value) in [
                 ("Effects", "Browse processors for channel audio", 1),
                 (

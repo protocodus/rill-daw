@@ -1,50 +1,43 @@
 use super::*;
 
-pub(super) fn build(
-    mut layout: Layout,
-    descriptor: &DeviceDescriptor,
-    page: usize,
-    band: usize,
-) -> Workspace {
+pub(super) fn build(mut layout: Layout, descriptor: &DeviceDescriptor, band: usize) -> Workspace {
     use Slot::Control as C;
     layout.cells = true;
     layout.picture_place = PicturePlace::Above;
     if descriptor.id == filter::DESCRIPTOR.id {
         use filter::*;
-        layout.sections = if page == 1 {
-            vec![
-                cells(
-                    "LFO",
-                    0,
-                    8,
-                    &[&[
-                        C(LFO_SHAPE, 2),
-                        C(LFO_RATE, 1),
-                        C(LFO_SYNC, 3),
-                        C(LFO_DEPTH, 1),
-                        C(LFO_STEREO, 1),
-                    ]],
-                ),
-                cells(
-                    "Envelope follower",
-                    0,
-                    4,
-                    &[&[C(ENV_AMOUNT, 2), C(ENV_ATTACK, 1), C(ENV_RELEASE, 1)]],
-                ),
-            ]
-        } else {
-            vec![
-                cells(
-                    "Sound",
-                    0,
-                    5,
-                    &[&[C(CUTOFF, 2), C(RESONANCE, 1), C(DRIVE, 1), C(MORPH, 1)]],
-                ),
-                cells("Circuit", 0, 7, &[&[C(MODEL, 2), C(TYPE, 4), C(SLOPE, 1)]]),
-            ]
-        };
+        layout.toggle_columns = &[(TYPE, 2), (SLOPE, 1)];
+        layout.sections = vec![
+            cells("Circuit", 0, 5, &[&[C(MODEL, 2), C(TYPE, 2), C(SLOPE, 1)]]),
+            cells(
+                "Filter",
+                0,
+                4,
+                &[&[C(DRIVE, 1), C(CUTOFF, 1), C(RESONANCE, 1), C(MORPH, 1)]],
+            ),
+            // Both sources move the same cutoff. Keep the source timings and
+            // modulation amounts accessible while adjusting the filter.
+            cells(
+                "LFO",
+                1,
+                5,
+                &[&[
+                    C(LFO_SHAPE, 1),
+                    C(LFO_SYNC, 1),
+                    C(LFO_RATE, 1),
+                    C(LFO_DEPTH, 1),
+                    C(LFO_STEREO, 1),
+                ]],
+            ),
+            cells(
+                "Envelope follower",
+                1,
+                4,
+                &[&[C(ENV_ATTACK, 1), C(ENV_RELEASE, 2), C(ENV_AMOUNT, 1)]],
+            ),
+        ];
         if let Some(Picture::Response(view)) = &mut layout.picture {
-            view.height = 176.0;
+            view.height = 152.0;
             view.nodes = &[NodeView {
                 label: Some("Cutoff"),
                 frequency: CUTOFF,
@@ -69,7 +62,6 @@ pub(super) fn build(
                 MORPH => "Morph is available for State variable, Comb and Vowel models.",
                 TYPE => "This model has a fixed filter type.",
                 SLOPE => "This model has a fixed filter slope.",
-                DRIVE => "This model does not apply drive.",
                 _ => "This control is inactive for the selected model.",
             })
         };
@@ -77,35 +69,37 @@ pub(super) fn build(
             layout,
             output: vec![MIX, OUTPUT],
             toolbar: vec![],
-            body_height: 360.0,
+            body_height: 0.0,
         }
     } else {
         use equalizer::*;
         let band = band.min(5);
+        // Shape or slope first, then the same frequency dial for every band.
+        // Cut filters share the other bands' geometry when gain and Q disappear.
         let mut inspector = match band {
             0 => cells(
                 "High-pass",
                 0,
-                12,
-                &[&[C(HP_FREQUENCY, 3), C(HP_SLOPE, 5), Slot::Blank(4)]],
+                9,
+                &[&[C(HP_SLOPE, 3), C(HP_FREQUENCY, 2), Slot::Blank(4)]],
             ),
             5 => cells(
                 "Low-pass",
                 0,
-                12,
-                &[&[C(LP_FREQUENCY, 3), C(LP_SLOPE, 5), Slot::Blank(4)]],
+                9,
+                &[&[C(LP_SLOPE, 3), C(LP_FREQUENCY, 2), Slot::Blank(4)]],
             ),
             _ => {
                 let base = BANDS[band - 1];
                 cells(
                     ["Band 1", "Band 2", "Band 3", "Band 4"][band - 1],
                     0,
-                    12,
+                    9,
                     &[&[
+                        C(base + BAND_TYPE, 3),
                         C(base + BAND_FREQUENCY, 2),
                         C(base + BAND_GAIN, 2),
                         C(base + BAND_Q, 2),
-                        C(base + BAND_TYPE, 6),
                     ]],
                 )
             }
@@ -123,18 +117,8 @@ pub(super) fn build(
         });
         layout.faces = &[];
         layout.leds = &[];
-        layout.captions = &[
-            (HP_FREQUENCY, "Frequency"),
-            (LP_FREQUENCY, "Frequency"),
-            (HP_SLOPE, "Slope"),
-            (LP_SLOPE, "Slope"),
-            (BANDS[0] + BAND_FREQUENCY, "Frequency"),
-            (BANDS[1] + BAND_FREQUENCY, "Frequency"),
-            (BANDS[2] + BAND_FREQUENCY, "Frequency"),
-            (BANDS[3] + BAND_FREQUENCY, "Frequency"),
-        ];
         if let Some(Picture::Response(view)) = &mut layout.picture {
-            view.height = 190.0;
+            view.height = 212.0;
         }
         layout.hint = |id, values| {
             (!applies(id, &equalizer_settings(values)))
@@ -144,7 +128,7 @@ pub(super) fn build(
             layout,
             output: vec![AUTO_GAIN, OUTPUT],
             toolbar: vec![MODE, ANALYZER],
-            body_height: 450.0,
+            body_height: 0.0,
         }
     }
 }

@@ -349,37 +349,43 @@ pub fn show(
         // Device workspaces use the shared compact rhythm between a caption,
         // control and value; full workspace spacing would triple that gap.
         ui.spacing_mut().item_spacing.y = daw_ui::tokens::SPACE_XS;
-        if !tabs.is_empty() {
-            ui.horizontal(|ui| {
-                for (page, label) in tabs.iter().enumerate() {
-                    let response = daw_ui::tab_choice(ui, state.page == page, *label);
-                    if response.clicked() {
-                        state.page = page;
-                    }
-                    #[cfg(test)]
-                    state.tab_rects.push(response.rect);
-                }
-            });
+        let build = |state: &PanelState| {
+            panels::workspaces::build(
+                descriptor,
+                state.pad,
+                state.page,
+                state.selected.unwrap_or(1),
+            )
+        };
+        let responses = daw_ui::page_tab_bar(ui, tabs, state.page);
+        if let Some(page) = responses.iter().position(egui::Response::clicked) {
+            state.page = page;
         }
-        let mut workspace = panels::workspaces::build(
-            descriptor,
-            state.pad,
-            state.page,
-            state.selected.unwrap_or(1),
-        );
+        #[cfg(test)]
+        state.tab_rects.extend(responses.iter().map(|tab| tab.rect));
+        let mut workspace = build(state);
         let body = ui.allocate_ui(
             egui::vec2(ui.available_width(), workspace.body_height),
             |ui| {
                 ui.set_min_height(workspace.body_height);
-                if !workspace.toolbar.is_empty() {
-                    compact_parameters(
-                        ui,
-                        descriptor,
-                        &workspace.toolbar,
-                        host,
-                        state,
-                        &workspace.layout,
-                    );
+                if !equalizer && !workspace.toolbar.is_empty() {
+                    daw_ui::control_row_wrapped(ui, |ui| {
+                        compact_parameters(
+                            ui,
+                            descriptor,
+                            &workspace.toolbar,
+                            host,
+                            state,
+                            &workspace.layout,
+                        );
+                    });
+                }
+                if descriptor.id == daw_devices::devices::drums::DESCRIPTOR.id {
+                    // The kit picture includes the full inspector. Read the selected pad
+                    // again for its output controls after the grid handles a click.
+                    picture(ui, descriptor, &workspace.layout, host, state);
+                    workspace = build(state);
+                    return;
                 }
                 if workspace.layout.picture_place == panels::PicturePlace::Above
                     && workspace.layout.picture.is_some()
@@ -388,7 +394,7 @@ pub fn show(
                     ui.add_space(daw_ui::tokens::SPACE_SM);
                 }
                 if equalizer {
-                    ui.horizontal(|ui| {
+                    daw_ui::control_row_wrapped(ui, |ui| {
                         daw_ui::control_caption(ui, "Band");
                         for (index, label) in ["HP", "1", "2", "3", "4", "LP"].iter().enumerate() {
                             let name = match index {
@@ -396,9 +402,14 @@ pub fn show(
                                 5 => "Low-pass".to_owned(),
                                 _ => format!("Band {index}"),
                             };
-                            let response =
-                                daw_ui::tab_choice(ui, state.selected == Some(index), *label)
-                                    .on_hover_text(&name);
+                            let response = ui
+                                .add(
+                                    daw_ui::IconButton::text(*label)
+                                        .presentation()
+                                        .selected(state.selected == Some(index))
+                                        .quiet(),
+                                )
+                                .on_hover_text(&name);
                             response.widget_info(|| {
                                 egui::WidgetInfo::selected(
                                     egui::WidgetType::SelectableLabel,
@@ -413,23 +424,39 @@ pub fn show(
                             #[cfg(test)]
                             state.band_rects.push(response.rect);
                         }
+                        // Keep the mode and spectrum source beside the band
+                        // picker, or together below it in a narrow popup.
+                        let spacing = ui.spacing().item_spacing.x;
+                        let width = workspace
+                            .toolbar
+                            .iter()
+                            .filter_map(|id| descriptor.parameter(*id))
+                            .map(|spec| {
+                                let caption = ui.painter().layout_no_wrap(
+                                    spec.name.into(),
+                                    daw_ui::control_caption_font(),
+                                    egui::Color32::PLACEHOLDER,
+                                );
+                                caption.size().x
+                                    + cell_width(ui, spec, &workspace.layout)
+                                    + 2.0 * spacing
+                            })
+                            .sum();
+                        daw_ui::toolbar_group_sized_with_spacing(ui, width, spacing, |ui| {
+                            compact_parameters(
+                                ui,
+                                descriptor,
+                                &workspace.toolbar,
+                                host,
+                                state,
+                                &workspace.layout,
+                            )
+                        });
                     });
                     // A graph gesture and the selector update the inspector in this frame.
-                    workspace = panels::workspaces::build(
-                        descriptor,
-                        state.pad,
-                        state.page,
-                        state.selected.unwrap_or(1),
-                    );
-                } else if descriptor.id == daw_devices::devices::drums::DESCRIPTOR.id {
-                    // A pad click updates its inspector immediately as well.
-                    workspace = panels::workspaces::build(descriptor, state.pad, state.page, 0);
+                    workspace = build(state);
                 }
-                // The drum kit keeps its large audition pads beside the sample
-                // and task inspector; its picture composes those cards on the right.
-                if descriptor.id != daw_devices::devices::drums::DESCRIPTOR.id {
-                    workspace_sections(ui, descriptor, &workspace.layout, host, state);
-                }
+                workspace_sections(ui, descriptor, &workspace.layout, host, state);
             },
         );
         #[cfg(test)]
@@ -439,14 +466,17 @@ pub fn show(
         let _ = body;
         if !workspace.output.is_empty() {
             ui.separator();
-            state.output_rect = Some(compact_parameters(
-                ui,
-                descriptor,
-                &workspace.output,
-                host,
-                state,
-                &workspace.layout,
-            ));
+            let output = daw_ui::control_row_wrapped(ui, |ui| {
+                compact_parameters(
+                    ui,
+                    descriptor,
+                    &workspace.output,
+                    host,
+                    state,
+                    &workspace.layout,
+                );
+            });
+            state.output_rect = Some(output.response.rect);
         }
         if descriptor.kind == DeviceKind::Instrument {
             ui.add_space(daw_ui::tokens::SPACE_SM);
@@ -503,46 +533,59 @@ fn compact_parameters(
     host: &mut dyn DeviceHost,
     #[cfg_attr(not(test), expect(unused_variables))] state: &mut PanelState,
     layout: &panels::Layout,
-) -> egui::Rect {
-    daw_ui::control_row(ui, |ui| {
-        for spec in ids.iter().filter_map(|id| descriptor.parameter(*id)) {
-            let caption = caption(descriptor, spec, host, layout);
-            ui.push_id((descriptor.id, spec.id, "persistent"), |ui| {
-                daw_ui::control_caption(ui, caption);
-                let drawn = ui.scope(|ui| {
-                    ui.spacing_mut().button_padding.x = daw_ui::tokens::SPACE_SM;
-                    table_control(ui, spec, host, layout, 108.0);
-                });
-                #[cfg(test)]
-                {
-                    state.control_rects.push((spec.id, drawn.response.rect));
-                    if !active(spec, host, layout) {
-                        state.disabled.push(spec.id);
-                    }
-                }
-                if let Some(hint) = (layout.hint)(spec.id, &|id| host.value(id)) {
-                    drawn
-                        .response
-                        .on_hover_text(hint)
-                        .on_disabled_hover_text(hint);
-                }
-                // Compensation has a reserved value slot even while switched off.
-                if matches!(spec.range, ParamRange::Toggle) {
-                    let readout = (layout.readout)(spec.id, &|id| host.value(id));
-                    if spec.key == "auto_gain" {
-                        ui.allocate_ui(egui::vec2(70.0, daw_ui::tokens::COMPACT_HEIGHT), |ui| {
-                            daw_ui::text::note(ui, readout.as_deref().unwrap_or(""));
-                        });
-                    } else if let Some(text) = readout {
-                        daw_ui::text::note(ui, &text);
-                    }
-                }
-                ui.add_space(daw_ui::tokens::SPACE_SM);
+) {
+    for spec in ids.iter().filter_map(|id| descriptor.parameter(*id)) {
+        let caption = caption(descriptor, spec, host, layout);
+        ui.push_id((descriptor.id, spec.id, "persistent"), |ui| {
+            let label = daw_ui::control_caption(ui, caption);
+            if let Some((_, captions)) = mode_captions(spec, layout) {
+                let width = captions
+                    .iter()
+                    .map(|name| {
+                        ui.painter()
+                            .layout_no_wrap(
+                                (*name).into(),
+                                daw_ui::control_caption_font(),
+                                egui::Color32::PLACEHOLDER,
+                            )
+                            .size()
+                            .x
+                    })
+                    .fold(0.0, f32::max);
+                ui.add_space((width - label.rect.width()).max(0.0));
+            }
+            let drawn = ui.scope(|ui| {
+                ui.spacing_mut().button_padding.x = daw_ui::tokens::SPACE_SM;
+                table_control(ui, spec, host, layout, 108.0);
             });
-        }
-    })
-    .response
-    .rect
+            #[cfg(test)]
+            {
+                state.control_rects.push((spec.id, drawn.response.rect));
+                if !active(spec, host, layout) {
+                    state.disabled.push(spec.id);
+                }
+            }
+            if let Some(hint) = (layout.hint)(spec.id, &|id| host.value(id)) {
+                drawn
+                    .response
+                    .on_hover_text(hint)
+                    .on_disabled_hover_text(hint);
+            }
+            // Compensation has a reserved value slot even while switched off.
+            if matches!(spec.range, ParamRange::Toggle) {
+                let readout = (layout.readout)(spec.id, &|id| host.value(id));
+                if matches!(spec.key, "auto_gain" | "auto_makeup") {
+                    ui.allocate_ui(egui::vec2(70.0, daw_ui::tokens::COMPACT_HEIGHT), |ui| {
+                        ui.set_min_width(70.0);
+                        daw_ui::text::note(ui, readout.as_deref().unwrap_or(""));
+                    });
+                } else if let Some(text) = readout {
+                    daw_ui::text::note(ui, &text);
+                }
+            }
+            ui.add_space(daw_ui::tokens::SPACE_SM);
+        });
+    }
 }
 
 /// The device's picture, in the space the caller gave it.
@@ -746,13 +789,18 @@ fn cell_row(
             framed: true,
         }))
         .collect();
-    daw_ui::grid_row_cells(ui, &cells, |ui, index| {
+    let title_height = if sections.iter().any(|section| section.choice.is_some()) {
+        daw_ui::TOGGLE_ROW_HEIGHT
+    } else {
+        0.0
+    };
+    daw_ui::device_stage_row(ui, &cells, |ui, index| {
         let Some(index) = index.checked_sub(usize::from(beside.is_some())) else {
             picture(ui, descriptor, layout, host, state);
             return;
         };
         let section = sections[index];
-        section_header(ui, descriptor, section, host, state, layout);
+        section_header(ui, descriptor, section, title_height, host, state, layout);
         ui.add_space(daw_ui::tokens::SPACE_XS);
         let width = ui.available_width() / f32::from(section.span);
         for (line, slots) in section.lines.iter().enumerate() {
@@ -826,6 +874,7 @@ fn section_header(
     ui: &mut Ui,
     descriptor: &DeviceDescriptor,
     section: &panels::Section,
+    title_height: f32,
     host: &mut dyn DeviceHost,
     // Only tests look at where controls were drawn.
     #[cfg_attr(not(test), expect(unused_variables))] state: &mut PanelState,
@@ -875,11 +924,12 @@ fn section_header(
             }
             lamp
         }
-        None => daw_ui::device_section_header(
+        None => daw_ui::device_section_header_sized(
             ui,
             section.title,
             enable.is_some().then_some(&mut on),
             enable.and_then(|enable| mark(host, enable, switch_position)),
+            title_height,
         ),
     };
     let Some(spec) = enable else {
@@ -1737,6 +1787,12 @@ fn control(
     let control = AutomationControl::DeviceParameter { id: spec.id };
     let caption = caption(descriptor, spec, host, layout);
     let applies = active(spec, host, layout);
+    let offered = match spec.range {
+        ParamRange::Choice(labels) => {
+            (layout.options)(spec.id, &|id| host.value(id)).unwrap_or(labels)
+        }
+        _ => &[],
+    };
     // Use the last measured footprint so caption, dial and revealed value
     // form one stable hover target, including disabled controls. Keep drawing
     // the readout at zero opacity when idle to preserve its size and widget ID.
@@ -1766,6 +1822,10 @@ fn control(
                     daw_ui::control_caption(ui, if named { caption } else { " " });
                     let own = if fader {
                         height
+                    } else if let Some(columns) = toggle_columns(spec, layout) {
+                        // The row reserves every possible choice. Center the
+                        // rows offered by the current circuit within that band.
+                        daw_ui::TOGGLE_ROW_HEIGHT * offered.len().div_ceil(columns) as f32
                     } else {
                         control_height(spec, layout)
                     };
@@ -1872,8 +1932,6 @@ fn control(
                         }
                         ParamRange::Choice(labels) => {
                             // Option indices with their labels.
-                            let offered =
-                                (layout.options)(spec.id, &|id| host.value(id)).unwrap_or(labels);
                             let options: Vec<(f32, String)> = offered
                                 .iter()
                                 .map(|option| {

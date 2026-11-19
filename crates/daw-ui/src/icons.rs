@@ -925,7 +925,6 @@ enum ButtonRole {
     Tool,
     ToolChoice,
     View,
-    Tab,
 }
 
 #[derive(Clone, Default)]
@@ -970,6 +969,10 @@ impl IconButton {
         let icon = Icon::for_label(label.text());
         Self::from_parts(label, icon)
     }
+    /// A text-only button, including for labels that have a standard icon.
+    pub fn text(label: impl Into<WidgetText>) -> Self {
+        Self::from_parts(label.into(), None)
+    }
     pub fn with_icon(icon: Icon, label: impl Into<WidgetText>) -> Self {
         Self::from_parts(label.into(), Some(icon))
     }
@@ -1007,18 +1010,6 @@ impl IconButton {
             Some(tool) => format!("{label} · {tool}"),
             None => label.to_owned(),
         });
-        button
-    }
-    /// Quiet exclusive page navigation: full-size targets and a persistent
-    /// glowing border, with a surface only on hover or keyboard focus.
-    pub fn tab(selected: bool, label: impl Into<WidgetText>) -> Self {
-        let label = label.into();
-        let accessible_label = label.text().to_owned();
-        let mut button = Self::from_parts(label, None)
-            .selected(selected)
-            .frame_when_inactive(false);
-        button.role = ButtonRole::Tab;
-        button.accessible_label = Some(accessible_label);
         button
     }
     /// Presentation commands have an outline rather than an action fill.
@@ -1234,9 +1225,7 @@ impl Widget for IconButton {
         // Modes and views stay neutral; the action tint marks commands that
         // change the document, so a toolbar reads as mostly quiet text.
         let purpose = match self.role {
-            ButtonRole::View | ButtonRole::Tab | ButtonRole::Tool | ButtonRole::ToolChoice => {
-                colors.text
-            }
+            ButtonRole::View | ButtonRole::Tool | ButtonRole::ToolChoice => colors.text,
             ButtonRole::Ai => colors.ai,
             ButtonRole::Automation => colors.automation,
             _ if in_menu => inherited.unwrap_or(colors.text),
@@ -1266,11 +1255,8 @@ impl Widget for IconButton {
             visuals.active.bg_stroke.color = purpose;
             visuals.hovered.bg_stroke.color = purpose;
         }
-        let selected_mode = self.selected
-            && matches!(
-                self.role,
-                ButtonRole::Tool | ButtonRole::ToolChoice | ButtonRole::Tab
-            );
+        let selected_mode =
+            self.selected && matches!(self.role, ButtonRole::Tool | ButtonRole::ToolChoice);
         if in_menu {
             let visuals = &mut ui.visuals_mut().widgets;
             visuals.inactive.weak_bg_fill = Color32::TRANSPARENT;
@@ -1364,16 +1350,14 @@ impl Widget for IconButton {
                 if output.events.get(index).is_some_and(|event| {
                     let info = event.widget_info();
                     info.typ == egui::WidgetType::Button
-                        && (matches!(
-                            self.role,
-                            ButtonRole::Tool | ButtonRole::ToolChoice | ButtonRole::Tab
-                        ) || info.label.is_none())
+                        && (matches!(self.role, ButtonRole::Tool | ButtonRole::ToolChoice)
+                            || info.label.is_none())
                 }) {
                     output.events.remove(index);
                 }
             });
             output.response.widget_info(|| {
-                if matches!(self.role, ButtonRole::Tool | ButtonRole::Tab) {
+                if self.role == ButtonRole::Tool {
                     egui::WidgetInfo::selected(
                         egui::WidgetType::RadioButton,
                         ui.is_enabled(),

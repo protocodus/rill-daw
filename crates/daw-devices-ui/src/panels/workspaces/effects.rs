@@ -5,7 +5,7 @@ use super::*;
 pub(super) fn build(layout: Layout, descriptor: &DeviceDescriptor, page: usize) -> Workspace {
     match descriptor.id {
         "r1-saturator" => saturation(layout),
-        "r1-compressor" => dynamics(layout, page),
+        "r1-compressor" => dynamics(layout),
         "r1-modulator" => modulation(layout),
         "r1-spacer" => space(layout, page),
         _ => unreachable!("effect workspace"),
@@ -16,13 +16,14 @@ fn saturation(mut layout: Layout) -> Workspace {
     use Slot::Control as C;
     use saturator::*;
     layout.sections = vec![
+        cells("Input", 0, 3, &[&[C(FOCUS, 1), C(DRIVE, 2)]]),
         cells(
-            "Sound",
+            "Waveshaper",
             0,
-            8,
-            &[&[C(MODEL, 3), C(DRIVE, 2), C(CHARACTER, 1), C(TONE, 2)]],
+            6,
+            &[&[C(MODEL, 3), C(CHARACTER, 1), C(QUALITY, 2)]],
         ),
-        cells("Refinement", 0, 4, &[&[C(FOCUS, 2), C(QUALITY, 2)]]),
+        cells("Wet signal", 0, 3, &[&[C(AUTO_GAIN, 2), C(TONE, 1)]]),
     ];
     layout.captions = &[(FOCUS, "Low bypass")];
     layout.hint = |id, _| match id {
@@ -33,62 +34,51 @@ fn saturation(mut layout: Layout) -> Workspace {
         }
         _ => None,
     };
-    layout.picture = Some(Picture::Saturation { height: 150.0 });
+    layout.picture = Some(Picture::Saturation { height: 168.0 });
     layout.picture_place = PicturePlace::Above;
     Workspace {
         layout,
-        output: vec![AUTO_GAIN, MIX, OUTPUT],
+        output: vec![MIX, OUTPUT],
         toolbar: vec![],
-        body_height: 330.0,
+        body_height: 0.0,
     }
 }
 
-fn dynamics(mut layout: Layout, page: usize) -> Workspace {
+fn dynamics(mut layout: Layout) -> Workspace {
     use Slot::Control as C;
     use compressor::*;
     layout.knob = daw_ui::KnobSize::Standard;
-    layout.sections = if page == 0 {
-        vec![
-            cells(
-                "Dynamics",
-                0,
-                4,
-                &[&[C(THRESHOLD, 1), C(RATIO, 1), C(KNEE, 1), C(CEILING, 1)]],
-            ),
-            cells(
-                "Timing",
-                0,
-                3,
-                &[&[C(ATTACK, 1), C(RELEASE, 1), C(AUTO_RELEASE, 1)]],
-            ),
-            cells(
-                "Character & gain",
-                0,
-                5,
-                &[&[C(CHARACTER, 3), C(MAKEUP, 1), C(AUTO_MAKEUP, 1)]],
-            ),
-        ]
-    } else {
-        vec![
-            cells(
-                "Sidechain",
-                0,
-                8,
-                &[&[
-                    C(SIDECHAIN, 4),
-                    C(SIDECHAIN_HIGH_PASS, 2),
-                    C(STEREO_LINK, 2),
-                ]],
-            ),
-            cells("Detection", 0, 4, &[&[C(LOOKAHEAD, 4)]]),
-        ]
-    };
+    layout.sections = vec![
+        cells(
+            "Sidechain",
+            0,
+            5,
+            &[&[
+                C(SIDECHAIN, 2),
+                C(SIDECHAIN_HIGH_PASS, 1),
+                C(STEREO_LINK, 1),
+                C(LOOKAHEAD, 1),
+            ]],
+        ),
+        cells(
+            "Dynamics",
+            0,
+            4,
+            &[&[C(THRESHOLD, 1), C(RATIO, 1), C(KNEE, 1), C(CEILING, 1)]],
+        ),
+        cells(
+            "Timing",
+            0,
+            3,
+            &[&[C(ATTACK, 1), C(RELEASE, 1), C(AUTO_RELEASE, 1)]],
+        ),
+    ];
     layout.toggle_columns = &[];
     layout.captions = &[
+        (SIDECHAIN, "Source"),
         (SIDECHAIN_HIGH_PASS, "High-pass"),
         (STEREO_LINK, "Stereo link"),
         (AUTO_RELEASE, "Auto"),
-        (AUTO_MAKEUP, "Auto"),
     ];
     layout.hint = |id, values| {
         let settings = compressor_settings(values);
@@ -118,13 +108,13 @@ fn dynamics(mut layout: Layout, page: usize) -> Workspace {
             _ => None,
         }
     };
-    layout.picture = Some(Picture::Dynamics { height: 150.0 });
+    layout.picture = Some(Picture::Dynamics { height: 168.0 });
     layout.picture_place = PicturePlace::Above;
     Workspace {
         layout,
-        output: vec![MIX, OUTPUT],
-        toolbar: vec![MODE],
-        body_height: 400.0,
+        output: vec![MAKEUP, AUTO_MAKEUP, MIX, OUTPUT],
+        toolbar: vec![MODE, CHARACTER],
+        body_height: 0.0,
     }
 }
 
@@ -133,27 +123,28 @@ fn modulation(mut layout: Layout) -> Workspace {
     use modulator::*;
     layout.knob = daw_ui::KnobSize::Standard;
     layout.sections = vec![
-        cells("Type", 0, 3, &[&[C(MODE, 3)], &[C(CHARACTER, 3)]]),
         cells(
-            "Motion",
+            "LFO",
             0,
-            5,
-            &[
-                &[Swap(&[RATE, DIVISION], 2), C(SYNC, 1), C(DEPTH, 2)],
-                &[C(SHAPE, 3), C(STEREO, 2)],
-            ],
+            6,
+            &[&[
+                C(SHAPE, 2),
+                C(SYNC, 1),
+                Swap(&[RATE, DIVISION], 1),
+                C(DEPTH, 1),
+                C(STEREO, 1),
+            ]],
         ),
         cells(
-            "Tone",
+            "Wet signal",
             0,
             4,
-            &[
-                &[
-                    Swap(&[CENTER_CHORUS, CENTER_FLANGER, CENTER_PHASER], 2),
-                    C(FEEDBACK, 2),
-                ],
-                &[Swap(&[VOICES, STAGES], 2), C(LOW_CUT, 2)],
-            ],
+            &[&[
+                Swap(&[CENTER_CHORUS, CENTER_FLANGER, CENTER_PHASER], 1),
+                Swap(&[VOICES, STAGES], 1),
+                C(FEEDBACK, 1),
+                C(LOW_CUT, 1),
+            ]],
         ),
     ];
     layout.hint = |id, values| match id {
@@ -172,79 +163,74 @@ fn modulation(mut layout: Layout) -> Workspace {
     Workspace {
         layout,
         output: vec![MIX, OUTPUT],
-        toolbar: vec![],
-        body_height: 440.0,
+        toolbar: vec![MODE, CHARACTER],
+        body_height: 0.0,
     }
 }
 
 fn space(mut layout: Layout, page: usize) -> Workspace {
     use Slot::{Control as C, Swap};
     use spacer::*;
-    layout.knob = daw_ui::KnobSize::Dense;
-    let (echo, reverb) = if page == 0 {
-        (
+    layout.knob = daw_ui::KnobSize::Standard;
+    layout.sections = if page == 0 {
+        vec![
             cells(
-                "Echo",
+                "Repeats",
                 0,
-                6,
+                5,
                 &[
+                    &[C(ECHO_MODEL, 3), C(ECHO_TAPS, 2)],
                     &[
-                        C(ECHO_SYNC, 2),
+                        C(ECHO_SYNC, 1),
                         Swap(&[ECHO_TIME, ECHO_DIVISION], 2),
                         C(ECHO_FEEDBACK, 2),
                     ],
-                    &[C(ECHO_DUCK, 3), C(ECHO_LEVEL, 3)],
                 ],
             ),
             cells(
-                "Reverb",
+                "Delay line",
                 0,
-                6,
+                4,
                 &[
-                    &[C(PRE_DELAY, 2), C(SIZE, 2), C(DECAY, 2)],
-                    &[C(WIDTH, 2), C(REVERB_DUCK, 2), C(REVERB_LEVEL, 2)],
+                    &[C(ECHO_DIFFUSION, 2), C(ECHO_WOBBLE, 2)],
+                    &[C(ECHO_LOW_CUT, 2), C(ECHO_COLOR, 2)],
                 ],
             ),
-        )
+            cells(
+                "Return",
+                0,
+                3,
+                &[&[C(ECHO_STEREO, 3)], &[C(ECHO_DUCK, 1), C(ECHO_LEVEL, 2)]],
+            ),
+        ]
     } else {
-        (
+        vec![
             cells(
-                "Echo",
+                "Room",
                 0,
-                6,
+                5,
                 &[
-                    &[C(ECHO_TAPS, 2), C(ECHO_STEREO, 4)],
-                    &[
-                        C(ECHO_COLOR, 2),
-                        C(ECHO_DIFFUSION, 2),
-                        C(ECHO_WOBBLE, 1),
-                        C(ECHO_LOW_CUT, 1),
-                    ],
+                    &[C(REVERB_MODEL, 3), C(SEED, 2)],
+                    &[C(PRE_DELAY, 1), C(SIZE, 2), C(DECAY, 2)],
                 ],
             ),
             cells(
-                "Reverb",
+                "Reverb tail",
                 0,
-                6,
+                4,
                 &[
-                    &[C(SEED, 2), C(DIFFUSION, 2), C(MOVEMENT, 2)],
-                    &[C(REVERB_COLOR, 2), C(DAMPING, 2), C(REVERB_LOW_CUT, 2)],
+                    &[C(DIFFUSION, 2), C(MOVEMENT, 2)],
+                    &[C(REVERB_LOW_CUT, 1), C(REVERB_COLOR, 1), C(DAMPING, 2)],
                 ],
             ),
-        )
+            cells(
+                "Return",
+                0,
+                3,
+                &[&[C(WIDTH, 3)], &[C(REVERB_DUCK, 1), C(REVERB_LEVEL, 2)]],
+            ),
+        ]
     };
-    layout.sections = vec![
-        Section {
-            enable: Some(ECHO_ON),
-            choice: Some(ECHO_MODEL),
-            ..echo
-        },
-        Section {
-            enable: Some(REVERB_ON),
-            choice: Some(REVERB_MODEL),
-            ..reverb
-        },
-    ];
     layout.picture = Some(Picture::Space { height: 150.0 });
     layout.picture_place = PicturePlace::Above;
     layout.hint = |id, values| {
@@ -280,9 +266,9 @@ fn space(mut layout: Layout, page: usize) -> Workspace {
     };
     Workspace {
         layout,
-        output: vec![ROUTING, MIX, OUTPUT],
-        toolbar: vec![],
-        body_height: 420.0,
+        output: vec![MIX, OUTPUT],
+        toolbar: vec![ROUTING, ECHO_ON, REVERB_ON],
+        body_height: 0.0,
     }
 }
 
@@ -377,7 +363,7 @@ mod tests {
             &spacer::DESCRIPTOR,
         ] {
             let mut reachable = BTreeSet::new();
-            for page in 0..2 {
+            for page in 0..super::super::tabs(descriptor).len().max(1) {
                 let workspace = build(layout_for(descriptor, 0), descriptor, page);
                 reachable.extend(workspace.layout.sections.iter().flat_map(Section::ids));
                 reachable.extend(workspace.output);
@@ -404,7 +390,7 @@ mod tests {
                     };
                     f64::from(spec.to_normalized(plain))
                 };
-                for page in 0..2 {
+                for page in 0..super::super::tabs(descriptor).len().max(1) {
                     let workspace = build(layout_for(descriptor, 0), descriptor, page);
                     let layout = &workspace.layout;
                     for id in layout

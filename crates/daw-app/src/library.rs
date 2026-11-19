@@ -752,23 +752,7 @@ impl DawApp {
                 (LibrarySection::Sample, "Samples", "Find, preview, and use sounds from your sample library or project"),
                 (LibrarySection::Unknown, "Unverified", "Inspect plug-ins whose instrument or effect type has not been verified"),
             ];
-            let manage = |ui: &mut egui::Ui| {
-                if state.kind == LibrarySection::Sample { return; }
-                if scanning || status.phase == SyncPhase::Capturing {
-                    ui.spinner().on_hover_text(if scanning { "Scanning plug-ins…" } else { "Capturing optional preview images…" });
-                }
-                daw_ui::view_menu(ui, "Manage plug-ins", |ui| {
-                    if ui.add_enabled(!scanning, daw_ui::button_widget("Refresh")).on_hover_text("Rescan plug-in folders and capture missing previews").on_disabled_hover_text("A plug-in scan is already in progress").clicked() { refresh = true; ui.close(); }
-                    if daw_ui::button(ui, "Plug-in folders…").on_hover_text("Choose the folders RILL scans for installed plug-ins").clicked() { folders = true; ui.close(); }
-                }).response.on_hover_text("Manage plug-in folders and scan for installed devices");
-            };
-            if compact_height {
-                daw_ui::action_row(ui, manage, |ui| {
-                    for (value, label, hint) in pages {
-                        if daw_ui::tab_choice(ui, kind == value, label).on_hover_text(hint).clicked() { kind = value; }
-                    }
-                });
-            } else { daw_ui::popup_tabs_with_hints(ui, &mut kind, &pages, manage); }
+            daw_ui::popup_tabs_with_hints(ui, &mut kind, &pages);
             if kind != state.kind {
                 if state.kind == LibrarySection::Sample {
                     self.reset_sample_browser_context();
@@ -782,9 +766,24 @@ impl DawApp {
                 self.sample_browser_contents(ui);
                 return;
             }
-            let search = daw_ui::device_browser_search(ui, &mut self.plugin_filter, match state.kind {
-                LibrarySection::Instrument => "Search instruments", LibrarySection::Effect => "Search effects", LibrarySection::Unknown => "Search unverified devices", LibrarySection::Sample => unreachable!("Samples uses the shared sample browser"),
-            }).search.on_hover_text("Search name, category, developer or format; combine words in any order");
+            let search_hint = match state.kind {
+                LibrarySection::Instrument => "Search instruments",
+                LibrarySection::Effect => "Search effects",
+                LibrarySection::Unknown => "Search unverified devices",
+                LibrarySection::Sample => unreachable!("Samples uses the shared sample browser"),
+            };
+            let search = daw_ui::action_row(ui, |ui| {
+                if scanning || status.phase == SyncPhase::Capturing {
+                    ui.spinner().on_hover_text(if scanning { "Scanning plug-ins…" } else { "Capturing optional preview images…" });
+                }
+                daw_ui::view_menu(ui, "Manage plug-ins", |ui| {
+                    if ui.add_enabled(!scanning, daw_ui::button_widget("Refresh")).on_hover_text("Rescan plug-in folders and capture missing previews").on_disabled_hover_text("A plug-in scan is already in progress").clicked() { refresh = true; ui.close(); }
+                    if daw_ui::button(ui, "Plug-in folders…").on_hover_text("Choose the folders RILL scans for installed plug-ins").clicked() { folders = true; ui.close(); }
+                }).response.on_hover_text("Manage plug-in folders and scan for installed devices");
+            }, |ui| {
+                daw_ui::device_browser_search(ui, &mut self.plugin_filter, search_hint).search
+                    .on_hover_text("Search name, category, developer or format; combine words in any order")
+            }).inner.1;
             if self.plugin_search_focus {
                 if search.has_focus() { self.plugin_search_focus = false; } else { search.request_focus(); }
             }

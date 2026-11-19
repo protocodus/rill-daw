@@ -197,7 +197,7 @@ fn heavy_ui_interactions_never_interrupt_or_alter_multicore_r1_playback() {
                 app.click("Window");
                 let opened = app.click("Instrument");
                 assert_eq!(opened["popups"]["instrument"], true);
-                let motion = app.click("Motion");
+                let motion = app.click("Modulation");
                 assert!(
                     !motion["backdrop_blur"].as_array().unwrap().is_empty(),
                     "instrument popup must keep backdrop blur"
