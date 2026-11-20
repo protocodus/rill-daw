@@ -1200,7 +1200,15 @@ fn spacer_layout(mut layout: Layout) -> Layout {
     // The two routings stacked: side by side they would take three cells.
     layout.toggle_columns = &[(ROUTING, 1)];
     layout.sections = vec![
-        cells("Output", 0, 4, &[&[C(ROUTING, 2), C(MIX, 1), C(OUTPUT, 1)]]),
+        cells(
+            "Output",
+            0,
+            4,
+            &[
+                &[C(ROUTING, 2), C(MIX, 1), C(OUTPUT, 1)],
+                &[C(FREEZE, 2), C(SHIMMER, 2)],
+            ],
+        ),
         Section {
             enable: Some(ECHO_ON),
             choice: Some(ECHO_MODEL),

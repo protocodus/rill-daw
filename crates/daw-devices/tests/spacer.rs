@@ -1922,12 +1922,13 @@ fn controls_apply_where_their_section_is_on() {
     assert!(echo_off.contains(&ROUTING) && !echo_off.contains(&ECHO_ON));
     assert!(echo_off.contains(&ECHO_DUCK) && echo_off.contains(&ECHO_TAPS));
     let reverb_off = hidden(&[(REVERB_ON, 0.0)]);
-    assert_eq!(reverb_off.len(), 15);
+    assert_eq!(reverb_off.len(), 17);
     assert!(reverb_off.contains(&ROUTING) && reverb_off.contains(&DECAY));
+    assert!(reverb_off.contains(&SHIMMER) && reverb_off.contains(&FREEZE));
     assert!(reverb_off.contains(&SEED) && reverb_off.contains(&REVERB_DUCK));
     assert!(!reverb_off.contains(&REVERB_ON) && !reverb_off.contains(&MIX));
     // The parameters are what the design lists, in signal order.
-    assert_eq!(spacer::PARAMETERS.len(), 31);
+    assert_eq!(spacer::PARAMETERS.len(), 33);
     let groups: Vec<&str> = spacer::PARAMETERS.iter().map(|spec| spec.group).collect();
     assert!(
         groups
@@ -2097,5 +2098,123 @@ fn a_short_time_bends_without_a_dropout_or_a_click() {
                 "{name}, {from} to {to} ms: {bent} against {steady} at rest"
             );
         }
+    }
+}
+
+#[test]
+fn freeze_holds_the_tail_lets_nothing_in_and_lets_go_without_a_click() {
+    let rate = 48_000.0_f32;
+    let second = rate as usize;
+    let mut random = Noise(9);
+    let noise: Vec<f32> = (0..2 * second).map(|_| 0.25 * random.next()).collect();
+    for (model, name) in REVERBS {
+        let values = with(&REVERB_ONLY, &[(REVERB_MODEL, model), (DECAY, 1.0)]);
+        // Half a second of noise, then Freeze; once it has closed, a loud
+        // burst (or nothing) must leave the tail exactly as it is.
+        let render = |burst: bool| {
+            let mut device = device(rate, &values);
+            let (mut left, _) = run_stereo(&mut *device, &noise[..second / 2]);
+            set(&mut *device, &[(FREEZE, 1.0)]);
+            left.extend(run_stereo(&mut *device, &vec![0.0; second / 10]).0);
+            let next: Vec<f32> = noise[..second]
+                .iter()
+                .map(|x| if burst { 4.0 * x } else { 0.0 })
+                .collect();
+            left.extend(run_stereo(&mut *device, &next).0);
+            left.extend(run_stereo(&mut *device, &vec![0.0; 3 * second]).0);
+            (left, device)
+        };
+        let (held, mut device) = render(true);
+        let (quiet, _) = render(false);
+        assert_eq!(held, quiet, "{name}: the input leaks in");
+        let early = rms(&held[second..3 * second / 2]);
+        let later = rms(&held[4 * second..9 * second / 2]);
+        let drop = db(later / early);
+        assert!(drop.abs() < 1.5, "{name}: the frozen tail moved {drop} dB");
+        let steady = largest_step(&held[3 * second..4 * second]);
+        assert!(
+            largest_step(&held[second / 2 - 2400..second / 2 + 4800]) < 2.0 * steady + 0.02,
+            "{name}: Freeze clicked"
+        );
+
+        // Let go: it decays at the Decay again, without a click.
+        set(&mut *device, &[(FREEZE, 0.0)]);
+        let (after, _) = run_stereo(&mut *device, &vec![0.0; 2 * second]);
+        assert!(largest_step(&after[..4800]) < 2.0 * steady + 0.02, "{name}");
+        let fallen = db(rms(&after[3 * second / 2..]) / rms(&after[..second / 10]));
+        assert!(
+            fallen < -50.0,
+            "{name}: {fallen} dB 1.5 s after Freeze let go"
+        );
+    }
+}
+
+#[test]
+fn shimmer_climbs_an_octave_and_stays_bounded() {
+    let rate = 48_000.0_f32;
+    let second = rate as usize;
+    let mut tone = sine(330.0, 0.5, f64::from(rate), second / 2);
+    tone.resize(6 * second, 0.0);
+    for (model, name) in REVERBS {
+        let values = with(&REVERB_ONLY, &[(REVERB_MODEL, model), (DECAY, 3.0)]);
+        let render = |shimmer: f32| {
+            let mut device = device(rate, &with(&values, &[(SHIMMER, shimmer)]));
+            run_stereo(&mut *device, &tone).0
+        };
+        let (plain, shimmering) = (render(0.0), render(100.0));
+        let tail = second..3 * second;
+        let octave = |signal: &[f32]| rms(&third_octave_band(&signal[tail.clone()], 660.0, rate));
+        let gain = db(octave(&shimmering) / octave(&plain));
+        assert!(gain > 12.0, "{name}: the octave up rose only {gain} dB");
+        let two = |signal: &[f32]| rms(&third_octave_band(&signal[tail.clone()], 1320.0, rate));
+        assert!(
+            db(two(&shimmering) / two(&plain)) > 12.0,
+            "{name}: it does not climb a second octave"
+        );
+        // Each pass is quieter than the last: it rings out.
+        let (start, end) = (
+            rms(&shimmering[second..2 * second]),
+            rms(&shimmering[5 * second..]),
+        );
+        assert!(db(end / start) < -30.0, "{name}: {} dB", db(end / start));
+    }
+}
+
+#[test]
+fn full_shimmer_on_the_longest_decay_cannot_run_away() {
+    let rate = 44_100.0_f32;
+    let second = rate as usize;
+    let mut random = Noise(11);
+    let mut input: Vec<f32> = (0..second).map(|_| random.next()).collect();
+    input.resize(20 * second, 0.0);
+    for (model, name) in REVERBS {
+        let values = with(
+            &REVERB_ONLY,
+            &[
+                (REVERB_MODEL, model),
+                (DECAY, 20.0),
+                (DAMPING, 0.0),
+                (REVERB_COLOR, 100.0),
+                (SHIMMER, 100.0),
+            ],
+        );
+        let (left, right) = run_stereo(&mut *device(rate, &values), &input);
+        let plain = run_stereo(
+            &mut *device(rate, &with(&values, &[(SHIMMER, 0.0)])),
+            &input,
+        );
+        let (loudest, without) = (
+            peak(&left).max(peak(&right)),
+            peak(&plain.0).max(peak(&plain.1)),
+        );
+        assert!(
+            loudest < 2.0 * without,
+            "{name}: a peak of {loudest} against {without}"
+        );
+        let (start, end) = (
+            rms(&left[2 * second..4 * second]),
+            rms(&left[18 * second..]),
+        );
+        assert!(end < start, "{name}: it grows from {start} to {end}");
     }
 }

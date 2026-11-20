@@ -17,6 +17,7 @@ mod fdn;
 pub mod layout;
 mod ring;
 mod rooms;
+mod shimmer;
 
 pub use diffuser::DiffuserStep;
 pub use fdn::Fdn;
@@ -24,6 +25,7 @@ pub use fdn::Fdn;
 use super::{CutoffGlide, DelayLine, FadeTap, LinearRamp, Random, Shelf1, Smoothed, Svf, flush};
 use ring::Hall;
 use rooms::{Move, Room, Studio};
+use shimmer::Shimmer;
 
 /// Multiplies by the `N` × `N` Hadamard matrix (`N` a power of two) scaled
 /// to be orthogonal and its own inverse: sums and differences, no
@@ -243,6 +245,26 @@ pub struct ReverbSettings {
     pub low_cut_hz: f32,
     /// 0 (mono) – 1 (as the network gives it) – 1.5.
     pub width: f32,
+    /// 0–1: how much of the tail comes back an octave up.
+    pub shimmer: f32,
+    /// Holds the tail: nothing more goes in, and it no longer decays.
+    pub freeze: bool,
+}
+
+impl ReverbSettings {
+    /// The settings the networks are given: Freeze holds the tail at every
+    /// frequency alike.
+    pub fn held(&self) -> Self {
+        if self.freeze {
+            Self {
+                decay_seconds: FROZEN_DECAY_SECONDS,
+                damping: 0.0,
+                ..*self
+            }
+        } else {
+            *self
+        }
+    }
 }
 
 impl Default for ReverbSettings {
@@ -259,6 +281,8 @@ impl Default for ReverbSettings {
             color: 0.0,
             low_cut_hz: 100.0,
             width: 1.0,
+            shimmer: 0.0,
+            freeze: false,
         }
     }
 }
@@ -293,6 +317,11 @@ pub(crate) fn cut_share(share: &mut LinearRamp, off: bool, fade: u32) -> f32 {
 }
 
 pub const MAX_PRE_DELAY_SECONDS: f32 = 0.25;
+/// The decay of a frozen tail: 1 dB a minute, which no ear follows, where a
+/// lossless network would let rounding drift its level either way.
+pub const FROZEN_DECAY_SECONDS: f32 = 3600.0;
+/// How fast Freeze closes and opens the input.
+const FREEZE_SECONDS: f32 = 0.03;
 pub const EARLY_TAPS: usize = 8;
 /// Output taps per channel of the Hall's ring.
 pub(crate) const HALL_TAPS: usize = 11;
@@ -542,6 +571,7 @@ impl Layout {
 /// filters of all its delay elements add up to. `decay_seconds` at 1 kHz,
 /// shorter above with Damping, somewhat longer below.
 pub fn decay_seconds_at(settings: &ReverbSettings, hz: f32, sample_rate: f32) -> f32 {
+    let settings = &settings.held();
     let omega = std::f64::consts::TAU * f64::from(hz / sample_rate).min(0.5);
     let high = high_decay_seconds(settings.decay_seconds, settings.damping);
     let crossover = crossover_hz(settings.model, settings.color);
@@ -579,9 +609,14 @@ pub fn structure_seconds(settings: &ReverbSettings) -> f32 {
 }
 
 /// Seconds until the reverb has fallen by 60 dB at any frequency: the bass
-/// may ring for up to twice Decay.
+/// may ring for up to twice Decay, and Shimmer climbs through up to five
+/// more octaves, each pass a Decay long.
 pub fn tail_seconds(settings: &ReverbSettings) -> f32 {
-    settings.pre_delay_seconds + structure_seconds(settings) + 2.0 * settings.decay_seconds
+    let settings = settings.held();
+    let shimmer = if settings.shimmer > 0.0 { 5.0 } else { 0.0 };
+    settings.pre_delay_seconds
+        + structure_seconds(&settings)
+        + (2.0 + shimmer) * settings.decay_seconds
 }
 
 /// A model's place in the kernel: it runs while it is fed or rings out.
@@ -627,6 +662,12 @@ pub struct ReverbKernel {
     movement: Smoothed,
     color: Smoothed,
     width: Smoothed,
+    shimmer: Smoothed,
+    shimmer_unit: Shimmer,
+    /// The last output, which Shimmer feeds back.
+    last: [f32; 2],
+    /// 1 while the input goes in, 0 while frozen.
+    intake: LinearRamp,
     /// Decay, damping and color the absorption filters were last made for.
     absorbed: (f32, f32, f32),
     absorb_dirty: bool,
@@ -668,6 +709,10 @@ impl Default for ReverbKernel {
             movement: Smoothed::new(settings.movement),
             color: Smoothed::new(settings.color),
             width: Smoothed::new(settings.width),
+            shimmer: Smoothed::new(settings.shimmer),
+            shimmer_unit: Shimmer::default(),
+            last: [0.0; 2],
+            intake: LinearRamp::new(1.0),
             absorbed: (0.0, 0.0, 0.0),
             absorb_dirty: true,
             tilted: (f32::NAN, settings.model),
@@ -713,9 +758,11 @@ impl ReverbKernel {
             &mut self.movement,
             &mut self.color,
             &mut self.width,
+            &mut self.shimmer,
         ] {
             value.set_time(20.0, sample_rate);
         }
+        self.shimmer_unit.prepare(sample_rate);
         self.low_glide.prepare(20.0, sample_rate);
         self.high_glide.prepare(20.0, sample_rate);
         self.reset();
@@ -789,9 +836,16 @@ impl ReverbKernel {
                 }
             }
         }
+        let held = settings.held();
         self.decay_rate
-            .set_target(1.0 / settings.decay_seconds.max(0.01));
-        self.damping.set_target(settings.damping.clamp(0.0, 1.0));
+            .set_target(1.0 / held.decay_seconds.max(0.01));
+        self.damping.set_target(held.damping.clamp(0.0, 1.0));
+        self.shimmer.set_target(settings.shimmer.clamp(0.0, 1.0));
+        let intake = if settings.freeze { 0.0 } else { 1.0 };
+        if self.intake.target() != intake {
+            self.intake
+                .set_target(intake, (FREEZE_SECONDS * rate) as u32);
+        }
         self.diffusion
             .set_target(settings.diffusion.clamp(0.0, 1.0));
         self.movement.set_target(settings.movement.clamp(0.0, 1.0));
@@ -819,7 +873,7 @@ impl ReverbKernel {
         }
         let settings = self.settings;
         self.decay_rate
-            .set_target(1.0 / settings.decay_seconds.max(0.01));
+            .set_target(1.0 / settings.held().decay_seconds.max(0.01));
         self.diffusion
             .set_target(settings.diffusion.clamp(0.0, 1.0));
         self.movement.set_target(settings.movement.clamp(0.0, 1.0));
@@ -850,9 +904,17 @@ impl ReverbKernel {
             self.high_cut[channel].reset();
             self.tilt[channel].reset();
         }
-        for value in [&mut self.damping, &mut self.color, &mut self.width] {
+        for value in [
+            &mut self.damping,
+            &mut self.color,
+            &mut self.width,
+            &mut self.shimmer,
+        ] {
             value.snap();
         }
+        self.intake.snap();
+        self.shimmer_unit.reset();
+        self.last = [0.0; 2];
         self.level.iter_mut().for_each(LinearRamp::snap);
         self.low_glide.snap();
         self.high_glide.snap();
@@ -951,7 +1013,18 @@ impl ReverbKernel {
         }
         self.tick = (self.tick + 1) % TICK;
 
-        let input = [left, right];
+        let intake = self.intake.next();
+        let mut input = [left * intake, right * intake];
+        let shimmer = self.shimmer.next_value();
+        if shimmer > 0.0 {
+            let octave = self.shimmer_unit.process(self.last);
+            let gain = intake * shimmer * shimmer::FULL_GAIN;
+            for (input, octave) in input.iter_mut().zip(octave) {
+                // Bounded whatever comes back: the loop cannot run away.
+                let feed = gain * octave;
+                *input += feed / (1.0 + feed * feed).sqrt();
+            }
+        }
         let mut delayed = [0.0; 2];
         let mut wet = [0.0; 2];
         for channel in 0..2 {
@@ -1023,6 +1096,7 @@ impl ReverbKernel {
                 .low;
             *wet = blend(signal, cut, high_share);
         }
+        self.last = wet;
         let width = self.width.next_value();
         let (mid, side) = (0.5 * (wet[0] + wet[1]), 0.5 * (wet[0] - wet[1]) * width);
         (mid + side, mid - side)

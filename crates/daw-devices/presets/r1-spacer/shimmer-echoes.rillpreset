@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Shimmer Echoes",
+  "author": "Rill",
+  "category": "Space",
+  "tags": ["ambient", "guitar", "shimmer"],
+  "description": "Dotted eighths washing into a rising hall.",
+  "parameters": {
+    "echo.division": "1/8 D",
+    "echo.feedback": 45.0,
+    "echo.diffusion": 35.0,
+    "echo.color": -20.0,
+    "reverb.model": "Hall",
+    "reverb.size": 70.0,
+    "reverb.decay": 4.5,
+    "reverb.shimmer": 40.0,
+    "reverb.low_cut": 180.0,
+    "mix": 35.0
+  }
+}

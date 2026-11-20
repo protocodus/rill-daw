@@ -16,7 +16,7 @@ Instruments keep the audition keyboard and wheels below the output strip.
 | Saturator | Follow the input through low bypass and drive into the waveshaper, then adjust wet gain compensation and tone before mixing with the dry signal. |
 | Compressor | Mode and character sit above the transfer curve, level history and reduction meter. The sidechain, gain curve and timing share one row. Makeup, mix and output follow. |
 | Modulator | Choose mode and character above the plots. The LFO controls lead into the wet path, with mode-specific center, voices or stages, feedback and low cut. |
-| Spacer | **Echo** groups repeats, the delay line and the echo return. **Reverb** groups the room, tail and reverb return. Each page opens with routing and the two engine switches above the timing display. Mix and output sit below the engine controls. |
+| Spacer | **Echo** groups repeats, the delay line and the echo return. **Reverb** groups the room, tail (Diffusion, Movement and Shimmer above Low cut, Color and Damping) and reverb return. Each page opens with routing, the two engine switches and Freeze above the timing display. Mix and output sit below the engine controls. |
 
 The **Randomize** menu in the preset header offers 1%, 10% and 100% variations.
 Each choice creates one Undo step. [Dark panels](../artifacts/r1-ux-redesign/overview-dark.png) · [Light panels](../artifacts/r1-ux-redesign/overview-light.png)

@@ -147,6 +147,7 @@ r1-spacer 8 echo.low_cut "Echo low cut" log 20 2000
 r1-spacer 14 echo.duck "Echo duck" linear 0 100
 r1-spacer 11 echo.level "Echo level" linear -60 0
 r1-spacer 40 reverb.on "Reverb on" toggle
+r1-spacer 55 reverb.freeze "Freeze" toggle
 r1-spacer 41 reverb.model "Reverb model" choice Studio|Room|Hall
 r1-spacer 42 reverb.pre_delay "Pre-delay" linear 0 250
 r1-spacer 43 reverb.size "Size" linear 0 100
@@ -154,6 +155,7 @@ r1-spacer 44 reverb.decay "Decay" log 0.1 20
 r1-spacer 45 reverb.damping "Damping" linear 0 100
 r1-spacer 48 reverb.diffusion "Diffusion" linear 0 100
 r1-spacer 49 reverb.movement "Movement" linear 0 100
+r1-spacer 54 reverb.shimmer "Shimmer" linear 0 100
 r1-spacer 52 reverb.seed "Seed" integer 1 32
 r1-spacer 47 reverb.color "Reverb color" linear -100 100
 r1-spacer 46 reverb.low_cut "Reverb low cut" log 20 1000

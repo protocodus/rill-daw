@@ -219,7 +219,8 @@ fn space(mut layout: Layout, page: usize) -> Workspace {
                 0,
                 4,
                 &[
-                    &[C(DIFFUSION, 2), C(MOVEMENT, 2)],
+                    // Two lines on the same columns.
+                    &[C(DIFFUSION, 1), C(MOVEMENT, 1), C(SHIMMER, 2)],
                     &[C(REVERB_LOW_CUT, 1), C(REVERB_COLOR, 1), C(DAMPING, 2)],
                 ],
             ),
@@ -244,7 +245,7 @@ fn space(mut layout: Layout, page: usize) -> Workspace {
                 ECHO_TIME => "Turn off Sync to set a time in milliseconds.",
                 ECHO_DIVISION => "Turn on Sync to choose a tempo division.",
                 ECHO_MODEL..=ECHO_DUCK => "Enable Echo to hear and edit these controls.",
-                REVERB_MODEL..=REVERB_DUCK => "Enable Reverb to hear and edit these controls.",
+                REVERB_MODEL..=FREEZE => "Enable Reverb to hear and edit these controls.",
                 _ => "Not used in the current mode.",
             });
         }
@@ -261,13 +262,17 @@ fn space(mut layout: Layout, page: usize) -> Workspace {
             (ECHO_WOBBLE, EchoModel::Tape) => "Wow, flutter and drift",
             (REVERB_COLOR, _) => "Tone of the reverb: dark left, bright right",
             (SEED, _) => "Another room of the same size and decay",
+            (SHIMMER, _) => {
+                "Feed the tail back an octave up; Damping and Color set how high it climbs"
+            }
+            (FREEZE, _) => "Hold the reverb tail: nothing new goes in and it no longer fades",
             _ => return None,
         })
     };
     Workspace {
         layout,
         output: vec![MIX, OUTPUT],
-        toolbar: vec![ROUTING, ECHO_ON, REVERB_ON],
+        toolbar: vec![ROUTING, ECHO_ON, REVERB_ON, FREEZE],
         body_height: 0.0,
     }
 }
