@@ -1006,9 +1006,9 @@ fn saturator_layout(mut layout: Layout) -> Layout {
 fn compressor_layout(mut layout: Layout) -> Layout {
     use Slot::Control as C;
     use compressor::*;
-    // One row of four cards on a grid of eleven cells, read as the signal
-    // goes: the style; what the detector hears; threshold, ratio and knee
-    // over the timing; makeup and output last.
+    // One row of four cards on the twelve cells, read as the signal goes:
+    // the style; what the detector hears; the curve over the timing, with
+    // Range above Hold, the gate's pair; makeup and output last.
     layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
     layout.cells = true;
     layout.sections = vec![
@@ -1018,20 +1018,27 @@ fn compressor_layout(mut layout: Layout) -> Layout {
             0,
             2,
             &[
-                &[C(SIDECHAIN, 2)],
+                &[C(SIDECHAIN, 1), C(LISTEN, 1)],
                 &[C(SIDECHAIN_HIGH_PASS, 1), C(STEREO_LINK, 1)],
             ],
         ),
         cells(
             "Dynamics",
             0,
-            4,
+            5,
             &[
-                &[C(THRESHOLD, 1), C(RATIO, 1), C(KNEE, 1), C(CEILING, 1)],
+                &[
+                    C(THRESHOLD, 1),
+                    C(RATIO, 1),
+                    C(KNEE, 1),
+                    C(RANGE, 1),
+                    C(CEILING, 1),
+                ],
                 &[
                     C(ATTACK, 1),
                     C(RELEASE, 1),
                     C(AUTO_RELEASE, 1),
+                    C(HOLD, 1),
                     C(LOOKAHEAD, 1),
                 ],
             ],
@@ -1052,6 +1059,7 @@ fn compressor_layout(mut layout: Layout) -> Layout {
     layout.captions = &[
         (SIDECHAIN_HIGH_PASS, "High-pass"),
         (STEREO_LINK, "Link"),
+        (LISTEN, "Listen"),
         (AUTO_RELEASE, "Auto"),
         (AUTO_MAKEUP, "Auto"),
     ];

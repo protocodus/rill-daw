@@ -45,7 +45,7 @@ fn saturation(mut layout: Layout) -> Workspace {
 }
 
 fn dynamics(mut layout: Layout) -> Workspace {
-    use Slot::Control as C;
+    use Slot::{Control as C, Swap};
     use compressor::*;
     layout.knob = daw_ui::KnobSize::Standard;
     layout.sections = vec![
@@ -57,27 +57,40 @@ fn dynamics(mut layout: Layout) -> Workspace {
                 C(SIDECHAIN, 2),
                 C(SIDECHAIN_HIGH_PASS, 1),
                 C(STEREO_LINK, 1),
-                C(LOOKAHEAD, 1),
+                C(LISTEN, 1),
             ]],
         ),
         cells(
             "Dynamics",
             0,
             4,
-            &[&[C(THRESHOLD, 1), C(RATIO, 1), C(KNEE, 1), C(CEILING, 1)]],
+            &[&[
+                // Never both in use: the level the curve's handle sets.
+                Swap(&[THRESHOLD, CEILING], 1),
+                C(RATIO, 1),
+                C(KNEE, 1),
+                C(RANGE, 1),
+            ]],
         ),
         cells(
             "Timing",
             0,
-            3,
-            &[&[C(ATTACK, 1), C(RELEASE, 1), C(AUTO_RELEASE, 1)]],
+            4,
+            &[&[
+                C(ATTACK, 1),
+                C(RELEASE, 1),
+                // Auto release never applies in Expander mode, Hold only there.
+                Swap(&[AUTO_RELEASE, HOLD], 1),
+                C(LOOKAHEAD, 1),
+            ]],
         ),
     ];
     layout.toggle_columns = &[];
     layout.captions = &[
         (SIDECHAIN, "Source"),
         (SIDECHAIN_HIGH_PASS, "High-pass"),
-        (STEREO_LINK, "Stereo link"),
+        (STEREO_LINK, "Link"),
+        (LISTEN, "Listen"),
         (AUTO_RELEASE, "Auto"),
     ];
     layout.hint = |id, values| {
@@ -85,14 +98,17 @@ fn dynamics(mut layout: Layout) -> Workspace {
         if !applies(id, &settings) {
             return Some(match id {
                 CHARACTER | AUTO_MAKEUP => "Available in Compressor mode.",
-                THRESHOLD | RATIO | ATTACK => {
+                THRESHOLD | RATIO | ATTACK | RANGE => {
                     "Limiter uses its ceiling and automatic attack instead."
                 }
+                HOLD => "Available in Expander mode.",
                 CEILING => "Available in Limiter mode.",
                 RELEASE => "Auto release sets the release time. Turn it off to set a manual time.",
                 AUTO_RELEASE => "Expander uses the manual Release time.",
                 LOOKAHEAD => "Lookahead is available with Digital character, Limiter or Expander.",
-                SIDECHAIN | SIDECHAIN_HIGH_PASS => "Limiter detects the main input directly.",
+                SIDECHAIN | SIDECHAIN_HIGH_PASS | LISTEN => {
+                    "Limiter detects the main input directly."
+                }
                 _ => "Not used in the current mode.",
             });
         }
@@ -104,6 +120,9 @@ fn dynamics(mut layout: Layout) -> Workspace {
                 Some("Link the left and right detectors to keep the stereo image stable.")
             }
             LOOKAHEAD => Some("Listen ahead to catch transients; adds latency."),
+            LISTEN => Some("Hear what the detector hears, to tune the high-pass."),
+            RANGE => Some("The most the level is turned down: how deep a gate closes."),
+            HOLD => Some("Keeps the gate open this long after the signal falls."),
             AUTO_MAKEUP => Some("Compensate for compression; the readout shows the applied gain."),
             _ => None,
         }
