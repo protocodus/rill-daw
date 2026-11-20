@@ -1163,6 +1163,8 @@ Output (ID 31) are the effect pair.
 | 3 | Character (`character`) | 0 – 100 % (Transistor: hardness; Tube: bias; Tape: compression) | 50 % |
 | 4 | Tone (`tone`) | −6 – +6 dB tilt around 1 kHz | 0 dB |
 | 5 | Focus (`focus`) | 20 Hz – 1 kHz; content below it passes clean; Off at 20 Hz | 20 Hz |
+| 6 | Stereo (`stereo`) | Both, Mid, Side: what is saturated; the rest passes clean | Both |
+| 7 | Punch (`punch`) | −100 – +100 %: positive spares attacks, negative crushes them | 0 % |
 | 10 | Quality (`quality`) | 2×, 4×, 8× oversampling | 4× |
 | 20 | Auto gain (`auto_gain`) | toggle | on |
 
@@ -1170,11 +1172,12 @@ Output (ID 31) are the effect pair.
 
 ```
 in ─┬─ dry ── delay 41 ────────────────────────────────────────────────┐
-    ├─ Focus split: low = in − HP(in) ── delay 41 ── × ρ ──────┐       │
-    └─ high ── × Drive ── (Tape: program compression)          │       │
+    ├─ clean = in − target ── delay 41 ── × ρ ─────────────────┐       │
+    └─ target = Stereo(in − Focus low)                         │       │
+            ── × Drive × p ── (Tape: program compression)      │       │
             ── pre-emphasis ── [↑M  ADAA shaper  ↓M] ── pad    │       │
             ── de-emphasis ── (Tape: head bump) ── (Tube: bloom)       │
-            ── DC blocker ───────────────────────────────── (+)◄┘      │
+            ── DC blocker ── (Side: side only) ── × 1/p ── (+)◄┘      │
             ── × 1/ρ with Auto gain ── Tone tilt ── Mix ◄──────────────┘
             ── Output ── out
 ```
@@ -1185,6 +1188,21 @@ in ─┬─ dry ── delay 41 ───────────────�
   bands sum back to the input exactly, so with no drive the device is a pure
   delay. A Linkwitz-Riley pair would sum to an allpass and comb against the
   dry signal under Mix. At 20 Hz the split is off, exactly.
+- *Stereo* picks the target from what Focus leaves: both channels, their
+  mid `(L + R)/2` on both, or their side `±(L − R)/2`. Everything else joins
+  the clean band, so the two still sum to the input exactly. With Side the
+  shaped pair is projected back onto the side after the DC blocker: the
+  curves' even harmonics are common to both channels and would otherwise
+  leak into the centre. A change fades through the dry signal like Model.
+- *Punch* follows the target's power with a 1 ms rise and 60 ms fall, and
+  that envelope again with a 30 ms rise and an instant fall. Their ratio,
+  0 – 12 dB, is how far an attack stands out; it is 0 dB on sustained and
+  decaying sound. Punch scales it into a gain `p` before the shaper and
+  `1/p` after it, delayed by the 41 samples between: below the knee the two
+  cancel, above it a positive Punch lowers the drive on an attack and
+  restores its level, so the attack comes through cleaner and louder than
+  the saturated body; a negative Punch drives the attack harder and pulls
+  it down into the sustain. About 4 % more CPU at 4× while it is not zero.
 - *Emphasis.* A first-order shelf before the shaper and its exact inverse
   after it, both at the base rate, so the small-signal response stays flat
   while highs meet the curve harder: Transistor +4 dB above 720 Hz (less
@@ -1246,16 +1264,21 @@ cards on a grid of twelve cells, in the order of the signal flow above:
 
 | Card (columns of 12) | Controls |
 | --- | --- |
-| Drive (2) | Focus, reading "Off" at 20 Hz; Drive, the hero knob |
-| Shaper (6) | Model as toggle buttons (three cells); Character, named **Hardness**, **Bias** or **Compress** for the model; Quality, 2× / 4× / 8× as toggle buttons (two cells) |
-| Output (4) | Auto gain switch with what it applies in dB as its value line; Tone; Mix; Output |
+| Input (6) | Stereo, captioned **Saturate**, as toggle buttons (two cells); Focus, captioned **Low bypass**, reading "Off" at 20 Hz; Drive, the hero knob (two cells); Punch |
+| Waveshaper (4) | Model as toggle buttons (three cells); Character, named **Hardness**, **Bias** or **Compress** for the model |
+| Wet signal (2) | Auto gain switch with what it applies in dB as its value line; Tone |
+
+Quality (2× / 4× / 8× toggle buttons) sits on the toolbar above the
+picture: it is a setting of the whole device, not a step of the signal.
+Mix and Output are the compact output row below every effect.
 
 The curve is drawn normalized to its largest value: in true units it would
 leave the frame without Auto gain and lie flat with it. The level is what
 the Auto gain readout is for.
 
 Factory presets: Default, Warm Tube, Tube Crunch, Transistor Edge, Fuzz Box,
-Tape Glue, Tape Slam, Bass Grit, Parallel Dirt, Hi-fi Sheen.
+Tape Glue, Tape Slam, Bass Grit, Parallel Dirt, Hi-fi Sheen, Drum Punch,
+Crushed Room, Wide Sheen, Centre Glue.
 
 ### R1 Compressor
 

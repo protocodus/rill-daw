@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "device": "r1-saturator",
+  "name": "Centre Glue",
+  "author": "Rill",
+  "category": "Tape",
+  "tags": ["bus", "stereo"],
+  "description": "Tape weight on the centre of a bus; the stereo field stays clean.",
+  "parameters": {
+    "model": "Tape",
+    "drive": 9.0,
+    "character": 50.0,
+    "stereo": "Mid",
+    "punch": 30.0
+  }
+}

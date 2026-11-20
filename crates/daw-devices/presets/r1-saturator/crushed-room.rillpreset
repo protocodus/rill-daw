@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device": "r1-saturator",
+  "name": "Crushed Room",
+  "author": "Rill",
+  "category": "Tape",
+  "tags": ["drums", "parallel"],
+  "description": "Attacks flattened into dense tape grit, blended under the kit.",
+  "parameters": {
+    "model": "Tape",
+    "drive": 24.0,
+    "character": 80.0,
+    "punch": -80.0,
+    "tone": -1.5,
+    "mix": 45.0
+  }
+}

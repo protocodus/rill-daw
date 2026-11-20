@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "device": "r1-saturator",
+  "name": "Drum Punch",
+  "author": "Rill",
+  "category": "Transistor",
+  "tags": ["drums", "punch"],
+  "description": "Thick, driven body with the attacks let through clean.",
+  "parameters": {
+    "model": "Transistor",
+    "drive": 18.0,
+    "character": 45.0,
+    "punch": 70.0,
+    "focus": 60.0
+  }
+}

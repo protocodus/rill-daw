@@ -29,7 +29,12 @@ fn variants(id: &str) -> Vec<Variant> {
             .collect()
     };
     match id {
-        "r1-saturator" => choices(saturator::QUALITY, saturator::QUALITIES),
+        "r1-saturator" => {
+            let mut variants: Vec<Variant> = choices(saturator::QUALITY, saturator::QUALITIES);
+            // Punch's followers and gains, at the default 4×.
+            variants.push(("4× Punch".into(), vec![(saturator::PUNCH, 50.0)], 8));
+            variants
+        }
         "r1-compressor" => choices(compressor::CHARACTER, compressor::CHARACTERS),
         "r1-modulator" => choices(modulator::MODE, modulator::MODES),
         "r1-spacer" => {

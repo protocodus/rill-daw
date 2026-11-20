@@ -16,18 +16,22 @@ fn saturation(mut layout: Layout) -> Workspace {
     use Slot::Control as C;
     use saturator::*;
     layout.sections = vec![
-        cells("Input", 0, 3, &[&[C(FOCUS, 1), C(DRIVE, 2)]]),
         cells(
-            "Waveshaper",
+            "Input",
             0,
             6,
-            &[&[C(MODEL, 3), C(CHARACTER, 1), C(QUALITY, 2)]],
+            &[&[C(STEREO, 2), C(FOCUS, 1), C(DRIVE, 2), C(PUNCH, 1)]],
         ),
-        cells("Wet signal", 0, 3, &[&[C(AUTO_GAIN, 2), C(TONE, 1)]]),
+        cells("Waveshaper", 0, 4, &[&[C(MODEL, 3), C(CHARACTER, 1)]]),
+        cells("Wet signal", 0, 2, &[&[C(AUTO_GAIN, 1), C(TONE, 1)]]),
     ];
-    layout.captions = &[(FOCUS, "Low bypass")];
+    layout.captions = &[(FOCUS, "Low bypass"), (STEREO, "Saturate")];
     layout.hint = |id, _| match id {
+        STEREO => Some("Saturate the whole signal, only its centre or only its sides."),
         FOCUS => Some("Frequencies below this stay clean. Off processes the full signal."),
+        PUNCH => {
+            Some("Positive lets attacks through cleaner; negative crushes them into the sustain.")
+        }
         QUALITY => Some("Higher oversampling reduces aliasing and uses more CPU."),
         AUTO_GAIN => {
             Some("Compensate for the level added by Drive; the readout shows the applied gain.")
@@ -39,7 +43,9 @@ fn saturation(mut layout: Layout) -> Workspace {
     Workspace {
         layout,
         output: vec![MIX, OUTPUT],
-        toolbar: vec![],
+        // Oversampling is a setting of the whole device, not a step of the
+        // signal.
+        toolbar: vec![QUALITY],
         body_height: 0.0,
     }
 }
