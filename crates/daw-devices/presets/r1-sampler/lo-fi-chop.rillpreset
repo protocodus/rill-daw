@@ -9,7 +9,7 @@
     "band-pass",
     "chop"
   ],
-  "description": "One voice at a time through a narrow band-pass, held briefly and cut short: chopped, telephone-like slices.",
+  "description": "One voice at a time through a narrow band-pass, at 12 kHz and 12 bits, held briefly and cut short: chopped, telephone-like slices.",
   "parameters": {
     "filter.on": true,
     "filter.type": "Band-pass",
@@ -22,6 +22,9 @@
     "aenv.release": 60.0,
     "voice.mode": "Mono",
     "voice.glide": 25.0,
-    "voice.volume": 0.0
+    "voice.volume": 0.0,
+    "character.rate": 12000.0,
+    "character.bits": "12-bit",
+    "character.drive": 25.0
   }
 }

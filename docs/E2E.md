@@ -355,8 +355,11 @@ plays at twice the recording's frequency, that a key three semitones above a
 changed root follows it, that the recording ends without a loop and sustains
 with one, and that Undo restores the song. **Use as sampler instrument** on a
 clip's context menu adds a MIDI track below it that plays the clip at its
-pitch from C4, undone in one step. Run with
-`cargo test --locked -p daw-app --test sampler_e2e`.
+pitch from C4, undone in one step. Slicing switched on from the Sample
+page's **Slice** title plays the fourth of four parts at its own pitch and
+stops where it ends; Character's Rate holds samples in the export; the
+Modulation page shows Fade in, Mod wheel and Retrigger; Undo restores them.
+Run with `cargo test --locked -p daw-app --test sampler_e2e`.
 
 `drums_e2e` loads recordings onto R1 Drums pads with `set_device_sample`
 and its `slot` (slot 16 is refused) and checks in exported audio that each

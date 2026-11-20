@@ -206,6 +206,14 @@ r1-sampler 73 voice.bend "Bend" integer 0 24
 r1-sampler 74 voice.velocity "Velocity" linear 0 100
 r1-sampler 75 voice.pan "Pan" linear -100 100
 r1-sampler 76 voice.volume "Volume" linear -36 6
+r1-sampler 7 slice.on "Slice" toggle
+r1-sampler 8 slice.count "Slices" integer 2 64
+r1-sampler 80 character.rate "Rate" log 1000 48000
+r1-sampler 81 character.bits "Bits" choice Clean|12-bit|8-bit
+r1-sampler 82 character.drive "Drive" linear 0 100
+r1-sampler 67 lfo.fade "Fade in" log 1 5000
+r1-sampler 68 lfo.retrigger "Retrigger" toggle
+r1-sampler 69 lfo.wheel "Mod wheel" linear 0 100
 r1-drums 1 volume "Volume" linear -36 6
 r1-drums 32 pad1.start "Start" linear 0 100
 r1-drums 33 pad1.end "End" linear 0 100

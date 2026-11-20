@@ -48,7 +48,7 @@ fn task_content(device: &str, task: &str) -> &'static [&'static str] {
         ("r1-mini" | "r1-sampler", "Filter & amp") => {
             &["FILTER", "FILTER ENVELOPE", "AMP ENVELOPE"]
         }
-        ("r1-sampler", "Sample") => &["REGION", "LOOP"],
+        ("r1-sampler", "Sample") => &["REGION", "LOOP", "SLICE", "CHARACTER"],
         ("r1-sampler", "Pitch & voices") => &["PITCH", "VOICES"],
         ("r1-spacer", "Echo") => &["Routing", "Echo on", "Reverb on", "Taps"],
         ("r1-spacer", "Reverb") => &["Routing", "Echo on", "Reverb on", "Seed"],

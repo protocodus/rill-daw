@@ -1027,7 +1027,8 @@ pub(crate) fn sample(
         peaks: summary.as_ref().map_or(&empty, |summary| &summary.peaks),
         start: source_position(bounds, share(START, host)),
         end: source_position(bounds, share(END, host)),
-        loop_range: settings.loop_mode.loops().then(|| {
+        // A slice loops whole; the loop markers rest.
+        loop_range: (settings.loop_mode.loops() && settings.slices.is_none()).then(|| {
             (
                 source_position(bounds, share(LOOP_START, host)),
                 source_position(bounds, share(LOOP_END, host)),
@@ -1035,6 +1036,7 @@ pub(crate) fn sample(
         }),
         playheads: &playheads,
         envelope: &[],
+        slices: settings.slices.unwrap_or(0),
     };
     let size = egui::vec2(ui.available_width(), height);
     // The response also covers the markers' handles, which reach past it.
@@ -1403,6 +1405,7 @@ pub(crate) fn drums(
             loop_range: None,
             playheads: &playheads,
             envelope: &envelope,
+            slices: 0,
         };
         let size = egui::vec2(ui.available_width(), 70.0);
         let view = egui::Rect::from_min_size(ui.cursor().min, size);

@@ -1,6 +1,6 @@
 mod support;
 
-use daw_devices::devices::sampler::{self, *};
+use daw_devices::devices::sampler::{self, RATE as RATE_ID, *};
 use daw_devices::{Device, Event, EventKind, ProcessContext, SampleData, StereoIo};
 use std::sync::Arc;
 use support::{db, largest_step, rms};
@@ -585,4 +585,154 @@ fn stealing_keeps_the_selection_made_at_note_on_and_tail_ignores_unused_sources(
         device.tail_samples() < at(0.2) as u32,
         "unused sample must not extend the tail"
     );
+}
+
+#[test]
+fn slices_play_one_share_of_the_region_a_key_at_its_own_pitch() {
+    // Four equal parts at four pitches; slicing in four gives one each.
+    let parts = [220.0, 330.0, 440.0, 550.0];
+    let sample = recording(RATE, 2.0, |t| {
+        let hz = parts[((t / 0.5) as usize).min(3)];
+        0.5 * (std::f32::consts::TAU * hz * t).sin()
+    });
+    let values = [(SLICE, 1.0), (SLICES, 4.0), (ROOT, 60.0)];
+    // The root plays the first slice, each key above the next, and the
+    // keys wrap around: transposition does not change the pitch.
+    for (note, hz) in [
+        (60, 220.0),
+        (61, 330.0),
+        (63, 550.0),
+        (64, 220.0),
+        (58, 440.0),
+    ] {
+        let mut device = sampler(Arc::clone(&sample), &values);
+        let (left, _) = render(&mut *device, 0.7, &[(0.0, on(note))]);
+        let (amplitude, rest) = tone(span(&left, 0.05, 0.45), hz);
+        assert!(
+            (db(amplitude / 0.5)).abs() < 0.1 && rest < -40.0,
+            "key {note}: {amplitude} at {hz} Hz, {rest} dB besides"
+        );
+        // The slice ends where the next one begins.
+        assert!(rms(span(&left, 0.55, 0.7)) < 1e-4, "key {note} plays on");
+    }
+    // A Forward loop repeats the whole slice for as long as the key is held.
+    let mut device = sampler(
+        Arc::clone(&sample),
+        &[values.as_slice(), &[(LOOP_MODE, 1.0), (CROSSFADE, 0.0)]].concat(),
+    );
+    let (left, _) = render(&mut *device, 1.6, &[(0.0, on(62))]);
+    let (amplitude, _) = tone(span(&left, 1.05, 1.45), 440.0);
+    assert!((db(amplitude / 0.5)).abs() < 0.5, "{amplitude}");
+}
+
+#[test]
+fn character_holds_quantizes_and_saturates_ahead_of_the_filter() {
+    let sample = sine(RATE, 1.0, 220.0, 0.5);
+    let render_with = |values: &[(u32, f32)]| {
+        let mut device = sampler(Arc::clone(&sample), values);
+        let (left, _) = render(&mut *device, 0.5, &[(0.0, on(60))]);
+        span(&left, 0.1, 0.4).to_vec()
+    };
+    let clean = render_with(&[]);
+    let repeats = |signal: &[f32]| {
+        signal.windows(2).filter(|pair| pair[0] == pair[1]).count() as f32 / signal.len() as f32
+    };
+    assert!(repeats(&clean) < 0.01);
+    // 4 kHz at 48 kHz: a new sample every twelfth.
+    let held = render_with(&[(RATE_ID, 4000.0)]);
+    assert!(
+        (repeats(&held) - 11.0 / 12.0).abs() < 0.01,
+        "{}",
+        repeats(&held)
+    );
+    // 8 bits: 256 steps over the full scale, so at most 128 levels here.
+    let crushed = render_with(&[(BITS, 2.0)]);
+    let mut levels: Vec<i32> = crushed.iter().map(|x| (x * 128.0).round() as i32).collect();
+    levels.sort_unstable();
+    levels.dedup();
+    assert!(levels.len() <= 129, "{} levels", levels.len());
+    assert!(
+        crushed
+            .iter()
+            .all(|x| ((x * 128.0) - (x * 128.0).round()).abs() < 1e-3),
+        "8-bit output off the grid"
+    );
+    // Drive: odd harmonics, and the tone itself a little louder.
+    let (clean_third, _) = tone(&clean, 660.0);
+    let driven = render_with(&[(DRIVE, 60.0)]);
+    let (driven_third, _) = tone(&driven, 660.0);
+    assert!(driven_third > 0.02 && clean_third < 1e-4, "{driven_third}");
+    // Off is exactly off.
+    assert_eq!(
+        render_with(&[(RATE_ID, 48_000.0), (BITS, 0.0), (DRIVE, 0.0)]),
+        clean
+    );
+}
+
+/// Tremolo depth over a span: how far the level swings, as a share of it.
+fn swing(signal: &[f32]) -> f64 {
+    let windows: Vec<f64> = signal.chunks(480).map(rms).collect();
+    let max = windows.iter().copied().fold(0.0, f64::max);
+    let min = windows.iter().copied().fold(f64::MAX, f64::min);
+    (max - min) / max
+}
+
+#[test]
+fn the_lfo_fades_in_follows_the_mod_wheel_and_retriggers() {
+    let sample = recording(RATE, 3.0, |_| 0.5);
+    let tremolo = [(LFO_LEVEL, 100.0), (LFO_RATE, 5.0), (LOOP_MODE, 0.0)];
+    // Fade in: no swing at first, full swing after the fade.
+    let mut device = sampler(
+        Arc::clone(&sample),
+        &[tremolo.as_slice(), &[(LFO_FADE, 1000.0)]].concat(),
+    );
+    let (left, _) = render(&mut *device, 2.0, &[(0.0, on(60))]);
+    let (early, late) = (swing(span(&left, 0.0, 0.1)), swing(span(&left, 1.2, 1.8)));
+    assert!(early < 0.05 && late > 0.8, "{early} {late}");
+    // Mod wheel at 100 %: none at rest, full depth with the wheel up.
+    let wheel = [tremolo.as_slice(), &[(LFO_WHEEL, 100.0)]].concat();
+    let mut device = sampler(Arc::clone(&sample), &wheel);
+    let (left, _) = render(&mut *device, 0.6, &[(0.0, on(60))]);
+    assert!(swing(span(&left, 0.1, 0.5)) < 0.01);
+    let mut device = sampler(Arc::clone(&sample), &wheel);
+    let (left, _) = render(
+        &mut *device,
+        0.6,
+        &[(0.0, EventKind::ModWheel(1.0)), (0.0, on(60))],
+    );
+    assert!(swing(span(&left, 0.1, 0.5)) > 0.8);
+    // Retrigger: a second phrase starts the LFO where the first did.
+    let phrase = |retrigger: f32| {
+        let mut device = sampler(
+            Arc::clone(&sample),
+            &[
+                tremolo.as_slice(),
+                &[(LFO_RETRIGGER, retrigger), (AENV_RELEASE, 1.0)],
+            ]
+            .concat(),
+        );
+        let (left, _) = render(
+            &mut *device,
+            1.0,
+            &[(0.0, on(60)), (0.33, off(60)), (0.53, on(60))],
+        );
+        (
+            span(&left, 0.01, 0.2).to_vec(),
+            span(&left, 0.54, 0.73).to_vec(),
+        )
+    };
+    let (first, second) = phrase(1.0);
+    let difference = first
+        .iter()
+        .zip(&second)
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0, f32::max);
+    assert!(difference < 0.01, "{difference}");
+    let (first, second) = phrase(0.0);
+    let difference = first
+        .iter()
+        .zip(&second)
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0, f32::max);
+    assert!(difference > 0.05, "{difference}");
 }

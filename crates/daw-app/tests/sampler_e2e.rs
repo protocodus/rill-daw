@@ -2,6 +2,7 @@
 //! `set_device_sample` tool, by the panel's Load sample… and by dropping a
 //! file on it, and by an audio clip's Use as sampler instrument; keys play it
 //! at their interval from the root, a loop sustains it, Undo takes it back.
+//! Slices and the Character stage play from the panel and the tools.
 mod common;
 
 use common::Harness;
@@ -325,5 +326,109 @@ fn the_application_import_loads_a_file_into_a_sampler_track() {
         "arguments":{"action":"import","path":source,"track_id":keys,"slot":3}}),
     );
     assert_eq!(refused["tool_result"]["ok"], false, "{refused}");
+    app.quit();
+}
+
+/// The instrument's stored value of parameter `id`, if set.
+fn parameter(state: &Value, track: u64, id: u32) -> Option<f64> {
+    state["project"]["tracks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["id"] == track)
+        .unwrap()["instrument_parameters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["id"] == id)
+        .and_then(|entry| entry["value"].as_f64())
+}
+
+#[test]
+fn slices_and_character_play_from_the_panel_and_the_tools() {
+    let mut app = Harness::new();
+    // Four quarter-second parts at four pitches.
+    let source = app.directory.path().join("parts.wav");
+    AudioData {
+        sample_rate: 44_100,
+        channels: 1,
+        samples: (0..44_100)
+            .map(|n| {
+                let hz = [220.0, 330.0, 440.0, 550.0][n / 11_025];
+                0.5 * (std::f32::consts::TAU * hz * n as f32 / 44_100.0).sin()
+            })
+            .collect(),
+    }
+    .write_wav(&source)
+    .unwrap();
+    let (project, keys, clip) = project(&source);
+    let before = open(&mut app, &project);
+    let (id, revision) = session(&before);
+    song_tool(
+        &mut app,
+        "set_device_sample",
+        json!({"session_id":id,"expected_revision":revision,"track_id":keys,"clip_id":clip}),
+    );
+
+    // The Sample page offers slicing beside the loop, and the converter
+    // character after it; the title's switch turns slicing on.
+    app.command(json!({"command":"viewport","width":1480,"height":960}));
+    app.click("Keys");
+    app.click("Window");
+    app.click("Instrument");
+    common::wait_visible(&mut app, "CHARACTER");
+    let sliced = app.click("SLICE");
+    assert_eq!(
+        parameter(&sliced, keys, daw_devices::devices::sampler::SLICE),
+        Some(1.0)
+    );
+
+    // Four slices from A4: C5, three keys up, plays the fourth part at its
+    // own pitch for its quarter second, and stops where it ends.
+    let (id, revision) = session(&sliced);
+    let set = song_tool(
+        &mut app,
+        "set_device_parameters",
+        json!({"session_id":id,"expected_revision":revision,"track_id":keys,
+            "parameters":[{"parameter":"slice.count","value":4},
+                          {"parameter":"sample.root","value":"A4"}]}),
+    );
+    let played = export(&mut app, "slice.wav");
+    let hz = frequency(&played, 0.02, 0.22);
+    assert!((hz - 550.0).abs() < 10.0, "{hz} Hz");
+    assert!(rms(&played, 0.4, 1.8) < 1e-4, "the slice ends");
+
+    // Rate holds each sample: at 4 kHz most samples repeat the last.
+    let (id, revision) = session(&set);
+    song_tool(
+        &mut app,
+        "set_device_parameters",
+        json!({"session_id":id,"expected_revision":revision,"track_id":keys,
+            "parameters":[{"parameter":"character.rate","value":4000},
+                          {"parameter":"character.bits","value":"8-bit"}]}),
+    );
+    let held = window(&export(&mut app, "held.wav"), 0.02, 0.22);
+    let repeats = held.windows(2).filter(|pair| pair[0] == pair[1]).count();
+    assert!(
+        repeats as f32 > 0.8 * held.len() as f32,
+        "{repeats} of {}",
+        held.len()
+    );
+
+    // The LFO's new depth controls are on the Modulation page.
+    app.click("Modulation");
+    for label in ["Fade in", "Mod wheel", "Retrigger"] {
+        common::wait_visible(&mut app, label);
+    }
+
+    // Undo takes back the settings and the switch, one step each.
+    for _ in 0..3 {
+        app.command(json!({"command":"key","key":"Z","cmd":true}));
+    }
+    let undone = app.inspect();
+    assert_eq!(
+        parameter(&undone, keys, daw_devices::devices::sampler::SLICE).unwrap_or(0.0),
+        0.0
+    );
     app.quit();
 }

@@ -9,7 +9,7 @@
     "vibrato",
     "loop"
   ],
-  "description": "Legato with glide between overlapping notes, a looped sustain and a gentle vibrato.",
+  "description": "Legato with glide between overlapping notes, a looped sustain and a gentle vibrato that grows into each note; the mod wheel deepens it.",
   "parameters": {
     "loop.mode": "Forward",
     "loop.start": 40.0,
@@ -17,10 +17,12 @@
     "loop.crossfade": 60.0,
     "lfo.rate": 5.5,
     "lfo.shape": "Sine",
-    "lfo.pitch": 0.25,
+    "lfo.pitch": 0.5,
     "voice.mode": "Legato",
     "voice.glide": 90.0,
     "aenv.attack": 8.0,
-    "aenv.release": 250.0
+    "aenv.release": 250.0,
+    "lfo.fade": 400.0,
+    "lfo.wheel": 50.0
   }
 }

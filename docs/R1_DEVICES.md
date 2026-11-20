@@ -620,7 +620,7 @@ to place the visualization and order the sections well, not to restyle.
 | `spectrum` | Spectrum as a standalone or as a backdrop for `frequency_plot`. | Magnitude bins; reuses the `signal_analyzer` painting where possible. |
 | `wavetable_view` | Current wavetable frame, with neighboring frames stacked faintly behind it. | Frames as slices plus position. |
 | `lfo_view` | One LFO cycle, as one trace or several (voices), with labelled phase markers. Optionally draggable sideways. | Traces as samples with an emphasis flag, markers with a phase and a letter. Returns the drag in notches (Shift: a tenth) and a double-click; the caller decides what they turn. |
-| `sample_view` | Sample waveform with draggable start, end and loop markers, and voice playheads. | Peak columns (reuses `waveform.rs`), marker positions; returns marker drags. |
+| `sample_view` | Sample waveform with draggable start, end and loop markers, optional equal slices between start and end, and voice playheads. | Peak columns (reuses `waveform.rs`), marker positions; returns marker drags. |
 | `delay_view` | Sound over time: taps as bars (left above the centre line, right below) and decays as filled wedges, on a decibel axis from 0 dB at the outer edges to a floor on the centre line, so a decay is a straight line; a time or beat grid; draggable handles; lettered gain-reduction bars. A tap can glow sideways (a diffused echo) and a tail can hold a second, faster wedge (the top of a damped reverb). | Taps (time, left and right gain, thin, faint, blur time), tails (start time and level, decay time, an optional inner decay time), grid lines with labels, the time span, reductions (now, full scale, letter), handles (time, level, side, letter, hover readout, which axes move). Returns each handle's drag in seconds and decibels, arrow-key nudges, double-clicks and the handles' responses for context menus. |
 | `harmonics_view` | Bars for the harmonics of a tone, each with its level over it, on a decibel scale relative to the first. | Any number of values in dB and the floor; `harmonic_bars` gives the bar rectangles. |
 
@@ -1749,12 +1749,14 @@ One sample played across the keyboard.
 | Section | Parameters |
 | --- | --- |
 | Sample | slot 0 (project audio source); Root key, Fine tune (±100 cents), Start, End, Reverse, Gain |
+| Slice | Slice (switch), Slices (2 – 64) |
+| Character | Rate (1 – 48 kHz, maximum off), Bits (Clean, 12-bit, 8-bit), Drive |
 | Loop | Mode (Off, Forward, Ping-pong, One-shot), Loop start, Loop end, Crossfade (0 – 500 ms) |
 | Pitch | Key tracking (toggle), Transpose (±24) |
 | Filter | Type (LP, HP, BP; 12, 24 dB/oct), Cutoff, Resonance, Envelope amount, Key tracking, Velocity → Cutoff |
 | Filter envelope | Attack, Decay, Sustain, Release |
 | Amp envelope | Attack, Hold, Decay, Sustain, Release |
-| LFO | Rate, Sync, Shape, → Pitch, → Cutoff, → Level, → Pan |
+| LFO | Rate, Sync, Shape, Retrigger, Fade in (0 – 5 s), Mod wheel, → Pitch, → Cutoff, → Level, → Pan |
 | Voice | Mode, Voices (1 – 32), Glide, Bend range, Velocity → Level, Pan, Volume |
 
 Start, End and loop points are normalized positions in the sample, so they
@@ -1775,7 +1777,7 @@ like clip media.
 end and loop markers and live voice playheads; rows for Sample/Loop,
 Filter + envelope, Amp envelope, LFO; `keyboard_strip` showing the root key.
 
-**As built** (43 parameters, IDs in `devices/sampler.rs`). Where it departs
+**As built** (51 parameters, IDs in `devices/sampler.rs`). Where it departs
 from the table above:
 
 - *Interpolator.* Not the toolkit's 16-tap `SincTable`, which leaves aliasing
@@ -1799,9 +1801,33 @@ from the table above:
   tracking; without it every key plays the recording at its own pitch.
   Bend range and Glide stand in the Pitch card.
 - *Amp envelope.* Adds Hold (`Adsr::set_hold`); 1 ms and below is no hold.
+- *Slice.* With the switch on, Start to End splits into equal slices (2 –
+  64, eight by default). Root key plays the first, each key above the next,
+  and the keys wrap around, so every key plays one. A slice keeps its pitch
+  (Transpose, Fine, bend and LFO still apply), plays its share in the voice's
+  direction, and a Forward or Ping-pong loop repeats the whole slice, for
+  stutters; Loop start, Loop end and Key track show disabled. The waveform
+  divides the region with a thin line at each slice.
+- *Character.* Sample-and-hold, quantizer and saturator per voice ahead of
+  the filter, as an early sampler's converters and input stage, so the
+  filter can smooth the grit. Rate holds samples on one clock for every voice
+  (one converter); its maximum, 48 kHz, holds none. Bits uses R1 Drums'
+  depths (Clean, 12-bit, 8-bit). Drive is the algebraic sigmoid with
+  first-order ADAA: up to 30 dB in and half of that taken off after, so quiet passages
+  come up while peaks round off; its first tenth fades the shaper in, so
+  leaving 0 % makes no step in level. Each stage costs nothing while off.
+- *LFO.* Still one LFO for every voice. Fade in brings each new voice from no
+  depth to full over its time; Mod wheel at 100 % sets the depth from none
+  (wheel down) to full, as on R1 Mini. Retrigger restarts the LFO when a key
+  is played with none held; Sync while the song plays still follows the beat.
 - *Telemetry.* Voice count, LFO phase, the first voice's cutoff, and one
   playhead per voice (32), as a share of the recording; `TELEMETRY_VALUES`
   grew from 32 to 48 for it.
+- *Workspace.* Four pages. Sample holds one row of cards so the recording
+  keeps its height: Region, Loop, Slice (its switch in the title, with the
+  root key that plays the first slice) and Character. Modulation pairs the
+  LFO (Shape, Rate, Sync, Retrigger) with its depths (Pitch, Cutoff, Level,
+  Pan, Mod wheel, Fade in).
 - *Panel.* `POPUP_WIDTH_LG` on R1 Mini's twelve-cell grid, in signal order:
   the recording over the full width (name, length, **Load sample…**,
   **Clear**); Sample, Loop, Pitch and Filter (with its switch in the title);
@@ -1827,6 +1853,9 @@ CPU (`devices_bench`, 48 kHz, 256-frame blocks, a four-second stereo
 recording, looped; one machine, not a guarantee): 8 voices 161 µs per block
 (3.0 % of real time), with the filter 177 µs (3.3 %), with the filter and LFO
 to pitch and cutoff 199 µs (3.7 %); 32 voices with the filter 362 µs (6.8 %).
+Every Character stage on (12 kHz, 8-bit, Drive 50 %) with the filter, 8
+voices, measured on another machine beside a filter-only 148 µs: 213 µs
+(4.0 %), most of it the saturator's ADAA.
 
 ### R1 Drums
 

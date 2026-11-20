@@ -731,6 +731,17 @@ fn sampler_layout(mut layout: Layout) -> Layout {
             ]],
         ),
         cells("Voices", 2, 4, &[&[C(VOICE_MODE, 3), C(VOICES, 1)]]),
+        Section {
+            enable: Some(SLICE),
+            ..cells("Slice", 3, 2, &[&[C(SLICES, 2)]])
+        },
+        cells("Character", 3, 5, &[&[C(RATE, 1), C(BITS, 3), C(DRIVE, 1)]]),
+        cells(
+            "LFO depth",
+            3,
+            5,
+            &[&[C(LFO_RETRIGGER, 2), C(LFO_FADE, 1), C(LFO_WHEEL, 2)]],
+        ),
     ];
     layout.captions = &[
         (VELOCITY_CUTOFF, "Velocity"),
@@ -751,6 +762,8 @@ fn sampler_layout(mut layout: Layout) -> Layout {
         (LFO_CUTOFF, "Cutoff"),
         (LFO_LEVEL, "Level"),
         (LFO_PAN, "Pan"),
+        (LFO_FADE, "Fade in"),
+        (LFO_WHEEL, "Mod wheel"),
         // As engraved on hardware; five full names do not fit side by side.
         (FENV_ATTACK, "A"),
         (FENV_DECAY, "D"),

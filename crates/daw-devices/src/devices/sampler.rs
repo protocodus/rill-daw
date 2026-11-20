@@ -8,8 +8,8 @@ use super::mini::{MODES, VoiceMode};
 use super::param;
 use crate::dsp::playback::{LoopMode, Markers, Playhead, Region};
 use crate::dsp::{
-    Adsr, CleanShape, FilterType, Lfo, LfoShape, SincBank, Smoothed, Stage, Step, Svf, db_to_gain,
-    prewarp,
+    Adaa1, Adsr, AlgebraicSigmoid, CleanShape, FilterType, Lfo, LfoShape, SincBank, Smoothed,
+    Stage, Step, Svf, db_to_gain, prewarp,
 };
 use crate::{
     Device, DeviceDescriptor, DeviceKind, Event, EventKind, ParamRange, ParamSpec, ProcessContext,
@@ -26,6 +26,8 @@ pub const START: u32 = 3;
 pub const END: u32 = 4;
 pub const REVERSE: u32 = 5;
 pub const GAIN: u32 = 6;
+pub const SLICE: u32 = 7;
+pub const SLICES: u32 = 8;
 pub const LOOP_MODE: u32 = 10;
 pub const LOOP_START: u32 = 11;
 pub const LOOP_END: u32 = 12;
@@ -56,6 +58,9 @@ pub const LFO_PITCH: u32 = 63;
 pub const LFO_CUTOFF: u32 = 64;
 pub const LFO_LEVEL: u32 = 65;
 pub const LFO_PAN: u32 = 66;
+pub const LFO_FADE: u32 = 67;
+pub const LFO_RETRIGGER: u32 = 68;
+pub const LFO_WHEEL: u32 = 69;
 pub const VOICE_MODE: u32 = 70;
 pub const VOICES: u32 = 71;
 pub const GLIDE: u32 = 72;
@@ -63,6 +68,9 @@ pub const BEND_RANGE: u32 = 73;
 pub const VELOCITY_LEVEL: u32 = 74;
 pub const PAN: u32 = 75;
 pub const VOLUME: u32 = 76;
+pub const RATE: u32 = 80;
+pub const BITS: u32 = 81;
+pub const DRIVE: u32 = 82;
 
 /// Telemetry value slots. Playheads: one per voice from
 /// [`TELEMETRY_PLAYHEADS`], the position as a share of the recording, or
@@ -83,9 +91,18 @@ const STEAL_FADE_MS: f32 = 5.0;
 /// A voice reaching its end marker fades over this long, so it never cuts.
 const END_FADE_MS: f32 = 2.0;
 const GLIDE_OFF_MS: f32 = 1.0;
+/// An LFO fade this short is none.
+const FADE_OFF_MS: f32 = 1.0;
 /// A hold this short is none.
 const HOLD_OFF_MS: f32 = 1.0;
 const HELD_NOTES: usize = 16;
+pub const MAX_SLICES: i32 = 64;
+/// Rate at its maximum leaves the recording at the engine's rate.
+pub const RATE_OFF_HZ: f32 = 48_000.0;
+/// As R1 Drums' pads: Clean, 12-bit, 8-bit.
+pub const BIT_DEPTHS: &[&str] = super::drums::BIT_DEPTHS;
+/// Drive at 100 %, in dB before the saturator.
+const DRIVE_DB: f32 = 30.0;
 
 const fn percent(
     id: u32,
@@ -127,7 +144,7 @@ const fn time(
     )
 }
 
-pub static PARAMETERS: [ParamSpec; 43] = [
+pub static PARAMETERS: [ParamSpec; 51] = [
     param(
         ROOT,
         "sample.root",
@@ -172,6 +189,49 @@ pub static PARAMETERS: [ParamSpec; 43] = [
         },
         0.0,
     ),
+    param(
+        SLICE,
+        "slice.on",
+        "Slice",
+        "Slice",
+        "",
+        ParamRange::Toggle,
+        0.0,
+    ),
+    param(
+        SLICES,
+        "slice.count",
+        "Slices",
+        "Slice",
+        "",
+        ParamRange::Integer {
+            min: 2,
+            max: MAX_SLICES,
+        },
+        8.0,
+    ),
+    param(
+        RATE,
+        "character.rate",
+        "Rate",
+        "Character",
+        "Hz",
+        ParamRange::Log {
+            min: 1000.0,
+            max: RATE_OFF_HZ,
+        },
+        RATE_OFF_HZ,
+    ),
+    param(
+        BITS,
+        "character.bits",
+        "Bits",
+        "Character",
+        "",
+        ParamRange::Choice(BIT_DEPTHS),
+        0.0,
+    ),
+    percent(DRIVE, "character.drive", "Drive", "Character", 0.0),
     param(
         LOOP_MODE,
         "loop.mode",
@@ -405,6 +465,28 @@ pub static PARAMETERS: [ParamSpec; 43] = [
     percent(LFO_LEVEL, "lfo.level", "Level", "LFO", 0.0),
     percent(LFO_PAN, "lfo.pan", "Pan", "LFO", 0.0),
     param(
+        LFO_FADE,
+        "lfo.fade",
+        "Fade in",
+        "LFO",
+        "ms",
+        ParamRange::Log {
+            min: FADE_OFF_MS,
+            max: 5000.0,
+        },
+        FADE_OFF_MS,
+    ),
+    param(
+        LFO_RETRIGGER,
+        "lfo.retrigger",
+        "Retrigger",
+        "LFO",
+        "",
+        ParamRange::Toggle,
+        0.0,
+    ),
+    percent(LFO_WHEEL, "lfo.wheel", "Mod wheel", "LFO", 0.0),
+    param(
         VOICE_MODE,
         "voice.mode",
         "Mode",
@@ -491,6 +573,7 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-sampler/tape-reverse.rillpreset"),
         include_str!("../../presets/r1-sampler/lo-fi-chop.rillpreset"),
         include_str!("../../presets/r1-sampler/vibrato-lead.rillpreset"),
+        include_str!("../../presets/r1-sampler/sliced-break.rillpreset"),
     ],
     legacy_labels: &[],
     fixed_on_roll: &[],
@@ -509,6 +592,15 @@ pub struct Settings {
     pub end: f32,
     pub reverse: bool,
     pub gain_db: f32,
+    /// Equal slices of Start to End, one a key from the root; `None` plays
+    /// the recording across the keyboard.
+    pub slices: Option<usize>,
+    /// Sample-and-hold rate of the Character stage; `None` for none.
+    pub rate_hz: Option<f32>,
+    /// Quantization of the Character stage; `None` for none.
+    pub bits: Option<u8>,
+    /// 0–1.
+    pub drive: f32,
     pub loop_mode: LoopMode,
     pub loop_start: f32,
     pub loop_end: f32,
@@ -537,6 +629,12 @@ pub struct Settings {
     /// 0–1.
     pub lfo_level: f32,
     pub lfo_pan: f32,
+    /// How long a new voice takes to reach the full LFO depth; 0 for at once.
+    pub lfo_fade_ms: f32,
+    /// Whether a key played with none held restarts the LFO.
+    pub lfo_retrigger: bool,
+    /// How much the mod wheel controls the LFO depth, 0–1.
+    pub lfo_wheel: f32,
     pub mode: VoiceMode,
     pub voices: usize,
     pub glide_ms: f32,
@@ -565,6 +663,14 @@ impl Settings {
             end: share(END),
             reverse: plain(REVERSE) >= 0.5,
             gain_db: plain(GAIN),
+            slices: (plain(SLICE) >= 0.5).then(|| index(SLICES).max(2)),
+            rate_hz: Some(plain(RATE)).filter(|&hz| hz < RATE_OFF_HZ * 0.999),
+            bits: match index(BITS) {
+                1 => Some(12),
+                2 => Some(8),
+                _ => None,
+            },
+            drive: share(DRIVE),
             loop_mode: LoopMode::from_index(index(LOOP_MODE)),
             loop_start: share(LOOP_START),
             loop_end: share(LOOP_END),
@@ -607,6 +713,13 @@ impl Settings {
             lfo_cutoff: plain(LFO_CUTOFF),
             lfo_level: share(LFO_LEVEL),
             lfo_pan: share(LFO_PAN),
+            lfo_fade_ms: if plain(LFO_FADE) <= FADE_OFF_MS {
+                0.0
+            } else {
+                plain(LFO_FADE)
+            },
+            lfo_retrigger: plain(LFO_RETRIGGER) >= 0.5,
+            lfo_wheel: share(LFO_WHEEL),
             mode: match index(VOICE_MODE) {
                 1 => VoiceMode::Mono,
                 2 => VoiceMode::Legato,
@@ -622,23 +735,41 @@ impl Settings {
     }
 
     /// The markers of a recording at `sample_rate`, played in the voice's
-    /// direction.
-    pub fn markers(&self, sample_rate: f32, reverse: bool) -> Markers {
+    /// direction. A slice plays its share of Start to End and loops whole.
+    pub fn markers(&self, sample_rate: f32, reverse: bool, slice: Option<usize>) -> Markers {
+        let (start, end, loop_start, loop_end) = match (slice, self.slices) {
+            (Some(slice), Some(count)) => {
+                let at = |index: usize| {
+                    self.start + (self.end - self.start) * index.min(count) as f32 / count as f32
+                };
+                let (from, to) = (at(slice), at(slice + 1));
+                (from, to, from.min(to), from.max(to))
+            }
+            _ => (self.start, self.end, self.loop_start, self.loop_end),
+        };
         Markers {
-            start: self.start,
-            end: self.end,
-            loop_start: self.loop_start,
-            loop_end: self.loop_end,
+            start,
+            end,
+            loop_start,
+            loop_end,
             crossfade: f64::from(self.crossfade_ms * 0.001 * sample_rate),
             mode: self.loop_mode,
             reverse,
         }
     }
 
+    /// The slice a key plays: the root plays the first, each key above the
+    /// next, wrapping around so every key plays one.
+    pub fn slice(&self, pitch: f32) -> Option<usize> {
+        let count = self.slices? as i32;
+        Some((pitch.round() as i32 - self.root.round() as i32).rem_euclid(count) as usize)
+    }
+
     /// The note a key plays relative to the root, in semitones before bend
     /// and LFO.
     pub fn transposition(&self, pitch: f32) -> f32 {
-        let key = if self.key_tracking {
+        // A slice keeps its pitch; the key chooses which slice plays.
+        let key = if self.key_tracking && self.slices.is_none() {
             pitch - self.root
         } else {
             0.0
@@ -651,8 +782,10 @@ impl Settings {
 /// the ones that do not disabled in place.
 pub fn applies(id: u32, settings: &Settings) -> bool {
     match id {
-        ROOT => settings.key_tracking,
-        LOOP_START | LOOP_END => settings.loop_mode.loops(),
+        ROOT => settings.key_tracking || settings.slices.is_some(),
+        KEY_TRACKING => settings.slices.is_none(),
+        SLICES => settings.slices.is_some(),
+        LOOP_START | LOOP_END => settings.loop_mode.loops() && settings.slices.is_none(),
         CROSSFADE => settings.loop_mode == LoopMode::Forward,
         FILTER_TYPE | FILTER_SLOPE | CUTOFF | RESONANCE | FILTER_ENV | FILTER_KEY_TRACKING
         | VELOCITY_CUTOFF | FENV_ATTACK | FENV_DECAY | FENV_SUSTAIN | FENV_RELEASE | LFO_CUTOFF => {
@@ -711,6 +844,11 @@ struct Modulation {
     pan: f32,
     velocity_level: f32,
     glide: f32,
+    /// LFO depth left by the mod wheel, 0–1.
+    lfo_depth: f32,
+    /// How far a voice's LFO fade moves in one control period.
+    lfo_fade_step: f32,
+    drive: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -767,6 +905,86 @@ struct Voice {
     /// Left and right gain: velocity, LFO level and pan.
     gains: [Ramp; 2],
     cutoff: f32,
+    /// The slice the key chose, in Slice mode.
+    slice: Option<usize>,
+    /// Share of the LFO depth this voice has faded in, 0–1.
+    lfo_fade: f32,
+    character: Character,
+}
+
+/// A voice's sample-and-hold, quantizer and saturator ahead of the filter,
+/// as the converters and input stage of an early hardware sampler. The
+/// hold follows one clock for every voice, as one converter would.
+#[derive(Clone, Debug)]
+struct Character {
+    hold: [f32; 2],
+    drive: [Adaa1<AlgebraicSigmoid>; 2],
+}
+
+impl Default for Character {
+    fn default() -> Self {
+        Self {
+            hold: [0.0; 2],
+            drive: std::array::from_fn(|_| Adaa1::new(AlgebraicSigmoid::new(1.0, 1.0, 0.0))),
+        }
+    }
+}
+
+/// The Character stage's settings for one control period.
+#[derive(Clone, Copy, Debug)]
+struct CharacterRun {
+    /// Held samples per output sample; `None` holds none.
+    rate: Option<f32>,
+    /// Quantization steps per unit; `None` for none.
+    levels: Option<f32>,
+    /// Gain into the saturator, gain after it and wet share; `None` when
+    /// Drive is off.
+    drive: Option<(f64, f32, f32)>,
+}
+
+impl CharacterRun {
+    fn new(s: &Settings, drive: f32, sample_rate: f32) -> Self {
+        let into = db_to_gain(DRIVE_DB * drive);
+        Self {
+            rate: s.rate_hz.map(|hz| (hz / sample_rate).min(1.0)),
+            levels: s.bits.map(|bits| f32::from(bits - 1).exp2()),
+            // Makeup of half the drive: quiet passages come up while peaks
+            // saturate. The first tenth fades the saturator in, so Drive
+            // leaves zero without a step in level.
+            drive: (drive > 0.0).then(|| {
+                (
+                    f64::from(into),
+                    into.sqrt().recip(),
+                    (drive * 10.0).min(1.0),
+                )
+            }),
+        }
+    }
+
+    fn active(&self) -> bool {
+        self.rate.is_some() || self.levels.is_some() || self.drive.is_some()
+    }
+
+    /// `tick` is whether the shared clock takes a new sample now.
+    #[inline]
+    fn process(&self, state: &mut Character, mut pair: [f32; 2], tick: bool) -> [f32; 2] {
+        if self.rate.is_some() {
+            if tick {
+                state.hold = pair;
+            }
+            pair = state.hold;
+        }
+        if let Some(levels) = self.levels {
+            pair = pair.map(|x| (x * levels).round() / levels);
+        }
+        if let Some((into, out, wet)) = self.drive {
+            for (x, shaper) in pair.iter_mut().zip(&mut state.drive) {
+                let shaped = shaper.process(f64::from(*x) * into) as f32 * out;
+                *x += (shaped - *x) * wet;
+            }
+        }
+        pair
+    }
 }
 
 impl Voice {
@@ -823,6 +1041,10 @@ pub struct Sampler {
     lfo_pan: Smoothed,
     pan: Smoothed,
     velocity_level: Smoothed,
+    /// The Character stage's sample-and-hold clock, 0–1; due at 1.
+    hold_phase: f32,
+    wheel: Smoothed,
+    drive: Smoothed,
     /// Sample gain and volume, per output sample.
     gain: Smoothed,
     telemetry: Arc<Telemetry>,
@@ -868,6 +1090,9 @@ impl Sampler {
             lfo_pan: Smoothed::new(0.0),
             pan: Smoothed::new(0.0),
             velocity_level: Smoothed::new(0.0),
+            hold_phase: 1.0,
+            wheel: Smoothed::new(0.0),
+            drive: Smoothed::new(0.0),
             gain: Smoothed::new(0.0),
             telemetry: Arc::new(Telemetry::meter_only()),
         };
@@ -879,7 +1104,7 @@ impl Sampler {
         &self.settings
     }
 
-    fn control_smoothers(&mut self) -> [&mut Smoothed; 12] {
+    fn control_smoothers(&mut self) -> [&mut Smoothed; 14] {
         [
             &mut self.bend,
             &mut self.cutoff,
@@ -893,6 +1118,8 @@ impl Sampler {
             &mut self.lfo_pan,
             &mut self.pan,
             &mut self.velocity_level,
+            &mut self.wheel,
+            &mut self.drive,
         ]
     }
 
@@ -940,6 +1167,7 @@ impl Sampler {
         self.lfo_pan.set_target(s.lfo_pan);
         self.pan.set_target(s.pan);
         self.velocity_level.set_target(s.velocity_level);
+        self.drive.set_target(s.drive);
         self.gain.set_target(db_to_gain(s.gain_db + s.volume_db));
         let (rate, control_rate) = (self.sample_rate, self.sample_rate / CONTROL as f32);
         for voice in &mut self.voices {
@@ -990,6 +1218,13 @@ impl Sampler {
             } else {
                 1.0 - (-4.6 / glide_periods.max(1.0)).exp()
             },
+            lfo_depth: 1.0 - s.lfo_wheel * (1.0 - self.wheel.next_value()),
+            lfo_fade_step: if s.lfo_fade_ms > 0.0 {
+                CONTROL as f32 / (s.lfo_fade_ms * 0.001 * rate)
+            } else {
+                1.0
+            },
+            drive: self.drive.next_value(),
         };
         let modulation = self.modulation;
         let mut active = 0;
@@ -1062,7 +1297,10 @@ impl Sampler {
         };
         if !was_active {
             voice.filters = Default::default();
+            voice.character = Character::default();
         }
+        voice.slice = s.slice(note.pitch);
+        voice.lfo_fade = if s.lfo_fade_ms > 0.0 { 0.0 } else { 1.0 };
         // A retriggered voice starts its recording afresh; the envelope
         // continues from its level, so it does not click.
         voice.reverse = s.reverse;
@@ -1082,7 +1320,7 @@ impl Sampler {
             layer.source = source;
             layer.region = Region::new(
                 sample.frames(),
-                &source.markers(s.markers(sample.sample_rate(), voice.reverse)),
+                &source.markers(s.markers(sample.sample_rate(), voice.reverse, voice.slice)),
             );
             layer.playhead = Playhead::new(&layer.region);
         }
@@ -1099,6 +1337,15 @@ impl Sampler {
         };
         let glide_from = self.last_pitch;
         self.last_pitch = pitch;
+        if self.settings.lfo_retrigger
+            && !self
+                .voices
+                .iter()
+                .any(|voice| voice.held || voice.pending.is_some_and(|pending| pending.held))
+        {
+            // Unless the song's beat sets it (Sync while playing).
+            self.lfo.set_phase(0.0);
+        }
         if self.settings.mode != VoiceMode::Poly {
             self.mono_note_on(note, glide_from);
             return;
@@ -1272,7 +1519,8 @@ impl Sampler {
             EventKind::NoteOff { note } => self.note_off(note),
             EventKind::PitchBend(value) => self.bend.set_target(value.clamp(-1.0, 1.0)),
             EventKind::Sustain(on) => self.set_sustain(on),
-            EventKind::ModWheel(_) | EventKind::Pressure { .. } => {}
+            EventKind::ModWheel(value) => self.wheel.set_target(value.clamp(0.0, 1.0)),
+            EventKind::Pressure { .. } => {}
         }
     }
 
@@ -1283,6 +1531,22 @@ impl Sampler {
         let fade_step = 1.0 / (STEAL_FADE_MS * 0.001 * self.sample_rate);
         let end_fade = f64::from(END_FADE_MS * 0.001 * self.sample_rate);
         let filter_on = s.filter_on;
+        let character = CharacterRun::new(&s, self.modulation.drive, self.sample_rate);
+        let character_on = character.active();
+        let mut ticks = [true; CONTROL];
+        match character.rate {
+            Some(rate) => {
+                for tick in &mut ticks[..left.len()] {
+                    self.hold_phase += rate;
+                    *tick = self.hold_phase >= 1.0;
+                    if *tick {
+                        self.hold_phase -= 1.0;
+                    }
+                }
+            }
+            // Due, so turning Rate on holds the current sample.
+            None => self.hold_phase = 1.0,
+        }
         let bank = self.bank;
         for index in 0..MAX_VOICES {
             let voice = &mut self.voices[index];
@@ -1291,7 +1555,8 @@ impl Sampler {
             }
             let fixed_coeffs =
                 (filter_on && voice.g.step == 0.0).then(|| shape.coeffs(voice.g.value));
-            for (out_left, out_right) in left.iter_mut().zip(right.iter_mut()) {
+            for ((out_left, out_right), &tick) in left.iter_mut().zip(right.iter_mut()).zip(&ticks)
+            {
                 let (mut l, mut r) = (0.0, 0.0);
                 for layer in &mut voice.layers[..voice.layer_count] {
                     if layer.playhead.is_done() {
@@ -1328,6 +1593,9 @@ impl Sampler {
                     l += leaf_left * layer.source.gain;
                     r += leaf_right * layer.source.gain;
                     layer.playhead.advance(&layer.region, step, end_fade);
+                }
+                if character_on {
+                    [l, r] = character.process(&mut voice.character, [l, r], tick);
                 }
                 let g = voice.g.next();
                 if filter_on {
@@ -1389,7 +1657,10 @@ fn voice_control(
     start: bool,
 ) {
     voice.pitch += (voice.note.pitch - voice.pitch) * m.glide;
-    let semitones = s.transposition(voice.pitch) + m.bend + m.lfo * m.lfo_pitch;
+    voice.lfo_fade = (voice.lfo_fade + m.lfo_fade_step).min(1.0);
+    let depth = m.lfo_depth * voice.lfo_fade;
+    let lfo = m.lfo * depth;
+    let semitones = s.transposition(voice.pitch) + m.bend + lfo * m.lfo_pitch;
     for layer in &mut voice.layers[..voice.layer_count] {
         let Some(sample) = &samples[layer.source.slot as usize] else {
             continue;
@@ -1399,7 +1670,7 @@ fn voice_control(
             sample.frames(),
             &layer
                 .source
-                .markers(s.markers(sample.sample_rate(), voice.reverse)),
+                .markers(s.markers(sample.sample_rate(), voice.reverse, voice.slice)),
         );
         let step = ((semitones / 12.0).exp2() * sample.sample_rate() / rate)
             .min(crate::dsp::resample::MAX_STEP);
@@ -1414,13 +1685,13 @@ fn voice_control(
         + m.filter_env * fenv
         + m.key_tracking * (voice.pitch - 60.0) / 12.0
         + m.velocity_cutoff * (voice.note.velocity - 1.0)
-        + m.lfo * m.lfo_cutoff;
+        + lfo * m.lfo_cutoff;
     voice.cutoff = octaves.exp2().clamp(20.0, 20_000.0);
     voice.g.to(prewarp(voice.cutoff, rate), start);
     // A dip from full level, so the LFO never raises a note above its velocity.
     let level = (1.0 - m.velocity_level * (1.0 - voice.note.velocity))
-        * (1.0 - m.lfo_level * (0.5 - 0.5 * m.lfo));
-    let pan = (m.pan + m.lfo * m.lfo_pan).clamp(-1.0, 1.0);
+        * (1.0 - m.lfo_level * depth * (0.5 - 0.5 * m.lfo));
+    let pan = (m.pan + lfo * m.lfo_pan).clamp(-1.0, 1.0);
     voice.gains[0].to(level * (1.0 - pan).min(1.0), start);
     voice.gains[1].to(level * (1.0 + pan).min(1.0), start);
 }
@@ -1541,6 +1812,8 @@ impl Device for Sampler {
         self.held_count = 0;
         self.sustain = false;
         self.bend.set_target(0.0);
+        self.wheel.set_target(0.0);
+        self.hold_phase = 1.0;
         self.lfo.reset();
         self.countdown = 0;
         self.age = 0;
