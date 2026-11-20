@@ -52,9 +52,9 @@ fn dynamics(mut layout: Layout) -> Workspace {
         cells(
             "Sidechain",
             0,
-            5,
+            4,
             &[&[
-                C(SIDECHAIN, 2),
+                C(SIDECHAIN, 1),
                 C(SIDECHAIN_HIGH_PASS, 1),
                 C(STEREO_LINK, 1),
                 C(LISTEN, 1),
@@ -72,6 +72,14 @@ fn dynamics(mut layout: Layout) -> Workspace {
                 C(RANGE, 1),
             ]],
         ),
+        // Lifts what is quiet toward the threshold, the mirror of the
+        // downward curve: with both, single-band OTT.
+        cells(
+            "Upward",
+            0,
+            2,
+            &[&[C(UPWARD_THRESHOLD, 1), C(UPWARD_RATIO, 1)]],
+        ),
         cells(
             "Timing",
             0,
@@ -85,8 +93,10 @@ fn dynamics(mut layout: Layout) -> Workspace {
             ]],
         ),
     ];
-    layout.toggle_columns = &[];
+    layout.toggle_columns = &[(SIDECHAIN, 1)];
     layout.captions = &[
+        (UPWARD_THRESHOLD, "Threshold"),
+        (UPWARD_RATIO, "Ratio"),
         (SIDECHAIN, "Source"),
         (SIDECHAIN_HIGH_PASS, "High-pass"),
         (STEREO_LINK, "Link"),
@@ -97,7 +107,9 @@ fn dynamics(mut layout: Layout) -> Workspace {
         let settings = compressor_settings(values);
         if !applies(id, &settings) {
             return Some(match id {
-                CHARACTER | AUTO_MAKEUP => "Available in Compressor mode.",
+                CHARACTER | AUTO_MAKEUP | UPWARD_THRESHOLD | UPWARD_RATIO => {
+                    "Available in Compressor mode."
+                }
                 THRESHOLD | RATIO | ATTACK | RANGE => {
                     "Limiter uses its ceiling and automatic attack instead."
                 }
@@ -122,6 +134,9 @@ fn dynamics(mut layout: Layout) -> Workspace {
             LOOKAHEAD => Some("Listen ahead to catch transients; adds latency."),
             LISTEN => Some("Hear what the detector hears, to tune the high-pass."),
             RANGE => Some("The most the level is turned down: how deep a gate closes."),
+            UPWARD_RATIO => {
+                Some("Lifts what is below the upward threshold; 1:1 is off. At most +24 dB.")
+            }
             HOLD => Some("Keeps the gate open this long after the signal falls."),
             AUTO_MAKEUP => Some("Compensate for compression; the readout shows the applied gain."),
             _ => None,

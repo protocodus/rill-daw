@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "device": "r1-compressor",
+  "name": "Single-band OTT",
+  "author": "Rill",
+  "category": "Character",
+  "tags": ["ott", "upward"],
+  "description": "Squashes the loud parts and lifts the quiet ones toward them: dense, forward and blended in.",
+  "parameters": {
+    "threshold": -20.0,
+    "ratio": 6.0,
+    "attack": 3.0,
+    "release": 130.0,
+    "upward.threshold": -36.0,
+    "upward.ratio": 4.0,
+    "mix": 70.0
+  }
+}

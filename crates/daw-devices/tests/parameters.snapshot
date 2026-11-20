@@ -546,3 +546,5 @@ r1-drums 499 pad15.bits "Bit depth" choice Clean|12-bit|8-bit
 r1-drums 500 pad15.velocity_pitch "Soft hit pitch" linear -12 12
 r1-drums 531 pad16.bits "Bit depth" choice Clean|12-bit|8-bit
 r1-drums 532 pad16.velocity_pitch "Soft hit pitch" linear -12 12
+r1-compressor 13 upward.threshold "Upward threshold" linear -60 0
+r1-compressor 14 upward.ratio "Upward ratio" log 1 20
