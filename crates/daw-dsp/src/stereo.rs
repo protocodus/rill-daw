@@ -22,7 +22,7 @@ mod tests {
     #[test]
     fn width_folds_keeps_and_widens() {
         assert_eq!(stereo_width([1.0, 0.0], 0.0), [0.5, 0.5]);
-        assert_eq!(stereo_width([0.3, -0.2], 1.0), [0.3, -0.2]);
+        assert_eq!(stereo_width([0.5, -0.25], 1.0), [0.5, -0.25]);
         assert_eq!(stereo_width([1.0, 0.0], 2.0), [1.5, -0.5]);
     }
 
