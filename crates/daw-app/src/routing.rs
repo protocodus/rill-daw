@@ -99,7 +99,10 @@ impl DawApp {
                                 index,
                                 count,
                                 enabled: slot.enabled,
-                                has_parameters: !matches!(slot.effect, Effect::Builtin { .. }),
+                                has_parameters: !matches!(
+                                    slot.effect,
+                                    Effect::Builtin { .. } | Effect::Container { .. }
+                                ),
                             };
                             let row = widgets::effect_slot(
                                 ui,
@@ -190,6 +193,7 @@ impl DawApp {
             self.open_effect_chooser(crate::library::LibraryTarget::Insert {
                 track: track_id,
                 anchor: insert_anchor,
+                lane: None,
             });
         }
         if let Some(effect) = edit_effect {

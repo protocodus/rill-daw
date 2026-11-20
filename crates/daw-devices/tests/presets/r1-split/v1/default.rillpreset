@@ -7,7 +7,7 @@
   "description": "Three empty bands at 120 Hz and 2.5 kHz.",
   "parameters": {
     "rule": "Bands",
-    "bands": 3
+    "bands": "3"
   },
   "lanes": [
     {

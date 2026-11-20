@@ -10,7 +10,7 @@
   "description": "Clean lows, tube warmth in the mids and tape on the top.",
   "parameters": {
     "rule": "Bands",
-    "bands": 3,
+    "bands": "3",
     "crossover.1": 150.0,
     "crossover.2": 3000.0
   },

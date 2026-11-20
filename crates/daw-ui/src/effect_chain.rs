@@ -202,3 +202,136 @@ pub fn empty_effect_chain(ui: &mut Ui) -> Response {
         })
         .response
 }
+
+/// What a row inside a container lane asks for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LaneEffectAction {
+    Open,
+    ToggleEnabled,
+    MoveUp,
+    MoveDown,
+    /// To the end of another lane, by index.
+    MoveToLane(usize),
+    Remove,
+}
+
+/// One effect inside a container lane. The lane is already a card, so the
+/// row is flat: the enable switch with the name, **Open** and a **More**
+/// menu on one line, the model under it. The secondary-click menu offers
+/// the same actions.
+#[allow(clippy::too_many_arguments)]
+pub fn lane_effect_row(
+    ui: &mut Ui,
+    name: &str,
+    model: &str,
+    enabled: bool,
+    index: usize,
+    count: usize,
+    lane: usize,
+    lanes: &[String],
+) -> Option<LaneEffectAction> {
+    let colors = theme::palette(ui.ctx());
+    let mut action = None;
+    let row = ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        // The name takes the whole first line; the model and the actions
+        // share the second, so a narrow lane still shows the name.
+        let mut on = enabled;
+        let mut title = egui::text::LayoutJob::simple_singleline(
+            name.to_owned(),
+            text::TextRole::Label.font(),
+            if enabled { colors.text } else { colors.muted },
+        );
+        title.wrap = egui::text::TextWrapping::truncate_at_width(
+            (ui.available_width() - tokens::SWITCH_WIDTH - tokens::SPACE_SM).max(0.0),
+        );
+        if crate::switch(ui, &mut on, title)
+            .on_hover_text(if enabled {
+                format!("{name} · Click to bypass")
+            } else {
+                format!("{name} · Bypassed")
+            })
+            .changed()
+        {
+            action = Some(LaneEffectAction::ToggleEnabled);
+        }
+        ui.allocate_ui_with_layout(
+            egui::vec2(ui.available_width(), tokens::CONTROL_HEIGHT),
+            egui::Layout::right_to_left(egui::Align::Center),
+            |ui| {
+                if let Some(chosen) = crate::compact_action_menu(ui, "More", |ui| {
+                    lane_effect_menu(ui, index, count, lane, lanes)
+                })
+                .inner
+                .flatten()
+                {
+                    action = Some(chosen);
+                }
+                if crate::small_button(ui, "Open")
+                    .on_hover_text("Open this effect's panel")
+                    .clicked()
+                {
+                    action = Some(LaneEffectAction::Open);
+                }
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    text::truncated(ui, text::TextRole::Note, model);
+                });
+            },
+        );
+    });
+    let menu = ui.id().with(("lane_effect_menu", lane, index));
+    if let Some(chosen) = crate::selection_item_context_menu(ui, menu, row.response.rect, |ui| {
+        let open = crate::button(ui, "Open").clicked();
+        let toggle = crate::button(ui, if enabled { "Bypass" } else { "Enable" }).clicked();
+        ui.separator();
+        let other = lane_effect_menu(ui, index, count, lane, lanes);
+        let chosen = open
+            .then_some(LaneEffectAction::Open)
+            .or(toggle.then_some(LaneEffectAction::ToggleEnabled))
+            .or(other);
+        if chosen.is_some() {
+            ui.close();
+        }
+        chosen
+    })
+    .and_then(|popup| popup.inner)
+    {
+        action = Some(chosen);
+    }
+    action
+}
+
+fn lane_effect_menu(
+    ui: &mut Ui,
+    index: usize,
+    count: usize,
+    lane: usize,
+    lanes: &[String],
+) -> Option<LaneEffectAction> {
+    let mut action = None;
+    if ui
+        .add_enabled(index > 0, crate::button_widget("Move up"))
+        .clicked()
+    {
+        action = Some(LaneEffectAction::MoveUp);
+    }
+    if ui
+        .add_enabled(index + 1 < count, crate::button_widget("Move down"))
+        .clicked()
+    {
+        action = Some(LaneEffectAction::MoveDown);
+    }
+    for (other, name) in lanes.iter().enumerate().filter(|(other, _)| *other != lane) {
+        if crate::button(ui, format!("Move to {name}")).clicked() {
+            action = Some(LaneEffectAction::MoveToLane(other));
+        }
+    }
+    ui.separator();
+    if crate::button(ui, "Remove").clicked() {
+        action = Some(LaneEffectAction::Remove);
+    }
+    if action.is_some() {
+        ui.close();
+    }
+    action
+}

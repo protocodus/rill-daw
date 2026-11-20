@@ -5,7 +5,7 @@
   "description": "Every parameter key of this version, so a removed or renamed key is caught.",
   "parameters": {
     "rule": "Left/Right",
-    "bands": 4,
+    "bands": "4",
     "crossover.1": 95.0,
     "crossover.2": 1800.0,
     "crossover.3": 7200.0,

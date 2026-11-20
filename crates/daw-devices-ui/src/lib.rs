@@ -52,6 +52,47 @@ pub enum SampleRequest {
     Clear,
 }
 
+/// One effect in a container lane, as its panel shows it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LaneEffect {
+    pub id: u64,
+    pub name: String,
+    /// Producer and model, or "Container" for a nested container.
+    pub model: String,
+    pub enabled: bool,
+}
+
+/// What a container panel asks of its host for its lanes. Each is one Undo
+/// step.
+#[derive(Clone, Debug, PartialEq)]
+pub enum LaneAction {
+    /// Choose an effect for the end of a lane; lanes up to it are created.
+    AddEffect {
+        lane: usize,
+    },
+    AddLane,
+    RemoveLane {
+        lane: usize,
+    },
+    /// Show the effect's own panel.
+    Open {
+        effect: u64,
+    },
+    SetEnabled {
+        effect: u64,
+        enabled: bool,
+    },
+    /// Within its lane, or to the end of another.
+    Move {
+        effect: u64,
+        lane: usize,
+        index: usize,
+    },
+    Remove {
+        effect: u64,
+    },
+}
+
 /// The panel's view of the parameter owner.
 pub trait DeviceHost {
     /// Normalized 0–1.
@@ -122,6 +163,19 @@ pub trait DeviceHost {
     }
     /// Loads or clears a sample slot, as one Undo step.
     fn request_sample(&mut self, _slot: u32, _request: SampleRequest) {}
+    /// What each lane of a container holds; `None` where the host cannot
+    /// say (the gallery shows the lanes empty).
+    fn lanes(&self) -> Option<Vec<Vec<LaneEffect>>> {
+        None
+    }
+    fn lane_action(&mut self, _action: LaneAction) {}
+    /// Loads a preset with lanes, parameters and lane contents together as
+    /// one Undo step; `false` where the host cannot (it then loads nothing).
+    /// [`DeviceHost::save_preset`] receives container presets without lanes
+    /// and adds them.
+    fn load_container_preset(&mut self, _preset: &Preset) -> bool {
+        false
+    }
 }
 
 /// Per-panel UI state the host keeps between frames.
@@ -464,6 +518,10 @@ pub fn show(
             state.workspace_rect = Some(body.response.rect);
         }
         let _ = body;
+        // Signal flow: the split, the lanes it feeds, then their sum.
+        if daw_devices::devices::container::is_container(descriptor.id) {
+            container_lanes(ui, descriptor, host, state, &workspace.layout);
+        }
         if !workspace.output.is_empty() {
             ui.separator();
             let output = daw_ui::control_row_wrapped(ui, |ui| {
@@ -483,6 +541,158 @@ pub fn show(
             performance(ui, host, state);
         }
     });
+}
+
+/// The lanes of R1 Split or R1 Chain side by side, each a card: its name,
+/// a Split lane's gain, mute and solo, then its effects in order and
+/// **+ Effect**. Lanes the rule does not feed are not drawn.
+fn container_lanes(
+    ui: &mut Ui,
+    descriptor: &DeviceDescriptor,
+    host: &mut dyn DeviceHost,
+    state: &mut PanelState,
+    layout: &panels::Layout,
+) {
+    use daw_devices::devices::container::{self, MAX_LANES, Rule};
+    let held = host.lanes().unwrap_or_default();
+    let split = descriptor.id == container::SPLIT.id;
+    let (rule, bands) = if split {
+        (
+            Rule::from_normalized(host.value(container::RULE) as f32),
+            container::bands(host.value(container::BANDS) as f32),
+        )
+    } else {
+        (Rule::All, 1)
+    };
+    let count = if split {
+        rule.lanes(held.len(), bands)
+    } else {
+        1
+    };
+    let names: Vec<String> = (0..count)
+        .map(|lane| match rule.lane_name(lane, bands) {
+            Some(name) => name.to_owned(),
+            None if split => format!("Lane {}", lane + 1),
+            None => "Effects".to_owned(),
+        })
+        .collect();
+    let mut action = None;
+    if split && rule == Rule::All {
+        daw_ui::control_row_wrapped(ui, |ui| {
+            daw_ui::text::note(
+                ui,
+                "Every lane gets the whole signal; the lanes are summed.",
+            );
+            if ui
+                .add_enabled(held.len() < MAX_LANES, daw_ui::button_widget("+ Lane"))
+                .on_hover_text("Add a parallel lane")
+                .clicked()
+            {
+                action = Some(LaneAction::AddLane);
+            }
+        });
+    }
+    let unused = held.len().saturating_sub(count);
+    if split && unused > 0 && held[count..].iter().any(|lane| !lane.is_empty()) {
+        daw_ui::text::note(
+            ui,
+            format!(
+                "{unused} more lane{} keep their effects but get no signal with this split.",
+                if unused == 1 { "" } else { "s" }
+            ),
+        );
+    }
+    for row in (0..count).collect::<Vec<_>>().chunks(4) {
+        let span = (12 / row.len()) as u8;
+        let spans = vec![span; row.len()];
+        daw_ui::grid_row(ui, &spans, |ui, column| {
+            let lane = row[column];
+            let effects = held.get(lane).map(Vec::as_slice).unwrap_or_default();
+            ui.push_id(("lane", lane), |ui| {
+                let title = daw_ui::device_section_title(ui, &names[lane].to_uppercase());
+                if split && rule == Rule::All && held.len() > 1 {
+                    title.context_menu(|ui| {
+                        if daw_ui::button(ui, "Remove lane").clicked() {
+                            action = Some(LaneAction::RemoveLane { lane });
+                            ui.close();
+                        }
+                    });
+                }
+                if split {
+                    ui.horizontal(|ui| {
+                        compact_parameters(
+                            ui,
+                            descriptor,
+                            &[container::LANE_GAIN + lane as u32],
+                            host,
+                            state,
+                            layout,
+                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            for id in [container::LANE_SOLO, container::LANE_MUTE] {
+                                if let Some(spec) = descriptor.parameter(id + lane as u32) {
+                                    ui.push_id(spec.id, |ui| {
+                                        table_control(ui, spec, host, layout, 0.0);
+                                    });
+                                }
+                            }
+                        });
+                    });
+                }
+                if effects.is_empty() {
+                    daw_ui::text::note(ui, "Empty: passes its signal through.");
+                }
+                for (index, effect) in effects.iter().enumerate() {
+                    ui.push_id(effect.id, |ui| {
+                        let chosen = daw_ui::lane_effect_row(
+                            ui,
+                            &effect.name,
+                            &effect.model,
+                            effect.enabled,
+                            index,
+                            effects.len(),
+                            lane,
+                            &names,
+                        );
+                        use daw_ui::LaneEffectAction as Row;
+                        action = match chosen {
+                            Some(Row::Open) => Some(LaneAction::Open { effect: effect.id }),
+                            Some(Row::ToggleEnabled) => Some(LaneAction::SetEnabled {
+                                effect: effect.id,
+                                enabled: !effect.enabled,
+                            }),
+                            Some(Row::MoveUp) => Some(LaneAction::Move {
+                                effect: effect.id,
+                                lane,
+                                index: index - 1,
+                            }),
+                            Some(Row::MoveDown) => Some(LaneAction::Move {
+                                effect: effect.id,
+                                lane,
+                                index: index + 1,
+                            }),
+                            Some(Row::MoveToLane(other)) => Some(LaneAction::Move {
+                                effect: effect.id,
+                                lane: other,
+                                index: held.get(other).map_or(0, Vec::len),
+                            }),
+                            Some(Row::Remove) => Some(LaneAction::Remove { effect: effect.id }),
+                            None => action.take(),
+                        };
+                    });
+                }
+                if daw_ui::small_button(ui, "+ Effect")
+                    .on_hover_text("Add an effect to the end of this lane")
+                    .clicked()
+                {
+                    action = Some(LaneAction::AddEffect { lane });
+                }
+            });
+        });
+    }
+    if let Some(action) = action {
+        host.lane_action(action);
+    }
 }
 
 fn workspace_sections(
@@ -2208,6 +2418,13 @@ fn preset_bar(
         })
     });
     let load = |host: &mut dyn DeviceHost, state: &mut PanelState, preset: &Preset| {
+        // A container preset also replaces what its lanes hold.
+        if !preset.lanes.is_empty() {
+            if host.load_container_preset(preset) {
+                state.preset = Some(preset.name.clone());
+            }
+            return;
+        }
         if let Ok(resolved) = preset.resolve(descriptor) {
             let values: Vec<_> = resolved
                 .values

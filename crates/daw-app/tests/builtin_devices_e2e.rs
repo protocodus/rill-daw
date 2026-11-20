@@ -1448,21 +1448,25 @@ fn builtin_devices_show_metadata_and_preview_in_the_device_browser() {
     assert_eq!(
         inserts["library"]["order"],
         json!([
+            "R1 Chain",
             "R1 Compressor",
             "R1 Equalizer",
             "R1 Filter",
             "R1 Modulator",
             "R1 Saturator",
-            "R1 Spacer"
+            "R1 Spacer",
+            "R1 Split"
         ])
     );
     for name in [
+        "R1 Chain",
         "R1 Compressor",
         "R1 Equalizer",
         "R1 Filter",
         "R1 Modulator",
         "R1 Saturator",
         "R1 Spacer",
+        "R1 Split",
     ] {
         assert_preview(&mut app, name);
     }

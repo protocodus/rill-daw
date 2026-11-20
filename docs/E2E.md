@@ -45,7 +45,7 @@ output values and mouse selection from revealed choice menus. Run alongside
 the existing sound/automation workflows:
 
 ```sh
-cargo test --locked -p daw-app --test r1_workspaces_e2e --test builtin_devices_e2e --test mini_synth_e2e --test sampler_e2e --test drums_e2e -- --test-threads=1
+cargo test --locked -p daw-app --test r1_workspaces_e2e --test builtin_devices_e2e --test mini_synth_e2e --test sampler_e2e --test drums_e2e --test containers_e2e -- --test-threads=1
 ```
 
 `save_optimize_e2e` uses **File → Save and optimize** to remove deleted-clip

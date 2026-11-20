@@ -47,10 +47,10 @@ impl BandSplitter {
         let mut rest = input.map(f64::from);
         for split in 0..bands - 1 {
             let (mut low, high) = Self::split(&mut self.splits[split], rest, coefficients[split]);
-            for later in split + 1..bands - 1 {
-                for (channel, sample) in low.iter_mut().enumerate() {
-                    let outputs = self.allpasses[split][later][channel]
-                        .process_coeffs(*sample, coefficients[later]);
+            let later = self.allpasses[split].iter_mut().zip(coefficients);
+            for (allpasses, coefficients) in later.take(bands - 1).skip(split + 1) {
+                for (allpass, sample) in allpasses.iter_mut().zip(&mut low) {
+                    let outputs = allpass.process_coeffs(*sample, *coefficients);
                     *sample = outputs.low - K * outputs.band + outputs.high;
                 }
             }
@@ -69,12 +69,13 @@ impl BandSplitter {
     ) -> ([f64; 2], [f64; 2]) {
         let mut low = input;
         let mut high = input;
-        for channel in 0..2 {
-            for stage in 0..2 {
-                low[channel] = stages[0][stage][channel]
+        let [lows, highs] = stages;
+        for (low_stage, high_stage) in lows.iter_mut().zip(highs) {
+            for channel in 0..2 {
+                low[channel] = low_stage[channel]
                     .process_coeffs(low[channel], coefficients)
                     .low;
-                high[channel] = stages[1][stage][channel]
+                high[channel] = high_stage[channel]
                     .process_coeffs(high[channel], coefficients)
                     .high;
             }

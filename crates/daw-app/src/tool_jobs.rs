@@ -257,9 +257,7 @@ fn describe_parameters(
         .ok_or_else(|| "Track not found".to_string())?;
     let builtin = match args.insert_id {
         Some(insert_id) => track
-            .inserts
-            .iter()
-            .find(|insert| insert.id == insert_id)
+            .effect(insert_id)
             .and_then(|insert| Some((insert.effect.builtin_device()?, &insert.parameters))),
         None => track
             .instrument
@@ -274,9 +272,7 @@ fn describe_parameters(
     };
     let parameters = if let Some(insert_id) = args.insert_id {
         let insert = track
-            .inserts
-            .iter()
-            .find(|insert| insert.id == insert_id)
+            .effect(insert_id)
             .ok_or_else(|| "Insert not found on this track".to_string())?;
         let Effect::Vst3 { path, class_id } = &insert.effect else {
             unreachable!("built-in inserts are answered above")

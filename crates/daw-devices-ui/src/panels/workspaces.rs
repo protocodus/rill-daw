@@ -2,6 +2,7 @@
 //! stay with the device; these workspaces only decide what is shown together.
 use super::*;
 
+mod containers;
 mod effects;
 mod instruments;
 mod tone;
@@ -35,6 +36,7 @@ pub(crate) fn build(
     match descriptor.id {
         "r1-mini" | "r1-sampler" | "r1-drums" => instruments::build(layout, descriptor, pad, page),
         "r1-filter" | "r1-equalizer" => tone::build(layout, descriptor, band),
+        "r1-split" | "r1-chain" => containers::build(layout, descriptor),
         "r1-saturator" | "r1-compressor" | "r1-modulator" | "r1-spacer" => {
             effects::build(layout, descriptor, page)
         }

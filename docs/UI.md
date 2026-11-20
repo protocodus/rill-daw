@@ -325,7 +325,7 @@ Standard controls are available at the crate root and through `daw_ui::widgets`.
 | Mixer identity, inserts and routing | `mixer_name_plate`, `mixer_name_plate_with_grip`, `MixerNamePlateKind`, `mixer_row`, `MixerRowText`, `mixer_source_caption`, `mixer_effects_button`, `mixer_insert_slot`, `mixer_bus_input_summary`, `mixer_output_button`, `mixer_send_row`, `mixer_more_sends`, `mixer_add_send_button`, `MixerSend`, `MIXER_CHANNEL_WIDTH`, `MIXER_ROW_GAP`, `MIXER_SECTION_GAP` |
 | Live signal analysis | `mixer_analysis_button`, `signal_analyzer_tabs`, `signal_analyzer`, `SignalAnalyzerView`, `SignalAnalyzerData`, `SignalAnalyzerResponse` |
 | Exact note expression | `midi_expression_editor`, `MidiExpressionControls`, `MidiExpressionKind`, `MidiExpressionPoint`, `MidiExpressionAction` |
-| Insert-chain structure | `effect_chain_header`, `effect_slot`, `EffectSlotControls`, `empty_effect_chain` |
+| Insert-chain structure | `effect_chain_header`, `effect_slot`, `EffectSlotControls`, `empty_effect_chain`, `lane_effect_row`, `LaneEffectAction` |
 | Audio recording and raw input level | `record_button`, `record_arm_at`, `input_meter`, `paint_recording_region`, `recording_color` |
 | Disk-streamed clip status | `Icon::Disk`, `DISK_STREAMED_AUDIO`, `AUDIO_STREAMING_BADGE_SIZE`, `paint_audio_streaming_badge`, `paint_audio_streaming_badge_avoiding`, `audio_streaming_status` |
 | Boolean button | `toggle` |
@@ -1510,6 +1510,13 @@ Set `ParameterBrowserState::reset_details` when a nested editor should return to
 the top of its detail pane. The browser consumes this flag once; it preserves
 the parameter list, search, and ordinary detail scrolling.
 
+
+`lane_effect_row(ui, name, model, enabled, index, count, lane, lanes)` is one
+effect in a container lane (R1 Split, R1 Chain): a bypass switch with the
+truncated name on the first line, the model with **Open** and **More** on the
+second, so a narrow lane still shows the name. **More** and the row's context
+menu offer Move up, Move down, Move to another lane (named by `lanes`) and
+Remove; it returns the chosen `LaneEffectAction` and the caller applies it.
 
 ## Device controls, visualizations and panels
 

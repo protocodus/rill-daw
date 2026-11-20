@@ -17,6 +17,8 @@ pub const RULE: u32 = 1;
 /// Crossover `n` (from 0) between bands `n` and `n + 1`.
 pub const CROSSOVERS: [u32; 3] = [2, 3, 5];
 pub const BANDS: u32 = 4;
+/// The options of [`BANDS`]: three, so a row of buttons, not a knob.
+pub const BAND_COUNTS: &[&str] = &["2", "3", "4"];
 /// Lane `n` (from 0) has gain `LANE_GAIN + n`, mute `LANE_MUTE + n` and solo
 /// `LANE_SOLO + n`.
 pub const LANE_GAIN: u32 = 10;
@@ -37,6 +39,15 @@ pub enum Rule {
     MidSide,
     /// Left in the first lane, right in the second.
     LeftRight,
+}
+
+/// How many bands [`BANDS`] at `normalized` asks for.
+pub fn bands(normalized: f32) -> usize {
+    let index = SPLIT_PARAMETERS[1].to_plain(normalized).round() as usize;
+    BAND_COUNTS
+        .get(index)
+        .and_then(|count| count.parse().ok())
+        .unwrap_or(3)
 }
 
 impl Rule {
@@ -138,8 +149,8 @@ pub static SPLIT_PARAMETERS: [ParamSpec; 5 + 3 * MAX_LANES + 2] = [
         "Bands",
         "Split",
         "",
-        ParamRange::Integer { min: 2, max: 4 },
-        3.0,
+        ParamRange::Choice(BAND_COUNTS),
+        1.0,
     ),
     crossover(CROSSOVERS[0], "crossover.1", "Crossover 1", 120.0),
     crossover(CROSSOVERS[1], "crossover.2", "Crossover 2", 2500.0),
@@ -382,7 +393,7 @@ impl Router {
     }
 
     fn target_bands(&self) -> usize {
-        self.plain(BANDS).map_or(3, |bands| bands as usize)
+        self.value(BANDS).map_or(3, |(value, _)| bands(value))
     }
 
     fn update_targets(&mut self) {

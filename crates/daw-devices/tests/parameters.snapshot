@@ -546,7 +546,7 @@ r1-drums 532 pad16.velocity_pitch "Soft hit pitch" linear -12 12
 r1-chain 40 mix "Mix" linear 0 100
 r1-chain 41 output "Output" linear -24 24
 r1-split 1 rule "Split" choice All|Bands|Mid/Side|Left/Right
-r1-split 4 bands "Bands" integer 2 4
+r1-split 4 bands "Bands" choice 2|3|4
 r1-split 2 crossover.1 "Crossover 1" log 20 20000
 r1-split 3 crossover.2 "Crossover 2" log 20 20000
 r1-split 5 crossover.3 "Crossover 3" log 20 20000

@@ -801,7 +801,7 @@ impl DawApp {
                                     if matches!(target.parameter, AutomationParameter::TrackInputGain | AutomationParameter::TrackGain | AutomationParameter::TrackPan) { continue; }
                                     let title = match target.parameter {
                                         AutomationParameter::SendGain { bus } => format!("Send · {}", names.get(&bus).map(String::as_str).unwrap_or("Bus")),
-                                        AutomationParameter::VstParameter { effect, id } => format!("{} · Parameter {id}", effect.and_then(|effect| track.inserts.iter().find(|slot| slot.id == effect)).map(|slot| slot.name.as_str()).unwrap_or("Instrument")),
+                                        AutomationParameter::VstParameter { effect, id } => format!("{} · Parameter {id}", effect.and_then(|effect| track.effect(effect)).map(|slot| slot.name.as_str()).unwrap_or("Instrument")),
                                         parameter => parameter.name().to_owned(),
                                     };
                                     ui.push_id(lane, |ui| { daw_ui::action_menu(ui, title, |ui| {

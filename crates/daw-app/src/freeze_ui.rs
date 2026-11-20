@@ -919,11 +919,7 @@ impl DawApp {
             for copied in links.iter().flat_map(|link| &link.input_copies) {
                 if let Some(channel) = candidate.track_mut(copied.track) {
                     let routes = if let Some(effect) = copied.effect {
-                        channel
-                            .inserts
-                            .iter_mut()
-                            .find(|slot| slot.id == effect)
-                            .map(|slot| &mut slot.inputs)
+                        channel.effect_mut(effect).map(|slot| &mut slot.inputs)
                     } else {
                         Some(&mut channel.instrument_inputs)
                     };

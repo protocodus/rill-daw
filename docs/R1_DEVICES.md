@@ -35,7 +35,7 @@ for a person and for the AI tools alike.
 2. [Architecture](#architecture)
 3. [Shared UI library additions](#shared-ui-library-additions)
 4. [Shared DSP toolkit](#shared-dsp-toolkit)
-5. [Effects](#effects): Spacer, Modulator, Saturator, Compressor, Equalizer, Filter
+5. [Effects](#effects): Spacer, Modulator, Saturator, Compressor, Equalizer, Filter, [Split and Chain](#r1-split-and-r1-chain)
 6. [Instruments](#instruments): Mini, Maxi, Sampler, Drums
 7. [Verification](#verification)
 8. [Adding a device](#adding-a-device)
@@ -1536,6 +1536,78 @@ Depth, Stereo, in the order of R1 Mini's and R1 Sampler's) and Envelope
 (Amount, Attack, Release), and Output (Mix, Output) at the right end. A
 control the model does not have (Morph, Slope, Type) or that Sync replaces
 (Rate) stays in its cell, disabled.
+
+### R1 Split and R1 Chain
+
+Containers: effects whose **lanes** hold other effects, so a multiband or
+parallel setup is one insert with one preset. **R1 Chain** has one lane and
+runs its effects in series. **R1 Split** divides the signal over 1 to 8 lanes,
+runs each lane's effects in series, and sums the lanes. A lane holds any
+effect: built-in devices, hosted plug-ins, or another container, nested up to
+4 deep (256 nested effects per track). An empty lane passes its signal through.
+
+| Split rule | Lanes fed | What each lane gets |
+| --- | --- | --- |
+| All | every lane (1–8, **+ Lane**) | the whole signal |
+| Bands (default) | 2, 3 or 4 | one band of Linkwitz–Riley 24 dB/oct crossovers at Crossover 1–3 (120 Hz, 2.5 kHz, 8 kHz); each crossover is held at or above the one before |
+| Mid/Side | 2 | Mid = (L + R) / 2, Side = (L − R) / 2, decoded back after the lanes |
+| Left/Right | 2 | each channel alone |
+
+Each Split lane has **Gain** (−24 to +24 dB), **Mute** and **Solo**; any solo
+silences the unsoloed lanes. **Mix** blends the summed lanes with the dry
+input and **Output** sets the level after it; Chain has the same two.
+
+*DSP.* `daw_dsp::BandSplitter` cascades two Butterworth TPT SVFs per side of
+each split (`f64`). A band below a later split passes the allpass that split
+leaves on the bands above it, so every band shares one phase response and the
+bands sum to the input's magnitude exactly (within 1 % in tests). Mid/Side
+and Left/Right are exact. Changing the rule or the band count fades the
+output through silence over 5 ms rather than clicking. `container::Router`
+does the routing and mixing; the lanes themselves run in the engine.
+
+*Model.* `Effect::Container { device, lanes: [{inserts: [...]}] }` (see
+[Project files](PROJECT_FORMAT.md)). The container's own parameters are
+`parameters` overrides like any built-in device, so automation, presets and
+tools reach them unchanged. Lane `n` (from 0) has gain ID `10 + n`, mute
+`20 + n` and solo `30 + n`. Removing a lane moves the later lanes' settings
+down with them. Lanes the rule does not feed (a Split set to 2 bands with 4
+lanes) keep their effects and get no signal.
+
+*Engine.* `InsertProcessor::Container` holds every lane's insert processors,
+built recursively. Each lane is delayed to the slowest lane's latency, and so
+is the dry signal, so lanes with different latency stay aligned; the container
+reports that latency to the track. Nested parameters automate and change live
+like top-level ones. Changing what a lane holds rebuilds the graph like any
+insert change. Nested effects cannot take a sidechain input, and neither can
+a container.
+
+*Presets.* A container preset adds `lanes`: `[{"effects": [{"device":
+"r1-compressor", "name": "…", "enabled": true, "parameters": {…}, "lanes":
+[…]}]}]`. A hosted plug-in entry has `"plugin": {"path", "class_id",
+"state"}` (state in hex) and parameters keyed by ID. Loading one replaces the
+lanes and the container's settings as one Undo step, with fresh IDs; a preset
+without `lanes` changes only the settings. Saving from the panel captures the
+lanes. Factory presets: Split *Default* (three empty bands), *OTT Style*
+(three bands at 88 Hz and 2.5 kHz, each through an R1 Compressor, mix 70 %),
+*Multiband Drive*, *Wide Lows Mono*, *Parallel Crush*; Chain *Default*,
+*Vocal Strip*, *Master Glue*. OTT Style compresses downward only, so it
+approximates the upward-and-downward original.
+
+*Panel.* The Split card (rule, band count as 2/3/4 buttons, crossovers that
+apply), then one card per fed lane, up to four side by side (R1 Split is 987
+points wide, R1 Chain 610). A lane card shows its name (Low, Mid, High;
+Mid, Side; Left, Right; or Lane n), the Split lane's Gain, Mute and Solo, then
+its effects with a bypass switch, **Open**, **More** (move up or down, move to
+another lane, remove) and the same in a context menu, and **+ Effect**, which
+opens the Device browser with **Add to lane**. With the All rule, **+ Lane**
+adds a lane and right-clicking a lane's title removes it. **Open** shows the
+nested effect's panel in the same window, with **‹ R1 Split** and its lane
+above it to go back. Mix and Output close the panel.
+
+*Tools.* `assign_plugin` with `container_id` and `lane` adds an effect to a
+lane; `edit_effect_lanes` adds or removes lanes and moves effects between
+lanes; `load_device_preset` and `store_device_preset` carry lanes; the insert
+edits of `apply_edits` (bypass, remove, reorder) work on nested effects by ID.
 
 ## Instruments
 

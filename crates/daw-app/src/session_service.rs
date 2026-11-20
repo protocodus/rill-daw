@@ -128,10 +128,7 @@ impl DawApp {
                         old.instrument == new.instrument
                             && old.instrument_state == new.instrument_state
                     }
-                    (Some(old), Some(new), Some(id)) => match (
-                        old.inserts.iter().find(|s| s.id == *id),
-                        new.inserts.iter().find(|s| s.id == *id),
-                    ) {
+                    (Some(old), Some(new), Some(id)) => match (old.effect(*id), new.effect(*id)) {
                         (Some(old), Some(new)) => {
                             old.effect == new.effect && old.state == new.state
                         }
@@ -928,8 +925,20 @@ impl ToolHost for DawApp {
                     format: Option<String>,
                     #[serde(default)]
                     insert: bool,
+                    /// With `lane`, adds the insert to that lane of this
+                    /// R1 Split or R1 Chain instead of the track's chain.
+                    container_id: Option<u64>,
+                    lane: Option<usize>,
                 }
                 let args: Args = parse_arguments(arguments)?;
+                if args.container_id.is_some() != args.lane.is_some()
+                    || (args.container_id.is_some() && !args.insert)
+                {
+                    return Err(ToolError::new(
+                        "invalid_arguments",
+                        "Give container_id and lane together, with insert: true",
+                    ));
+                }
                 let format = args.format.as_deref().map(plugin_format).transpose()?;
                 self.check_tool_revision(args.session_id, args.expected_revision)?;
                 let entry = crate::builtin_devices::catalog()
@@ -966,11 +975,22 @@ impl ToolHost for DawApp {
                         crate::builtin_devices::effect(&entry.plugin),
                     );
                     let id = slot.id;
-                    candidate
-                        .track_mut(args.track_id)
-                        .ok_or_else(|| ToolError::new("not_found", "Track not found"))?
-                        .inserts
-                        .push(slot);
+                    if let (Some(container), Some(lane)) = (args.container_id, args.lane) {
+                        crate::containers::insert_into_lane(
+                            &mut candidate,
+                            args.track_id,
+                            container,
+                            lane,
+                            slot,
+                        )
+                        .map_err(failure)?;
+                    } else {
+                        candidate
+                            .track_mut(args.track_id)
+                            .ok_or_else(|| ToolError::new("not_found", "Track not found"))?
+                            .inserts
+                            .push(slot);
+                    }
                     Some(id)
                 } else {
                     candidate
@@ -986,6 +1006,59 @@ impl ToolHost for DawApp {
                 Ok(
                     json!({"session_id":self.song_session.id,"revision":self.song_session.revision,"track_id":args.track_id,"insert_id":effect_id,"format":crate::builtin_devices::format_label(&used_plugin)}),
                 )
+            }
+            "edit_effect_lanes" => {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields, rename_all = "snake_case")]
+                enum Action {
+                    AddLane,
+                    RemoveLane,
+                    MoveEffect,
+                }
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Args {
+                    session_id: u64,
+                    expected_revision: u64,
+                    track_id: u64,
+                    container_id: u64,
+                    action: Action,
+                    lane: Option<usize>,
+                    effect_id: Option<u64>,
+                    #[serde(default = "usize_max")]
+                    index: usize,
+                }
+                fn usize_max() -> usize {
+                    usize::MAX
+                }
+                let args: Args = parse_arguments(arguments)?;
+                self.check_tool_revision(args.session_id, args.expected_revision)?;
+                let needs = |what: Option<usize>, name: &str| {
+                    what.ok_or_else(|| ToolError::new("invalid_arguments", format!("Give {name}")))
+                };
+                let action = match args.action {
+                    Action::AddLane => daw_devices_ui::LaneAction::AddLane,
+                    Action::RemoveLane => daw_devices_ui::LaneAction::RemoveLane {
+                        lane: needs(args.lane, "lane")?,
+                    },
+                    Action::MoveEffect => daw_devices_ui::LaneAction::Move {
+                        effect: args
+                            .effect_id
+                            .ok_or_else(|| ToolError::new("invalid_arguments", "Give effect_id"))?,
+                        lane: needs(args.lane, "lane")?,
+                        index: args.index,
+                    },
+                };
+                let mut candidate = self.project.clone();
+                let label = crate::containers::edit_lanes(
+                    &mut candidate,
+                    args.track_id,
+                    args.container_id,
+                    action,
+                )
+                .map_err(failure)?;
+                self.commit_song_candidate(candidate, label)?;
+                Ok(json!({"session_id":self.song_session.id,"revision":self.song_session.revision}))
             }
             "set_device_parameters" => {
                 #[derive(Deserialize)]
@@ -1240,15 +1313,36 @@ impl ToolHost for DawApp {
                                     "No such preset; list the device's presets first",
                                 )
                             })?;
-                        let resolved = preset.resolve(descriptor).map_err(failure)?;
                         let mut candidate = self.project.clone();
-                        store_values(
-                            device_parameters_mut(&mut candidate, args.track_id, args.insert_id)?,
-                            resolved
-                                .values
-                                .iter()
-                                .map(|(id, value)| (*id, f64::from(*value))),
-                        );
+                        let resolved = match args.insert_id {
+                            // A container preset also replaces its lanes.
+                            Some(insert)
+                                if daw_devices::devices::container::is_container(descriptor.id) =>
+                            {
+                                crate::containers::apply_preset(
+                                    &mut candidate,
+                                    args.track_id,
+                                    insert,
+                                    &preset,
+                                )
+                                .map_err(failure)?
+                            }
+                            _ => {
+                                let resolved = preset.resolve(descriptor).map_err(failure)?;
+                                store_values(
+                                    device_parameters_mut(
+                                        &mut candidate,
+                                        args.track_id,
+                                        args.insert_id,
+                                    )?,
+                                    resolved
+                                        .values
+                                        .iter()
+                                        .map(|(id, value)| (*id, f64::from(*value))),
+                                );
+                                resolved
+                            }
+                        };
                         self.commit_song_candidate(candidate, "Device preset")?;
                         Ok(
                             json!({"session_id":self.song_session.id,"revision":self.song_session.revision,
@@ -1260,9 +1354,15 @@ impl ToolHost for DawApp {
                         let overrides =
                             device_parameters(&self.project, args.track_id, args.insert_id)
                                 .unwrap_or_default();
-                        let preset = daw_devices::Preset::capture(descriptor, name, |id| {
+                        let mut preset = daw_devices::Preset::capture(descriptor, name, |id| {
                             crate::builtin_devices::value(descriptor, overrides, id) as f32
                         });
+                        if let Some(slot) = args
+                            .insert_id
+                            .and_then(|insert| self.project.track(args.track_id)?.effect(insert))
+                        {
+                            preset.lanes = crate::containers::preset_lanes(slot.effect.lanes());
+                        }
                         crate::builtin_devices::save_user_preset(&preset).map_err(|error| {
                             ToolError::new("settings_failed", format!("{error:#}"))
                         })?;
@@ -1342,7 +1442,7 @@ impl DawApp {
             let descriptor = self
                 .project
                 .track(*track)
-                .and_then(|track| track.inserts.iter().find(|slot| slot.id == *effect))
+                .and_then(|track| track.effect(*effect))
                 .and_then(|slot| slot.effect.builtin_device())
                 .and_then(daw_devices::descriptor);
             let Some(descriptor) = descriptor.filter(|_| !inputs.is_empty()) else {
@@ -1379,9 +1479,7 @@ impl DawApp {
             .ok_or_else(|| ToolError::new("not_found", "Track not found"))?;
         let device = match insert_id {
             Some(id) => track
-                .inserts
-                .iter()
-                .find(|slot| slot.id == id)
+                .effect(id)
                 .ok_or_else(|| ToolError::new("not_found", "Insert not found on this track"))?
                 .effect
                 .builtin_device(),
@@ -1409,7 +1507,7 @@ fn device_parameters(
 ) -> Option<&[PluginParameterValue]> {
     let track = project.track(track_id)?;
     Some(match insert_id {
-        Some(id) => &track.inserts.iter().find(|slot| slot.id == id)?.parameters,
+        Some(id) => &track.effect(id)?.parameters,
         None => &track.instrument_parameters,
     })
 }
@@ -1425,9 +1523,7 @@ fn device_parameters_mut(
     Ok(match insert_id {
         Some(id) => {
             &mut track
-                .inserts
-                .iter_mut()
-                .find(|slot| slot.id == id)
+                .effect_mut(id)
                 .ok_or_else(|| ToolError::new("not_found", "Insert not found on this track"))?
                 .parameters
         }

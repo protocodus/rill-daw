@@ -11,7 +11,7 @@
   "description": "Three bands at 88 Hz and 2.5 kHz, each squashed hard and lifted, blended under the dry signal. Downward only, so it approximates the classic upward-and-downward sound.",
   "parameters": {
     "rule": "Bands",
-    "bands": 3,
+    "bands": "3",
     "crossover.1": 88.0,
     "crossover.2": 2500.0,
     "lane1.gain": -1.5,
