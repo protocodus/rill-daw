@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Default",
+  "author": "Rill",
+  "category": "Basic",
+  "description": "Transparent: every stage ready, only the equalizer switched on and flat.",
+  "parameters": {}
+}

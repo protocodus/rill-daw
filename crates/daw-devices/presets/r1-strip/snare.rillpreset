@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Snare",
+  "author": "Rill",
+  "category": "Drums",
+  "tags": ["drums", "snare"],
+  "description": "Gate against the hi-hat, body at 200 Hz and crack on top.",
+  "parameters": {
+    "hp.on": true,
+    "hp.frequency": 80.0,
+    "gate.on": true,
+    "gate.threshold": -30.0,
+    "gate.release": 180.0,
+    "mid.frequency": 200.0,
+    "mid.gain": 3.0,
+    "mid.q": 1.4,
+    "high.frequency": 5000.0,
+    "high.gain": 3.5,
+    "comp.on": true,
+    "comp.threshold": -18.0,
+    "comp.ratio": 4.0,
+    "comp.attack": 20.0,
+    "comp.release": 90.0,
+    "comp.makeup": 3.0
+  }
+}
