@@ -86,6 +86,7 @@ pub fn tool_activity(name: &str) -> &'static str {
         "list_plugins" => "Finding instruments and effects…",
         "organize_plugin" => "Organizing the plug-in library…",
         "assign_plugin" => "Assigning an instrument or effect…",
+        "edit_effect_lanes" => "Editing the lanes of a Split or Chain…",
         "set_device_parameters" => "Setting device parameters…",
         "set_device_sample" => "Loading a sample…",
         "list_project_samples" => "Browsing project samples…",
