@@ -19,6 +19,7 @@ pub const CUTOFF: u32 = 4;
 pub const RESONANCE: u32 = 5;
 pub const DRIVE: u32 = 6;
 pub const MORPH: u32 = 7;
+pub const SPREAD: u32 = 8;
 pub const LFO_RATE: u32 = 10;
 pub const LFO_SYNC: u32 = 11;
 pub const LFO_SHAPE: u32 = 12;
@@ -27,6 +28,7 @@ pub const LFO_STEREO: u32 = 14;
 pub const ENV_AMOUNT: u32 = 20;
 pub const ENV_ATTACK: u32 = 21;
 pub const ENV_RELEASE: u32 = 22;
+pub const ENV_SIDECHAIN: u32 = 23;
 pub const MIX: u32 = 30;
 pub const OUTPUT: u32 = 31;
 
@@ -49,12 +51,14 @@ pub const MODELS: &[&str] = &[
 ];
 pub const TYPES: &[&str] = &["Low-pass", "High-pass", "Band-pass", "Notch"];
 pub const SLOPES: &[&str] = &["12 dB", "24 dB"];
+/// What the envelope follower listens to; named as on R1 Compressor.
+pub const SIDECHAINS: &[&str] = &["Internal", "External"];
 pub const SYNC: &[&str] = &[
     "Off", "4 bars", "2 bars", "1 bar", "1/2", "1/4", "1/8", "1/16",
 ];
 pub(crate) const SYNC_BEATS: [f64; 8] = [0.0, 16.0, 8.0, 4.0, 2.0, 1.0, 0.5, 0.25];
 
-pub static PARAMETERS: [ParamSpec; 17] = [
+pub static PARAMETERS: [ParamSpec; 19] = [
     param(
         MODEL,
         "model",
@@ -128,6 +132,15 @@ pub static PARAMETERS: [ParamSpec; 17] = [
             min: 0.0,
             max: 100.0,
         },
+        0.0,
+    ),
+    param(
+        SPREAD,
+        "spread",
+        "Spread",
+        "Filter",
+        "oct",
+        ParamRange::Linear { min: 0.0, max: 2.0 },
         0.0,
     ),
     param(
@@ -221,6 +234,15 @@ pub static PARAMETERS: [ParamSpec; 17] = [
         150.0,
     ),
     param(
+        ENV_SIDECHAIN,
+        "env.sidechain",
+        "Sidechain",
+        "Envelope",
+        "",
+        ParamRange::Choice(SIDECHAINS),
+        0.0,
+    ),
+    param(
         MIX,
         "mix",
         "Mix",
@@ -254,7 +276,7 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
     parameters: &PARAMETERS,
     sample_slots: 0,
     sample_capacity: 0,
-    sidechain_input: false,
+    sidechain_input: true,
     factory_presets: &[
         include_str!("../../presets/r1-filter/default.rillpreset"),
         include_str!("../../presets/r1-filter/acid-ladder.rillpreset"),
@@ -263,6 +285,8 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-filter/talking-vowels.rillpreset"),
         include_str!("../../presets/r1-filter/metal-comb.rillpreset"),
         include_str!("../../presets/r1-filter/screaming-high-pass.rillpreset"),
+        include_str!("../../presets/r1-filter/sidechain-pump.rillpreset"),
+        include_str!("../../presets/r1-filter/wide-drift.rillpreset"),
     ],
     legacy_labels: &[
         ("model", "Ladder", "Transistor Ladder"),
@@ -290,6 +314,8 @@ pub struct Settings {
     pub drive_db: f32,
     /// 0–1.
     pub morph: f32,
+    /// Octaves between the two channels' cutoffs, centered on `cutoff`.
+    pub spread: f32,
     pub lfo_rate: f32,
     /// Beats per LFO cycle, or `None` when free-running.
     pub lfo_sync_beats: Option<f64>,
@@ -299,6 +325,8 @@ pub struct Settings {
     pub env_amount: f32,
     pub env_attack: f32,
     pub env_release: f32,
+    /// The follower listens to the sidechain input instead of the signal.
+    pub env_external: bool,
     /// 0–1.
     pub mix: f32,
     pub output_db: f32,
@@ -349,6 +377,7 @@ impl Settings {
             resonance: plain(RESONANCE) / 100.0,
             drive_db: plain(DRIVE),
             morph: plain(MORPH) / 100.0,
+            spread: plain(SPREAD),
             lfo_rate: plain(LFO_RATE),
             lfo_sync_beats: (sync > 0.0).then_some(sync),
             lfo_shape: LfoShape::from_index(index(LFO_SHAPE)),
@@ -357,6 +386,7 @@ impl Settings {
             env_amount: plain(ENV_AMOUNT),
             env_attack: plain(ENV_ATTACK),
             env_release: plain(ENV_RELEASE),
+            env_external: index(ENV_SIDECHAIN) == 1,
             mix: plain(MIX) / 100.0,
             output_db: plain(OUTPUT),
         }
@@ -391,6 +421,8 @@ pub struct Filter {
     cutoff: Smoothed,
     resonance: Smoothed,
     morph: Smoothed,
+    /// Octaves between the channels' cutoffs.
+    spread: Smoothed,
     mix: Smoothed,
     output: Smoothed,
     lfo_depth: Smoothed,
@@ -424,6 +456,7 @@ impl Filter {
             cutoff: Smoothed::new(settings.cutoff.log2()),
             resonance: Smoothed::new(settings.resonance),
             morph: Smoothed::new(settings.morph),
+            spread: Smoothed::new(settings.spread),
             mix: Smoothed::new(settings.mix),
             output: Smoothed::new(db_to_gain(settings.output_db)),
             lfo_depth: Smoothed::new(settings.lfo_depth),
@@ -449,6 +482,7 @@ impl Filter {
         self.cutoff.set_target(settings.cutoff.log2());
         self.resonance.set_target(settings.resonance);
         self.morph.set_target(settings.morph);
+        self.spread.set_target(settings.spread);
         self.mix.set_target(settings.mix);
         self.output.set_target(db_to_gain(settings.output_db));
         self.lfo_depth.set_target(settings.lfo_depth);
@@ -458,13 +492,14 @@ impl Filter {
         self.dirty = false;
     }
 
-    fn smoothers(&mut self) -> [&mut Smoothed; 7] {
+    fn smoothers(&mut self) -> [&mut Smoothed; 8] {
         [
             &mut self.lfo_depth,
             &mut self.env_amount,
             &mut self.cutoff,
             &mut self.resonance,
             &mut self.morph,
+            &mut self.spread,
             &mut self.mix,
             &mut self.output,
         ]
@@ -505,7 +540,11 @@ impl Device for Filter {
         if self.dirty {
             self.update_settings();
         }
-        let StereoIo { left, right, .. } = io;
+        let StereoIo {
+            left,
+            right,
+            sidechain,
+        } = io;
         let frames = left.len().min(right.len());
         let (left, right) = (&mut left[..frames], &mut right[..frames]);
         self.telemetry.record_input(left, right);
@@ -515,6 +554,13 @@ impl Device for Filter {
         let stereo = f64::from(s.lfo_stereo) / 360.0;
         let synced = s.lfo_sync_beats.filter(|_| context.playing);
         let beats_per_sample = context.tempo / 60.0 / f64::from(rate);
+        // External without anything routed listens to silence, as R1
+        // Compressor does: the cutoff rests at its base.
+        let key = if s.env_external {
+            Some(sidechain.unwrap_or((&[], &[])))
+        } else {
+            None
+        };
         let mut cutoffs = [s.cutoff; 2];
         for index in 0..frames {
             match synced {
@@ -528,9 +574,15 @@ impl Device for Filter {
                     self.lfo.advance(rate_hz / f64::from(rate));
                 }
             }
-            let envelope = self
-                .follower
-                .process(left[index].abs().max(right[index].abs()));
+            let level = match key {
+                // A sidechain shorter than the block is silence beyond it.
+                Some((key_left, key_right)) => {
+                    let at = |channel: &[f32]| channel.get(index).map_or(0.0, |x| x.abs());
+                    at(key_left).max(at(key_right))
+                }
+                None => left[index].abs().max(right[index].abs()),
+            };
+            let envelope = self.follower.process(level);
             let base = self.cutoff.next_value();
             let resonance = self.resonance.next_value();
             let morph = self.morph.next_value();
@@ -538,7 +590,8 @@ impl Device for Filter {
             let output = self.output.next_value();
             let lfo_depth = self.lfo_depth.next_value();
             let env_amount = self.env_amount.next_value();
-            if s.lfo_stereo == 0.0 || lfo_depth == 0.0 {
+            let spread = self.spread.next_value();
+            if spread == 0.0 && (s.lfo_stereo == 0.0 || lfo_depth == 0.0) {
                 let lfo = if lfo_depth == 0.0 {
                     0.0
                 } else {
@@ -557,8 +610,14 @@ impl Device for Filter {
                 right[index] = (dry[1] + mix * (wet[1] - dry[1])) * output;
             } else {
                 for (channel, slot) in cutoffs.iter_mut().enumerate() {
-                    let lfo = self.lfo.value(s.lfo_shape, stereo * channel as f64);
-                    let octaves = base + lfo_depth * lfo + env_amount * envelope;
+                    let lfo = if lfo_depth == 0.0 {
+                        0.0
+                    } else {
+                        self.lfo.value(s.lfo_shape, stereo * channel as f64)
+                    };
+                    // Left below the cutoff, right above it.
+                    let side = channel as f32 - 0.5;
+                    let octaves = base + side * spread + lfo_depth * lfo + env_amount * envelope;
                     *slot = self.hertz[channel]
                         .get(octaves, |octaves| octaves.exp2().clamp(20.0, 20_000.0));
                 }

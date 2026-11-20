@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "device": "r1-filter",
+  "name": "Wide Drift",
+  "author": "Rill",
+  "category": "Movement",
+  "tags": ["pad", "stereo"],
+  "description": "Band-pass split an octave across the sides, drifting apart and back.",
+  "parameters": {
+    "model": "OTA Multimode",
+    "type": "Band-pass",
+    "cutoff": 1200.0,
+    "resonance": 45.0,
+    "spread": 1.0,
+    "lfo.rate": 0.15,
+    "lfo.shape": "Sine",
+    "lfo.depth": 1.0,
+    "lfo.stereo": 180.0,
+    "mix": 80.0
+  }
+}

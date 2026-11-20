@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "device": "r1-filter",
+  "name": "Sidechain Pump",
+  "author": "Rill",
+  "category": "Envelope",
+  "tags": ["sidechain", "house", "bass"],
+  "description": "Low-pass that the routed kick pulls shut on every hit.",
+  "parameters": {
+    "model": "Transistor Ladder",
+    "type": "Low-pass",
+    "cutoff": 6000.0,
+    "resonance": 25.0,
+    "env.sidechain": "External",
+    "env.amount": -4.0,
+    "env.attack": 1.0,
+    "env.release": 180.0
+  }
+}

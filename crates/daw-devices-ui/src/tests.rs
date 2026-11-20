@@ -693,16 +693,74 @@ fn filter_response_keeps_its_one_node_on_the_cutoff() {
     assert!(panel.plain(CUTOFF) > cutoff * 1.5);
     assert!(panel.host.singles.iter().all(|id| *id == CUTOFF));
     assert!(panel.host.batch_ids.is_empty());
-    // No band to switch or reset: a double-click and the wheel do nothing.
-    let at = panel.node(panel.plain(CUTOFF), 0.0, 24.0);
+    // No band to switch: a double-click does nothing; the wheel sets the
+    // resonance and leaves the cutoff where it is.
+    let cutoff = panel.plain(CUTOFF);
+    let resonance = panel.plain(RESONANCE);
+    let at = panel.node(cutoff, 0.0, 24.0);
     let values = panel.host.values.clone();
     panel.click(at, 2);
+    assert_eq!(panel.host.values, values);
     panel.frame(vec![Event::MouseWheel {
         unit: egui::MouseWheelUnit::Line,
         delta: vec2(0.0, 3.0),
         modifiers: Modifiers::NONE,
     }]);
-    assert_eq!(panel.host.values, values);
+    assert!(panel.plain(RESONANCE) > resonance);
+    assert_eq!(panel.plain(CUTOFF), cutoff);
+}
+
+#[test]
+fn filter_draws_the_modulated_curves_beside_the_set_one() {
+    use filter::*;
+    let layout = panels::layout(&DESCRIPTOR);
+    let live = layout.response().unwrap().live.unwrap();
+    let telemetry = Telemetry::default();
+    let frequencies = [100.0, 1000.0, 10_000.0];
+    let mut curves: [Vec<f32>; 2] = Default::default();
+    let mut values: HashMap<u32, f64> = DESCRIPTOR
+        .parameters
+        .iter()
+        .map(|spec| (spec.id, f64::from(spec.default_normalized())))
+        .collect();
+    let draw = |values: &HashMap<u32, f64>, curves: &mut [Vec<f32>; 2]| {
+        live(
+            &|id| values[&id],
+            &telemetry,
+            48_000.0,
+            &frequencies,
+            curves,
+        )
+    };
+    // Nothing modulates: nothing to follow.
+    assert_eq!(draw(&values, &mut curves), None);
+    let depth = DESCRIPTOR.parameter(LFO_DEPTH).unwrap();
+    values.insert(LFO_DEPTH, f64::from(depth.to_normalized(2.0)));
+    // Modulated, but the device has not run yet.
+    assert_eq!(draw(&values, &mut curves), Some(0));
+    telemetry.set_value(TELEMETRY_CUTOFF_LEFT, 4000.0);
+    telemetry.set_value(TELEMETRY_CUTOFF_RIGHT, 4000.0);
+    assert_eq!(draw(&values, &mut curves), Some(1));
+    telemetry.set_value(TELEMETRY_CUTOFF_LEFT, 250.0);
+    assert_eq!(draw(&values, &mut curves), Some(2));
+    // Low-passes at 250 Hz and 4 kHz, read at 1 kHz.
+    assert!(curves[0][1] < curves[1][1] - 6.0, "{curves:?}");
+}
+
+#[test]
+fn filter_external_envelope_names_its_source() {
+    use filter::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    panel.host.sources = Some(vec!["Kick".into()]);
+    let link = |panel: &Panel| {
+        let cell = panel.cell(ENV_SIDECHAIN);
+        pos2(cell.center().x, cell.bottom() - 8.0)
+    };
+    panel.click(link(&panel), 1);
+    assert_eq!(panel.host.routed, 0, "Internal has nothing to route");
+    panel.set(ENV_SIDECHAIN, 1.0);
+    panel.click(link(&panel), 1);
+    assert_eq!(panel.host.routed, 1);
 }
 
 fn placed(descriptor: &DeviceDescriptor) -> Vec<u32> {
@@ -2323,12 +2381,18 @@ fn a_lamp_only_heads_a_table_column() {
 fn filter_keeps_every_control_in_its_cell_whatever_the_model() {
     let mut panel = Panel::new(&filter::DESCRIPTOR);
     let before = places(&panel);
-    assert!(panel.state.disabled.contains(&filter::MORPH));
+    let shown = |panel: &Panel, id: u32| panel.state.control_rects.iter().any(|(at, _)| *at == id);
+    // Morph shares the place of Type, which every model without it has.
+    assert!(shown(&panel, filter::TYPE) && !shown(&panel, filter::MORPH));
     for (index, model) in filter::MODELS.iter().enumerate() {
         panel.set(filter::MODEL, index as f32);
         assert_eq!(places(&panel), before, "{model} changed the filter layout");
     }
     // Vowel has a Morph and neither Type nor Slope.
-    assert!(!panel.state.disabled.contains(&filter::MORPH));
-    assert!(panel.state.disabled.contains(&filter::TYPE));
+    assert!(shown(&panel, filter::MORPH) && !shown(&panel, filter::TYPE));
+    assert_eq!(disabled(&panel), vec![filter::SLOPE]);
+    // The Transistor Ladder has neither: Type stays, disabled.
+    panel.set(filter::MODEL, 1.0);
+    assert!(shown(&panel, filter::TYPE));
+    assert_eq!(disabled(&panel), vec![filter::TYPE, filter::SLOPE]);
 }
