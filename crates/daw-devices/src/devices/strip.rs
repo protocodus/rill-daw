@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 pub const TRIM: u32 = 1;
 pub const POLARITY: u32 = 2;
+pub const MODE: u32 = 3;
 pub const HP_ON: u32 = 10;
 pub const HP_FREQUENCY: u32 = 11;
 pub const HP_SLOPE: u32 = 12;
@@ -30,6 +31,8 @@ pub const GATE_THRESHOLD: u32 = 21;
 pub const GATE_RATIO: u32 = 22;
 pub const GATE_ATTACK: u32 = 23;
 pub const GATE_RELEASE: u32 = 24;
+pub const GATE_RANGE: u32 = 25;
+pub const GATE_HOLD: u32 = 26;
 pub const EQ_ON: u32 = 30;
 pub const LOW_FREQUENCY: u32 = 31;
 pub const LOW_GAIN: u32 = 32;
@@ -44,6 +47,8 @@ pub const COMP_RATIO: u32 = 42;
 pub const COMP_ATTACK: u32 = 43;
 pub const COMP_RELEASE: u32 = 44;
 pub const COMP_MAKEUP: u32 = 45;
+pub const COMP_UPWARD_THRESHOLD: u32 = 46;
+pub const COMP_UPWARD_RATIO: u32 = 47;
 pub const WIDTH: u32 = 50;
 pub const PAN: u32 = 52;
 pub const OUTPUT: u32 = 51;
@@ -106,9 +111,18 @@ const fn slope(id: u32, key: &'static str, group: &'static str) -> ParamSpec {
 
 // Ranges match the inner devices' where the strip offers the whole range,
 // so a value moves the same distance on either panel.
-pub static PARAMETERS: [ParamSpec; 30] = [
+pub static PARAMETERS: [ParamSpec; 35] = [
     linear(TRIM, "trim", "Trim", "Input", "dB", (-24.0, 24.0), 0.0),
     toggle(POLARITY, "polarity", "Invert polarity", "Input"),
+    param(
+        MODE,
+        "mode",
+        "Mode",
+        "Input",
+        "",
+        ParamRange::Choice(equalizer::MODES),
+        0.0,
+    ),
     toggle(HP_ON, "hp.on", "On", "High-pass"),
     log(
         HP_FREQUENCY,
@@ -167,6 +181,24 @@ pub static PARAMETERS: [ParamSpec; 30] = [
         "ms",
         (5.0, 2500.0),
         150.0,
+    ),
+    linear(
+        GATE_RANGE,
+        "gate.range",
+        "Range",
+        "Gate",
+        "dB",
+        (0.0, 80.0),
+        80.0,
+    ),
+    linear(
+        GATE_HOLD,
+        "gate.hold",
+        "Hold",
+        "Gate",
+        "ms",
+        (0.0, 500.0),
+        0.0,
     ),
     param(
         EQ_ON,
@@ -278,6 +310,24 @@ pub static PARAMETERS: [ParamSpec; 30] = [
         (-12.0, 24.0),
         0.0,
     ),
+    linear(
+        COMP_UPWARD_THRESHOLD,
+        "comp.upward.threshold",
+        "Upward threshold",
+        "Compressor",
+        "dB",
+        (-60.0, 0.0),
+        -40.0,
+    ),
+    log(
+        COMP_UPWARD_RATIO,
+        "comp.upward.ratio",
+        "Upward ratio",
+        "Compressor",
+        ":1",
+        (1.0, 20.0),
+        1.0,
+    ),
     linear(WIDTH, "width", "Width", "Output", "%", (0.0, 200.0), 100.0),
     linear(PAN, "pan", "Pan", "Output", "%", (-100.0, 100.0), 0.0),
     linear(
@@ -343,6 +393,8 @@ const ROUTES: &[(u32, Stage, u32)] = {
         (GATE_RATIO, Gate, compressor::RATIO),
         (GATE_ATTACK, Gate, compressor::ATTACK),
         (GATE_RELEASE, Gate, compressor::RELEASE),
+        (GATE_RANGE, Gate, compressor::RANGE),
+        (GATE_HOLD, Gate, compressor::HOLD),
         (LOW_FREQUENCY, Eq, BANDS[0] + BAND_FREQUENCY),
         (LOW_GAIN, Eq, BANDS[0] + BAND_GAIN),
         (MID_FREQUENCY, Eq, BANDS[1] + BAND_FREQUENCY),
@@ -355,6 +407,12 @@ const ROUTES: &[(u32, Stage, u32)] = {
         (COMP_ATTACK, Compressor, compressor::ATTACK),
         (COMP_RELEASE, Compressor, compressor::RELEASE),
         (COMP_MAKEUP, Compressor, compressor::MAKEUP),
+        (
+            COMP_UPWARD_THRESHOLD,
+            Compressor,
+            compressor::UPWARD_THRESHOLD,
+        ),
+        (COMP_UPWARD_RATIO, Compressor, compressor::UPWARD_RATIO),
     ]
 };
 
@@ -382,6 +440,14 @@ const FIXED: &[(Stage, u32, f32)] = {
         (Gate, compressor::KNEE, 3.0),
     ]
 };
+
+/// The input transformer of a console channel, which Analog mode switches in
+/// on the cut filters' two spare bands: a slight lift in the deep lows and
+/// a soft top. Kind, frequency, gain and Q.
+const TRANSFORMER: [(equalizer::BandType, f32, f32, f32); 2] = [
+    (equalizer::BandType::Bell, 40.0, 0.6, 0.8),
+    (equalizer::BandType::HighShelf, 16_000.0, -0.6, 0.71),
+];
 
 /// The three bands EQ_ON switches together.
 const EQ_BANDS: [u32; 3] = [
@@ -464,10 +530,60 @@ pub fn equalizer_settings(value: impl Fn(u32) -> f32) -> equalizer::Settings {
             frequency: plain(LP_FREQUENCY),
             slope: slope(LP_SLOPE),
         },
-        mode: equalizer::Mode::Digital,
+        mode: if on(MODE) {
+            equalizer::Mode::Analog
+        } else {
+            equalizer::Mode::Digital
+        },
         auto_gain: false,
         analyzer: equalizer::Analyzer::Off,
         output_db: 0.0,
+    }
+}
+
+/// The strip's whole frequency response, for drawing it: the equalizer
+/// above plus, in Analog mode, the transformer.
+pub fn response_db(
+    value: impl Fn(u32) -> f32,
+    sample_rate: f32,
+    frequencies: &[f32],
+    out: &mut [f32],
+) {
+    let settings = equalizer_settings(&value);
+    equalizer::response_db(&settings, sample_rate, frequencies, out);
+    if settings.mode == equalizer::Mode::Digital {
+        return;
+    }
+    let transformer = equalizer::Settings {
+        hp: equalizer::CutSettings {
+            on: false,
+            ..settings.hp
+        },
+        lp: equalizer::CutSettings {
+            on: false,
+            ..settings.lp
+        },
+        bands: [0, 1, 2, 3].map(|index| match TRANSFORMER.get(index) {
+            Some(&(kind, frequency, gain_db, q)) => equalizer::BandSettings {
+                on: true,
+                kind,
+                frequency,
+                gain_db,
+                q,
+            },
+            None => equalizer::BandSettings {
+                on: false,
+                ..settings.bands[3]
+            },
+        }),
+        // The transformer sits with the cut filters, which stay Digital.
+        mode: equalizer::Mode::Digital,
+        ..settings
+    };
+    let mut lift = vec![0.0; out.len()];
+    equalizer::response_db(&transformer, sample_rate, frequencies, &mut lift);
+    for (out, lift) in out.iter_mut().zip(lift) {
+        *out += lift;
     }
 }
 
@@ -518,6 +634,20 @@ impl Strip {
                 .inner(stage)
                 .set_parameter(id, spec.to_normalized(value));
         }
+        for (index, &(kind, frequency, gain, q)) in TRANSFORMER.iter().enumerate() {
+            let band = equalizer::BANDS[index];
+            for (offset, value) in [
+                (equalizer::BAND_TYPE, kind as u32 as f32),
+                (equalizer::BAND_FREQUENCY, frequency),
+                (equalizer::BAND_GAIN, gain),
+                (equalizer::BAND_Q, q),
+            ] {
+                let spec = equalizer::DESCRIPTOR.parameter(band + offset).unwrap();
+                strip
+                    .cut
+                    .set_parameter(band + offset, spec.to_normalized(value));
+            }
+        }
         for spec in &PARAMETERS {
             strip.forward(spec.id);
         }
@@ -554,6 +684,17 @@ impl Strip {
                 };
                 self.trim
                     .set_target(sign * db_to_gain(plain(&self.values, TRIM)));
+            }
+            // Analog: the equalizer's console curves and soft headroom, and
+            // the transformer on the cut filters. Digital costs nothing.
+            MODE => {
+                let spec = equalizer::DESCRIPTOR.parameter(equalizer::MODE).unwrap();
+                self.eq
+                    .set_parameter(equalizer::MODE, spec.to_normalized(on));
+                for index in 0..TRANSFORMER.len() {
+                    self.cut
+                        .set_parameter(equalizer::BANDS[index] + equalizer::BAND_ON, on);
+                }
             }
             GATE_ON => self.gate_mix.set_target(on),
             COMP_ON => self.compressor_mix.set_target(on),

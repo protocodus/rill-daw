@@ -578,3 +578,8 @@ r1-strip 45 comp.makeup "Makeup" linear -12 24
 r1-strip 50 width "Width" linear 0 200
 r1-strip 52 pan "Pan" linear -100 100
 r1-strip 51 output "Output" linear -24 24
+r1-strip 3 mode "Mode" choice Digital|Analog
+r1-strip 25 gate.range "Range" linear 0 80
+r1-strip 26 gate.hold "Hold" linear 0 500
+r1-strip 46 comp.upward.threshold "Upward threshold" linear -60 0
+r1-strip 47 comp.upward.ratio "Upward ratio" log 1 20

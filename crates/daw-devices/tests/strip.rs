@@ -49,7 +49,18 @@ fn default_strip_is_transparent() {
 
 #[test]
 fn every_stage_is_its_r1_device_in_the_mixer_order() {
+    matches_the_devices(false);
+}
+
+#[test]
+fn analog_is_the_analog_equalizer_after_a_transformer() {
+    matches_the_devices(true);
+}
+
+fn matches_the_devices(analog: bool) {
+    let mode = if analog { 1.0 } else { 0.0 };
     let values = [
+        (MODE, mode),
         (TRIM, 6.0),
         (POLARITY, 1.0),
         (HP_ON, 1.0),
@@ -59,6 +70,8 @@ fn every_stage_is_its_r1_device_in_the_mixer_order() {
         (LP_FREQUENCY, 9000.0),
         (GATE_ON, 1.0),
         (GATE_THRESHOLD, -30.0),
+        (GATE_RANGE, 40.0),
+        (GATE_HOLD, 20.0),
         (LOW_GAIN, 4.0),
         (MID_FREQUENCY, 700.0),
         (MID_GAIN, -5.0),
@@ -68,6 +81,8 @@ fn every_stage_is_its_r1_device_in_the_mixer_order() {
         (COMP_THRESHOLD, -24.0),
         (COMP_RATIO, 5.0),
         (COMP_MAKEUP, 3.0),
+        (COMP_UPWARD_THRESHOLD, -40.0),
+        (COMP_UPWARD_RATIO, 2.0),
         (WIDTH, 150.0),
         (PAN, -40.0),
         (OUTPUT, -2.0),
@@ -89,8 +104,17 @@ fn every_stage_is_its_r1_device_in_the_mixer_order() {
             (equalizer::HP_SLOPE, 1.0),
             (equalizer::LP_ON, 1.0),
             (equalizer::LP_FREQUENCY, 9000.0),
-            (equalizer::BANDS[0] + equalizer::BAND_ON, 0.0),
-            (equalizer::BANDS[1] + equalizer::BAND_ON, 0.0),
+            // The transformer: a slight low lift and a soft top.
+            (equalizer::BANDS[0] + equalizer::BAND_ON, mode),
+            (equalizer::BANDS[0] + equalizer::BAND_TYPE, 0.0),
+            (equalizer::BANDS[0] + equalizer::BAND_FREQUENCY, 40.0),
+            (equalizer::BANDS[0] + equalizer::BAND_GAIN, 0.6),
+            (equalizer::BANDS[0] + equalizer::BAND_Q, 0.8),
+            (equalizer::BANDS[1] + equalizer::BAND_ON, mode),
+            (equalizer::BANDS[1] + equalizer::BAND_TYPE, 2.0),
+            (equalizer::BANDS[1] + equalizer::BAND_FREQUENCY, 16_000.0),
+            (equalizer::BANDS[1] + equalizer::BAND_GAIN, -0.6),
+            (equalizer::BANDS[1] + equalizer::BAND_Q, 0.71),
             (equalizer::BANDS[2] + equalizer::BAND_ON, 0.0),
             (equalizer::BANDS[3] + equalizer::BAND_ON, 0.0),
         ],
@@ -103,6 +127,8 @@ fn every_stage_is_its_r1_device_in_the_mixer_order() {
             (compressor::KNEE, 3.0),
             (compressor::THRESHOLD, -30.0),
             (compressor::RATIO, 10.0),
+            (compressor::RANGE, 40.0),
+            (compressor::HOLD, 20.0),
             (compressor::ATTACK, 0.5),
             (compressor::RELEASE, 150.0),
         ],
@@ -112,6 +138,7 @@ fn every_stage_is_its_r1_device_in_the_mixer_order() {
         &equalizer::DESCRIPTOR,
         RATE,
         &[
+            (equalizer::MODE, mode),
             (band(0, equalizer::BAND_TYPE), 1.0),
             (band(0, equalizer::BAND_FREQUENCY), 100.0),
             (band(0, equalizer::BAND_GAIN), 4.0),
@@ -134,6 +161,8 @@ fn every_stage_is_its_r1_device_in_the_mixer_order() {
             (compressor::THRESHOLD, -24.0),
             (compressor::RATIO, 5.0),
             (compressor::MAKEUP, 3.0),
+            (compressor::UPWARD_THRESHOLD, -40.0),
+            (compressor::UPWARD_RATIO, 2.0),
         ],
     );
     for stage in [&mut cut, &mut gate, &mut eq, &mut comp] {
@@ -209,6 +238,18 @@ fn drawn_response_is_both_equalizers_together() {
         &[(EQ_ON, 0.0), (MID_GAIN, 6.0)],
     ));
     assert!(off.bands.iter().all(|band| !band.on));
+
+    // Analog draws the transformer too: its lift at 40 Hz and soft top.
+    let mut analog = [0.0_f32; 3];
+    strip::response_db(
+        value_of(&strip::DESCRIPTOR, &[(MODE, 1.0)]),
+        RATE,
+        &[40.0, 1000.0, 20_000.0],
+        &mut analog,
+    );
+    assert!((analog[0] - 0.6).abs() < 0.1, "low lift: {analog:?}");
+    assert!(analog[1].abs() < 0.1, "flat middle: {analog:?}");
+    assert!(analog[2] < -0.3, "soft top: {analog:?}");
 }
 
 #[test]

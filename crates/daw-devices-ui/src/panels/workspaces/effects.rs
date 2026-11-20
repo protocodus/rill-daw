@@ -159,16 +159,22 @@ fn channel(mut layout: Layout) -> Workspace {
     layout.picture_place = PicturePlace::Above;
     layout.hint = |id, values| match id {
         POLARITY => Some("Flip both channels, to fix a microphone that cancels another."),
+        MODE => Some(
+            "Analog adds console curves, soft headroom on loud peaks and a transformer's gentle low lift and soft top.",
+        ),
         WIDTH => Some("0 % is mono, 100 % leaves the image unchanged, 200 % doubles the sides."),
         _ if crate::panels::strip_stage(id).is_some_and(|on| values(on) < 0.5) => {
             Some("Switch this stage on with the lamp in its title.")
+        }
+        COMP_UPWARD_RATIO => {
+            Some("Lifts material below the upward threshold; with the ratio above, one-band OTT.")
         }
         _ => None,
     };
     Workspace {
         layout,
         output: vec![WIDTH, PAN, OUTPUT],
-        toolbar: vec![],
+        toolbar: vec![MODE],
         body_height: 0.0,
     }
 }
