@@ -552,6 +552,26 @@ fn switches_and_jumps_do_not_click() {
             vec![(DRIVE, 24.0)],
             vec![(DRIVE, 24.0), (AUTO_GAIN, 0.0)],
         ),
+        (
+            "Stereo to Side",
+            vec![(DRIVE, 24.0)],
+            vec![(DRIVE, 24.0), (STEREO, SIDE)],
+        ),
+        (
+            "Stereo to Mid",
+            vec![(DRIVE, 24.0), (STEREO, SIDE)],
+            vec![(DRIVE, 24.0), (STEREO, MID)],
+        ),
+        (
+            "Punch up",
+            vec![(DRIVE, 24.0)],
+            vec![(DRIVE, 24.0), (PUNCH, 100.0)],
+        ),
+        (
+            "Punch down",
+            vec![(DRIVE, 24.0), (PUNCH, 100.0)],
+            vec![(DRIVE, 24.0), (PUNCH, -100.0)],
+        ),
     ] {
         let limit = 2.0 * steady(&from).max(steady(&to));
         let mut device = device(rate as f32, &from);
@@ -611,6 +631,129 @@ fn one_huge_sample_is_forgotten() {
                 (settled / expected - 1.0).abs() < 1e-3,
                 "{name} {huge}: {settled} against {expected}"
             );
+        }
+    }
+}
+
+const BOTH: f32 = 0.0;
+const MID: f32 = 1.0;
+const SIDE: f32 = 2.0;
+
+/// Plucks of a 200 Hz tone: a sharp attack every half second, decaying
+/// with 80 ms.
+fn plucks(rate: f64, frames: usize) -> Vec<f32> {
+    let period = (rate / 2.0) as usize;
+    sine(200.0, 0.5, rate, frames)
+        .iter()
+        .enumerate()
+        .map(|(n, x)| x * (-((n % period) as f64) / (0.08 * rate)).exp() as f32)
+        .collect()
+}
+
+/// The second pluck's first 10 ms against its level 150 ms later, in dB.
+fn attack_db(output: &[f32], rate: f64) -> f32 {
+    let at = |ms: f64| {
+        let start = (rate * (0.5 + ms / 1000.0)) as usize;
+        peak(&output[start..start + (rate / 100.0) as usize])
+    };
+    db(f64::from(at(0.0) / at(150.0)))
+}
+
+#[test]
+fn punch_spares_or_crushes_attacks() {
+    let rate = 48_000.0;
+    let input = plucks(rate, rate as usize);
+    let attack = |punch: f32| {
+        let values = [(MODEL, TRANSISTOR), (DRIVE, 24.0), (PUNCH, punch)];
+        attack_db(&run_mono(&mut *device(rate as f32, &values), &input), rate)
+    };
+    let (crushed, neutral, spared) = (attack(-100.0), attack(0.0), attack(100.0));
+    assert!(spared >= neutral + 6.0, "{spared} against {neutral}");
+    assert!(crushed <= neutral - 3.0, "{crushed} against {neutral}");
+}
+
+#[test]
+fn punch_leaves_sustained_tones_and_small_signals_alone() {
+    let rate = 48_000.0;
+    let frames = 2 * rate as usize;
+    // A sustained tone: the followers agree and Punch changes nothing.
+    let tone = sine(200.0, 0.25, rate, frames);
+    let level = |punch: f32| {
+        let values = [(DRIVE, 18.0), (PUNCH, punch)];
+        rms(&run_mono(&mut *device(rate as f32, &values), &tone)[frames / 2..])
+    };
+    let neutral = level(0.0);
+    for punch in [-100.0, 100.0] {
+        let change = db(level(punch) / neutral);
+        assert!(change.abs() < 0.3, "Punch {punch}: {change} dB");
+    }
+    // Below the knee the gain before the curve and the one after it cancel,
+    // attacks included.
+    let quiet: Vec<f32> = plucks(rate, frames).iter().map(|x| x * 0.01).collect();
+    let run = |punch: f32| {
+        let values = [(DRIVE, 0.0), (AUTO_GAIN, 0.0), (PUNCH, punch)];
+        run_mono(&mut *device(rate as f32, &values), &quiet)
+    };
+    let (reference, punched) = (run(0.0), run(100.0));
+    let difference: Vec<f32> = reference.iter().zip(&punched).map(|(a, b)| a - b).collect();
+    let error = db(rms(&difference) / rms(&reference));
+    assert!(error < -30.0, "{error} dB");
+}
+
+/// Harmonics 2–5 of a 300 Hz tone against it, in dB.
+fn distortion_db(signal: &[f32], rate: f64) -> f32 {
+    let harmonics: f64 = (2..=5)
+        .map(|k| fit(signal, 300.0 * k as f64, rate).powi(2))
+        .sum();
+    db(harmonics.sqrt() / fit(signal, 300.0, rate))
+}
+
+#[test]
+fn stereo_saturates_only_its_target() {
+    let rate = 48_000.0;
+    let frames = 24_000;
+    let tone = sine(300.0, 0.5, rate, frames);
+    let inverted: Vec<f32> = tone.iter().map(|x| -x).collect();
+    let mono = (&tone, &tone);
+    let side = (&tone, &inverted);
+    for (stereo, (left, right), saturated) in [
+        (BOTH, mono, true),
+        (BOTH, side, true),
+        (MID, mono, true),
+        (MID, side, false),
+        (SIDE, mono, false),
+        (SIDE, side, true),
+    ] {
+        let values = [
+            (MODEL, TUBE),
+            (CHARACTER, 100.0),
+            (DRIVE, 24.0),
+            (STEREO, stereo),
+        ];
+        let mut device = device(rate as f32, &values);
+        let (mut left, mut right) = (left.clone(), right.clone());
+        run(&mut *device, &mut left, &mut right);
+        let is_side = right[100] != left[100];
+        let label = format!("stereo {stereo}, side input {is_side}");
+        let (left, right) = (&left[frames / 2..], &right[frames / 2..]);
+        let distortion = distortion_db(left, rate);
+        if saturated {
+            assert!(distortion > -30.0, "{label}: {distortion} dB");
+        } else {
+            assert!(distortion < -80.0, "{label}: {distortion} dB");
+        }
+        // Mid and Side keep the image: mono stays mono and a side signal
+        // stays on the sides, even with Tube's even harmonics. (Both
+        // saturates each channel on its own, as a stereo pair of
+        // saturators does.)
+        if stereo != BOTH {
+            let wrong: Vec<f32> = left
+                .iter()
+                .zip(right)
+                .map(|(l, r)| if is_side { l + r } else { l - r })
+                .collect();
+            let leak = db(rms(&wrong) / rms(left));
+            assert!(leak < -80.0, "{label}: image leak {leak} dB");
         }
     }
 }

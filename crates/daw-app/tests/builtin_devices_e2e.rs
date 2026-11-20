@@ -657,6 +657,38 @@ fn r1_saturator_adds_harmonics_holds_level_and_drives_from_its_panel() {
         "driven {driven}, held {held}"
     );
     assert!(harmonics(&held) > harmonics(&dry) + 6.0, "{held}");
+    // Side saturates only what differs between the channels: the mono tone
+    // passes clean. Punch is a bipolar percentage that leaves a steady tone
+    // alone.
+    let punch = &song_tool(
+        &mut app,
+        "plugin_describe_parameters",
+        json!({"track_id":track,"insert_id":insert,"query":"punch"}),
+    )["tool_result"]["result"]["parameters"][0];
+    assert_eq!(
+        (&punch["unit"], &punch["min"], &punch["max"]),
+        (&json!("%"), &json!(-100.0), &json!(100.0))
+    );
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"stereo","value":"side"},{"parameter":"punch","value":"60 %"}]),
+    );
+    let sides = analysis(&mut app);
+    assert!(
+        (harmonics(&sides) - harmonics(&dry)).abs() < 1.0,
+        "dry {dry}, side only {sides}"
+    );
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"stereo","value":"both"}]),
+    );
+    let punched = analysis(&mut app);
+    assert!(harmonics(&punched) > harmonics(&dry) + 6.0, "{punched}");
+    assert!((rms(&punched) - rms(&held)).abs() < 0.5, "{held} {punched}");
     // Mix at 0 % is the dry signal.
     set_parameters(
         &mut app,
@@ -707,15 +739,17 @@ fn r1_saturator_adds_harmonics_holds_level_and_drives_from_its_panel() {
     assert_signal_row(
         &state,
         &[
+            "Saturate",
             "Low bypass",
             "Drive",
+            "Punch",
             "Model",
             "Hardness",
-            "Quality",
             "Auto gain",
             "Tone",
         ],
     );
+    assert!(visible(&state, "Quality"), "{}", state["visible_labels"]);
     assert_signal_row(&state, &["Mix", "Output"]);
     let (x, name) = label_center(&state, "Drive");
     let knob = name + 12.0 + f64::from(daw_devices_ui::KNOB_HERO) * 0.5;
@@ -743,6 +777,19 @@ fn r1_saturator_adds_harmonics_holds_level_and_drives_from_its_panel() {
         label_center(&state, "Output")
     );
     assert_eq!(tube["history"]["undo"][0], "Effect parameter");
+    // Stereo is a row of buttons too.
+    let mid = app.click("Mid");
+    assert_eq!(mid["history"]["undo"][0], "Effect parameter");
+    let stereo = |state: &Value| {
+        state["project"]["tracks"][0]["inserts"][0]["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|parameter| parameter["id"] == 6)
+            .map(|parameter| parameter["value"].as_f64().unwrap())
+    };
+    assert_eq!(stereo(&mid), Some(0.5), "{}", mid["project"]);
+    let tube = app.command(json!({"command":"key","key":"Z","cmd":true}));
     check_compact_output(&mut app);
 
     // Save and reopen: the same device, the same sound.

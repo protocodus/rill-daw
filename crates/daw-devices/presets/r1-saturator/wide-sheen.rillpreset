@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device": "r1-saturator",
+  "name": "Wide Sheen",
+  "author": "Rill",
+  "category": "Tube",
+  "tags": ["master", "stereo"],
+  "description": "Harmonics on the sides only: wider and brighter, with a solid centre.",
+  "parameters": {
+    "model": "Tube",
+    "drive": 10.0,
+    "character": 40.0,
+    "stereo": "Side",
+    "tone": 1.5,
+    "focus": 200.0
+  }
+}

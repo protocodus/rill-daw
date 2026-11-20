@@ -965,13 +965,19 @@ fn formatted(descriptor: &DeviceDescriptor, like: u32, plain: f32) -> Option<Str
 fn saturator_layout(mut layout: Layout) -> Layout {
     use Slot::Control as C;
     use saturator::*;
-    // The curve and what it adds on top; below, twelve cells in the order
-    // of the signal: what is kept clean and how hard the rest is driven,
-    // the shaper with its oversampling, then what follows it.
+    // The curve and what it adds on top; below, cards in the order of the
+    // signal: what is kept clean and how hard the rest is driven, the
+    // shaper with its oversampling, then what follows it. The effect
+    // workspace regroups these cards.
     layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
     layout.cells = true;
     layout.sections = vec![
-        cells("Drive", 0, 2, &[&[C(FOCUS, 1), C(DRIVE, 1)]]),
+        cells(
+            "Drive",
+            0,
+            6,
+            &[&[C(STEREO, 2), C(FOCUS, 1), C(DRIVE, 2), C(PUNCH, 1)]],
+        ),
         cells(
             "Shaper",
             0,
@@ -980,9 +986,9 @@ fn saturator_layout(mut layout: Layout) -> Layout {
         ),
         cells(
             "Output",
-            0,
-            4,
-            &[&[C(AUTO_GAIN, 1), C(TONE, 1), C(MIX, 1), C(OUTPUT, 1)]],
+            1,
+            12,
+            &[&[C(AUTO_GAIN, 3), C(TONE, 3), C(MIX, 3), C(OUTPUT, 3)]],
         ),
     ];
     layout.hero = Some(DRIVE);

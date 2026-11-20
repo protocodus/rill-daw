@@ -1,6 +1,6 @@
 //! R1 Saturator: three circuit-style curves inside an oversampled,
-//! antialiased shaper, with a clean low band, static level compensation and
-//! the same latency at every quality. See `docs/R1_DEVICES.md#r1-saturator`.
+//! antialiased shaper, with a clean low band, mid/side targeting, transient
+//! control, static level compensation and the same latency at every quality. See `docs/R1_DEVICES.md#r1-saturator`.
 use super::param;
 use crate::dsp::{
     AlgebraicSigmoid, AntialiasedShaper, Ballistics, CurveKind, DroopCorrector, GainComputer,
@@ -18,6 +18,8 @@ pub const DRIVE: u32 = 2;
 pub const CHARACTER: u32 = 3;
 pub const TONE: u32 = 4;
 pub const FOCUS: u32 = 5;
+pub const STEREO: u32 = 6;
+pub const PUNCH: u32 = 7;
 pub const QUALITY: u32 = 10;
 pub const AUTO_GAIN: u32 = 20;
 pub const MIX: u32 = 30;
@@ -31,6 +33,8 @@ pub const TELEMETRY_SAMPLE_RATE: usize = 1;
 /// Named after the circuit technology, never a manufacturer.
 pub const MODELS: &[&str] = &["Transistor", "Tube", "Tape"];
 pub const QUALITIES: &[&str] = &["2×", "4×", "8×"];
+/// What is saturated; the rest passes clean, like the band below Focus.
+pub const STEREO_MODES: &[&str] = &["Both", "Mid", "Side"];
 
 /// The same at every quality and sample rate: the shorter oversamplers are
 /// padded, so changing Quality moves nothing else in the song.
@@ -56,7 +60,7 @@ const fn linear(
     )
 }
 
-pub static PARAMETERS: [ParamSpec; 9] = [
+pub static PARAMETERS: [ParamSpec; 11] = [
     param(
         MODEL,
         "model",
@@ -96,6 +100,24 @@ pub static PARAMETERS: [ParamSpec; 9] = [
             max: 1000.0,
         },
         20.0,
+    ),
+    param(
+        STEREO,
+        "stereo",
+        "Stereo",
+        "Saturation",
+        "",
+        ParamRange::Choice(STEREO_MODES),
+        0.0,
+    ),
+    linear(
+        PUNCH,
+        "punch",
+        "Punch",
+        "Saturation",
+        "%",
+        (-100.0, 100.0),
+        0.0,
     ),
     param(
         QUALITY,
@@ -147,6 +169,10 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-saturator/transistor-edge.rillpreset"),
         include_str!("../../presets/r1-saturator/fuzz-box.rillpreset"),
         include_str!("../../presets/r1-saturator/parallel-dirt.rillpreset"),
+        include_str!("../../presets/r1-saturator/drum-punch.rillpreset"),
+        include_str!("../../presets/r1-saturator/crushed-room.rillpreset"),
+        include_str!("../../presets/r1-saturator/wide-sheen.rillpreset"),
+        include_str!("../../presets/r1-saturator/centre-glue.rillpreset"),
     ],
     legacy_labels: &[],
     fixed_on_roll: &[],
@@ -161,6 +187,13 @@ pub enum Model {
     Tape,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stereo {
+    Both,
+    Mid,
+    Side,
+}
+
 /// Plain parameter values, decoded once per change.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Settings {
@@ -172,6 +205,9 @@ pub struct Settings {
     pub focus_hz: f32,
     /// Off at the bottom of the Focus range: everything is saturated.
     pub focus_on: bool,
+    pub stereo: Stereo,
+    /// −1–1: positive lets attacks through cleaner, negative crushes them.
+    pub punch: f32,
     pub quality: OversampleFactor,
     pub auto_gain: bool,
     /// 0–1.
@@ -197,6 +233,12 @@ impl Settings {
             tone_db: plain(TONE),
             focus_hz: plain(FOCUS),
             focus_on: value(FOCUS) > 0.0,
+            stereo: match plain(STEREO) as usize {
+                0 => Stereo::Both,
+                1 => Stereo::Mid,
+                _ => Stereo::Side,
+            },
+            punch: plain(PUNCH) / 100.0,
             quality: match plain(QUALITY) as usize {
                 0 => OversampleFactor::X2,
                 1 => OversampleFactor::X4,
@@ -404,6 +446,14 @@ const TONE_PIVOT_HZ: f32 = 1000.0;
 const BLOOM_HZ: f32 = 120.0;
 const BLOOM_AMOUNT: f32 = 0.26;
 const DC_BLOCKER_HZ: f32 = 5.0;
+/// Punch follows the power with a fast rise, and that envelope again with a
+/// slow rise and an instant fall; their ratio is how far an attack stands
+/// out. It is 0 dB on sustained and decaying sound, so Auto gain's static
+/// figure stays true outside the attacks.
+const PUNCH_FAST_MS: (f32, f32) = (1.0, 60.0);
+const PUNCH_SLOW_MS: (f32, f32) = (30.0, 0.0);
+/// The most an attack moves the drive at full Punch.
+const PUNCH_RANGE_DB: f32 = 12.0;
 
 const PAD: usize = (LATENCY - Oversampler::latency(OversampleFactor::X2)) as usize;
 
@@ -422,6 +472,9 @@ struct ChannelStereo {
     shapers: [AntialiasedShaper<Curve>; 2],
     /// Makes up the latency of the shorter oversamplers.
     pad: StaticDelayStereo<PAD>,
+    /// Punch's gain after the shaper, delayed to meet the samples its
+    /// inverse drove.
+    punch_delay: StaticDelayStereo<{ LATENCY as usize }>,
 }
 
 impl ChannelStereo {
@@ -440,6 +493,7 @@ impl ChannelStereo {
             oversampler: OversamplerStereo::new(quality),
             shapers: [shaper.clone(), shaper],
             pad: StaticDelayStereo::default(),
+            punch_delay: StaticDelayStereo::default(),
         }
     }
 
@@ -467,12 +521,12 @@ pub struct Saturator {
     dirty: bool,
     sample_rate: f32,
     channels: ChannelStereo,
-    /// The model and quality the audio path runs now; a change waits for the
-    /// swap fade to reach zero.
-    active: (Model, OversampleFactor),
-    pending: Option<(Model, OversampleFactor)>,
-    /// 1 = the saturated path, 0 = the delayed dry signal, while model or
-    /// quality are exchanged.
+    /// The model, quality and stereo target the audio path runs now; a
+    /// change waits for the swap fade to reach zero.
+    active: Active,
+    pending: Option<Active>,
+    /// 1 = the saturated path, 0 = the delayed dry signal, while model,
+    /// quality or stereo target are exchanged.
     swap: LinearRamp,
     /// Samples the fade stays at zero after an exchange, until the new
     /// oversampler has filled.
@@ -494,6 +548,9 @@ pub struct Saturator {
     focus_g: LinearRamp,
     /// 1 while Focus keeps the low band clean, 0 when it is off.
     split: LinearRamp,
+    punch: LinearRamp,
+    punch_fast: Ballistics,
+    punch_slow: Ballistics,
     mix: Smoothed,
     output: Smoothed,
     tape_power: Ballistics,
@@ -510,6 +567,8 @@ impl Default for Saturator {
         Self::new()
     }
 }
+
+type Active = (Model, OversampleFactor, Stereo);
 
 fn decode(values: &[f32; PARAMETERS.len()]) -> Settings {
     Settings::from_normalized(|id| {
@@ -544,7 +603,7 @@ impl Saturator {
             dirty: false,
             sample_rate: 48_000.0,
             channels: channel,
-            active: (settings.model, settings.quality),
+            active: (settings.model, settings.quality, settings.stereo),
             pending: None,
             swap: LinearRamp::new(1.0),
             swap_hold: 0,
@@ -561,6 +620,9 @@ impl Saturator {
             focus_applied: 0.0,
             focus_g: LinearRamp::new(0.0),
             split: LinearRamp::new(0.0),
+            punch: LinearRamp::new(settings.punch),
+            punch_fast: Ballistics::default(),
+            punch_slow: Ballistics::default(),
             mix: Smoothed::new(settings.mix),
             output: Smoothed::new(db_to_gain(settings.output_db)),
             tape_power: Ballistics::default(),
@@ -596,9 +658,10 @@ impl Saturator {
             self.split
                 .set_target(split, self.samples(SPLIT_RAMP_SECONDS));
         }
+        self.punch.set_target(settings.punch, slow);
         self.mix.set_target(settings.mix);
         self.output.set_target(db_to_gain(settings.output_db));
-        let wanted = (settings.model, settings.quality);
+        let wanted = (settings.model, settings.quality, settings.stereo);
         let (aim, pending) = if wanted == self.active {
             (1.0, None)
         } else {
@@ -611,9 +674,9 @@ impl Saturator {
         }
     }
 
-    /// Exchanges model and quality while the fade is at zero.
-    fn apply_swap(&mut self, (model, quality): (Model, OversampleFactor)) {
-        self.active = (model, quality);
+    /// Exchanges model, quality and stereo target while the fade is at zero.
+    fn apply_swap(&mut self, (model, quality, stereo): Active) {
+        self.active = (model, quality, stereo);
         let rate = self.sample_rate;
         let (pre, post) = emphasis_pair(model, rate);
         let shape = curve(model, self.character.value());
@@ -678,6 +741,7 @@ impl Saturator {
             &mut self.tone,
             &mut self.focus,
             &mut self.split,
+            &mut self.punch,
         ] {
             ramp.snap();
         }
@@ -699,7 +763,7 @@ impl Saturator {
         channel.dc = Shelf1Stereo::from_shelf(&Shelf1::high_pass(DC_BLOCKER_HZ, rate));
         channel.tone = Shelf1Stereo::from_shelf(&tilt);
         self.channels = channel;
-        self.apply_swap((settings.model, settings.quality));
+        self.apply_swap((settings.model, settings.quality, settings.stereo));
         self.tick = 0;
         self.level = 0.0;
     }
@@ -718,6 +782,10 @@ impl Device for Saturator {
         self.mix.set_time(5.0, rate);
         self.output.set_time(5.0, rate);
         self.tape_power.set_times(10.0, 150.0, rate);
+        self.punch_fast
+            .set_times(PUNCH_FAST_MS.0, PUNCH_FAST_MS.1, rate);
+        self.punch_slow
+            .set_times(PUNCH_SLOW_MS.0, PUNCH_SLOW_MS.1, rate);
         self.bloom_level.set_times(30.0, 300.0, rate);
         self.telemetry.set_value(TELEMETRY_SAMPLE_RATE, rate);
         self.reset();
@@ -778,11 +846,12 @@ impl Device for Saturator {
             self.tone.next();
             self.focus.next();
             let split = self.split.next();
+            let punch = self.punch.next();
             let focus_g = self.focus_g.next();
             let tone = self.tone_coefficients.each_mut().map(LinearRamp::next);
             let mix = self.mix.next_value();
             let output = self.output.next_value();
-            let model = self.active.0;
+            let (model, _, stereo) = self.active;
             let pad = (LATENCY - Oversampler::latency(self.active.1)) as usize;
 
             // One bad sample must not poison the filter states: the squares
@@ -797,9 +866,40 @@ impl Device for Saturator {
             let dry = self.channels.dry_delay.process(input);
             let focus_coeffs = SvfCoeffs::new(focus_g, std::f32::consts::SQRT_2);
             let high = self.channels.focus.process_coeffs(input, focus_coeffs).high;
-            let clean = [split * (input[0] - high[0]), split * (input[1] - high[1])];
+            let low = [split * (input[0] - high[0]), split * (input[1] - high[1])];
+            let rest = [input[0] - low[0], input[1] - low[1]];
+            // What is saturated; everything else joins the clean band, so
+            // the two still sum to the input.
+            let target = match stereo {
+                Stereo::Both => rest,
+                Stereo::Mid => [0.5 * (rest[0] + rest[1]); 2],
+                Stereo::Side => {
+                    let side = 0.5 * (rest[0] - rest[1]);
+                    [side, -side]
+                }
+            };
+            let clean = [input[0] - target[0], input[1] - target[1]];
             let low = self.channels.low_delay.process(clean);
-            let driven = [(input[0] - clean[0]) * drive, (input[1] - clean[1]) * drive];
+
+            // The followers run always, so turning Punch up meets settled
+            // levels.
+            let power = 0.5 * (target[0] * target[0] + target[1] * target[1]);
+            let fast = self.punch_fast.process(power);
+            let slow = self.punch_slow.process(fast);
+            let punch_gain = if punch == 0.0 {
+                1.0
+            } else {
+                let rise_db = 10.0 * ((fast + 1e-12) / (slow + 1e-12)).log10();
+                db_to_gain(-punch * rise_db.clamp(0.0, PUNCH_RANGE_DB))
+            };
+            // Less drive into the curve on an attack, as much more after it:
+            // below the knee the two cancel, above it the attack is spared.
+            let restore = 1.0 / punch_gain;
+            let restore = self.channels.punch_delay.process([restore; 2])[0];
+            let driven = [
+                target[0] * drive * punch_gain,
+                target[1] * drive * punch_gain,
+            ];
             peak = peak.max(driven[0].abs()).max(driven[1].abs());
 
             let compression = if model == Model::Tape {
@@ -841,9 +941,15 @@ impl Device for Saturator {
                 Model::Tape => wet = self.channels.bump.process(wet),
             }
             wet = self.channels.dc.process(wet);
+            if stereo == Stereo::Side {
+                // The curves' even harmonics are common to both sides; keep
+                // only the side signal.
+                let side = 0.5 * (wet[0] - wet[1]);
+                wet = [side, -side];
+            }
             wet = [
-                (wet[0] + rho * low[0]) * comp,
-                (wet[1] + rho * low[1]) * comp,
+                (wet[0] * restore + rho * low[0]) * comp,
+                (wet[1] * restore + rho * low[1]) * comp,
             ];
             self.channels.tone.big_g = tone[0];
             self.channels.tone.low_gain = tone[1];
@@ -863,6 +969,8 @@ impl Device for Saturator {
 
     fn reset(&mut self) {
         self.settle();
+        self.punch_fast.reset();
+        self.punch_slow.reset();
         self.tape_power.reset();
         self.bloom_level.reset();
     }

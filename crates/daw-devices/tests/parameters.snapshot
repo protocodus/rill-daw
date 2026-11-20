@@ -94,6 +94,8 @@ r1-saturator 2 drive "Drive" linear 0 36
 r1-saturator 3 character "Character" linear 0 100
 r1-saturator 4 tone "Tone" linear -6 6
 r1-saturator 5 focus "Focus" log 20 1000
+r1-saturator 6 stereo "Stereo" choice Both|Mid|Side
+r1-saturator 7 punch "Punch" linear -100 100
 r1-saturator 10 quality "Quality" choice 2×|4×|8×
 r1-saturator 20 auto_gain "Auto gain" toggle
 r1-saturator 30 mix "Mix" linear 0 100
