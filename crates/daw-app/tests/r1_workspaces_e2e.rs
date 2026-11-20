@@ -175,7 +175,8 @@ fn knob_readout<'a>(state: &'a Value, caption: &Value, text: &str) -> Option<&'a
         .iter()
         .find(|entry| {
             let (at_x, at_y) = center(entry);
-            entry["text"] == text && (at_x - x).abs() < 50.0 && at_y > top && at_y < top + 90.0
+            // Below the caption, within the height of a row of controls.
+            entry["text"] == text && (at_x - x).abs() < 50.0 && at_y > top && at_y < top + 110.0
         })
 }
 
@@ -464,8 +465,12 @@ fn inline_knob_values_hide_on_leave_and_revealed_choice_values_remain_clickable(
     unchanged(&left, &before);
     assert_eq!(label(&left, "Output"), &output);
 
-    let sync = center(label(&left, "Sync"));
-    pointer(&mut app, "click", (sync.0, sync.1 + 36.0));
+    // The switch sits on the row's center line, as Feel's middle option does.
+    let sync = (
+        center(label(&left, "Sync")).0,
+        center(label(&left, "Dotted")).1,
+    );
+    pointer(&mut app, "click", sync);
     let synced = pointer(&mut app, "move", (2.0, 2.0));
     let division = label(&synced, "Division").clone();
     assert_knob_readouts(&synced, &division, &["8 bars", "1/16", "1 bar"], false);

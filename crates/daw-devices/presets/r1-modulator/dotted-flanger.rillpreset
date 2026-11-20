@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "device": "r1-modulator",
+  "name": "Dotted Flanger",
+  "author": "Rill",
+  "category": "Flanger",
+  "tags": ["drums", "synth"],
+  "description": "Sweeps every dotted quarter, against the beat.",
+  "parameters": {
+    "mode": "Flanger",
+    "shape": "Triangle",
+    "sync": true,
+    "division": "1/4",
+    "feel": "Dotted",
+    "feedback": 65.0,
+    "depth": 70.0,
+    "center.flanger": 2.0
+  }
+}

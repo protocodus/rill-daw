@@ -1002,6 +1002,8 @@ are the effect pair.
 | 13 | Division (`division`) | 8 bars, 4 bars, 2 bars, 1 bar, 1/2, 1/4, 1/8, 1/16 | 1 bar |
 | 14 | Depth (`depth`) | 0 – 100 % | 50 % |
 | 15 | Stereo (`stereo`) | 0 – 180° | 90° |
+| 17 | Feel (`feel`) | Straight, Dotted, Triplet (with Sync) | Straight |
+| 16 | Envelope (`envelope`) | −100 – +100 % | 0 % |
 | 20 | Feedback (`feedback`) | −95 – +95 % | 0 % |
 | 21 | Chorus center (`center.chorus`) | 5 – 30 ms (log) | 12 ms |
 | 22 | Flanger center (`center.flanger`) | 0.1 – 10 ms (log) | 1.5 ms |
@@ -1034,7 +1036,8 @@ core, Chorus and Flanger, per channel:
 core, Phaser, per channel:
    x ─► N allpass stages at fc(t), zero-delay feedback ─► wet
 
-control: LFO ─ shape ─ offset per voice and channel ─ 3 ms smoothing ─ sweep law ─ d or fc
+control: LFO ─ shape ─ offset per voice and channel ─ 3 ms smoothing ─┐
+         input level ─ follower 5/150 ms ─ dB ─ × Envelope ─────────────┴─ sweep law ─ d or fc
 ```
 
 **Algorithms, and why.** The core is `daw_dsp::modulation::ModulationKernel`,
@@ -1055,7 +1058,20 @@ which Maxi's Modulator slot will use too.
   offset is a share of the voice spacing, so 180° always puts the right
   voices midway between the left ones (a plain offset would make the wet
   signal mono at 180° with two voices). With one voice, and in Flanger and
-  Phaser, Stereo is the plain offset.
+  Phaser, Stereo is the plain offset. Feel makes a synced cycle 1.5 times
+  (Dotted) or two thirds (Triplet) of the division, as a separate parameter
+  so that saved Division values and lanes keep their meaning.
+- *Envelope.* A peak follower (5 ms attack, 150 ms release) on the louder
+  input channel, read in decibels over the 48 dB below full scale, moves
+  the sweep by up to Envelope times the LFO's swing at full Depth, on top
+  of the LFO and also at Depth 0: an envelope phaser or flanger, or a
+  chorus that deepens as the part gets louder. Positive moves it up in
+  pitch (a higher corner, a shorter delay), negative down. Off, nothing is
+  followed. The device reports the offset (`TELEMETRY_PUSH`), so the
+  picture's markers and curves follow it, and the shaded range extends as
+  far as Envelope can carry the sweep. The tail allows for that reach; the
+  loudness factor does not follow the envelope, so a loud phaser pushed far
+  can lift the band a little more.
 - *Sweep laws.* Chorus: `Center + Depth · 4 ms · lfo`, linear in time.
   Flanger: `Center · 2^(2·Depth·lfo)`, so the notches move evenly in pitch.
   Phaser: the stages' corner `Center · 2^(2.5·Depth·lfo)`, between 20 Hz and
@@ -1111,7 +1127,7 @@ as the lowest and highest gain in each cell of the frequency grid, sampled
 at sixteen points per tooth where a comb is finer than the grid),
 `lfo_cycle` and `modulation::swept`. Telemetry: the LFO phase, the sweep
 position of every voice of each channel (a Random sweep is known nowhere
-else) and the sample rate. `TELEMETRY_VALUES` is 16 for that.
+else), the envelope's offset of the sweep and the sample rate. `TELEMETRY_VALUES` is 16 for that.
 
 **Panel.** The picture is 208 points high and reads left to right as cause
 and effect:
@@ -1131,24 +1147,26 @@ and effect:
   (Shift for fine steps, arrow keys when focused), the wheel over it turns
   Depth, and a double-click or its context menu resets Center.
 
-Below it one row of four cards on ten columns, each of two lines of cells
-(thirteen controls fill ten columns by two lines without a blank cell):
+Below it one row of four cards on twelve columns, each of two lines of cells
+(fifteen controls fill twelve columns by two lines without a blank cell):
 
-| Card (columns of 10) | Line 1 | Line 2 |
+| Card (columns of 12) | Line 1 | Line 2 |
 | --- | --- | --- |
 | Mode (3) | Mode as toggle buttons | Character as toggle buttons |
-| LFO (3) | Shape as drawn waves (Sine, Triangle, Random); Sync switch | Rate, or Division while synced, in one cell; Depth; Stereo |
-| Wet (2) | Center, of the mode, in one cell; Feedback | Voices (Chorus) or Stages (Phaser) in one cell, disabled in Flanger; Low cut, reading "Off" at 20 Hz |
+| LFO (4) | Shape as drawn waves (Sine, Triangle, Random); Sync switch; Feel | Rate, or Division while synced, in one cell; Depth; Stereo |
+| Wet (3) | Center, of the mode, in one cell; Envelope; Feedback | Voices (Chorus) or Stages (Phaser) in one cell, disabled in Flanger; Low cut, reading "Off" at 20 Hz |
 | Output (2) | Mix | Output |
 
 Division and Stages are dials with one detent per option; clicking the
-value lists the options. Voices reads "2 voices". Nothing moves when the
+value lists the options. Feel stacks its three toggle buttons in one cell
+and stays, disabled, while the LFO runs free. Envelope reads "+40 %". Voices reads "2 voices". Nothing moves when the
 mode changes: a cell shows the parameter that applies, under the same
 caption.
 
 Factory presets: Default, Wide Chorus, Ensemble, Analog Chorus, Vibrato,
 Drift, Jet Flanger, Hollow Flanger, Tape Flange, Classic Phaser, Deep
-Phaser, Synced Phaser, Fast Wobble.
+Phaser, Synced Phaser, Fast Wobble, Dotted Flanger (Feel), Envelope Phaser
+(Envelope).
 
 ### R1 Saturator
 

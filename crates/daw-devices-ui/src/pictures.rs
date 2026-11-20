@@ -326,10 +326,14 @@ pub(crate) fn modulation(
             lfo
         })
     });
-    // Where an LFO value puts what the handle and the markers stand for:
-    // the stages' corner, or the first tooth of the comb.
-    let place = |lfo: f32| {
-        let swept = daw_devices::dsp::modulation::swept(&kernel, lfo, rate);
+    // Where the envelope has moved the sweep; nothing while stopped.
+    let push = playing.as_ref().map_or(0.0, |telemetry| {
+        telemetry.value(TELEMETRY_PUSH).clamp(-1.0, 1.0)
+    });
+    // Where an LFO value and a push put what the handle and the markers
+    // stand for: the stages' corner, or the first tooth of the comb.
+    let place = |lfo: f32, push: f32| {
+        let swept = daw_devices::dsp::modulation::swept(&kernel, lfo, push, rate);
         match settings.mode {
             Mode::Phaser => swept,
             Mode::Chorus | Mode::Flanger => 2.0 * rate / swept.max(1.0),
@@ -399,7 +403,15 @@ pub(crate) fn modulation(
             .collect();
         let band = |lfo: [f32; 4]| {
             let (mut low, mut high) = (vec![0.0; points], vec![0.0; points]);
-            response_band_db(&settings, lfo, rate, &frequencies, &mut low, &mut high);
+            response_band_db(
+                &settings,
+                lfo,
+                push,
+                rate,
+                &frequencies,
+                &mut low,
+                &mut high,
+            );
             (low, high)
         };
         let (left, right) = match positions {
@@ -419,7 +431,20 @@ pub(crate) fn modulation(
             emphasis: true,
             low: Some(&left.0),
         });
-        let (from, to) = (place(-1.0), place(1.0));
+        // The LFO's reach, and as far as the envelope can carry it beyond. A
+        // comb's LFO and envelope run opposite ways in pitch, so take every
+        // end.
+        let ends = [
+            (-1.0, 0.0),
+            (1.0, 0.0),
+            (-1.0, settings.envelope),
+            (1.0, settings.envelope),
+        ]
+        .map(|(lfo, push)| place(lfo, push));
+        let (from, to) = (
+            ends.iter().copied().fold(f32::MAX, f32::min),
+            ends.iter().copied().fold(f32::MIN, f32::max),
+        );
         let readout = format!(
             "Center {} · Depth {}",
             text(center, host),
@@ -429,16 +454,16 @@ pub(crate) fn modulation(
             gain_editable: false,
             label: Some("C"),
             readout: Some(&readout),
-            ..daw_ui::FrequencyNode::new(place(0.0), 0.0)
+            ..daw_ui::FrequencyNode::new(place(0.0, 0.0), 0.0)
         };
         let live_markers = positions.map(|[left, right]| {
             [
                 daw_ui::FrequencyMarker {
-                    frequency: place(left[0]),
+                    frequency: place(left[0], push),
                     label: "L",
                 },
                 daw_ui::FrequencyMarker {
-                    frequency: place(right[0]),
+                    frequency: place(right[0], push),
                     label: "R",
                 },
             ]
@@ -451,7 +476,7 @@ pub(crate) fn modulation(
                 nodes: &[node],
                 range_db: 24.0,
                 limit_db: 24.0,
-                spans: &[(from.min(to), from.max(to))],
+                spans: &[(from, to)],
                 markers: live_markers.as_ref().map_or(&[], |markers| &markers[..]),
                 size,
             },

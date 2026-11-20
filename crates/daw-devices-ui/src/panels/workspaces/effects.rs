@@ -122,15 +122,18 @@ fn modulation(mut layout: Layout) -> Workspace {
     use Slot::{Control as C, Swap};
     use modulator::*;
     layout.knob = daw_ui::KnobSize::Standard;
+    // Feel stacks its three options in one cell, beside the Division it
+    // changes; Envelope sits beside the Center it moves.
     layout.sections = vec![
         cells(
             "LFO",
             0,
-            6,
+            7,
             &[&[
                 C(SHAPE, 2),
                 C(SYNC, 1),
                 Swap(&[RATE, DIVISION], 1),
+                C(FEEL, 1),
                 C(DEPTH, 1),
                 C(STEREO, 1),
             ]],
@@ -138,20 +141,29 @@ fn modulation(mut layout: Layout) -> Workspace {
         cells(
             "Wet signal",
             0,
-            4,
+            5,
             &[&[
                 Swap(&[CENTER_CHORUS, CENTER_FLANGER, CENTER_PHASER], 1),
+                C(ENVELOPE, 1),
                 Swap(&[VOICES, STAGES], 1),
                 C(FEEDBACK, 1),
                 C(LOW_CUT, 1),
             ]],
         ),
     ];
+    layout.toggle_columns = &[(FEEL, 1)];
     layout.hint = |id, values| match id {
         VOICES if !applies(VOICES, &modulator_settings(values)) => {
             Some("Voices is available in Chorus mode; Flanger uses one delay.")
         }
+        FEEL if !applies(FEEL, &modulator_settings(values)) => {
+            Some("Feel applies while Sync follows the song tempo.")
+        }
         SYNC => Some("Follow the song tempo with Division, or set a free-running Rate."),
+        FEEL => Some("Stretch the division to a dotted length or squeeze it into a triplet."),
+        ENVELOPE => {
+            Some("Playing louder moves the sweep up in pitch; negative values move it down.")
+        }
         DEPTH => Some("How far the modulation moves from the center."),
         LOW_CUT => {
             Some("Remove low frequencies from the effected signal; Off leaves it full range.")

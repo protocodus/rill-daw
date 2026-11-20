@@ -1099,8 +1099,8 @@ fn modulator_layout(mut layout: Layout) -> Layout {
     use modulator::*;
     // Cause and effect on top: the LFO beside the response it sweeps. Below,
     // as the signal goes: what kind of effect, the LFO that moves it, the
-    // wet path it moves, the mix. Thirteen controls fill ten columns by two
-    // lines; on twelve, two cells would stay empty.
+    // wet path it moves, the mix. Fifteen controls fill twelve columns by
+    // two lines.
     layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
     layout.cells = true;
     layout.sections = vec![
@@ -1108,23 +1108,24 @@ fn modulator_layout(mut layout: Layout) -> Layout {
         cells(
             "LFO",
             0,
-            3,
+            4,
             &[
-                &[C(SHAPE, 2), C(SYNC, 1)],
-                &[Swap(&[RATE, DIVISION], 1), C(DEPTH, 1), C(STEREO, 1)],
+                &[C(SHAPE, 2), C(SYNC, 1), C(FEEL, 1)],
+                &[Swap(&[RATE, DIVISION], 2), C(DEPTH, 1), C(STEREO, 1)],
             ],
         ),
         cells(
             "Wet",
             0,
-            2,
+            3,
             &[
                 &[
                     Swap(&[CENTER_CHORUS, CENTER_FLANGER, CENTER_PHASER], 1),
+                    C(ENVELOPE, 1),
                     C(FEEDBACK, 1),
                 ],
                 // A flanger has neither: Voices stays, disabled.
-                &[Swap(&[VOICES, STAGES], 1), C(LOW_CUT, 1)],
+                &[Swap(&[VOICES, STAGES], 2), C(LOW_CUT, 1)],
             ],
         ),
         cells("Output", 0, 2, &[&[C(MIX, 2)], &[C(OUTPUT, 2)]]),
@@ -1153,6 +1154,7 @@ fn modulator_layout(mut layout: Layout) -> Layout {
         match id {
             LOW_CUT if !settings.low_cut_on => Some("Off".into()),
             FEEDBACK => Some(format!("{:+.0} %", settings.feedback * 100.0)),
+            ENVELOPE => Some(format!("{:+.0} %", settings.envelope * 100.0)),
             STEREO => Some(format!("{:.0}°", settings.stereo_degrees)),
             VOICES if settings.voices == 1 => Some("1 voice".into()),
             VOICES => Some(format!("{} voices", settings.voices)),
