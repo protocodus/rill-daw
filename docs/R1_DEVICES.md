@@ -676,7 +676,7 @@ or in parallel. The reverb is one of three models that differ in size class
 and in algorithm: **Studio**, **Room**, **Hall**. The echo is one of three
 delay media, each with up to four heads: **Digital**, **BBD**, **Tape**.
 Every model has Decay (Feedback for the echo), Diffusion, Color and Duck;
-the reverb models also have Seed. 987 points wide (`POPUP_WIDTH_LG`). No
+the reverb models also have Seed, Shimmer and Freeze. 987 points wide (`POPUP_WIDTH_LG`). No
 latency. Mix (ID 30) and Output (ID 31) are the effect pair; the descriptor
 lists the parameters in signal order (Echo, Reverb, Output).
 
@@ -702,6 +702,7 @@ network and its Digital/Tape/Analog echo are gone.
 | 14 | Echo duck (`echo.duck`) | 0 – 100 % | 0 % |
 | 11 | Echo level (`echo.level`) | −60 – 0 dB; −60 is silence | −6 dB |
 | 40 | Reverb on (`reverb.on`) | toggle | on |
+| 55 | Freeze (`reverb.freeze`) | toggle | off |
 | 41 | Reverb model (`reverb.model`) | Studio, Room, Hall | Hall |
 | 42 | Pre-delay (`reverb.pre_delay`) | 0 – 250 ms | 15 ms |
 | 43 | Size (`reverb.size`) | 0 – 100 % | 50 % |
@@ -709,6 +710,7 @@ network and its Digital/Tape/Analog echo are gone.
 | 45 | Damping (`reverb.damping`) | 0 – 100 % | 40 % |
 | 48 | Diffusion (`reverb.diffusion`) | 0 – 100 % | 80 % |
 | 49 | Movement (`reverb.movement`) | 0 – 100 % | 25 % |
+| 54 | Shimmer (`reverb.shimmer`) | 0 – 100 % | 0 % |
 | 52 | Seed (`reverb.seed`) | whole numbers 1 – 32 | 1 |
 | 47 | Reverb color (`reverb.color`) | −100 – 100 % | 0 % |
 | 46 | Reverb low cut (`reverb.low_cut`) | 20 Hz – 1 kHz (log) | 100 Hz |
@@ -751,8 +753,10 @@ ECHO, per line (two lines; Mono, Ping-pong or Wide routing):
 
 REVERB:
 
-  in ─ pre-delay ─┬─ model network (Studio | Room | Hall) ─ × model gain ─┐
-                  └─ early output of the model ───────────────────────────(+)─ low cut ─ Color (tilt, high cut) ─ Width ─► out
+  in ─ × intake (0 while frozen) ─(+)─ pre-delay ─┬─ model network (Studio | Room | Hall) ─ × model gain ─┐
+                                   ▲              └─ early output of the model ───────────────────────────(+)─ low cut ─ Color (tilt, high cut) ─┬─ Width ─► out
+                                   │                                                                                                             │
+                                   └─ soft clip ─ × Shimmer · 0.6 ─ octave up ─ band 180 Hz – 5 kHz ◄───────────────────────────────────────────┘
 ```
 
 In series the reverb hears the input plus the echo before the echo's duck,
@@ -803,6 +807,26 @@ same two.
   and the old model's tail rings out under the new one, no knob moves.
   Models are equally loud at the defaults and Size does not change the
   level.
+- *Freeze* closes the input over 30 ms (the echo's wash in series and
+  Shimmer's feed with it) and gives every absorption filter a Decay of an
+  hour and no Damping: the tail holds at every frequency, 1 dB a minute,
+  where a lossless network would let rounding drift its level either way.
+  Movement, Size, Seed and the tone controls still act on what is held.
+  Let go, the tail decays at Decay again; the absorption filters glide
+  there as on any Decay change, so neither edge clicks. A model change
+  while frozen leaves the new model empty and the old one rings out for
+  its usual ten seconds at most.
+- *Shimmer* feeds the reverb's output (after the low cut and Color, before
+  Width) back into its input an octave up: a band of 180 Hz – 5 kHz (a
+  second-order high-pass, two second-order low-passes, so the octave does
+  not fold over half the sample rate) into a pitch shifter of two 40 ms
+  grains per channel with `sin²` windows half a window apart. Reading
+  twice as fast as writing moves the read one whole sample a sample, so
+  the grains need no interpolation. The loop gain is 0.6 at full Shimmer
+  with an algebraic soft clip on the feed: each pass is quieter than the
+  last and climbs until Damping and Color take it, and nothing can run
+  away (tested at 20 s Decay, no Damping, bright Color, full-scale noise).
+  At 0 the shimmer is not run at all.
 - *Movement* costs no decay and bends no pitch in Studio and Room: it
   rotates pairs of lines against each other after the mixing matrix, and
   every line stays on a whole sample. The first version modulated line
@@ -899,7 +923,8 @@ up to 10 kHz at 44.1 kHz.
 *Tail*: the echo's (the passes needed for 60 dB, plus half a second at full
 Diffusion; a synced echo is counted at its longest time, 4 s, because the
 tail is asked for before the tempo is known) plus, in series, the reverb's (pre-delay, the model's structure,
-twice Decay); the larger of the two in parallel; at most 30 s.
+twice Decay, five more Decays with Shimmer; an hour's Decay while frozen);
+the larger of the two in parallel; at most 30 s.
 
 **Cost.** `devices_bench`, 48 kHz, 256-frame blocks, one core of the build
 container, against a budget of 133 µs (2.5 %) per line:
@@ -909,6 +934,9 @@ container, against a budget of 133 µs (2.5 %) per line:
 | Default (Digital into Hall) | 72 | 1.4 % |
 | Echo Digital / BBD / Tape, reverb off | 20 / 44 / 95 | 0.4 / 0.8 / 1.8 % |
 | Reverb Studio / Room / Hall, echo off | 69 / 61 / 51 | 1.3 / 1.2 / 1.0 % |
+| Default with Shimmer at 50 % | +5 | +0.1 % |
+
+Freeze costs nothing; Shimmer at 0 costs nothing.
 
 **Known limits.** In the Hall, a band whose decay is shorter than about
 0.3 s (the top at full Damping with a dark Color) rings 12 – 17 % longer
@@ -975,14 +1003,17 @@ menu to reset:
   sets Reverb level.
 - **D**, where the tail meets the floor: sideways sets Decay.
 
-A section that is off is drawn dimmed, without handles. The cell Time and
+While frozen the tail is drawn flat across the span its Decay would
+take, without the D handle and without the faint tails behind the echoes,
+which no longer go in. A section that is off is drawn dimmed, without handles. The cell Time and
 Division share shows the one Sync selects, also while the echo is off
 (`Layout::swap`).
 
 Factory presets: Default, Slapback, Ping-Pong Eighths, Tape Echo,
 Multi-Head, BBD Dub, Wide Doubler, Diffused Repeats, Vocal Booth, Drum
-Room, Live Room, Dark Chamber, Large Hall, Cathedral, Echo Into Hall,
-Ducked Space, Parallel Wash, Send Hall, Send Echo.
+Room, Live Room, Dark Chamber, Large Hall, Cathedral, Shimmer Hall, Echo
+Into Hall, Shimmer Echoes, Ducked Space, Parallel Wash, Send Hall, Send
+Echo.
 
 ### R1 Modulator
 

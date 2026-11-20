@@ -47,6 +47,8 @@ pub const WIDTH: u32 = 50;
 pub const REVERB_LEVEL: u32 = 51;
 pub const SEED: u32 = 52;
 pub const REVERB_DUCK: u32 = 53;
+pub const SHIMMER: u32 = 54;
+pub const FREEZE: u32 = 55;
 
 /// Telemetry value slots: the duck's reduction now in dB at full depth (a
 /// section is reduced by this times its Duck), the echo time in effect in
@@ -160,7 +162,7 @@ const BIPOLAR: (f32, f32) = (-100.0, 100.0);
 const LEVEL: (f32, f32) = (SILENT_DB, 0.0);
 
 /// In signal order: Echo, Reverb, Output.
-pub static PARAMETERS: [ParamSpec; 31] = [
+pub static PARAMETERS: [ParamSpec; 33] = [
     toggle(ECHO_ON, "echo.on", "Echo on", "Echo", 1.0),
     choice(
         ECHO_MODEL,
@@ -268,6 +270,7 @@ pub static PARAMETERS: [ParamSpec; 31] = [
         -6.0,
     ),
     toggle(REVERB_ON, "reverb.on", "Reverb on", "Reverb", 1.0),
+    toggle(FREEZE, "reverb.freeze", "Freeze", "Reverb", 0.0),
     choice(
         REVERB_MODEL,
         "reverb.model",
@@ -321,6 +324,15 @@ pub static PARAMETERS: [ParamSpec; 31] = [
         "%",
         PERCENT,
         25.0,
+    ),
+    linear(
+        SHIMMER,
+        "reverb.shimmer",
+        "Shimmer",
+        "Reverb",
+        "%",
+        PERCENT,
+        0.0,
     ),
     param(
         SEED,
@@ -416,7 +428,9 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-spacer/dark-chamber.rillpreset"),
         include_str!("../../presets/r1-spacer/large-hall.rillpreset"),
         include_str!("../../presets/r1-spacer/cathedral.rillpreset"),
+        include_str!("../../presets/r1-spacer/shimmer-hall.rillpreset"),
         include_str!("../../presets/r1-spacer/echo-into-hall.rillpreset"),
+        include_str!("../../presets/r1-spacer/shimmer-echoes.rillpreset"),
         include_str!("../../presets/r1-spacer/ducked-space.rillpreset"),
         include_str!("../../presets/r1-spacer/parallel-wash.rillpreset"),
         include_str!("../../presets/r1-spacer/send-hall.rillpreset"),
@@ -508,6 +522,8 @@ impl Settings {
                 color: plain(REVERB_COLOR) / 100.0,
                 low_cut_hz: plain(REVERB_LOW_CUT),
                 width: plain(WIDTH) / 100.0,
+                shimmer: plain(SHIMMER) / 100.0,
+                freeze: plain(FREEZE) >= 0.5,
             },
             reverb_duck: plain(REVERB_DUCK) / 100.0,
             reverb_level: level_gain(plain(REVERB_LEVEL)),
@@ -546,7 +562,7 @@ pub fn applies(id: u32, settings: &Settings) -> bool {
         ECHO_TIME => settings.echo_on && !settings.echo_sync,
         ECHO_DIVISION => settings.echo_on && settings.echo_sync,
         ECHO_MODEL..=ECHO_DUCK => settings.echo_on,
-        REVERB_MODEL..=REVERB_DUCK => settings.reverb_on,
+        REVERB_MODEL..=FREEZE => settings.reverb_on,
         ROUTING => settings.echo_on && settings.reverb_on,
         _ => true,
     }

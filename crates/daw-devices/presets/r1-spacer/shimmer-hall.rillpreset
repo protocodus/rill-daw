@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "device": "r1-spacer",
+  "name": "Shimmer Hall",
+  "author": "Rill",
+  "category": "Reverb",
+  "tags": ["pad", "ambient", "shimmer"],
+  "description": "A long hall whose tail climbs in octaves.",
+  "parameters": {
+    "echo.on": false,
+    "reverb.model": "Hall",
+    "reverb.size": 85.0,
+    "reverb.decay": 6.0,
+    "reverb.damping": 35.0,
+    "reverb.movement": 45.0,
+    "reverb.shimmer": 55.0,
+    "reverb.low_cut": 200.0,
+    "reverb.seed": 5,
+    "mix": 40.0
+  }
+}

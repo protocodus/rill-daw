@@ -50,8 +50,8 @@ fn task_content(device: &str, task: &str) -> &'static [&'static str] {
         }
         ("r1-sampler", "Sample") => &["REGION", "LOOP"],
         ("r1-sampler", "Pitch & voices") => &["PITCH", "VOICES"],
-        ("r1-spacer", "Echo") => &["Routing", "Echo on", "Reverb on", "Taps"],
-        ("r1-spacer", "Reverb") => &["Routing", "Echo on", "Reverb on", "Seed"],
+        ("r1-spacer", "Echo") => &["Routing", "Echo on", "Reverb on", "Freeze", "Taps"],
+        ("r1-spacer", "Reverb") => &["Routing", "Echo on", "Reverb on", "Freeze", "Shimmer"],
         _ => panic!("Unknown task {device}/{task}"),
     }
 }
@@ -361,6 +361,35 @@ fn a_motion_parameter_keeps_its_value_across_tasks_undo_and_reopen() {
         reopened["project"]["tracks"][0]["instrument_parameters"],
         edited["project"]["tracks"][0]["instrument_parameters"]
     );
+    app.quit();
+}
+
+#[test]
+fn spacer_freeze_switches_from_either_page_as_one_undo_step() {
+    let mut app = Harness::new();
+    let before = open_device(&mut app, "r1-spacer", false, false);
+    let freeze = |state: &Value| {
+        state["project"]["tracks"][0]["inserts"][0]["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|parameter| parameter["id"] == daw_devices::devices::spacer::FREEZE)
+            .map_or(0.0, |parameter| parameter["value"].as_f64().unwrap())
+    };
+    assert_eq!(freeze(&before), 0.0);
+    // The switch stands right of its caption.
+    let caption = label(&before, "Freeze");
+    let (_, y) = center(caption);
+    let x = caption["max"][0].as_f64().unwrap() + 30.0;
+    let frozen = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y}));
+    assert_eq!(freeze(&frozen), 1.0, "{}", frozen["project"]);
+    // The same switch on the reverb page, beside Shimmer.
+    let reverb = app.click("Reverb");
+    unchanged(&reverb, &frozen);
+    visible_in_window(&reverb, label(&reverb, "Shimmer"));
+    assert_eq!(center(label(&reverb, "Freeze")), center(caption));
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], before["project"]);
     app.quit();
 }
 

@@ -1444,7 +1444,7 @@ fn spacer_controls_keep_their_places_on_both_tasks_whatever_is_switched() {
         panel.page(page);
         let used = panel.frame(vec![]);
         let before = places(&panel);
-        assert_eq!(before.len(), if page == 0 { 17 } else { 18 });
+        assert_eq!(before.len(), if page == 0 { 18 } else { 20 });
         for (echo_on, reverb_on, sync, model) in [
             (0.0, 1.0, 1.0, 0.0),
             (1.0, 0.0, 0.0, 1.0),
@@ -2331,4 +2331,27 @@ fn filter_keeps_every_control_in_its_cell_whatever_the_model() {
     // Vowel has a Morph and neither Type nor Slope.
     assert!(!panel.state.disabled.contains(&filter::MORPH));
     assert!(panel.state.disabled.contains(&filter::TYPE));
+}
+
+#[test]
+fn spacer_freeze_stands_beside_the_engines_and_shimmer_shares_the_tail_columns() {
+    use spacer::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    let freeze = panel.cell(FREEZE);
+    assert_eq!(freeze.center().y, panel.cell(REVERB_ON).center().y);
+    assert!(freeze.left() > panel.cell(REVERB_ON).right());
+    panel.click(freeze.center(), 1);
+    assert_eq!(panel.plain(FREEZE), 1.0);
+    // The same switch on the reverb page, where Shimmer stands above Damping.
+    panel.page(1);
+    assert_eq!(panel.cell(FREEZE), freeze);
+    panel.click(freeze.center(), 1);
+    assert_eq!(panel.plain(FREEZE), 0.0);
+    let (shimmer, damping) = (panel.cell(SHIMMER), panel.cell(DAMPING));
+    assert_eq!(
+        (shimmer.left(), shimmer.right()),
+        (damping.left(), damping.right())
+    );
+    assert!(shimmer.bottom() <= damping.top());
+    assert_eq!(panel.host.singles, vec![FREEZE, FREEZE]);
 }

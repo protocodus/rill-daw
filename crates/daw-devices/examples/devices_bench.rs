@@ -60,6 +60,11 @@ fn variants(id: &str) -> Vec<Variant> {
                 spacer::REVERB_MODEL,
                 spacer::REVERB_MODELS,
             ));
+            lines.push((
+                "Default, Shimmer".to_string(),
+                vec![(spacer::SHIMMER, 50.0)],
+                8,
+            ));
             lines
         }
         "r1-sampler" => {

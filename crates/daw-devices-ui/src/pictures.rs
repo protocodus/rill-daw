@@ -546,6 +546,10 @@ pub(crate) fn space(ui: &mut Ui, height: f32, host: &mut dyn DeviceHost, state: 
     let (echo_db, reverb_db) = (plain(ECHO_LEVEL), plain(REVERB_LEVEL));
     let pre_delay = settings.reverb.pre_delay_seconds;
     let decay = decay_seconds_at(&settings, 1000.0, rate);
+    // A frozen tail is drawn flat over the span its Decay would take.
+    let mut unfrozen = settings;
+    unfrozen.reverb.freeze = false;
+    let span_decay = decay_seconds_at(&unfrozen, 1000.0, rate);
     // What Damping and Color leave of the top.
     let decay_high = decay_seconds_at(&settings, 8000.0, rate);
     // Where the tail has fallen to the picture's floor.
@@ -589,7 +593,8 @@ pub(crate) fn space(ui: &mut Ui, height: f32, host: &mut dyn DeviceHost, state: 
         inner_decay_seconds: Some(decay_high),
         faint: !settings.reverb_on,
     }];
-    if settings.series && settings.echo_on && settings.reverb_on {
+    // A frozen reverb takes in no more echoes.
+    if settings.series && settings.echo_on && settings.reverb_on && !settings.reverb.freeze {
         // What the reverb makes of the first echoes.
         tails.extend(
             echoes
@@ -605,7 +610,7 @@ pub(crate) fn space(ui: &mut Ui, height: f32, host: &mut dyn DeviceHost, state: 
         );
     }
     let span = state.held_span.unwrap_or_else(|| {
-        let needed = (6.0 * time).max(pre_delay + decay) * 1.1;
+        let needed = (6.0 * time).max(pre_delay + span_decay) * 1.1;
         SPANS
             .into_iter()
             .find(|span| *span >= needed)
@@ -717,8 +722,8 @@ pub(crate) fn space(ui: &mut Ui, height: f32, host: &mut dyn DeviceHost, state: 
             },
             [Some(spec(PRE_DELAY)), Some(spec(REVERB_LEVEL))],
         ));
-        // A silent reverb has no slope to hold.
-        if reverb_db > SPACE_FLOOR_DB + 1.0 {
+        // A silent or frozen reverb has no slope to hold.
+        if reverb_db > SPACE_FLOOR_DB + 1.0 && !settings.reverb.freeze {
             handles.push((
                 daw_ui::DelayHandle {
                     readout: &readouts[3],
