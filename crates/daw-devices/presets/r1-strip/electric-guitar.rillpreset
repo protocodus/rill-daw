@@ -1,0 +1,33 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Electric Guitar",
+  "author": "Rill",
+  "category": "Guitar",
+  "tags": [
+    "guitar",
+    "electric"
+  ],
+  "description": "Room for bass and vocal: low end and fizz cut, mids pushed forward.",
+  "parameters": {
+    "mode": "Analog",
+    "hp.on": true,
+    "hp.frequency": 100.0,
+    "hp.slope": "24 dB",
+    "lp.on": true,
+    "lp.frequency": 9000.0,
+    "low.frequency": 200.0,
+    "low.gain": -1.5,
+    "mid.frequency": 2000.0,
+    "mid.gain": 2.0,
+    "mid.q": 0.9,
+    "high.frequency": 6000.0,
+    "high.gain": -1.0,
+    "comp.on": true,
+    "comp.threshold": -16.0,
+    "comp.ratio": 2.5,
+    "comp.attack": 15.0,
+    "comp.release": 120.0,
+    "comp.makeup": 2.0
+  }
+}

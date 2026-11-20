@@ -1,0 +1,31 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Room Crush",
+  "author": "Rill",
+  "category": "Drums",
+  "tags": [
+    "drums",
+    "room",
+    "parallel"
+  ],
+  "description": "Room mics squashed hard and dark, to blend under the kit.",
+  "parameters": {
+    "mode": "Analog",
+    "hp.on": true,
+    "hp.frequency": 80.0,
+    "lp.on": true,
+    "lp.frequency": 9000.0,
+    "low.frequency": 120.0,
+    "low.gain": 2.0,
+    "mid.frequency": 2500.0,
+    "mid.gain": -3.0,
+    "mid.q": 1.0,
+    "comp.on": true,
+    "comp.threshold": -32.0,
+    "comp.ratio": 10.0,
+    "comp.attack": 2.0,
+    "comp.release": 200.0,
+    "comp.makeup": 10.0
+  }
+}

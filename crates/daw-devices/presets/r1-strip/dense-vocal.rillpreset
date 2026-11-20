@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Dense Vocal",
+  "author": "Rill",
+  "category": "Vocal",
+  "tags": [
+    "vocal",
+    "upward",
+    "ott"
+  ],
+  "description": "Down and upward compression together: every breath and word upfront.",
+  "parameters": {
+    "mode": "Analog",
+    "hp.on": true,
+    "hp.frequency": 100.0,
+    "hp.slope": "24 dB",
+    "mid.frequency": 300.0,
+    "mid.gain": -2.0,
+    "mid.q": 1.2,
+    "high.frequency": 7000.0,
+    "high.gain": 2.0,
+    "comp.on": true,
+    "comp.threshold": -18.0,
+    "comp.ratio": 4.0,
+    "comp.attack": 5.0,
+    "comp.release": 90.0,
+    "comp.upward.threshold": -42.0,
+    "comp.upward.ratio": 2.5,
+    "comp.makeup": 2.0
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Voice-over",
+  "author": "Rill",
+  "category": "Vocal",
+  "tags": [
+    "vocal",
+    "speech",
+    "podcast"
+  ],
+  "description": "Speech made even: room noise dipped between phrases, quiet words lifted.",
+  "parameters": {
+    "hp.on": true,
+    "hp.frequency": 80.0,
+    "hp.slope": "24 dB",
+    "gate.on": true,
+    "gate.threshold": -48.0,
+    "gate.ratio": 4.0,
+    "gate.range": 12.0,
+    "gate.hold": 80.0,
+    "gate.release": 250.0,
+    "mid.frequency": 300.0,
+    "mid.gain": -3.0,
+    "mid.q": 1.0,
+    "high.frequency": 5000.0,
+    "high.gain": 2.0,
+    "comp.on": true,
+    "comp.threshold": -22.0,
+    "comp.ratio": 3.5,
+    "comp.attack": 8.0,
+    "comp.release": 150.0,
+    "comp.upward.threshold": -45.0,
+    "comp.upward.ratio": 1.8,
+    "comp.makeup": 3.0
+  }
+}

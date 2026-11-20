@@ -1,0 +1,28 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Strings",
+  "author": "Rill",
+  "category": "Keys",
+  "tags": [
+    "strings",
+    "orchestral"
+  ],
+  "description": "Warm and smooth: low rumble out, the bow's edge softened, a touch of air.",
+  "parameters": {
+    "mode": "Analog",
+    "hp.on": true,
+    "hp.frequency": 60.0,
+    "mid.frequency": 3500.0,
+    "mid.gain": -1.5,
+    "mid.q": 1.2,
+    "high.frequency": 12000.0,
+    "high.gain": 1.5,
+    "comp.on": true,
+    "comp.threshold": -22.0,
+    "comp.ratio": 1.8,
+    "comp.attack": 40.0,
+    "comp.release": 250.0,
+    "comp.makeup": 1.5
+  }
+}
