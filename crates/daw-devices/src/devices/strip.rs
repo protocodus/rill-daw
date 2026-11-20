@@ -3,9 +3,12 @@
 //! output, in that order. See `docs/R1_DEVICES.md#r1-strip`.
 //!
 //! It runs no DSP of its own: the filters and the equalizer are R1
-//! Equalizer, the gate and the compressor are R1 Compressor, and the width is
-//! the mixer's own `stereo_width` and `balance`. Its parameters are forwarded to those
-//! inner devices, so the strip sounds exactly like them.
+//! Equalizer, the gate and the compressor are R1 Compressor, and width and
+//! pan are the mixer's own `stereo_width` and `balance`. Its parameters are
+//! forwarded to those inner devices, so the strip sounds exactly like them.
+//!
+//! A mixer channel is this device with an insert slot between
+//! [`Strip::process_channel`] and [`Strip::process_output`].
 use super::{compressor, equalizer, param};
 use crate::dsp::{Smoothed, balance, db_to_gain, stereo_width};
 use crate::{
@@ -572,6 +575,66 @@ impl Strip {
         }
     }
 
+    /// Trim and polarity through the compressor: everything before the
+    /// insert slot of a mixer channel. [`Device::process`] is this, then
+    /// [`Self::process_output`]; a mixer channel runs its inserts between.
+    pub fn process_channel(
+        &mut self,
+        context: &ProcessContext,
+        left: &mut [f32],
+        right: &mut [f32],
+    ) {
+        for (left, right) in left.chunks_mut(CHUNK).zip(right.chunks_mut(CHUNK)) {
+            for index in 0..left.len() {
+                let trim = self.trim.next_value();
+                left[index] *= trim;
+                right[index] *= trim;
+            }
+            self.cut.process(
+                context,
+                &[],
+                StereoIo {
+                    left: &mut *left,
+                    right: &mut *right,
+                    sidechain: None,
+                },
+            );
+            dynamics(&mut self.gate, &mut self.gate_mix, context, left, right);
+            self.eq.process(
+                context,
+                &[],
+                StereoIo {
+                    left: &mut *left,
+                    right: &mut *right,
+                    sidechain: None,
+                },
+            );
+            dynamics(
+                &mut self.compressor,
+                &mut self.compressor_mix,
+                context,
+                left,
+                right,
+            );
+        }
+    }
+
+    /// Width, pan and output: the volume stage after a channel's inserts.
+    pub fn process_output(&mut self, left: &mut [f32], right: &mut [f32]) {
+        for (left, right) in left.iter_mut().zip(right.iter_mut()) {
+            let width = self.width.next_value();
+            let output = self.output.next_value();
+            let [l, r] = if width == 1.0 {
+                [*left, *right]
+            } else {
+                stereo_width([*left, *right], width)
+            };
+            let [pan_left, pan_right] = balance(self.pan.next_value());
+            *left = (l * output * pan_left).clamp(-LIMIT, LIMIT);
+            *right = (r * output * pan_right).clamp(-LIMIT, LIMIT);
+        }
+    }
+
     fn smoothers(&mut self) -> [&mut Smoothed; 6] {
         [
             &mut self.pan,
@@ -659,53 +722,8 @@ impl Device for Strip {
         let frames = left.len().min(right.len());
         let (left, right) = (&mut left[..frames], &mut right[..frames]);
         self.telemetry.record_input(left, right);
-        for (left, right) in left.chunks_mut(CHUNK).zip(right.chunks_mut(CHUNK)) {
-            // The mixer's order: trim and polarity first; width, pan and
-            // output last.
-            for index in 0..left.len() {
-                let trim = self.trim.next_value();
-                left[index] *= trim;
-                right[index] *= trim;
-            }
-            self.cut.process(
-                context,
-                &[],
-                StereoIo {
-                    left: &mut *left,
-                    right: &mut *right,
-                    sidechain: None,
-                },
-            );
-            dynamics(&mut self.gate, &mut self.gate_mix, context, left, right);
-            self.eq.process(
-                context,
-                &[],
-                StereoIo {
-                    left: &mut *left,
-                    right: &mut *right,
-                    sidechain: None,
-                },
-            );
-            dynamics(
-                &mut self.compressor,
-                &mut self.compressor_mix,
-                context,
-                left,
-                right,
-            );
-            for index in 0..left.len() {
-                let width = self.width.next_value();
-                let output = self.output.next_value();
-                let [l, r] = if width == 1.0 {
-                    [left[index], right[index]]
-                } else {
-                    stereo_width([left[index], right[index]], width)
-                };
-                let [pan_left, pan_right] = balance(self.pan.next_value());
-                left[index] = (l * output * pan_left).clamp(-LIMIT, LIMIT);
-                right[index] = (r * output * pan_right).clamp(-LIMIT, LIMIT);
-            }
-        }
+        self.process_channel(context, left, right);
+        self.process_output(left, right);
         self.telemetry.record_output(left, right);
     }
 

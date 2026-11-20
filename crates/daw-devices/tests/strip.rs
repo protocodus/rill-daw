@@ -1,5 +1,6 @@
 mod support;
 
+use daw_devices::Device;
 use daw_devices::devices::strip::{self, *};
 use daw_devices::devices::{compressor, equalizer};
 use daw_devices::dsp::stereo_width;
@@ -208,4 +209,30 @@ fn drawn_response_is_both_equalizers_together() {
         &[(EQ_ON, 0.0), (MID_GAIN, 6.0)],
     ));
     assert!(off.bands.iter().all(|band| !band.on));
+}
+
+#[test]
+fn channel_then_output_is_the_whole_strip() {
+    // A mixer channel runs its inserts between the two halves; with none
+    // there, it must be the strip itself.
+    let values = [
+        (HP_ON, 1.0),
+        (COMP_ON, 1.0),
+        (COMP_THRESHOLD, -30.0),
+        (WIDTH, 50.0),
+        (PAN, 30.0),
+        (OUTPUT, -3.0),
+    ];
+    let (whole_left, whole_right) = strip(&values);
+    let (mut left, mut right) = program();
+    let mut split = Strip::new();
+    split.prepare(RATE, 512);
+    set(&mut split, &values);
+    split.reset();
+    for (left, right) in left.chunks_mut(500).zip(right.chunks_mut(500)) {
+        split.process_channel(&Default::default(), left, right);
+        split.process_output(left, right);
+    }
+    assert_close(&left, &whole_left, "left");
+    assert_close(&right, &whole_right, "right");
 }

@@ -1528,9 +1528,13 @@ and **Gate** on one row of twelve cells, **Equalizer** (seven cells) and
 card. Each stage card has its switch as a lamp in its title; a stage that
 is off keeps its controls in place, dimmed.
 
-**Mixer.** Every mixer channel is to run this same device, with quick
-controls for the filters, width and pan on the strip itself, so the full
-panel only opens for detail. That change is a follow-up.
+**Mixer.** Every mixer channel is to be an instance of this device applied
+to the track's output, with its own controls on the mixer strip (filters,
+width, pan, volume) so the full panel only opens for detail. The channel's
+inserts are one Chain effect in a slot between the compressor and the
+volume stage: `Strip::process_channel` runs trim through compressor,
+`Strip::process_output` runs width, pan and output, and `process` is the
+two back to back. That change is a follow-up.
 
 ### R1 Filter
 
