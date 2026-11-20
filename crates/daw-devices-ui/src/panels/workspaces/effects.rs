@@ -8,6 +8,7 @@ pub(super) fn build(layout: Layout, descriptor: &DeviceDescriptor, page: usize) 
         "r1-compressor" => dynamics(layout),
         "r1-modulator" => modulation(layout),
         "r1-spacer" => space(layout, page),
+        "r1-strip" => channel(layout),
         _ => unreachable!("effect workspace"),
     }
 }
@@ -114,6 +115,26 @@ fn dynamics(mut layout: Layout) -> Workspace {
         layout,
         output: vec![MAKEUP, AUTO_MAKEUP, MIX, OUTPUT],
         toolbar: vec![MODE, CHARACTER],
+        body_height: 0.0,
+    }
+}
+
+fn channel(mut layout: Layout) -> Workspace {
+    use strip::*;
+    layout.knob = daw_ui::KnobSize::Standard;
+    layout.picture_place = PicturePlace::Above;
+    layout.hint = |id, values| match id {
+        POLARITY => Some("Flip both channels, to fix a microphone that cancels another."),
+        WIDTH => Some("0 % is mono, 100 % leaves the image unchanged, 200 % doubles the sides."),
+        _ if crate::panels::strip_stage(id).is_some_and(|on| values(on) < 0.5) => {
+            Some("Switch this stage on with the lamp in its title.")
+        }
+        _ => None,
+    };
+    Workspace {
+        layout,
+        output: vec![WIDTH, PAN, OUTPUT],
+        toolbar: vec![],
         body_height: 0.0,
     }
 }
@@ -308,6 +329,7 @@ mod tests {
             &compressor::DESCRIPTOR,
             &modulator::DESCRIPTOR,
             &spacer::DESCRIPTOR,
+            &strip::DESCRIPTOR,
         ] {
             for theme in [egui::Theme::Light, egui::Theme::Dark] {
                 let ctx = egui::Context::default();
@@ -361,6 +383,7 @@ mod tests {
             &compressor::DESCRIPTOR,
             &modulator::DESCRIPTOR,
             &spacer::DESCRIPTOR,
+            &strip::DESCRIPTOR,
         ] {
             let mut reachable = BTreeSet::new();
             for page in 0..super::super::tabs(descriptor).len().max(1) {

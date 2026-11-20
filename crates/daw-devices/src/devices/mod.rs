@@ -12,6 +12,7 @@ pub mod modulator;
 pub mod sampler;
 pub mod saturator;
 pub mod spacer;
+pub mod strip;
 
 /// A parameter; continuous ones are modulatable.
 pub(crate) const fn param(

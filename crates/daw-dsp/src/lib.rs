@@ -30,6 +30,7 @@ pub mod reverb;
 pub mod sample_player;
 mod shaper;
 mod smooth;
+mod stereo;
 mod svf;
 
 pub use allpass::{AbsorbentAllpass, Allpass1, AllpassChain, DelayAllpass};
@@ -77,6 +78,7 @@ pub use shaper::{
     DriveGains, DroopCorrector, HyperbolicClip, Shape,
 };
 pub use smooth::{LinearRamp, Smoothed};
+pub use stereo::{balance, stereo_width};
 pub use svf::{
     OnePole, Shelf1, Shelf1Stereo, ShelfBank, ShelfGlide, Svf, SvfCoeffs, SvfMix, SvfMixRamp,
     SvfOutputs, SvfOutputsStereo, SvfStereo,

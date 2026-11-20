@@ -1,0 +1,25 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Acoustic Guitar",
+  "author": "Rill",
+  "category": "Guitar",
+  "tags": ["guitar"],
+  "description": "Boom tamed, sparkle added, gently compressed.",
+  "parameters": {
+    "hp.on": true,
+    "hp.frequency": 100.0,
+    "mid.frequency": 220.0,
+    "mid.gain": -3.0,
+    "mid.q": 1.0,
+    "high.frequency": 10000.0,
+    "high.gain": 2.5,
+    "comp.on": true,
+    "comp.threshold": -20.0,
+    "comp.ratio": 2.5,
+    "comp.attack": 15.0,
+    "comp.release": 150.0,
+    "comp.makeup": 2.0,
+    "width": 120.0
+  }
+}

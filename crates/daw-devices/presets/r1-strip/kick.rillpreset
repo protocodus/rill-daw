@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Kick",
+  "author": "Rill",
+  "category": "Drums",
+  "tags": ["drums", "kick"],
+  "description": "Gated, with weight and click, the box cut out.",
+  "parameters": {
+    "lp.on": true,
+    "lp.frequency": 12000.0,
+    "gate.on": true,
+    "gate.threshold": -35.0,
+    "gate.release": 120.0,
+    "low.frequency": 60.0,
+    "low.gain": 4.0,
+    "mid.frequency": 400.0,
+    "mid.gain": -5.0,
+    "mid.q": 1.5,
+    "high.frequency": 4000.0,
+    "high.gain": 3.0,
+    "comp.on": true,
+    "comp.threshold": -16.0,
+    "comp.ratio": 4.0,
+    "comp.attack": 15.0,
+    "comp.release": 80.0,
+    "comp.makeup": 3.0,
+    "width": 0.0
+  }
+}
