@@ -414,21 +414,14 @@ fn active_automation_lane(
     })
 }
 
-#[inline]
-/// Mid/side width: 0 folds to mono, 1 is unchanged, 2 doubles the side.
-pub(crate) fn stereo_width([left, right]: [f32; 2], width: f32) -> [f32; 2] {
-    let mid = (left + right) * 0.5;
-    let side = (left - right) * 0.5 * width;
-    [mid + side, mid - side]
-}
+pub(crate) use daw_devices::dsp::stereo_width;
 
 pub(crate) fn polarity_sign(track: &daw_core::Track) -> f32 {
     if track.invert_polarity { -1.0 } else { 1.0 }
 }
 
 fn fader_factors(gain: f32, pan: f32) -> [f32; 2] {
-    let pan = pan.clamp(-1.0, 1.0);
-    [gain * (1.0 - pan.max(0.0)), gain * (1.0 + pan.min(0.0))]
+    daw_devices::dsp::balance(pan).map(|side| gain * side)
 }
 
 fn send_active(project: &Project, track: u64, send: &daw_core::Send) -> bool {

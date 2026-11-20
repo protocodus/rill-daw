@@ -548,3 +548,33 @@ r1-drums 531 pad16.bits "Bit depth" choice Clean|12-bit|8-bit
 r1-drums 532 pad16.velocity_pitch "Soft hit pitch" linear -12 12
 r1-compressor 13 upward.threshold "Upward threshold" linear -60 0
 r1-compressor 14 upward.ratio "Upward ratio" log 1 20
+r1-strip 1 trim "Trim" linear -24 24
+r1-strip 2 polarity "Invert polarity" toggle
+r1-strip 10 hp.on "On" toggle
+r1-strip 11 hp.frequency "Frequency" log 20 2000
+r1-strip 12 hp.slope "Slope" choice 12 dB|24 dB|48 dB
+r1-strip 15 lp.on "On" toggle
+r1-strip 16 lp.frequency "Frequency" log 200 20000
+r1-strip 17 lp.slope "Slope" choice 12 dB|24 dB|48 dB
+r1-strip 20 gate.on "On" toggle
+r1-strip 21 gate.threshold "Threshold" linear -60 0
+r1-strip 22 gate.ratio "Ratio" log 1 20
+r1-strip 23 gate.attack "Attack" log 0.02 250
+r1-strip 24 gate.release "Release" log 5 2500
+r1-strip 30 eq.on "On" toggle
+r1-strip 31 low.frequency "Low" log 20 1000
+r1-strip 32 low.gain "Low gain" linear -24 24
+r1-strip 33 mid.frequency "Mid" log 100 10000
+r1-strip 34 mid.gain "Mid gain" linear -24 24
+r1-strip 35 mid.q "Mid Q" log 0.1 18
+r1-strip 36 high.frequency "High" log 1000 20000
+r1-strip 37 high.gain "High gain" linear -24 24
+r1-strip 40 comp.on "On" toggle
+r1-strip 41 comp.threshold "Threshold" linear -60 0
+r1-strip 42 comp.ratio "Ratio" log 1 20
+r1-strip 43 comp.attack "Attack" log 0.02 250
+r1-strip 44 comp.release "Release" log 5 2500
+r1-strip 45 comp.makeup "Makeup" linear -12 24
+r1-strip 50 width "Width" linear 0 200
+r1-strip 52 pan "Pan" linear -100 100
+r1-strip 51 output "Output" linear -24 24

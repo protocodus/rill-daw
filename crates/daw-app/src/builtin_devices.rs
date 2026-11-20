@@ -48,6 +48,7 @@ const PREVIEWS: &[(&str, &[u8])] = &[
         "r1-spacer",
         include_bytes!("../assets/r1-spacer-preview.png"),
     ),
+    ("r1-strip", include_bytes!("../assets/r1-strip-preview.png")),
 ];
 
 /// Built-in devices as Library entries, in registry order.

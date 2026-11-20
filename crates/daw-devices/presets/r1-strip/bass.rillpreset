@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Bass",
+  "author": "Rill",
+  "category": "Bass",
+  "tags": ["bass"],
+  "description": "Mono, rumble removed, firm and even.",
+  "parameters": {
+    "hp.on": true,
+    "hp.frequency": 35.0,
+    "hp.slope": "24 dB",
+    "lp.on": true,
+    "lp.frequency": 9000.0,
+    "low.frequency": 80.0,
+    "low.gain": 2.0,
+    "mid.frequency": 250.0,
+    "mid.gain": -2.0,
+    "comp.on": true,
+    "comp.threshold": -22.0,
+    "comp.ratio": 4.0,
+    "comp.attack": 25.0,
+    "comp.release": 150.0,
+    "comp.makeup": 4.0,
+    "width": 0.0
+  }
+}

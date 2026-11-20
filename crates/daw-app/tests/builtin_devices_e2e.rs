@@ -1486,7 +1486,8 @@ fn builtin_devices_show_metadata_and_preview_in_the_device_browser() {
             "R1 Filter",
             "R1 Modulator",
             "R1 Saturator",
-            "R1 Spacer"
+            "R1 Spacer",
+            "R1 Strip"
         ])
     );
     for name in [
@@ -1496,9 +1497,128 @@ fn builtin_devices_show_metadata_and_preview_in_the_device_browser() {
         "R1 Modulator",
         "R1 Saturator",
         "R1 Spacer",
+        "R1 Strip",
     ] {
         assert_preview(&mut app, name);
     }
     builtin_details(&mut app, "R1 Filter", "rill:r1-filter", false);
+    app.quit();
+}
+
+#[test]
+fn r1_strip_filters_dynamics_and_width_run_in_order_and_switch_from_its_panel() {
+    use daw_devices::devices::strip::{COMP_ON, POLARITY};
+    let mut app = Harness::new();
+    let track = noise_project(&mut app, "strip.rill");
+    let dry = analysis(&mut app);
+    let (assigned, insert) = insert_device(&mut app, track, "R1 Strip", "r1-strip");
+    // The default is transparent.
+    let flat = analysis(&mut app);
+    for name in ["below_250_hz", "above_4000_hz"] {
+        assert!(
+            (band(&flat, name) - band(&dry, name)).abs() < 0.2,
+            "{name}: dry {dry}, strip {flat}"
+        );
+    }
+
+    // The high-pass takes the lows, the low-pass the highs, in one edit.
+    let set = set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"hp.on","value":true},{"parameter":"hp.frequency","value":"1000 Hz"},
+            {"parameter":"lp.on","value":true},{"parameter":"lp.frequency","value":"2000 Hz"}]),
+    );
+    assert_eq!(
+        set["history"]["undo"][0], "Device parameters",
+        "{}",
+        set["history"]
+    );
+    let cut = analysis(&mut app);
+    for name in ["below_250_hz", "above_4000_hz"] {
+        assert!(
+            // The analysis bands are first-order, so the mids leak in.
+            band(&cut, name) < band(&dry, name) - 8.0,
+            "{name}: dry {dry}, filtered {cut}"
+        );
+    }
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], assigned["project"]);
+
+    // The compressor holds the noise down; Makeup brings it back up.
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"comp.on","value":true},{"parameter":"comp.threshold","value":"-40 dB"},
+            {"parameter":"comp.ratio","value":10}]),
+    );
+    let squeezed = band(&analysis(&mut app), "below_250_hz");
+    assert!(
+        squeezed < band(&dry, "below_250_hz") - 6.0,
+        "dry {dry}, compressed {squeezed}"
+    );
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"comp.makeup","value":"12 dB"}]),
+    );
+    let lifted = band(&analysis(&mut app), "below_250_hz");
+    assert!(
+        (lifted - squeezed - 12.0).abs() < 1.0,
+        "{squeezed} {lifted}"
+    );
+
+    // A factory preset loads in one step and leaves nothing behind.
+    let before = app.inspect();
+    let (id, revision) = session(&before);
+    let loaded = song_tool(
+        &mut app,
+        "load_device_preset",
+        json!({"name":"vocal","track_id":track,"insert_id":insert,
+            "session_id":id,"expected_revision":revision}),
+    );
+    assert_eq!(loaded["tool_result"]["result"]["skipped"], json!([]));
+    assert_eq!(stored(&loaded, COMP_ON), Some(1.0));
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], before["project"]);
+
+    // The panel reads in signal order: the stages across, output below.
+    open_effect_editor(&mut app, "Noise burst", "Trim");
+    let state = app.inspect();
+    assert_signal_row(&state, &["INPUT", "HIGH-PASS", "LOW-PASS", "GATE"]);
+    assert_signal_row(&state, &["EQUALIZER", "COMPRESSOR"]);
+    assert!(label_center(&state, "GATE").1 < label_center(&state, "EQUALIZER").1);
+    assert_signal_row(&state, &["Width", "Pan", "Output"]);
+    assert!(label_center(&state, "EQUALIZER").1 < label_center(&state, "Width").1);
+
+    // Invert, the switch under its caption, flips the polarity from the
+    // panel in one Undo step.
+    assert_eq!(stored(&state, POLARITY).unwrap_or(0.0), 0.0);
+    let (x, y) = label_center(&state, "Invert");
+    let inverted = app.command(json!({"command":"pointer","phase":"click","x":x,"y":y + 36.0}));
+    assert_eq!(
+        stored(&inverted, POLARITY),
+        Some(1.0),
+        "{}",
+        inverted["project"]
+    );
+    assert_eq!(inverted["history"]["undo"][0], "Effect parameter");
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], state["project"]);
+    check_compact_output(&mut app);
+
+    // Save and reopen: the same strip, the same sound.
+    let saved = band(&analysis(&mut app), "below_250_hz");
+    let path = app.directory.path().join("stripped.rill");
+    app.command(json!({"command":"save","path":path}));
+    let reopened = app.command(json!({"command":"open","path":path}));
+    assert_eq!(
+        reopened["project"]["tracks"][0]["inserts"],
+        state["project"]["tracks"][0]["inserts"]
+    );
+    let again = band(&analysis(&mut app), "below_250_hz");
+    assert!((again - saved).abs() < 0.1, "{saved} {again}");
     app.quit();
 }

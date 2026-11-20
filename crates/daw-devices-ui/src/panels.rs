@@ -2,7 +2,7 @@
 //! layout: one section per parameter group, every control visible.
 use daw_devices::DeviceDescriptor;
 use daw_devices::devices::{
-    compressor, drums, equalizer, filter, mini, modulator, sampler, saturator, spacer,
+    compressor, drums, equalizer, filter, mini, modulator, sampler, saturator, spacer, strip,
 };
 use daw_ui::{Glyph, ToggleFace};
 
@@ -380,6 +380,9 @@ pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
     }
     if descriptor.id == spacer::DESCRIPTOR.id {
         layout = spacer_layout(layout);
+    }
+    if descriptor.id == strip::DESCRIPTOR.id {
+        layout = strip_layout(layout);
     }
     if descriptor.id == mini::DESCRIPTOR.id {
         use mini::*;
@@ -949,6 +952,176 @@ fn equalizer_layout(mut layout: Layout) -> Layout {
                 .bands
                 .iter()
                 .any(|band| band.on && band.kind != BandType::Notch && band.gain_db.abs() > 12.0);
+            if beyond { 24.0 } else { 12.0 }
+        },
+        limit_db: 24.0,
+    }));
+    layout
+}
+
+/// The strip's response nodes, low to high: the cut filters switch with a
+/// double-click, the bands follow the equalizer's one switch.
+static STRIP_NODES: [NodeView; 5] = {
+    use strip::*;
+    const fn band(label: &'static str, frequency: u32, gain: u32, wheel: Option<u32>) -> NodeView {
+        NodeView {
+            label: Some(label),
+            frequency,
+            gain: Some(gain),
+            wheel,
+            enable: None,
+            menu: None,
+        }
+    }
+    const fn cut(label: &'static str, on: u32, frequency: u32, slope: u32) -> NodeView {
+        NodeView {
+            label: Some(label),
+            frequency,
+            gain: None,
+            wheel: Some(slope),
+            enable: Some(on),
+            menu: Some(slope),
+        }
+    }
+    [
+        cut("HP", HP_ON, HP_FREQUENCY, HP_SLOPE),
+        band("L", LOW_FREQUENCY, LOW_GAIN, None),
+        band("M", MID_FREQUENCY, MID_GAIN, Some(MID_Q)),
+        band("H", HIGH_FREQUENCY, HIGH_GAIN, None),
+        cut("LP", LP_ON, LP_FREQUENCY, LP_SLOPE),
+    ]
+};
+
+/// The switch of the stage a strip parameter belongs to, if any.
+pub(crate) fn strip_stage(id: u32) -> Option<u32> {
+    use strip::*;
+    Some(match id {
+        HP_FREQUENCY | HP_SLOPE => HP_ON,
+        LP_FREQUENCY | LP_SLOPE => LP_ON,
+        GATE_THRESHOLD..=GATE_RELEASE => GATE_ON,
+        LOW_FREQUENCY..=HIGH_GAIN => EQ_ON,
+        COMP_THRESHOLD..=COMP_MAKEUP => COMP_ON,
+        _ => return None,
+    })
+}
+
+pub(crate) fn strip_equalizer(values: Values<'_>) -> equalizer::Settings {
+    strip::equalizer_settings(|id| values(id) as f32)
+}
+
+fn strip_layout(mut layout: Layout) -> Layout {
+    use Slot::Control as C;
+    use strip::*;
+    // A console channel read left to right, top to bottom, in the order the
+    // signal passes: input, the two cut filters and the gate; then the
+    // equalizer and the compressor. Width, pan and output stay below every
+    // card. Each stage switches with the lamp in its title.
+    layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
+    layout.cells = true;
+    let stage = |title, row, span, lines: &[&[Slot]], enable| Section {
+        enable: Some(enable),
+        ..cells(title, row, span, lines)
+    };
+    layout.sections = vec![
+        cells("Input", 0, 2, &[&[C(TRIM, 1), C(POLARITY, 1)]]),
+        stage(
+            "High-pass",
+            0,
+            3,
+            &[&[C(HP_FREQUENCY, 1), C(HP_SLOPE, 2)]],
+            HP_ON,
+        ),
+        stage(
+            "Low-pass",
+            0,
+            3,
+            &[&[C(LP_FREQUENCY, 1), C(LP_SLOPE, 2)]],
+            LP_ON,
+        ),
+        stage(
+            "Gate",
+            0,
+            4,
+            &[&[
+                C(GATE_THRESHOLD, 1),
+                C(GATE_RATIO, 1),
+                C(GATE_ATTACK, 1),
+                C(GATE_RELEASE, 1),
+            ]],
+            GATE_ON,
+        ),
+        stage(
+            "Equalizer",
+            1,
+            7,
+            &[&[
+                C(LOW_FREQUENCY, 1),
+                C(LOW_GAIN, 1),
+                C(MID_FREQUENCY, 1),
+                C(MID_GAIN, 1),
+                C(MID_Q, 1),
+                C(HIGH_FREQUENCY, 1),
+                C(HIGH_GAIN, 1),
+            ]],
+            EQ_ON,
+        ),
+        stage(
+            "Compressor",
+            1,
+            5,
+            &[&[
+                C(COMP_THRESHOLD, 1),
+                C(COMP_RATIO, 1),
+                C(COMP_ATTACK, 1),
+                C(COMP_RELEASE, 1),
+                C(COMP_MAKEUP, 1),
+            ]],
+            COMP_ON,
+        ),
+    ];
+    // The card names the stage; the equalizer's knobs say which band.
+    layout.captions = &[
+        (POLARITY, "Invert"),
+        (LOW_GAIN, "Gain"),
+        (MID_GAIN, "Gain"),
+        (MID_Q, "Q"),
+        (HIGH_GAIN, "Gain"),
+    ];
+    layout.visible = |id, values| strip_stage(id).is_none_or(|on| values(on) >= 0.5);
+    // A stage switched off keeps its controls in place, dimmed.
+    layout.keep_inactive = true;
+    layout.picture = Some(Picture::Response(ResponseView {
+        curve: |values, rate, frequencies, out| {
+            equalizer::response_db(&strip_equalizer(values), rate, frequencies, out);
+        },
+        node_curve: None,
+        nodes: &STRIP_NODES,
+        readout: Some(|node, values| {
+            let node = &STRIP_NODES[node];
+            let text = |id: u32| {
+                DESCRIPTOR
+                    .parameter(id)
+                    .map(|spec| spec.format(values(id) as f32))
+                    .unwrap_or_default()
+            };
+            let frequency = text(node.frequency);
+            match (node.gain, node.wheel) {
+                (Some(gain), Some(q)) => format!("{frequency}   {}   Q {}", text(gain), text(q)),
+                (Some(gain), None) => format!("{frequency}   {}", text(gain)),
+                (None, Some(slope)) => format!("{frequency}   {}/oct", text(slope)),
+                _ => frequency,
+            }
+        }),
+        spectrum: |_| None,
+        rate_slot: None,
+        height: 150.0,
+        // Twelve decibels read finely; the axis doubles once a band needs it.
+        range_db: |values| {
+            let settings = strip_equalizer(values);
+            let beyond = settings
+                .bands
+                .iter()
+                .any(|band| band.on && band.gain_db.abs() > 12.0);
             if beyond { 24.0 } else { 12.0 }
         },
         limit_db: 24.0,

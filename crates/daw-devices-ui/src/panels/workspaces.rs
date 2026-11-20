@@ -35,7 +35,7 @@ pub(crate) fn build(
     match descriptor.id {
         "r1-mini" | "r1-sampler" | "r1-drums" => instruments::build(layout, descriptor, pad, page),
         "r1-filter" | "r1-equalizer" => tone::build(layout, descriptor, band),
-        "r1-saturator" | "r1-compressor" | "r1-modulator" | "r1-spacer" => {
+        "r1-saturator" | "r1-compressor" | "r1-modulator" | "r1-spacer" | "r1-strip" => {
             effects::build(layout, descriptor, page)
         }
         _ => Workspace {

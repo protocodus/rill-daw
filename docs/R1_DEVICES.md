@@ -35,7 +35,7 @@ for a person and for the AI tools alike.
 2. [Architecture](#architecture)
 3. [Shared UI library additions](#shared-ui-library-additions)
 4. [Shared DSP toolkit](#shared-dsp-toolkit)
-5. [Effects](#effects): Spacer, Modulator, Saturator, Compressor, Equalizer, Filter
+5. [Effects](#effects): Spacer, Modulator, Saturator, Compressor, Equalizer, Filter, Strip
 6. [Instruments](#instruments): Mini, Maxi, Sampler, Drums
 7. [Verification](#verification)
 8. [Adding a device](#adding-a-device)
@@ -1508,6 +1508,55 @@ fit the panel at a readable size, while a table of values does and can be
 compared across bands. The controls it needed are shared `daw-ui`
 components (`inline_knob`, `glyph_toggle`, `column_highlight`, the extended
 `frequency_plot` and `Spectrum`), described in [UI.md](UI.md).
+
+### R1 Strip
+
+A mixer channel as an insert: the stages a console channel runs, in the
+order it runs them, each with its own switch.
+
+| Stage | Parameter | Range / choices | Default |
+| --- | --- | --- | --- |
+| Input | Trim, Invert polarity | ±24 dB; toggle | 0 dB, off |
+| High-pass | On, Frequency, Slope | 20 Hz – 2 kHz; 12, 24, 48 dB/oct | off, 80 Hz, 12 dB/oct |
+| Low-pass | On, Frequency, Slope | 200 Hz – 20 kHz; same slopes | off, 18 kHz, 12 dB/oct |
+| Gate | On, Threshold, Ratio, Attack, Release | −60 – 0 dB; 1 – 20:1; 0.02 – 250 ms; 5 – 2500 ms | off, −50 dB, 10:1, 0.5 ms, 150 ms |
+| Equalizer | On; Low (shelf) frequency and gain; Mid (bell) frequency, gain and Q; High (shelf) frequency and gain | 20 Hz – 1 kHz; 100 Hz – 10 kHz; 1 – 20 kHz; ±24 dB; Q 0.1 – 18 | on and flat; 100 Hz, 1 kHz, 8 kHz |
+| Compressor | On, Threshold, Ratio, Attack, Release, Makeup | −60 – 0 dB; 1 – 20:1; 0.02 – 250 ms; 5 – 2500 ms; −12 – 24 dB | off, −18 dB, 4:1, 10 ms, 120 ms, 0 dB |
+| Output | Width, Pan, Output | 0 – 200 %; −100 – 100 %; ±24 dB | 100 %, center, 0 dB |
+
+**Order.** Trim and polarity, high-pass, low-pass, gate, equalizer,
+compressor, width, pan, output. Polarity first and width last match where
+the mixer applies them around its inserts; the gate follows the filters so
+rumble and hiss do not hold it open, and the compressor follows the
+equalizer so a boost is controlled.
+
+**DSP.** The strip has no DSP of its own, so it cannot drift from the
+devices it is made of: the filters are an R1 Equalizer with its bands off,
+the gate an R1 Compressor in Expander mode (knee 3 dB), the equalizer a
+second R1 Equalizer with bands 1–3 fixed as low shelf, bell and high shelf
+(shelf Q 0.71), and the compressor an R1 Compressor (Digital character,
+knee 6 dB). Strip parameters are forwarded to them as plain values. Width
+(`daw_dsp::stereo_width`) and pan (`daw_dsp::balance`) are the functions the
+mixer channel itself calls. Switching the gate or compressor crossfades
+over 5 ms; the filters and bands fade as R1 Equalizer's do. Zero latency.
+A guard clamps the output at +36 dBFS, like the inner devices'. The
+default is transparent; a test checks the strip against the four devices
+chained by hand, sample for sample.
+
+**Panel** (wide), in signal order: the summed response of the filters and
+bands (HP, L, M, H, LP nodes), then **Input**, **High-pass**, **Low-pass**
+and **Gate** on one row of twelve cells, **Equalizer** (seven cells) and
+**Compressor** (five) on the next, and Width, Pan and Output below every
+card. Each stage card has its switch as a lamp in its title; a stage that
+is off keeps its controls in place, dimmed.
+
+**Mixer.** Every mixer channel is to be an instance of this device applied
+to the track's output, with its own controls on the mixer strip (filters,
+width, pan, volume) so the full panel only opens for detail. The channel's
+inserts are one Chain effect in a slot between the compressor and the
+volume stage: `Strip::process_channel` runs trim through compressor,
+`Strip::process_output` runs width, pan and output, and `process` is the
+two back to back. That change is a follow-up.
 
 ### R1 Filter
 
