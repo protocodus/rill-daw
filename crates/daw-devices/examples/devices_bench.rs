@@ -7,7 +7,7 @@
 //! `cargo run --release -p daw-devices --example devices_bench [name]`
 //!
 //! With a name, only the devices whose name contains it ("Spacer").
-use daw_devices::devices::{compressor, drums, modulator, sampler, saturator, spacer};
+use daw_devices::devices::{compressor, drums, mini, modulator, sampler, saturator, spacer};
 use daw_devices::{DeviceKind, Event, EventKind, ProcessContext, SampleData, StereoIo, registry};
 use std::sync::Arc;
 use std::time::Instant;
@@ -78,6 +78,16 @@ fn variants(id: &str) -> Vec<Variant> {
                 ("Filter".to_string(), filtered, 32),
             ]
         }
+        "r1-mini" => vec![
+            ("Poly".to_string(), vec![], 8),
+            // Eight notes of two voices: the whole pool.
+            ("Unison 2".to_string(), vec![(mini::UNISON, 2.0)], 8),
+            (
+                "Mono, unison 8".to_string(),
+                vec![(mini::VOICE_MODE, 1.0), (mini::UNISON, 8.0)],
+                1,
+            ),
+        ],
         _ => Vec::new(),
     }
 }

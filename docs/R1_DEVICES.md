@@ -1550,67 +1550,58 @@ controller's.
 ### R1 Mini
 
 A small subtractive synth in the classic two-oscillator, ladder-filter
-layout. Everything is visible at once; about 45 parameters.
+layout, on four task pages; about 50 parameters.
 
 | Section | Parameters |
 | --- | --- |
 | Oscillator 1 | Model (VCO, DCO), Wave (saw, pulse, triangle, sine), Octave (−2 – +2), Pulse width (5 – 95 %) |
 | Oscillator 2 | Model, Wave, Octave, Semitones (±12), Detune (±50 cents), Pulse width, Sync to oscillator 1 (toggle) |
 | Mixer | Oscillator 1, Oscillator 2, Sub (square one octave down), Noise levels |
-| Filter | Model (the five R1 Filter circuits), Cutoff, Resonance, Envelope amount (±), Key tracking (0 – 100 %), Drive |
-| Filter envelope | Attack, Decay, Sustain, Release |
+| Filter | Model (the five saturating R1 Filter circuits), Type (low-, high- or band-pass, as far as the model offers them; the ladder is low-pass only), Cutoff, Resonance, Envelope amount (±), Key tracking (0 – 100 %), Drive |
+| Filter envelope | Attack, Decay, Sustain, Release; → Osc 2 pitch (±24 semitones), the sync sweep |
 | Amp envelope | Attack, Decay, Sustain, Release |
-| LFO | Rate, Sync, Shape, → Pitch, → Cutoff, → Pulse width; mod wheel scales LFO depth |
+| LFO | Rate, Sync, Shape, Fade in (off – 5 s, from each note's start), → Pitch, → Cutoff, → Pulse width; mod wheel and per-note pressure scale LFO depth |
 | Velocity | → Amp, → Cutoff |
-| Voice | Mode, Voices (1 – 8), Glide, Bend range, Drift (0 – 100 %), Volume |
+| Voice | Mode, Voices (1 – 8 notes), Unison (1 – 8 voices a note), Spread (0 – 100 %), Glide, Bend range, Drift (0 – 100 %), Volume |
 
 **DSP.** The `daw_dsp` VCO or DCO per oscillator, with hard sync, mixed into
 the shared nonlinear filter kernel, whole voice at 2× oversampling. The
-voices are summed at that rate and one half-band filter brings the sum down:
-the filter is linear, so the sum sounds as eight filters did, and a voice's
-amplifier gain ramps at the doubled rate. Modulation
-runs at a control rate of 8 samples with linear ramps between updates. Eight
-voices take about 4 % of one core in real time (`devices_bench` example). Drift adds a slow, seeded
-per-voice random walk to pitch and cutoff so stacked notes do not sound
-static. The mixer can overdrive the filter input, as on the hardware this
-layout comes from.
+voices are summed at that rate, each panned, and one stereo half-band filter
+brings the sum down: the filter is linear, so the sum sounds as sixteen
+filters did, and a voice's amplifier gain ramps at the doubled rate.
+Modulation runs at a control rate of 8 samples with linear ramps between
+updates. Drift adds a slow, seeded per-voice random walk to pitch and cutoff
+so stacked notes do not sound static. The mixer can overdrive the filter
+input, as on the hardware this layout comes from.
 
-**Panel** (987 points, one page). Three rows of modules on one grid of
-equal cells, twelve to a row, laid out like a hardware front panel; every
-row breaks after its eighth cell:
+**Unison** stacks whole voices, each with its own oscillators, filter and
+envelopes, on one note. They come from a pool of sixteen: a poly patch plays
+min(Voices, 16 ÷ Unison) notes, a mono patch one stack. Spread places the
+voices of a stack evenly from left to right and detunes them with their
+place, up to a quarter semitone each side; a stack of *n* plays at 1/√*n*, so
+it sounds about as loud as one voice. Without unison, or at no spread, both
+outputs are the same, sample for sample. The cost follows the voices
+sounding: eight notes of two voices cost what sixteen notes would
+(`devices_bench` example). Changing Unison regroups the voices, so the notes
+sounding release, as on a mode change.
 
-- **Oscillators, Mixer, Voices.** Both oscillators share their columns:
-  Model (VCO over DCO), Wave (two by two), Octave and pulse Width, then what
-  only Osc 2 has: Semitones, Detune and Sync. The Mixer is a two-by-two
-  block of levels, each oscillator's beside its line. Voices holds how the
-  voices play them: their count, Glide, Bend and Drift.
-- **Filter, Filter envelope, Amp envelope.** Filter Model beside the hero
-  Cutoff, then Resonance, Drive, Envelope amount and Key track. Each
-  envelope is four faders, A D S R, and a fifth for its Velocity amount.
-- **LFO, Master.** The source (Shape, Rate, Sync) and its destinations
-  (Pitch, Cutoff, Width, Mod wheel); Mode (toggle buttons) and, last on
-  the panel as in the signal, Volume.
+**Panel** (987 points, four task pages, Volume below every page):
+
+- **Oscillators.** Each oscillator's card has its Model in the title; Wave
+  (glyphs), pulse Width, Octave, and for Osc 2 Coarse, Detune and Sync. The
+  Source mix is five faders: the four levels and Drive, the input gain that
+  scales them into the filter.
+- **Filter & amp.** Filter Model and Type (glyphs) in one column, then Cutoff
+  and Resonance over Envelope and Key track; each envelope is five faders,
+  A D S R and its Velocity amount.
+- **Modulation.** The LFO (Shape, Sync, Rate, Fade in), its depths, and the
+  filter envelope's second destination, Osc 2 pitch.
+- **Voices.** Mode and Voices, Unison and Spread, then Glide, Bend and Drift.
 
 A control that does nothing in the current mode (pulse Width on another
-wave, LFO Rate when synced, Voices outside Poly) stays in place, disabled, so
-the cards never reflow. Knobs are standard (48 points) except the hero
-Cutoff; Octave, Semitones, Bend and Voices click through whole values, with
-a dot per detent where they are few. A range around zero (Octave, Detune,
-Envelope) fills its arc from the center. Values print without a plus sign
-where the range has no negative side. Unlike the effect, the
-synth draws no filter response: the controls start right under the header.
-The sketch below is the
-original target:
-
-```text
-┌ R1 Mini ── preset ◂ ▸ ─────────────────────────────── scope ── Volume ┐
-│ OSC 1        OSC 2          MIXER      FILTER              AMP        │
-│ wave  oct    wave oct semi  o1 o2      [response plot]     [envelope] │
-│ pw           det  pw  sync  sub noise  cut res env key drv A D S R    │
-│ LFO  [shape] rate sync →pitch →cut →pw   FILTER ENV [envelope] A D S R│
-│ VOICE mode voices glide bend drift       velocity →amp →cut           │
-├ keyboard ─────────────────────────────────────────────────────────────┤
-```
+wave, LFO Rate when synced, Voices outside Poly, Type on the ladder, Spread
+without unison) stays in place, disabled, with a hint saying why. The synth
+draws no filter response.
 
 ### R1 Maxi
 

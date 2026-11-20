@@ -440,7 +440,7 @@ pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
                 1,
                 4,
                 &[
-                    &[C(FILTER_MODEL, 3), C(CUTOFF, 1)],
+                    &[C(FILTER_MODEL, 2), C(FILTER_TYPE, 1), C(CUTOFF, 1)],
                     &[
                         C(RESONANCE, 1),
                         C(DRIVE, 1),
@@ -453,10 +453,17 @@ pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
                 "Filter envelope",
                 1,
                 4,
-                &[&[
-                    Faders(&[FENV_ATTACK, FENV_DECAY, FENV_SUSTAIN, FENV_RELEASE], 3),
-                    Faders(&[VELOCITY_CUTOFF], 1),
-                ]],
+                &[&[Faders(
+                    &[
+                        FENV_ATTACK,
+                        FENV_DECAY,
+                        FENV_SUSTAIN,
+                        FENV_RELEASE,
+                        VELOCITY_CUTOFF,
+                        FENV_PITCH,
+                    ],
+                    4,
+                )]],
             ),
             cells(
                 "Amp envelope",
@@ -470,22 +477,25 @@ pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
             cells(
                 "LFO",
                 2,
-                8,
-                &[&[
-                    C(LFO_SHAPE, 2),
-                    C(LFO_RATE, 1),
-                    C(LFO_SYNC, 1),
-                    C(LFO_PITCH, 1),
-                    C(LFO_CUTOFF, 1),
-                    C(LFO_WIDTH, 1),
-                    C(LFO_WHEEL, 1),
-                ]],
+                6,
+                &[
+                    &[
+                        C(LFO_SHAPE, 2),
+                        C(LFO_RATE, 1),
+                        C(LFO_SYNC, 1),
+                        C(LFO_FADE, 1),
+                        C(LFO_WHEEL, 1),
+                    ],
+                    &[C(LFO_PITCH, 2), C(LFO_CUTOFF, 2), C(LFO_WIDTH, 2)],
+                ],
             ),
+            cells("Unison", 2, 2, &[&[C(UNISON, 1), C(SPREAD, 1)]]),
             cells("Master", 2, 4, &[&[C(VOICE_MODE, 3), C(VOLUME, 1)]]),
         ];
         layout.toggle_columns = &[
             (OSC1_MODEL, 1),
             (OSC2_MODEL, 1),
+            (FILTER_TYPE, 1),
             (OSC1_WAVE, 2),
             (OSC2_WAVE, 2),
         ];
@@ -494,6 +504,7 @@ pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
             (OSC2_MODEL, "Osc 2"),
             (VELOCITY_CUTOFF, "Velocity"),
             (VELOCITY_AMP, "Velocity"),
+            (FENV_PITCH, "Osc 2"),
             // As engraved on hardware; four full names do not fit side by side.
             (FENV_ATTACK, "A"),
             (FENV_DECAY, "D"),
@@ -505,6 +516,14 @@ pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
             (AENV_RELEASE, "R"),
         ];
         layout.hero = Some(CUTOFF);
+        // The ladder offers no choice; its one type shows, disabled. Mini
+        // offers no notch, which some models have.
+        layout.options = |id, values| {
+            (id == FILTER_TYPE).then(|| {
+                let count = mini_settings(values).filter_model.type_count();
+                &FILTER_TYPES[..count.clamp(1, FILTER_TYPES.len())]
+            })
+        };
         layout.visible = |id, values| applies(id, &mini_settings(values));
         layout.keep_inactive = true;
     }

@@ -4,8 +4,8 @@
   "name": "String Pad",
   "author": "Rill",
   "category": "Pad",
-  "tags": ["poly", "slow", "dco"],
-  "description": "Two DCO saws a few cents apart with slow pulse width movement, swelling in and out.",
+  "tags": ["poly", "slow", "dco", "wide"],
+  "description": "Two DCO saws a few cents apart with slow pulse width movement, swelling in and out; two voices a note, spread across the stereo field.",
   "parameters": {
     "osc1.model": "DCO",
     "osc1.wave": "Pulse",
@@ -32,6 +32,8 @@
     "lfo.wheel": 0.0,
     "velocity.amp": 30.0,
     "velocity.cutoff": 0.3,
+    "voice.unison": 2,
+    "voice.spread": 60.0,
     "voice.volume": -9.0
   }
 }

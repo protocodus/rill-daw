@@ -1999,10 +1999,14 @@ fn control(
                                 }
                                 response
                             } else if let Some(faces) = faces(spec, layout) {
+                                // Only the options the mode offers, as for words.
                                 let options: Vec<_> = faces
                                     .faces
                                     .iter()
                                     .enumerate()
+                                    .filter(|(index, _)| {
+                                        options.iter().any(|(plain, _)| *plain == *index as f32)
+                                    })
                                     .map(|(index, (face, name))| (index as f32, *face, *name))
                                     .collect();
                                 let response = daw_ui::glyph_toggle(

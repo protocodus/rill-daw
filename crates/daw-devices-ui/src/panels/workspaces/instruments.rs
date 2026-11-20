@@ -53,11 +53,13 @@ fn mini_workspace(mut layout: Layout, page: usize) -> Workspace {
                     ],
                 )
             },
+            // Drive is how hard the mix hits the filter, so it stands with
+            // the levels it scales, as a mixer's input gain.
             cells(
                 "Source mix",
                 0,
-                6,
-                &[&[Faders(&[MIX_OSC1, MIX_OSC2, MIX_SUB, MIX_NOISE], 6)]],
+                8,
+                &[&[Faders(&[MIX_OSC1, MIX_OSC2, MIX_SUB, MIX_NOISE, DRIVE], 8)]],
             ),
         ],
         1 => vec![
@@ -66,8 +68,8 @@ fn mini_workspace(mut layout: Layout, page: usize) -> Workspace {
                 0,
                 9,
                 &[
-                    &[C(FILTER_MODEL, 5), C(DRIVE, 2), C(CUTOFF, 2)],
-                    &[C(RESONANCE, 3), C(FILTER_ENV, 3), C(KEY_TRACKING, 3)],
+                    &[C(FILTER_MODEL, 5), C(CUTOFF, 2), C(RESONANCE, 2)],
+                    &[C(FILTER_TYPE, 5), C(FILTER_ENV, 2), C(KEY_TRACKING, 2)],
                 ],
             ),
             cells(
@@ -105,8 +107,13 @@ fn mini_workspace(mut layout: Layout, page: usize) -> Workspace {
             cells(
                 "LFO",
                 0,
-                6,
-                &[&[C(LFO_SHAPE, 3), C(LFO_SYNC, 2), C(LFO_RATE, 1)]],
+                7,
+                &[&[
+                    C(LFO_SHAPE, 3),
+                    C(LFO_SYNC, 2),
+                    C(LFO_RATE, 1),
+                    C(LFO_FADE, 1),
+                ]],
             ),
             cells(
                 "Modulation depth",
@@ -119,6 +126,9 @@ fn mini_workspace(mut layout: Layout, page: usize) -> Workspace {
                     C(LFO_WHEEL, 2),
                 ]],
             ),
+            // The envelope's second destination: with Sync, the classic
+            // sync sweep.
+            cells("Filter envelope", 0, 2, &[&[C(FENV_PITCH, 2)]]),
         ],
         _ => vec![
             cells(
@@ -127,6 +137,7 @@ fn mini_workspace(mut layout: Layout, page: usize) -> Workspace {
                 5,
                 &[&[C(VOICE_MODE, 3), C(VOICES, 2)]],
             ),
+            cells("Unison", 0, 4, &[&[C(UNISON, 2), C(SPREAD, 2)]]),
             cells(
                 "Pitch response",
                 0,
@@ -152,6 +163,15 @@ fn mini_workspace(mut layout: Layout, page: usize) -> Workspace {
             faces: LFO_WAVES,
             segment_width: 30.0,
         },
+        Faces {
+            ids: &[FILTER_TYPE],
+            faces: &[
+                (ToggleFace::Glyph(Glyph::LowPass), "Low-pass"),
+                (ToggleFace::Glyph(Glyph::HighPass), "High-pass"),
+                (ToggleFace::Glyph(Glyph::BandPass), "Band-pass"),
+            ],
+            segment_width: 30.0,
+        },
     ];
     layout.captions = &[
         (OSC2_SEMITONES, "Coarse"),
@@ -167,6 +187,8 @@ fn mini_workspace(mut layout: Layout, page: usize) -> Workspace {
                 LFO_WIDTH => "Choose Pulse on either oscillator to modulate pulse width.",
                 LFO_RATE => "Sync sets the LFO rate to the song tempo.",
                 VOICES => "Voice count applies in Poly mode.",
+                FILTER_TYPE => "The transistor ladder is low-pass only.",
+                SPREAD => "Spread applies when Unison stacks two or more voices.",
                 _ => return None,
             });
         }

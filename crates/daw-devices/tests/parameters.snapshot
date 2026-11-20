@@ -59,6 +59,11 @@ r1-mini 82 voice.glide "Glide" log 1 2000
 r1-mini 83 voice.bend "Bend" integer 0 24
 r1-mini 84 voice.drift "Drift" linear 0 100
 r1-mini 85 voice.volume "Volume" linear -36 6
+r1-mini 36 filter.type "Type" choice Low-pass|High-pass|Band-pass
+r1-mini 44 fenv.pitch "Osc 2 pitch" linear -24 24
+r1-mini 67 lfo.fade "Fade in" log 1 5000
+r1-mini 86 voice.unison "Unison" integer 1 8
+r1-mini 87 voice.spread "Spread" linear 0 100
 r1-equalizer 1 hp.on "On" toggle
 r1-equalizer 2 hp.frequency "Frequency" log 20 2000
 r1-equalizer 3 hp.slope "Slope" choice 12 dB|24 dB|48 dB

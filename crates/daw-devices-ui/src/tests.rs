@@ -226,6 +226,28 @@ fn mini_uses_the_wide_panel_and_shows_pulse_width_only_for_pulse() {
 }
 
 #[test]
+fn mini_offers_the_filter_types_its_model_has() {
+    let layout = panels::layout(&mini::DESCRIPTOR);
+    let offered = |model: f32| {
+        let spec = mini::DESCRIPTOR.parameter(mini::FILTER_MODEL).unwrap();
+        let value = f64::from(spec.to_normalized(model));
+        let values = move |id: u32| {
+            if id == mini::FILTER_MODEL {
+                value
+            } else {
+                f64::from(mini::DESCRIPTOR.parameter(id).unwrap().default_normalized())
+            }
+        };
+        let options = (layout.options)(mini::FILTER_TYPE, &values).unwrap();
+        (options.len(), (layout.visible)(mini::FILTER_TYPE, &values))
+    };
+    // Ladder: low-pass only, shown disabled; Sallen-Key: two; OTA: three.
+    assert_eq!(offered(0.0), (1, false));
+    assert_eq!(offered(2.0), (2, true));
+    assert_eq!(offered(3.0), (3, true));
+}
+
+#[test]
 fn card_lines_share_columns_and_wrap_only_when_too_wide() {
     let lines = vec![vec![("a", 50.0), ("b", 30.0)], vec![("c", 40.0)]];
     // Columns as wide as their widest control, leftover shared evenly.

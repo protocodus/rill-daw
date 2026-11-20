@@ -33,10 +33,21 @@ fn note_off(offset: u32, note: u32) -> Event {
     }
 }
 
-/// Renders `seconds`, delivering each `(frame, event)` at its frame.
+/// Renders `seconds`, delivering each `(frame, event)` at its frame. Without
+/// unison spread both sides are the same.
 fn render(device: &mut dyn Device, seconds: f32, events: &[(usize, EventKind)]) -> Vec<f32> {
+    let (left, right) = render_stereo(device, seconds, events);
+    assert_eq!(left, right, "Mini without spread is mono");
+    left
+}
+
+fn render_stereo(
+    device: &mut dyn Device,
+    seconds: f32,
+    events: &[(usize, EventKind)],
+) -> (Vec<f32>, Vec<f32>) {
     let total = (seconds * RATE) as usize;
-    let mut output = Vec::with_capacity(total);
+    let mut output = (Vec::with_capacity(total), Vec::with_capacity(total));
     let mut left = vec![0.0; BLOCK];
     let mut right = vec![0.0; BLOCK];
     for start in (0..total).step_by(BLOCK) {
@@ -57,10 +68,11 @@ fn render(device: &mut dyn Device, seconds: f32, events: &[(usize, EventKind)]) 
                 sidechain: None,
             },
         );
-        assert_eq!(left, right, "Mini is mono");
-        output.extend_from_slice(&left);
+        output.0.extend_from_slice(&left);
+        output.1.extend_from_slice(&right);
     }
-    output.truncate(total);
+    output.0.truncate(total);
+    output.1.truncate(total);
     output
 }
 
@@ -419,4 +431,155 @@ fn drawn_response_follows_cutoff_and_resonance() {
     let mut resonant = [0.0; 3];
     response_db(&settings(1000.0, 90.0), RATE, &frequencies, &mut resonant);
     assert!(resonant[1] > db[1] + 6.0, "{resonant:?}");
+}
+
+#[test]
+fn unison_stacks_voices_on_one_note_and_spread_detunes_them_across_the_stereo_field() {
+    let values = [sine_values(), vec![(UNISON, 2.0), (SPREAD, 0.0)]].concat();
+    let mut device = synth(&values);
+    let output = render(&mut *device, 0.5, &hold(69.0));
+    assert!((frequency(&output[4800..]) - 440.0).abs() < 0.3);
+    assert_eq!(device.telemetry().value(TELEMETRY_VOICES), 2.0);
+
+    // At full spread the two voices stand at either side, a quarter
+    // semitone below and above.
+    let values = [sine_values(), vec![(UNISON, 2.0), (SPREAD, 100.0)]].concat();
+    let (left, right) = render_stereo(&mut *synth(&values), 0.5, &hold(69.0));
+    let below = 440.0 * (-0.25_f32 / 12.0).exp2();
+    let above = 440.0 * (0.25_f32 / 12.0).exp2();
+    assert!(
+        (frequency(&left[4800..]) - below).abs() < 0.3,
+        "{}",
+        frequency(&left[4800..])
+    );
+    assert!(
+        (frequency(&right[4800..]) - above).abs() < 0.3,
+        "{}",
+        frequency(&right[4800..])
+    );
+    // A stack is about as loud as one voice.
+    let single = rms(&render(&mut *synth(&sine_values()), 0.5, &hold(69.0))[4800..]);
+    let stacked = (rms(&left[4800..]).powi(2) + rms(&right[4800..]).powi(2)).sqrt();
+    assert!((stacked / single - 1.0).abs() < 0.1, "{stacked} {single}");
+}
+
+#[test]
+fn unison_shares_the_voices_between_notes() {
+    let values = [
+        sine_values(),
+        vec![(UNISON, 4.0), (VOICES, 8.0), (SPREAD, 0.0)],
+    ]
+    .concat();
+    let mut device = synth(&values);
+    let events: Vec<_> = (0..5)
+        .map(|index| {
+            (
+                index * 480,
+                note_on(0, index as u32, 60.0 + index as f32, 1.0).kind,
+            )
+        })
+        .collect();
+    render(&mut *device, 0.2, &events);
+    // Sixteen voices hold four notes of four; the fifth note stole the first.
+    assert_eq!(device.telemetry().value(TELEMETRY_VOICES), 16.0);
+
+    let values = [
+        sine_values(),
+        vec![(UNISON, 3.0), (VOICE_MODE, 1.0), (SPREAD, 0.0)],
+    ]
+    .concat();
+    let mut device = synth(&values);
+    let output = render(
+        &mut *device,
+        0.6,
+        &[
+            (0, note_on(0, 1, 57.0, 1.0).kind),
+            (9600, note_on(0, 2, 69.0, 1.0).kind),
+        ],
+    );
+    assert_eq!(device.telemetry().value(TELEMETRY_VOICES), 3.0);
+    assert!((frequency(&output[19_200..]) - 440.0).abs() < 0.5);
+}
+
+#[test]
+fn the_filter_type_switches_to_high_pass_where_the_model_has_one() {
+    let saw = |model: f32, filter_type: f32| {
+        let values = vec![
+            (OSC1_MODEL, 1.0),
+            (MIX_OSC2, 0.0),
+            (FILTER_MODEL, model),
+            (FILTER_TYPE, filter_type),
+            (CUTOFF, 1000.0),
+            (FILTER_ENV, 0.0),
+            (KEY_TRACKING, 0.0),
+            (DRIFT, 0.0),
+        ];
+        let output = render(&mut *synth(&values), 0.5, &hold(45.0));
+        brightness(&output[4800..])
+    };
+    // OTA Cascade: high-pass keeps the top and loses the fundamental.
+    assert!(
+        saw(1.0, 1.0) > 5.0 * saw(1.0, 0.0),
+        "{} {}",
+        saw(1.0, 1.0),
+        saw(1.0, 0.0)
+    );
+    // The ladder is low-pass only; the type is ignored.
+    assert_eq!(saw(0.0, 1.0), saw(0.0, 0.0));
+}
+
+#[test]
+fn the_lfo_fades_in_on_each_note_and_pressure_opens_it() {
+    let swing = |output: &[f32]| {
+        let pitches: Vec<f32> = output.chunks(1200).map(frequency).collect();
+        pitches.iter().fold(0.0_f32, |m, p| m.max(*p))
+            - pitches.iter().fold(1e9_f32, |m, p| m.min(*p))
+    };
+    let values = [
+        sine_values(),
+        vec![
+            (LFO_PITCH, 1.0),
+            (LFO_RATE, 6.0),
+            (LFO_WHEEL, 0.0),
+            (LFO_FADE, 1500.0),
+        ],
+    ]
+    .concat();
+    let output = render(&mut *synth(&values), 2.5, &hold(69.0));
+    let early = swing(&output[2400..14_400]);
+    let late = swing(&output[96_000..120_000]);
+    assert!(early < 0.3 * late, "{early} {late}");
+
+    // With the mod wheel in charge, pressure on the note opens the vibrato.
+    let values = [sine_values(), vec![(LFO_PITCH, 1.0), (LFO_RATE, 6.0)]].concat();
+    let mut events = hold(69.0);
+    events.push((
+        100,
+        EventKind::Pressure {
+            note: 1,
+            value: 1.0,
+        },
+    ));
+    let output = render(&mut *synth(&values), 1.0, &events);
+    assert!(swing(&output[4800..]) > 20.0, "{}", swing(&output[4800..]));
+}
+
+#[test]
+fn the_filter_envelope_sweeps_oscillator_two() {
+    let values = [
+        sine_values(),
+        vec![
+            (MIX_OSC1, 0.0),
+            (MIX_OSC2, 100.0),
+            (OSC2_MODEL, 1.0),
+            (OSC2_WAVE, 3.0),
+            (OSC2_DETUNE, 0.0),
+            (FENV_SUSTAIN, 100.0),
+            (FENV_PITCH, 12.0),
+        ],
+    ]
+    .concat();
+    let output = render(&mut *synth(&values), 0.5, &hold(57.0));
+    // Envelope held at full: an octave up.
+    assert!((frequency(&output[4800..]) - 440.0).abs() < 0.5);
 }
