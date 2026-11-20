@@ -1657,7 +1657,7 @@ when a long span crowds them into one corner. The
 view knows no parameters: R1 Spacer maps the handles to Time or Division,
 Feedback, Pre-delay, Decay and the two levels.
 
-The other plots: `spectrum`, `scope`, `wavetable_view` and `sample_view` (draggable start, end and loop markers, an optional amplifier envelope drawn from start to end, and an optional audible-region preview; it takes a sample or file dropped on it). They take plain data and own no audio state.
+The other plots: `spectrum`, `scope`, `wavetable_view` and `sample_view` (draggable start, end and loop markers, an optional amplifier envelope drawn from start to end, optional equal slices between start and end, and an optional audible-region preview; it takes a sample or file dropped on it). They take plain data and own no audio state.
 
 `sample_player_editor` presents a shared DSP `PlayerNode` as an indented,
 collapsible tree and a selected-node inspector. Structural actions (Add sample,

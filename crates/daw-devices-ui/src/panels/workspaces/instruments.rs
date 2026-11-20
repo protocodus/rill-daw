@@ -189,21 +189,36 @@ fn sampler_workspace(mut layout: Layout, page: usize) -> Workspace {
     layout.picture = Some(Picture::Sample { height: 84.0 });
     layout.picture_place = PicturePlace::Above;
     layout.sections = match page {
+        // What plays, in signal order: the region, its loop or slices,
+        // then the converter character ahead of the filter. One row of
+        // cards leaves the recording its full height.
         0 => vec![
             cells(
                 "Region",
                 0,
-                4,
-                &[&[C(START, 2), C(END, 2)], &[C(REVERSE, 2), C(GAIN, 2)]],
+                2,
+                &[&[C(START, 1), C(END, 1)], &[C(REVERSE, 1), C(GAIN, 1)]],
             ),
             cells(
                 "Loop",
                 0,
-                6,
+                4,
                 &[
-                    &[C(LOOP_MODE, 6)],
-                    &[C(LOOP_START, 2), C(LOOP_END, 2), C(CROSSFADE, 2)],
+                    &[C(LOOP_MODE, 4)],
+                    &[C(LOOP_START, 1), C(LOOP_END, 1), C(CROSSFADE, 2)],
                 ],
+            ),
+            // The root key is where the first slice starts, so it stands
+            // here too.
+            Section {
+                enable: Some(SLICE),
+                ..cells("Slice", 0, 2, &[&[C(SLICES, 2)], &[C(ROOT, 2)]])
+            },
+            cells(
+                "Character",
+                0,
+                4,
+                &[&[C(BITS, 4)], &[C(RATE, 2), C(DRIVE, 2)]],
             ),
         ],
         1 => vec![
@@ -276,23 +291,26 @@ fn sampler_workspace(mut layout: Layout, page: usize) -> Workspace {
                 )]],
             ),
         ],
+        // The source with its timing, then how deep it goes where: the
+        // mod wheel and the fade-in scale every destination.
         _ => vec![
             cells(
                 "LFO",
                 0,
                 6,
-                &[&[C(LFO_SHAPE, 3), C(LFO_SYNC, 2), C(LFO_RATE, 1)]],
+                &[
+                    &[C(LFO_SHAPE, 4), C(LFO_RATE, 2)],
+                    &[C(LFO_SYNC, 4), C(LFO_RETRIGGER, 2)],
+                ],
             ),
             cells(
                 "Modulation depth",
                 0,
-                5,
-                &[&[
-                    C(LFO_PITCH, 1),
-                    C(LFO_CUTOFF, 1),
-                    C(LFO_LEVEL, 1),
-                    C(LFO_PAN, 2),
-                ]],
+                6,
+                &[
+                    &[C(LFO_PITCH, 2), C(LFO_CUTOFF, 2), C(LFO_LEVEL, 2)],
+                    &[C(LFO_PAN, 2), C(LFO_WHEEL, 2), C(LFO_FADE, 2)],
+                ],
             ),
         ],
     };
@@ -310,6 +328,11 @@ fn sampler_workspace(mut layout: Layout, page: usize) -> Workspace {
         (LFO_CUTOFF, "Cutoff"),
         (LFO_LEVEL, "Level"),
         (LFO_PAN, "Pan"),
+        (LFO_RETRIGGER, "Retrigger"),
+        (LFO_FADE, "Fade in"),
+        (LFO_WHEEL, "Mod wheel"),
+        (SLICES, "Slices"),
+        (ROOT, "Root"),
     ];
     layout.toggle_columns = &[];
     layout.faces = &[
@@ -340,7 +363,12 @@ fn sampler_workspace(mut layout: Layout, page: usize) -> Workspace {
         let settings = sampler::Settings::from_normalized(|id| values(id) as f32);
         if !sampler::applies(id, &settings) {
             return Some(match id {
-                ROOT => "Enable Key tracking to set the sample's original note.",
+                ROOT => "Enable Key tracking or Slice to set the root key.",
+                KEY_TRACKING => "In Slice mode each key plays a slice at its own pitch.",
+                SLICES => "Turn on Slice to cut Start to End into equal slices, one a key.",
+                LOOP_START | LOOP_END if settings.slices.is_some() => {
+                    "In Slice mode a Forward or Ping-pong loop repeats the whole slice."
+                }
                 LOOP_START | LOOP_END => "Choose Forward or Ping-pong to set a loop region.",
                 CROSSFADE => "Crossfade applies to Forward loops.",
                 FILTER_TYPE | FILTER_SLOPE | CUTOFF | RESONANCE | FILTER_ENV
@@ -354,7 +382,25 @@ fn sampler_workspace(mut layout: Layout, page: usize) -> Workspace {
                 _ => return None,
             });
         }
-        (id == LOOP_MODE).then_some("Off follows note release without looping. One-shot plays to End. Forward and Ping-pong repeat the loop region.")
+        match id {
+            LOOP_MODE => Some(
+                "Off follows note release without looping. One-shot plays to End. Forward and Ping-pong repeat the loop region.",
+            ),
+            ROOT if settings.slices.is_some() => {
+                Some("The key that plays the first slice; each key above plays the next.")
+            }
+            RATE => Some(
+                "Holds each sample for longer, down to telephone rates. Its maximum leaves the sample untouched.",
+            ),
+            BITS => Some("Quantizes the sample to 12 or 8 bits, for the grit of early samplers."),
+            DRIVE => Some("Saturates the sample before the filter."),
+            LFO_RETRIGGER => {
+                Some("A key played with none held restarts the LFO, unless Sync follows the song.")
+            }
+            LFO_FADE => Some("Each new note reaches the full LFO depth over this time."),
+            LFO_WHEEL => Some("At 100 % the mod wheel sets the LFO depth from none to full."),
+            _ => None,
+        }
     };
     Workspace {
         layout,

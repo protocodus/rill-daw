@@ -596,6 +596,7 @@ fn every_visualization_renders_without_overflow() {
                 loop_range: None,
                 playheads: &[0.5],
                 envelope: &[0.0, 1.0, 0.5, 0.0],
+                slices: 4,
             },
             size,
         );
@@ -2051,6 +2052,7 @@ fn sample_view_takes_files_dropped_on_it_and_leaves_others() {
         loop_range: None,
         playheads: &[],
         envelope: &[],
+        slices: 0,
     };
     // The view's rect, the files it took and those left to the app.
     let frame = |at: Pos2, dropped: bool| {

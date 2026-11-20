@@ -71,10 +71,21 @@ fn variants(id: &str) -> Vec<Variant> {
                 vec![(sampler::LFO_PITCH, 0.5), (sampler::LFO_CUTOFF, 1.0)],
             ]
             .concat();
+            // Every Character stage on, ahead of the filter.
+            let character = [
+                filtered.clone(),
+                vec![
+                    (sampler::RATE, 12_000.0),
+                    (sampler::BITS, 1.0),
+                    (sampler::DRIVE, 50.0),
+                ],
+            ]
+            .concat();
             vec![
                 ("Loop".to_string(), looped, 8),
                 ("Filter".to_string(), filtered.clone(), 8),
                 ("LFO".to_string(), modulated, 8),
+                ("Character".to_string(), character, 8),
                 ("Filter".to_string(), filtered, 32),
             ]
         }

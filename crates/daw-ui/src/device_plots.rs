@@ -1608,6 +1608,9 @@ pub struct SampleViewData<'a> {
     /// The amplifier's level, 0 to 1, at even steps from the start marker
     /// to the end marker, drawn over the waveform; empty for none.
     pub envelope: &'a [f32],
+    /// Equal slices between the start and end markers, divided by thin
+    /// lines; 0 or 1 for none.
+    pub slices: usize,
 }
 
 pub struct SampleViewOutput {
@@ -1749,6 +1752,13 @@ pub fn sample_view(ui: &mut Ui, data: &SampleViewData<'_>, size: Vec2) -> Sample
                 Rect::from_x_y_ranges(x_of(start)..=x_of(end), inner.y_range()),
                 0.0,
                 colors.accent.gamma_multiply(0.12),
+            );
+        }
+        for index in 1..data.slices {
+            let x = x_of(data.start + (data.end - data.start) * index as f32 / data.slices as f32);
+            painter.line_segment(
+                [pos2(x, inner.top()), pos2(x, inner.bottom())],
+                Stroke::new(1.0_f32, colors.accent.gamma_multiply(0.6)),
             );
         }
         for (marker, at) in &markers {

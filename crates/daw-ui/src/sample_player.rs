@@ -657,6 +657,7 @@ fn node_inspector(
                 loop_range: None,
                 playheads: &[],
                 envelope: &[],
+                slices: 0,
             },
             egui::vec2(ui.available_width(), 180.0),
         );

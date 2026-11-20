@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "device": "r1-sampler",
+  "name": "Sliced Break",
+  "author": "Rill",
+  "category": "Drums",
+  "tags": [
+    "slice",
+    "one-shot",
+    "drums"
+  ],
+  "description": "A drum loop cut into eight slices from C4 up, each played whole at its own pitch, with the dust of a 12-bit sampler.",
+  "parameters": {
+    "slice.on": true,
+    "slice.count": 8,
+    "loop.mode": "One-shot",
+    "character.bits": "12-bit",
+    "character.rate": 26000.0,
+    "character.drive": 15.0,
+    "voice.volume": -3.0
+  }
+}
