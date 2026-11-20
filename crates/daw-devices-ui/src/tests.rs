@@ -1116,8 +1116,8 @@ fn modulator_controls_keep_their_places_in_every_mode() {
     let mut panel = Panel::new(&DESCRIPTOR);
     let used = panel.frame(vec![]);
     let before = places(&panel);
-    // Thirteen places for seventeen parameters, none of them empty.
-    assert_eq!(before.len(), 13);
+    // Fifteen places for nineteen parameters, none of them empty.
+    assert_eq!(before.len(), 15);
     for (mode, sync) in [(1.0, 0.0), (2.0, 1.0), (0.0, 1.0), (1.0, 1.0), (2.0, 0.0)] {
         panel.set(MODE, mode);
         panel.set(SYNC, sync);
@@ -1132,12 +1132,16 @@ fn modulator_controls_keep_their_places_in_every_mode() {
         let center = [CENTER_CHORUS, CENTER_FLANGER, CENTER_PHASER][mode as usize];
         assert!(shown.contains(&center));
         assert!(shown.contains(if sync > 0.5 { &DIVISION } else { &RATE }));
-        // A flanger has neither voices nor stages: Voices stays, disabled.
-        let (count, off) = match mode as usize {
+        // A flanger has neither voices nor stages: Voices stays, disabled,
+        // and so does Feel while the LFO runs free.
+        let (count, mut off) = match mode as usize {
             0 => (VOICES, vec![]),
             1 => (VOICES, vec![VOICES]),
             _ => (STAGES, vec![]),
         };
+        if sync < 0.5 {
+            off.insert(0, FEEL);
+        }
         assert!(shown.contains(&count));
         assert_eq!(disabled(&panel), off, "mode {mode}");
     }
@@ -1146,7 +1150,7 @@ fn modulator_controls_keep_their_places_in_every_mode() {
     panel.set(SYNC, 0.0);
     let top = panel.cell(SHAPE).top();
     assert!(
-        [RATE, CENTER_CHORUS, VOICES, LOW_CUT]
+        [RATE, FEEL, CENTER_CHORUS, ENVELOPE, VOICES, LOW_CUT]
             .iter()
             .all(|id| panel.cell(*id).top() == top)
     );

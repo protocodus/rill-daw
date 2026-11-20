@@ -31,7 +31,21 @@ fn variants(id: &str) -> Vec<Variant> {
     match id {
         "r1-saturator" => choices(saturator::QUALITY, saturator::QUALITIES),
         "r1-compressor" => choices(compressor::CHARACTER, compressor::CHARACTERS),
-        "r1-modulator" => choices(modulator::MODE, modulator::MODES),
+        "r1-modulator" => {
+            // Each mode, and each with the envelope moving the sweep.
+            let mut variants: Vec<Variant> = choices(modulator::MODE, modulator::MODES);
+            for (choice, label) in modulator::MODES.iter().enumerate() {
+                variants.push((
+                    format!("{label} + Envelope"),
+                    vec![
+                        (modulator::MODE, choice as f32),
+                        (modulator::ENVELOPE, 60.0),
+                    ],
+                    8,
+                ));
+            }
+            variants
+        }
         "r1-spacer" => {
             // Each model alone, and the device as inserted.
             let section = |name: &str, other: u32, model: u32, labels: &'static [&'static str]| {

@@ -22,6 +22,8 @@ pub const RATE: u32 = 12;
 pub const DIVISION: u32 = 13;
 pub const DEPTH: u32 = 14;
 pub const STEREO: u32 = 15;
+pub const ENVELOPE: u32 = 16;
+pub const FEEL: u32 = 17;
 pub const FEEDBACK: u32 = 20;
 pub const CENTER_CHORUS: u32 = 21;
 pub const CENTER_FLANGER: u32 = 22;
@@ -33,9 +35,11 @@ pub const MIX: u32 = 30;
 pub const OUTPUT: u32 = 31;
 
 /// Telemetry value slots: the LFO phase in cycles at the end of the last
-/// block, and from each sweep slot on, where the four voices of that channel
+/// block, the envelope's `push` of the sweep (see
+/// [`modulation::ModulationKernel::push`]), and from each sweep slot on, where the four voices of that channel
 /// are in their sweep, as LFO values (−1–1) after the sweep smoothing.
 pub const TELEMETRY_PHASE: usize = 0;
+pub const TELEMETRY_PUSH: usize = 1;
 pub const TELEMETRY_SWEEP_LEFT: usize = 4;
 pub const TELEMETRY_SWEEP_RIGHT: usize = 8;
 pub const TELEMETRY_SAMPLE_RATE: usize = 3;
@@ -48,6 +52,9 @@ pub const DIVISIONS: &[&str] = &[
 ];
 /// Length of an LFO cycle in beats for each division.
 pub const DIVISION_BEATS: [f64; 8] = [32.0, 16.0, 8.0, 4.0, 2.0, 1.0, 0.5, 0.25];
+pub const FEELS: &[&str] = &["Straight", "Dotted", "Triplet"];
+/// What each feel makes of a division's length.
+pub const FEEL_FACTORS: [f64; 3] = [1.0, 1.5, 2.0 / 3.0];
 pub const STAGE_OPTIONS: &[&str] = &["2", "4", "6", "8", "12"];
 pub const STAGE_COUNTS: [usize; 5] = [2, 4, 6, 8, 12];
 
@@ -114,7 +121,7 @@ const fn choice(
     )
 }
 
-pub static PARAMETERS: [ParamSpec; 17] = [
+pub static PARAMETERS: [ParamSpec; 19] = [
     choice(MODE, "mode", "Mode", "Mode", MODES, 0.0),
     choice(CHARACTER, "character", "Character", "Mode", CHARACTERS, 0.0),
     choice(SHAPE, "shape", "Shape", "LFO", SHAPES, 0.0),
@@ -123,6 +130,16 @@ pub static PARAMETERS: [ParamSpec; 17] = [
     choice(DIVISION, "division", "Division", "LFO", DIVISIONS, 3.0),
     linear(DEPTH, "depth", "Depth", "LFO", "%", (0.0, 100.0), 50.0),
     linear(STEREO, "stereo", "Stereo", "LFO", "°", (0.0, 180.0), 90.0),
+    choice(FEEL, "feel", "Feel", "LFO", FEELS, 0.0),
+    linear(
+        ENVELOPE,
+        "envelope",
+        "Envelope",
+        "Envelope",
+        "%",
+        (-100.0, 100.0),
+        0.0,
+    ),
     linear(
         FEEDBACK,
         "feedback",
@@ -209,9 +226,11 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-modulator/jet-flanger.rillpreset"),
         include_str!("../../presets/r1-modulator/hollow-flanger.rillpreset"),
         include_str!("../../presets/r1-modulator/tape-flange.rillpreset"),
+        include_str!("../../presets/r1-modulator/dotted-flanger.rillpreset"),
         include_str!("../../presets/r1-modulator/classic-phaser.rillpreset"),
         include_str!("../../presets/r1-modulator/deep-phaser.rillpreset"),
         include_str!("../../presets/r1-modulator/synced-phaser.rillpreset"),
+        include_str!("../../presets/r1-modulator/envelope-phaser.rillpreset"),
         include_str!("../../presets/r1-modulator/fast-wobble.rillpreset"),
     ],
     legacy_labels: &[],
@@ -238,9 +257,13 @@ pub struct Settings {
     pub rate_hz: f32,
     /// Index into [`DIVISIONS`].
     pub division: usize,
+    /// Index into [`FEELS`].
+    pub feel: usize,
     /// 0–1.
     pub depth: f32,
     pub stereo_degrees: f32,
+    /// −1–1: how far the input level moves the sweep.
+    pub envelope: f32,
     /// −0.95–0.95.
     pub feedback: f32,
     /// The mode's own: seconds of delay for Chorus and Flanger, hertz for
@@ -279,8 +302,10 @@ impl Settings {
             sync: plain(SYNC) >= 0.5,
             rate_hz: plain(RATE),
             division: (plain(DIVISION) as usize).min(DIVISIONS.len() - 1),
+            feel: (plain(FEEL) as usize).min(FEELS.len() - 1),
             depth: plain(DEPTH) / 100.0,
             stereo_degrees: plain(STEREO),
+            envelope: plain(ENVELOPE) / 100.0,
             feedback: plain(FEEDBACK) / 100.0,
             center: match mode {
                 Mode::Chorus => plain(CENTER_CHORUS) / 1000.0,
@@ -307,13 +332,16 @@ impl Settings {
                 Shape::Random => LfoShape::Smooth,
             },
             rate_hz: self.rate_hz,
-            sync_beats: self.sync.then(|| DIVISION_BEATS[self.division]),
+            sync_beats: self
+                .sync
+                .then(|| DIVISION_BEATS[self.division] * FEEL_FACTORS[self.feel]),
             depth: self.depth,
             stereo_degrees: self.stereo_degrees,
             feedback: self.feedback,
             center: self.center,
             voices: self.voices,
             stages: self.stages,
+            envelope: self.envelope,
         }
     }
 
@@ -412,7 +440,7 @@ pub fn applies(id: u32, settings: &Settings) -> bool {
         CENTER_FLANGER => settings.mode == Mode::Flanger,
         CENTER_PHASER | STAGES => settings.mode == Mode::Phaser,
         RATE => !settings.sync,
-        DIVISION => settings.sync,
+        DIVISION | FEEL => settings.sync,
         _ => true,
     }
 }
@@ -459,12 +487,13 @@ fn low_cut_response(settings: &Settings, rate: f32, hz: f64) -> Complex {
 }
 
 /// Gain in dB of the whole device at `hz` for small signals, with the LFO
-/// standing at `lfo` for each voice: dry and wet mixed, at the loudness
+/// standing at `lfo` for each voice and the envelope at `push`: dry and wet
+/// mixed, at the loudness
 /// compensation. The half-band filters of the wet path, which roll off above
 /// 0.41 of the sample rate, are not part of it.
-pub fn response_db(settings: &Settings, lfo: &[f32; 4], rate: f32, hz: f32) -> f32 {
+pub fn response_db(settings: &Settings, lfo: &[f32; 4], push: f32, rate: f32, hz: f32) -> f32 {
     let hz = f64::from(hz);
-    let wet = modulation::wet_response(&settings.kernel(), lfo, rate, hz)
+    let wet = modulation::wet_response(&settings.kernel(), lfo, push, rate, hz)
         * low_cut_response(settings, rate, hz);
     let sum = Complex::real(f64::from(1.0 - settings.mix)) + wet.scale(f64::from(settings.mix));
     (20.0
@@ -480,6 +509,7 @@ pub fn response_db(settings: &Settings, lfo: &[f32; 4], rate: f32, hz: f32) -> f
 pub fn response_band_db(
     settings: &Settings,
     lfo: [f32; 4],
+    push: f32,
     rate: f32,
     frequencies: &[f32],
     low: &mut [f32],
@@ -491,7 +521,7 @@ pub fn response_band_db(
     } else {
         lfo[..settings.voices.clamp(1, 4)]
             .iter()
-            .map(|value| modulation::swept(&settings.kernel(), *value, rate) / (2.0 * rate))
+            .map(|value| modulation::swept(&settings.kernel(), *value, push, rate) / (2.0 * rate))
             .fold(0.0, f32::max)
     };
     for (index, frequency) in frequencies.iter().enumerate() {
@@ -511,7 +541,7 @@ pub fn response_band_db(
             } else {
                 from + (to - from) * point as f32 / (points - 1) as f32
             };
-            let db = response_db(settings, &lfo, rate, hz);
+            let db = response_db(settings, &lfo, push, rate, hz);
             least = least.min(db);
             most = most.max(db);
         }
@@ -681,6 +711,7 @@ impl Device for Modulator {
         }
         self.telemetry
             .set_value(TELEMETRY_PHASE, self.kernel.phase() as f32);
+        self.telemetry.set_value(TELEMETRY_PUSH, self.kernel.push());
         for (slot, channel) in [TELEMETRY_SWEEP_LEFT, TELEMETRY_SWEEP_RIGHT]
             .into_iter()
             .zip(self.kernel.sweep())

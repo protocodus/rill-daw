@@ -67,7 +67,15 @@ fn still_response_matches_the_drawn_one() {
                     for point in 0..36 {
                         let hz = 30.0 * (top / 30.0).powf(point as f32 / 35.0);
                         let (mut low, mut high) = ([0.0], [0.0]);
-                        response_band_db(&settings, [0.0; 4], rate, &[hz], &mut low, &mut high);
+                        response_band_db(
+                            &settings,
+                            [0.0; 4],
+                            0.0,
+                            rate,
+                            &[hz],
+                            &mut low,
+                            &mut high,
+                        );
                         assert_eq!(low, high);
                         let measured = response_at(
                             &response,
@@ -410,6 +418,56 @@ fn a_synced_lfo_is_a_function_of_the_song_position() {
 }
 
 #[test]
+fn feel_stretches_or_squeezes_the_synced_cycle() {
+    let rate = 48_000.0;
+    // A quarter note, straight, dotted and as a triplet.
+    let phase_at = |feel: f32, beat: f64| {
+        let mut device = device(rate, &[(SYNC, 1.0), (DIVISION, 5.0), (FEEL, feel)]);
+        run_playing(&mut *device, &[0.0], rate, &mut { beat });
+        device.telemetry().value(TELEMETRY_PHASE)
+    };
+    assert_eq!(phase_at(0.0, 0.5), 0.5);
+    assert_eq!(phase_at(1.0, 0.75), 0.5);
+    assert!((phase_at(2.0, 1.0 / 3.0) - 0.5).abs() < 1e-6);
+    // Feel follows the song only while synced.
+    assert!(!applies(FEEL, &settings(&[(FEEL, 1.0)])));
+    assert!(applies(FEEL, &settings(&[(SYNC, 1.0), (FEEL, 1.0)])));
+}
+
+#[test]
+fn the_envelope_moves_the_sweep_with_the_input_level() {
+    let rate = 48_000.0;
+    let rest = 20.0 * 800.0_f32.log10();
+    // A still phaser, so the only thing that moves the notches is the level.
+    let push = |envelope: f32, amplitude: f32| {
+        let mut device = device(rate, &[(MODE, PHASER), (DEPTH, 0.0), (ENVELOPE, envelope)]);
+        let input: Vec<f32> = (0..9600)
+            .map(|n| amplitude * (std::f32::consts::TAU * 220.0 * n as f32 / rate).sin())
+            .collect();
+        run_mono(&mut *device, &input);
+        device.telemetry().value(TELEMETRY_PUSH)
+    };
+    assert_eq!(push(100.0, 0.0), 0.0);
+    assert_eq!(push(0.0, 0.5), 0.0);
+    // Half scale is 6 dB down: seven eighths of the way.
+    let loud = push(100.0, 0.5);
+    assert!((loud - 0.875).abs() < 0.02, "{loud}");
+    assert!((push(-50.0, 0.5) + 0.5 * loud).abs() < 0.01);
+    let soft = push(100.0, 0.05);
+    assert!(soft > 0.3 && soft < loud - 0.3, "{soft}");
+
+    // The drawn response at that push is the one the audio takes.
+    let still = settings(&[(MODE, PHASER), (DEPTH, 0.0), (ENVELOPE, 100.0)]);
+    let corner = |push: f32| daw_devices::dsp::modulation::swept(&still.kernel(), 0.0, push, rate);
+    assert!((20.0 * corner(0.0).log10() - rest).abs() < 1e-3);
+    assert!((corner(loud) / corner(0.0) - (2.5 * loud).exp2()).abs() < 1e-3);
+    // Up in pitch is a shorter delay for the combs.
+    let flanger = settings(&[(MODE, FLANGER), (DEPTH, 0.0), (ENVELOPE, 100.0)]);
+    let delay = |push: f32| daw_devices::dsp::modulation::swept(&flanger.kernel(), 0.0, push, rate);
+    assert!(delay(0.5) < delay(0.0) && delay(-0.5) > delay(0.0));
+}
+
+#[test]
 fn switches_do_not_click() {
     let rate = 48_000.0;
     let mut device = device(rate, &[]);
@@ -542,15 +600,15 @@ fn each_mode_brings_its_defaults_and_its_own_controls() {
     };
     assert_eq!(
         shown(&by_mode(CHORUS)),
-        [DIVISION, CENTER_FLANGER, CENTER_PHASER, STAGES]
+        [DIVISION, FEEL, CENTER_FLANGER, CENTER_PHASER, STAGES]
     );
     assert_eq!(
         shown(&by_mode(FLANGER)),
-        [DIVISION, CENTER_CHORUS, CENTER_PHASER, VOICES, STAGES]
+        [DIVISION, FEEL, CENTER_CHORUS, CENTER_PHASER, VOICES, STAGES]
     );
     assert_eq!(
         shown(&by_mode(PHASER)),
-        [DIVISION, CENTER_CHORUS, CENTER_FLANGER, VOICES]
+        [DIVISION, FEEL, CENTER_CHORUS, CENTER_FLANGER, VOICES]
     );
     assert_eq!(
         shown(&settings(&[(SYNC, 1.0)])),

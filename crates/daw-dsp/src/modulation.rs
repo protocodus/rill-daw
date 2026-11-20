@@ -3,8 +3,8 @@
 //! the wet signal alone; whoever uses it mixes it with a dry signal delayed
 //! by [`LATENCY`].
 use super::{
-    AlgebraicSigmoid, Allpass1, AllpassChain, Complex, DelayLine, Lfo, LfoShape, LinearRamp,
-    Oversampler2x, Shape, Shelf1, Smoothed, Svf, SvfMix, flush, prewarp, tan_fast,
+    AlgebraicSigmoid, Allpass1, AllpassChain, Complex, DelayLine, EnvelopeFollower, Lfo, LfoShape,
+    LinearRamp, Oversampler2x, Shape, Shelf1, Smoothed, Svf, SvfMix, flush, prewarp, tan_fast,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,6 +36,9 @@ pub struct ModulationSettings {
     pub voices: usize,
     /// 2–12, phaser only.
     pub stages: usize,
+    /// −1–1: how far the input level moves the sweep, in units of the
+    /// LFO's swing at full depth. Positive moves it up in pitch.
+    pub envelope: f32,
 }
 
 impl Default for ModulationSettings {
@@ -52,6 +55,7 @@ impl Default for ModulationSettings {
             center: 0.012,
             voices: 2,
             stages: 4,
+            envelope: 0.0,
         }
     }
 }
@@ -104,6 +108,12 @@ const DUCK_SECONDS: f32 = 0.005;
 /// In cycles: more than the phase moves by itself between two samples.
 const JUMP: f64 = 1e-3;
 const LFO_SEED: u32 = 0x0C40_2A5E;
+/// The envelope's input range: silence up to this far below full scale
+/// counts as nothing, full scale as everything. Wide enough that a part
+/// played softly still moves the sweep.
+const ENVELOPE_RANGE_DB: f32 = 48.0;
+const ENVELOPE_ATTACK_MS: f32 = 5.0;
+const ENVELOPE_RELEASE_MS: f32 = 150.0;
 
 /// Voices that sound: one outside chorus.
 fn voice_count(settings: &ModulationSettings) -> usize {
@@ -121,27 +131,39 @@ pub fn channel_offset(settings: &ModulationSettings) -> f64 {
     f64::from(settings.stereo_degrees) / (360.0 * voice_count(settings) as f64)
 }
 
-fn sweep_law(mode: ModulationMode, depth: f32, center: f32, lfo: f32, sample_rate: f32) -> f32 {
+/// `push` is the envelope's offset (see [`ModulationSettings::envelope`]):
+/// up in pitch is a higher corner but a shorter delay.
+fn sweep_law(
+    mode: ModulationMode,
+    depth: f32,
+    center: f32,
+    lfo: f32,
+    push: f32,
+    sample_rate: f32,
+) -> f32 {
     let doubled = 2.0 * sample_rate;
     let longest = MAX_DELAY_SECONDS * doubled;
     match mode {
         ModulationMode::Chorus => {
-            ((center + depth * CHORUS_SWING_SECONDS * lfo).max(SHORTEST_CHORUS_SECONDS) * doubled)
+            let excursion = depth * lfo - push;
+            ((center + CHORUS_SWING_SECONDS * excursion).max(SHORTEST_CHORUS_SECONDS) * doubled)
                 .min(longest)
         }
         ModulationMode::Flanger => {
-            let ratio = if depth == 0.0 {
+            let excursion = depth * lfo - push;
+            let ratio = if excursion == 0.0 {
                 1.0
             } else {
-                (FLANGER_OCTAVES * depth * lfo).exp2()
+                (FLANGER_OCTAVES * excursion).exp2()
             };
             (center * ratio * doubled).clamp(SHORTEST_DELAY, longest)
         }
         ModulationMode::Phaser => {
-            let ratio = if depth == 0.0 {
+            let excursion = depth * lfo + push;
+            let ratio = if excursion == 0.0 {
                 1.0
             } else {
-                (PHASER_OCTAVES * depth * lfo).exp2()
+                (PHASER_OCTAVES * excursion).exp2()
             };
             (center * ratio).clamp(
                 LOWEST_CORNER_HZ,
@@ -151,15 +173,17 @@ fn sweep_law(mode: ModulationMode, depth: f32, center: f32, lfo: f32, sample_rat
     }
 }
 
-/// Where an LFO value (−1–1) puts the sweep: the delay in samples at twice
+/// Where an LFO value (−1–1) and the envelope's `push` (see
+/// [`ModulationKernel::push`]) put the sweep: the delay in samples at twice
 /// `sample_rate` (chorus, flanger) or the stages' corner in hertz (phaser).
 /// The one law for the audio path and for drawing.
-pub fn swept(settings: &ModulationSettings, lfo: f32, sample_rate: f32) -> f32 {
+pub fn swept(settings: &ModulationSettings, lfo: f32, push: f32, sample_rate: f32) -> f32 {
     sweep_law(
         settings.mode,
         settings.depth,
         settings.center,
         lfo,
+        push,
         sample_rate,
     )
 }
@@ -176,11 +200,12 @@ fn stage_gains(corner_hz: f32, analog: bool, doubled_rate: f32) -> [f32; MAX_STA
 }
 
 /// Complex response of the wet path at `hz` with the LFO at `lfo` for each
-/// voice (one value outside chorus), small signals, without the kernel's
-/// latency: what is mixed with the dry signal.
+/// voice (one value outside chorus) and the envelope at `push`, small
+/// signals, without the kernel's latency: what is mixed with the dry signal.
 pub fn wet_response(
     settings: &ModulationSettings,
     lfo: &[f32],
+    push: f32,
     sample_rate: f32,
     hz: f64,
 ) -> Complex {
@@ -189,7 +214,12 @@ pub fn wet_response(
     let feedback = f64::from(settings.feedback.clamp(-MAX_FEEDBACK, MAX_FEEDBACK));
     let looped = |path: Complex| path / (Complex::ONE - path.scale(feedback));
     if settings.mode == ModulationMode::Phaser {
-        let corner = swept(settings, lfo.first().copied().unwrap_or(0.0), sample_rate);
+        let corner = swept(
+            settings,
+            lfo.first().copied().unwrap_or(0.0),
+            push,
+            sample_rate,
+        );
         let gains = stage_gains(corner, settings.analog, doubled);
         return looped(
             gains[..settings.stages.clamp(1, MAX_STAGES)].iter().fold(
@@ -206,7 +236,7 @@ pub fn wet_response(
     for value in lfo.iter().take(voices) {
         // As the audio path reads: one sample less than the delay, the
         // write that follows the read making up for it.
-        let position = (swept(settings, *value, sample_rate) - 1.0).clamp(1.0, longest);
+        let position = (swept(settings, *value, push, sample_rate) - 1.0).clamp(1.0, longest);
         let whole = position.floor();
         sum = sum
             + DelayLine::lagrange_response(position - whole, omega)
@@ -233,13 +263,14 @@ pub fn wet_response(
 /// Seconds until the wet signal has fallen by 60 dB after the input stops,
 /// without the kernel's latency, at most 10.
 pub fn tail_seconds(settings: &ModulationSettings) -> f32 {
+    // The envelope can carry the sweep further either way.
+    let reach = settings.depth + settings.envelope.abs();
     let pass = match settings.mode {
-        ModulationMode::Chorus => settings.center + settings.depth * CHORUS_SWING_SECONDS,
-        ModulationMode::Flanger => settings.center * (FLANGER_OCTAVES * settings.depth).exp2(),
+        ModulationMode::Chorus => settings.center + reach * CHORUS_SWING_SECONDS,
+        ModulationMode::Flanger => settings.center * (FLANGER_OCTAVES * reach).exp2(),
         ModulationMode::Phaser => {
             // 1/(π·corner) is the longest group delay of a stage.
-            let lowest =
-                (settings.center * (-PHASER_OCTAVES * settings.depth).exp2()).max(LOWEST_CORNER_HZ);
+            let lowest = (settings.center * (-PHASER_OCTAVES * reach).exp2()).max(LOWEST_CORNER_HZ);
             settings.stages as f32 / (std::f32::consts::PI * lowest)
         }
     };
@@ -304,6 +335,10 @@ pub struct ModulationKernel {
     depth: Smoothed,
     center: Smoothed,
     feedback: Smoothed,
+    envelope: Smoothed,
+    follower: EnvelopeFollower,
+    /// The envelope's offset of the sweep at the last frame.
+    push: f32,
     over: [Oversampler2x; 2],
     lines: [DelayLine; 2],
     low_pass_in: [Svf; 2],
@@ -337,6 +372,9 @@ impl Default for ModulationKernel {
             depth: Smoothed::new(settings.depth),
             center: Smoothed::new(settings.center),
             feedback: Smoothed::new(settings.feedback),
+            envelope: Smoothed::new(settings.envelope),
+            follower: EnvelopeFollower::default(),
+            push: 0.0,
             over: [Oversampler2x::new(), Oversampler2x::new()],
             lines: [DelayLine::default(), DelayLine::default()],
             low_pass_in: [Svf::default(), Svf::default()],
@@ -368,9 +406,12 @@ impl ModulationKernel {
             &mut self.depth,
             &mut self.center,
             &mut self.feedback,
+            &mut self.envelope,
         ] {
             smoother.set_time(20.0, sample_rate);
         }
+        self.follower
+            .set_times(ENVELOPE_ATTACK_MS, ENVELOPE_RELEASE_MS, sample_rate);
         self.reset();
     }
 
@@ -386,6 +427,7 @@ impl ModulationKernel {
         self.depth.set_target(settings.depth.clamp(0.0, 1.0));
         self.feedback
             .set_target(settings.feedback.clamp(-MAX_FEEDBACK, MAX_FEEDBACK));
+        self.envelope.set_target(settings.envelope.clamp(-1.0, 1.0));
         let core = Core::of(settings);
         // The centre is a delay in one mode and a frequency in another: it
         // changes with the core, not before.
@@ -419,9 +461,12 @@ impl ModulationKernel {
             &mut self.depth,
             &mut self.center,
             &mut self.feedback,
+            &mut self.envelope,
         ] {
             smoother.snap();
         }
+        self.follower.reset();
+        self.push = 0.0;
         for over in &mut self.over {
             over.reset();
         }
@@ -453,6 +498,12 @@ impl ModulationKernel {
         &self.sweep
     }
 
+    /// Where the envelope has moved the sweep, in units of the LFO's swing
+    /// at full depth: the `push` of [`swept`].
+    pub fn push(&self) -> f32 {
+        self.push
+    }
+
     /// Keeps the LFO values of the moment and blends to the live ones: a
     /// jump of the phase or a new shape would otherwise move every delay
     /// within the sweep smoothing, a chirp.
@@ -471,15 +522,19 @@ impl ModulationKernel {
 
     /// Puts the sweep where the LFO is, without smoothing or glide.
     fn snap_sweep(&mut self) {
-        let (stereo, depth, center) =
-            (self.stereo.value(), self.depth.value(), self.center.value());
+        let (stereo, depth, center, push) = (
+            self.stereo.value(),
+            self.depth.value(),
+            self.center.value(),
+            self.push,
+        );
         for channel in 0..2 {
             for voice in 0..self.core.voices {
                 let value = self.live(channel, voice, stereo);
                 self.blended[channel][voice] = value;
                 self.sweep[channel][voice] = value;
                 self.previous[channel][voice] =
-                    sweep_law(self.core.mode, depth, center, value, self.sample_rate);
+                    sweep_law(self.core.mode, depth, center, value, push, self.sample_rate);
             }
         }
         self.glide = LinearRamp::new(1.0);
@@ -547,6 +602,22 @@ impl ModulationKernel {
         let depth = self.depth.next_value();
         let center = self.center.next_value();
         let feedback = self.feedback.next_value();
+        let envelope = self.envelope.next_value();
+        // The level on a decibel scale, as loudness is heard. Nothing is
+        // followed while the envelope is off; turned on, it rises from
+        // silence within its attack.
+        self.push = if envelope == 0.0 {
+            self.follower.reset();
+            0.0
+        } else {
+            let level = self.follower.process(left.abs().max(right.abs()));
+            if level > 0.0 {
+                envelope * (1.0 + 20.0 * level.log10() / ENVELOPE_RANGE_DB).max(0.0)
+            } else {
+                0.0
+            }
+        };
+        let push = self.push;
         if !self.started {
             self.started = true;
             self.snap_sweep();
@@ -587,7 +658,8 @@ impl ModulationKernel {
                     self.blended[channel][voice] = value;
                     let sweep = &mut self.sweep[channel][voice];
                     *sweep += self.sweep_coefficient * (value - *sweep);
-                    let mut now = sweep_law(core.mode, depth, center, *sweep, self.sample_rate);
+                    let mut now =
+                        sweep_law(core.mode, depth, center, *sweep, push, self.sample_rate);
                     let before = self.previous[channel][voice];
                     if core.mode != ModulationMode::Phaser {
                         now = now.clamp(before - 2.0 * MAX_SLEW, before + 2.0 * MAX_SLEW);
@@ -718,7 +790,7 @@ mod tests {
     fn the_wet_path_is_the_delay_it_says_plus_the_latency() {
         let settings = still(ModulationMode::Flanger, 0.002);
         let mut kernel = kernel(&settings);
-        assert!((swept(&settings, 0.7, RATE) - 192.0).abs() < 1e-3);
+        assert!((swept(&settings, 0.7, 0.0, RATE) - 192.0).abs() < 1e-3);
         let response: Vec<f32> = (0..400)
             .map(|n| {
                 kernel
@@ -752,7 +824,7 @@ mod tests {
                 for hz in [90.0, 440.0, 1000.0, 3300.0, 9000.0] {
                     kernel.reset();
                     let measured = wet_gain(&mut kernel, hz, 0.01);
-                    let expected = wet_response(&settings, &[0.0], RATE, hz).norm();
+                    let expected = wet_response(&settings, &[0.0], 0.0, RATE, hz).norm();
                     let error_db = 20.0 * (measured / expected).log10();
                     assert!(
                         error_db.abs() < 0.1,
@@ -769,30 +841,30 @@ mod tests {
             depth: 1.0,
             ..ModulationSettings::default()
         };
-        assert!((swept(&chorus, 1.0, RATE) - 0.016 * 96_000.0).abs() < 0.01);
-        assert!((swept(&chorus, -1.0, RATE) - 0.008 * 96_000.0).abs() < 0.01);
+        assert!((swept(&chorus, 1.0, 0.0, RATE) - 0.016 * 96_000.0).abs() < 0.01);
+        assert!((swept(&chorus, -1.0, 0.0, RATE) - 0.008 * 96_000.0).abs() < 0.01);
         let flanger = ModulationSettings {
             mode: ModulationMode::Flanger,
             center: 0.01,
             depth: 1.0,
             ..chorus
         };
-        assert!((swept(&flanger, 1.0, RATE) - 0.04 * 96_000.0).abs() < 0.01);
-        assert!((swept(&flanger, -1.0, RATE) - 0.0025 * 96_000.0).abs() < 0.01);
+        assert!((swept(&flanger, 1.0, 0.0, RATE) - 0.04 * 96_000.0).abs() < 0.01);
+        assert!((swept(&flanger, -1.0, 0.0, RATE) - 0.0025 * 96_000.0).abs() < 0.01);
         let tiny = ModulationSettings {
             center: 0.000_02,
             ..flanger
         };
-        assert_eq!(swept(&tiny, -1.0, 44_100.0), SHORTEST_DELAY);
+        assert_eq!(swept(&tiny, -1.0, 0.0, 44_100.0), SHORTEST_DELAY);
         let phaser = ModulationSettings {
             mode: ModulationMode::Phaser,
             center: 8000.0,
             depth: 1.0,
             ..chorus
         };
-        assert_eq!(swept(&phaser, 1.0, RATE), 20_000.0);
-        assert_eq!(swept(&phaser, 1.0, 44_100.0), 0.44 * 44_100.0);
-        assert!((swept(&phaser, -1.0, RATE) - 8000.0 / 5.656_854).abs() < 0.1);
+        assert_eq!(swept(&phaser, 1.0, 0.0, RATE), 20_000.0);
+        assert_eq!(swept(&phaser, 1.0, 0.0, 44_100.0), 0.44 * 44_100.0);
+        assert!((swept(&phaser, -1.0, 0.0, RATE) - 8000.0 / 5.656_854).abs() < 0.1);
         // 180° puts the right voices midway between the left ones.
         assert_eq!(
             channel_offset(&ModulationSettings {

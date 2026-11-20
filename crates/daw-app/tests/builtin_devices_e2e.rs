@@ -1044,6 +1044,29 @@ fn r1_modulator_combs_sweeps_and_takes_mode_defaults_from_its_panel() {
     let bypassed = level_between(&mut app, 0.5, 2.0);
     assert!((bypassed - dry).abs() < 0.5, "dry {dry}, mix 0 {bypassed}");
 
+    // Envelope: the tone's own level pushes a still comb's notch off it.
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"mix","value":"50 %"},{"parameter":"depth","value":"0 %"},
+            {"parameter":"center.flanger","value":"1 ms"}]),
+    );
+    let notched = level_between(&mut app, 0.5, 2.0);
+    let set = set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"envelope","value":"100 %"},{"parameter":"sync","value":true},
+            {"parameter":"feel","value":"Dotted"}]),
+    );
+    assert_eq!(
+        set["tool_result"]["result"]["parameters"][2]["value"],
+        "Dotted"
+    );
+    let pushed = level_between(&mut app, 0.5, 2.0);
+    assert!(pushed > notched + 6.0, "notched {notched}, pushed {pushed}");
+
     // A factory preset loads in one Undo step.
     let before = app.inspect();
     let (id, revision) = session(&before);
@@ -1067,7 +1090,8 @@ fn r1_modulator_combs_sweeps_and_takes_mode_defaults_from_its_panel() {
     assert_signal_row(
         &state,
         &[
-            "Shape", "Sync", "Depth", "Stereo", "Center", "Voices", "Feedback", "Low cut",
+            "Shape", "Sync", "Feel", "Depth", "Stereo", "Center", "Envelope", "Voices", "Feedback",
+            "Low cut",
         ],
     );
     assert_signal_row(&state, &["Mix", "Output"]);

@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "device": "r1-modulator",
+  "name": "Envelope Phaser",
+  "author": "Rill",
+  "category": "Phaser",
+  "tags": ["guitar", "bass", "funk"],
+  "description": "Harder playing pushes the notches up.",
+  "parameters": {
+    "mode": "Phaser",
+    "character": "Analog",
+    "stages": "6",
+    "feedback": 55.0,
+    "rate": 0.2,
+    "depth": 15.0,
+    "center.phaser": 300.0,
+    "envelope": 80.0,
+    "mix": 60.0
+  }
+}

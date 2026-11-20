@@ -123,6 +123,8 @@ r1-modulator 12 rate "Rate" log 0.01 20
 r1-modulator 13 division "Division" choice 8 bars|4 bars|2 bars|1 bar|1/2|1/4|1/8|1/16
 r1-modulator 14 depth "Depth" linear 0 100
 r1-modulator 15 stereo "Stereo" linear 0 180
+r1-modulator 17 feel "Feel" choice Straight|Dotted|Triplet
+r1-modulator 16 envelope "Envelope" linear -100 100
 r1-modulator 20 feedback "Feedback" linear -95 95
 r1-modulator 21 center.chorus "Chorus center" log 5 30
 r1-modulator 22 center.flanger "Flanger center" log 0.1 10

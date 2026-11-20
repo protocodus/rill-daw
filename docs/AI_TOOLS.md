@@ -94,7 +94,9 @@ the current `mode` act. Setting `mode` with `set_device_parameters` changes
 nothing else: the panel's Mode buttons also set that mode's usual Feedback
 and Center, a tool names them itself (a flanger or phaser usually wants
 `feedback` near 50 %). With `sync` on, `division` (`"1 bar"`, `"1/4"`)
-replaces `rate`.
+replaces `rate`, and `feel` (`"Straight"`, `"Dotted"`, `"Triplet"`)
+stretches or squeezes it. `envelope` (−100 – +100 %) lets the input level
+move the sweep, up in pitch when positive, even at `depth` 0.
 
 R1 Spacer (`rill:r1-spacer`) is an echo and a reverb: `echo.on` and
 `reverb.on` switch the sections, `routing` is `"Echo → Reverb"` or
