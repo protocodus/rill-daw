@@ -102,7 +102,7 @@ impl LiveEditContext {
         let mut parameters = HashMap::new();
         for track in project.channels() {
             parameters.insert((track.id, None), track.instrument_parameters.clone());
-            for slot in &track.inserts {
+            for slot in daw_core::effect_slots(&track.inserts) {
                 parameters.insert((track.id, Some(slot.id)), slot.parameters.clone());
             }
         }
@@ -247,25 +247,18 @@ impl LiveEditCompatibility {
                         })
                         && a.output_bus == b.output_bus
                         && a.parent_folder == b.parent_folder
-                        && a.inserts.len() == b.inserts.len()
-                        && a.inserts.iter().zip(&b.inserts).all(|(a_slot, b_slot)| {
-                            a_slot.id == b_slot.id
-                                && a_slot.enabled == b_slot.enabled
-                                && a_slot.effect == b_slot.effect
-                                && a_slot.state == b_slot.state
-                                && a_slot.inputs == b_slot.inputs
-                                && builtin_latency(
-                                    a_slot.effect.builtin_device(),
-                                    &a_slot.parameters,
-                                    rate,
-                                ) == builtin_latency(
-                                    b_slot.effect.builtin_device(),
-                                    &b_slot.parameters,
-                                    rate,
-                                )
-                                && (!compare_parameters
-                                    || parameters.get(&(a.id, Some(a_slot.id)))
-                                        == Some(&b_slot.parameters))
+                        && slots_compatible(&a.inserts, &b.inserts, &|a_slot, b_slot| {
+                            builtin_latency(
+                                a_slot.effect.builtin_device(),
+                                &a_slot.parameters,
+                                rate,
+                            ) == builtin_latency(
+                                b_slot.effect.builtin_device(),
+                                &b_slot.parameters,
+                                rate,
+                            ) && (!compare_parameters
+                                || parameters.get(&(a.id, Some(a_slot.id)))
+                                    == Some(&b_slot.parameters))
                         })
                 })
             })
@@ -463,12 +456,13 @@ impl LiveEditPreparer {
                     })
                     .collect(),
                 instrument_automation: plugin_automation(project, id, None),
-                insert_automation: track
-                    .inserts
-                    .iter()
-                    .filter(|slot| admission.channels.contains(&id) && slot.enabled)
-                    .map(|slot| (slot.id, plugin_automation(project, id, Some(slot.id))))
-                    .collect(),
+                insert_automation: if admission.channels.contains(&id) {
+                    let mut automation = Vec::new();
+                    enabled_slot_automation(project, id, &track.inserts, &mut automation);
+                    automation
+                } else {
+                    Vec::new()
+                },
                 content: content.clone(),
                 midi: Vec::with_capacity(midi_capacity),
                 chase: Vec::with_capacity(2 * *maximum),
@@ -605,17 +599,24 @@ impl Renderer {
         ensure!(
             Arc::ptr_eq(&self.live_edit_context, &edit.context)
                 && edit.tracks.len() == self.tracks.len()
-                && edit
-                    .tracks
-                    .iter()
-                    .zip(&self.tracks)
-                    .all(|(next, old)| old.as_ref().is_some_and(|old| {
+                && edit.tracks.iter().zip(&self.tracks).all(|(next, old)| old
+                    .as_ref()
+                    .is_some_and(|old| {
                         old.id == next.id
-                            && old.routes.iter().filter(|route| route.send_bus.is_some()).count() == next.send_gains.len()
-                            && old.inserts.len() == next.insert_automation.len()
-                            && old.inserts.iter().zip(&next.insert_automation).all(|(old, (id, _))| {
-                                matches!(old, Insert { id: old_id, .. } if old_id == id)
-                            })
+                            && old
+                                .routes
+                                .iter()
+                                .filter(|route| route.send_bus.is_some())
+                                .count()
+                                == next.send_gains.len()
+                            && {
+                                let mut ids = next.insert_automation.iter().map(|(id, _)| *id);
+                                let mut matches = true;
+                                visit_inserts(&old.inserts, &mut |insert| {
+                                    matches &= ids.next() == Some(insert.id);
+                                });
+                                matches && ids.next().is_none()
+                            }
                     })),
             "Prepared edit belongs to a different audio graph"
         );
@@ -673,12 +674,16 @@ impl Renderer {
                 &mut next.instrument_automation,
                 edit.automation_sequence,
             );
-            for (insert, (_, next_parameters)) in
-                track.inserts.iter_mut().zip(&mut next.insert_automation)
-            {
-                let Insert { parameters, .. } = insert;
-                swap_plugin_automation(parameters, next_parameters, edit.automation_sequence);
-            }
+            let mut next_automation = next.insert_automation.iter_mut();
+            visit_inserts_mut(&mut track.inserts, &mut |insert| {
+                if let Some((_, next_parameters)) = next_automation.next() {
+                    swap_plugin_automation(
+                        &mut insert.parameters,
+                        next_parameters,
+                        edit.automation_sequence,
+                    );
+                }
+            });
             if Arc::ptr_eq(&next.content.events, &track.events)
                 && Arc::ptr_eq(&next.content.audio, &track.audio)
             {
@@ -860,6 +865,43 @@ impl Renderer {
 /// compensation is fixed when the graph is built, so an edit that changes
 /// this (a compressor's lookahead) is not a live edit, although the value
 /// itself reaches the device through the live queue.
+/// Two insert lists compile to the same processors: the same effects in the
+/// same order and nesting, with `same` deciding what else must match.
+fn slots_compatible(
+    a: &[daw_core::EffectSlot],
+    b: &[daw_core::EffectSlot],
+    same: &dyn Fn(&daw_core::EffectSlot, &daw_core::EffectSlot) -> bool,
+) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b).all(|(a_slot, b_slot)| {
+            a_slot.id == b_slot.id
+                && a_slot.enabled == b_slot.enabled
+                && a_slot.effect.same_kind(&b_slot.effect)
+                && a_slot.state == b_slot.state
+                && a_slot.inputs == b_slot.inputs
+                && same(a_slot, b_slot)
+                && a_slot.effect.lanes().iter().zip(b_slot.effect.lanes()).all(
+                    |(a_lane, b_lane)| slots_compatible(&a_lane.inserts, &b_lane.inserts, same),
+                )
+        })
+}
+
+/// Automation of every insert the graph builds, in [`visit_inserts`] order:
+/// enabled ones, and inside enabled containers.
+fn enabled_slot_automation(
+    project: &Project,
+    track: u64,
+    slots: &[daw_core::EffectSlot],
+    out: &mut Vec<(u64, Vec<PluginAutomation>)>,
+) {
+    for slot in slots.iter().filter(|slot| slot.enabled) {
+        out.push((slot.id, plugin_automation(project, track, Some(slot.id))));
+        for lane in slot.effect.lanes().iter().take(daw_core::MAX_EFFECT_LANES) {
+            enabled_slot_automation(project, track, &lane.inserts, out);
+        }
+    }
+}
+
 pub fn builtin_latency(
     device: Option<&str>,
     parameters: &[PluginParameterValue],

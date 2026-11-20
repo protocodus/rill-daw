@@ -1538,9 +1538,7 @@ fn apply_one(
         } => {
             p.track_mut(r(track)?)
                 .context("Track not found")?
-                .inserts
-                .iter_mut()
-                .find(|s| s.id == *effect)
+                .effect_mut(*effect)
                 .context("Insert not found")?
                 .enabled = *enabled;
         }
@@ -1549,12 +1547,14 @@ fn apply_one(
             effect,
             index,
         } => {
-            let slots = &mut p.track_mut(r(track)?).context("Track not found")?.inserts;
+            // Reorders within the list holding the effect: the track's
+            // inserts or a container lane.
+            let (slots, from) = crate::effect_slot_list_mut(
+                &mut p.track_mut(r(track)?).context("Track not found")?.inserts,
+                *effect,
+            )
+            .context("Insert not found")?;
             ensure!(*index < slots.len(), "Insert index out of range");
-            let from = slots
-                .iter()
-                .position(|s| s.id == *effect)
-                .context("Insert not found")?;
             let slot = slots.remove(from);
             slots.insert(*index, slot);
         }
@@ -1576,9 +1576,7 @@ fn apply_one(
             let track = p.track_mut(r(track)?).context("Track not found")?;
             let values = if let Some(effect) = effect {
                 &mut track
-                    .inserts
-                    .iter_mut()
-                    .find(|s| s.id == *effect)
+                    .effect_mut(*effect)
                     .context("Insert not found")?
                     .parameters
             } else {

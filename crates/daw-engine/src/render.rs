@@ -85,6 +85,9 @@ mod audio_overlap_tests;
 #[cfg(test)]
 #[path = "builtin_render_tests.rs"]
 mod builtin_render_tests;
+#[cfg(test)]
+#[path = "container_render_tests.rs"]
+mod container_render_tests;
 
 #[cfg(test)]
 #[path = "midi_loop_tests.rs"]
@@ -590,6 +593,279 @@ fn apply_plugin_parameter_change(
     Ok(())
 }
 
+struct InsertBuild<'a> {
+    project: &'a Project,
+    track: &'a daw_core::Track,
+    sample_rate: u32,
+    processing_mode: ProcessingMode,
+    check_cancelled: &'a dyn Fn() -> Result<()>,
+}
+
+/// Prepares one enabled insert and its tail in samples. `None` for a device
+/// this version does not know, which passes audio through.
+fn build_insert(build: &InsertBuild, slot: &daw_core::EffectSlot) -> Result<Option<(Insert, u64)>> {
+    let InsertBuild {
+        project,
+        track,
+        sample_rate,
+        processing_mode,
+        check_cancelled,
+    } = *build;
+    let tail_limit = sample_rate as u64 * 30;
+    Ok(Some(match &slot.effect {
+        Effect::Vst3 { path, class_id } => {
+            let mut effect = VstEffect::load_class_with_mode(
+                Path::new(path),
+                class_id.as_deref(),
+                sample_rate as f64,
+                BLOCK,
+                processing_mode,
+            )
+            .with_context(|| format!("Loading insert {} on {}", slot.name, track.name))?;
+            check_cancelled()?;
+            if !slot.state.is_empty() {
+                effect.load_state(&slot.state)?;
+            }
+            for parameter in &slot.parameters {
+                check_cancelled()?;
+                effect.set_parameter(parameter.id, parameter.value)?;
+            }
+            let input_buses: Vec<_> = slot.inputs.iter().map(|route| route.bus as usize).collect();
+            effect.configure_audio_buses(&input_buses, &[])?;
+            let inputs = aux_inputs(
+                &slot.inputs,
+                &effect.audio_bus_layout(),
+                effect.main_input_bus(),
+            )?;
+            check_cancelled()?;
+            let tail = (effect.tail_samples() as u64).min(tail_limit);
+            let mut parameters = plugin_automation(project, track.id, Some(slot.id));
+            initialize_automation_defaults(&mut parameters, || effect.parameters())?;
+            (
+                Insert {
+                    id: slot.id,
+                    effect: InsertProcessor::Vst(Box::new(effect)),
+                    parameters,
+                    inputs,
+                    arrival_latency: 0,
+                    main_delay: CompensationDelay::new(0),
+                },
+                tail,
+            )
+        }
+        Effect::Builtin { device } => {
+            // An ID this version does not know passes audio through; the app
+            // shows it as an unknown device.
+            let Some(descriptor) = daw_devices::descriptor(device) else {
+                return Ok(None);
+            };
+            let inputs = aux_inputs(
+                &slot.inputs,
+                &crate::builtin::bus_layout(descriptor),
+                Some(0),
+            )
+            .with_context(|| format!("Routing inputs of insert {} on {}", slot.name, track.name))?;
+            let Some(device) =
+                crate::builtin::BuiltinDevice::create(device, sample_rate, BLOCK, &slot.parameters)
+            else {
+                return Ok(None);
+            };
+            let tail = (device.tail_samples() as u64).min(tail_limit);
+            let mut parameters = plugin_automation(project, track.id, Some(slot.id));
+            initialize_builtin_defaults(&mut parameters, slot.effect.builtin_device());
+            (
+                Insert {
+                    id: slot.id,
+                    effect: InsertProcessor::Builtin(Box::new(device)),
+                    parameters,
+                    inputs,
+                    arrival_latency: 0,
+                    main_delay: CompensationDelay::new(0),
+                },
+                tail,
+            )
+        }
+        Effect::Container { device, lanes } => {
+            let Some(descriptor) = daw_devices::descriptor(device)
+                .filter(|descriptor| daw_devices::devices::container::is_container(descriptor.id))
+            else {
+                return Ok(None);
+            };
+            let mut router = Router::new(descriptor);
+            router.prepare(sample_rate as f32);
+            router.set_lanes_present(lanes.len());
+            for parameter in &slot.parameters {
+                router.set_parameter(parameter.id, parameter.value as f32);
+            }
+            router.reset();
+            let mut prepared = Vec::with_capacity(lanes.len());
+            let mut tail = 0_u64;
+            for lane in lanes.iter().take(MAX_LANES) {
+                let mut inserts = Vec::new();
+                let mut lane_tail = 0_u64;
+                for nested in lane.inserts.iter().filter(|nested| nested.enabled) {
+                    check_cancelled()?;
+                    if let Some((insert, nested_tail)) = build_insert(build, nested)? {
+                        lane_tail += nested_tail;
+                        inserts.push(insert);
+                    }
+                }
+                tail = tail.max(lane_tail);
+                prepared.push(inserts);
+            }
+            let mut parameters = plugin_automation(project, track.id, Some(slot.id));
+            initialize_builtin_defaults(&mut parameters, Some(descriptor.id));
+            (
+                Insert {
+                    id: slot.id,
+                    effect: InsertProcessor::Container(Box::new(ContainerProcessor::new(
+                        router, prepared,
+                    ))),
+                    parameters,
+                    inputs: Vec::new(),
+                    arrival_latency: 0,
+                    main_delay: CompensationDelay::new(0),
+                },
+                tail.min(tail_limit),
+            )
+        }
+    }))
+}
+
+/// Runs one insert over the block in place. A hosted plug-in writes into
+/// `scratch`, which is then swapped in.
+#[allow(clippy::too_many_arguments)]
+fn process_insert(
+    insert: &mut Insert,
+    [left, right]: [&mut Vec<f32>; 2],
+    [scratch_left, scratch_right]: [&mut Vec<f32>; 2],
+    count: usize,
+    start: u64,
+    beats_per_sample: f64,
+    context: &BlockContext,
+) -> Result<()> {
+    let Insert {
+        effect,
+        parameters,
+        inputs,
+        main_delay,
+        arrival_latency,
+        ..
+    } = insert;
+    let position = if context.timeline {
+        start as i64 - i64::from(*arrival_latency)
+    } else {
+        start as i64
+    };
+    for index in 0..count {
+        let frame = main_delay.process([left[index], right[index]]);
+        left[index] = frame[0];
+        right[index] = frame[1];
+    }
+    match effect {
+        InsertProcessor::Builtin(device) => {
+            apply_plugin_automation(
+                parameters,
+                position as f64 * beats_per_sample,
+                |id, value| {
+                    device.set_parameter(id, value);
+                    Ok(())
+                },
+            )?;
+            let transport = daw_devices::ProcessContext {
+                tempo: context.tempo,
+                beat: position as f64 * beats_per_sample,
+                playing: context.timeline,
+            };
+            for input in inputs.iter_mut() {
+                input.prepare(count);
+            }
+            // A built-in has one sidechain pair; every route to it
+            // is already summed there.
+            let sidechain = inputs
+                .first()
+                .map(|input| (&input.left[..count], &input.right[..count]));
+            device.process_effect(
+                &transport,
+                &mut left[..count],
+                &mut right[..count],
+                sidechain,
+            )?;
+        }
+        InsertProcessor::Container(container) => {
+            apply_plugin_automation(
+                parameters,
+                position as f64 * beats_per_sample,
+                |id, value| {
+                    container.router.set_parameter(id, value as f32);
+                    Ok(())
+                },
+            )?;
+            container.process(
+                &mut left[..count],
+                &mut right[..count],
+                start,
+                beats_per_sample,
+                context,
+            )?;
+        }
+        InsertProcessor::Vst(effect) => {
+            for input in inputs.iter_mut() {
+                input.prepare(count);
+            }
+            let mut borrowed = [StereoBusInput {
+                bus: 0,
+                first_channel: 0,
+                left: &[],
+                right: &[],
+            }; 129];
+            borrowed[0] = StereoBusInput {
+                bus: effect
+                    .main_input_bus()
+                    .context("Effect lost its primary input bus")?,
+                first_channel: 0,
+                left: &left[..count],
+                right: &right[..count],
+            };
+            for (destination, input) in borrowed[1..].iter_mut().zip(inputs.iter()) {
+                *destination = input.borrowed(count);
+            }
+            let process = apply_plugin_automation(
+                parameters,
+                position as f64 * beats_per_sample,
+                |id, value| effect.queue_parameter_for_block(id, value),
+            )
+            .and_then(|()| {
+                effect.queue_transport_for_block(
+                    position,
+                    position as f64 * beats_per_sample,
+                    context.tempo,
+                    context.timeline,
+                )
+            })
+            .and_then(|()| {
+                effect.process_bus_inputs(&borrowed[..inputs.len() + 1], count)?;
+                effect.copy_output_pair(
+                    effect.main_output_bus(),
+                    0,
+                    &mut scratch_left[..count],
+                    &mut scratch_right[..count],
+                )
+            });
+            process.with_context(|| {
+                format!(
+                    "Processing effect \"{}\" ({})",
+                    effect.info().name,
+                    effect.info().path.display()
+                )
+            })?;
+            std::mem::swap(left, scratch_left);
+            std::mem::swap(right, scratch_right);
+        }
+    }
+    Ok(())
+}
+
 struct Insert {
     id: u64,
     effect: InsertProcessor,
@@ -602,6 +878,7 @@ struct Insert {
 enum InsertProcessor {
     Vst(Box<VstEffect>),
     Builtin(Box<crate::builtin::BuiltinDevice>),
+    Container(Box<ContainerProcessor>),
 }
 
 impl InsertProcessor {
@@ -609,8 +886,205 @@ impl InsertProcessor {
         match self {
             Self::Vst(effect) => effect.latency_samples(),
             Self::Builtin(device) => device.latency_samples(),
+            Self::Container(container) => container.latency,
         }
     }
+}
+
+use daw_devices::devices::container::{MAX_LANES, Router};
+
+/// One lane of a container: a serial chain of inserts and the delay that
+/// lines its output up with the container's slowest lane.
+struct ContainerLane {
+    inserts: Vec<Insert>,
+    left: Vec<f32>,
+    right: Vec<f32>,
+    scratch_left: Vec<f32>,
+    scratch_right: Vec<f32>,
+    latency: u32,
+    delay: CompensationDelay,
+}
+
+/// R1 Split or R1 Chain: divides the block between its lanes, runs each
+/// lane's inserts, and mixes them back. Every lane is delayed to the slowest
+/// one, and the dry signal with them, so band splits stay phase-coherent.
+struct ContainerProcessor {
+    router: Router,
+    /// Always [`MAX_LANES`] long; lanes the project does not hold are empty
+    /// and pass their part through.
+    lanes: Vec<ContainerLane>,
+    dry: Vec<[f32; 2]>,
+    dry_delay: CompensationDelay,
+    latency: u32,
+}
+
+impl ContainerProcessor {
+    fn new(router: Router, lanes: Vec<Vec<Insert>>) -> Self {
+        let mut lanes: Vec<_> = lanes
+            .into_iter()
+            .chain(std::iter::repeat_with(Vec::new))
+            .take(MAX_LANES)
+            .map(|inserts| ContainerLane {
+                latency: inserts
+                    .iter()
+                    .map(|insert: &Insert| insert.effect.latency_samples())
+                    .fold(0_u32, u32::saturating_add),
+                inserts,
+                left: vec![0.0; BLOCK],
+                right: vec![0.0; BLOCK],
+                scratch_left: vec![0.0; BLOCK],
+                scratch_right: vec![0.0; BLOCK],
+                delay: CompensationDelay::new(0),
+            })
+            .collect();
+        let latency = lanes.iter().map(|lane| lane.latency).max().unwrap_or(0);
+        for lane in &mut lanes {
+            lane.delay = CompensationDelay::new((latency - lane.latency) as usize);
+        }
+        Self {
+            router,
+            lanes,
+            dry: vec![[0.0; 2]; BLOCK],
+            dry_delay: CompensationDelay::new(latency as usize),
+            latency,
+        }
+    }
+
+    /// Nested inserts read automation at the position their input left the
+    /// timeline, as top-level inserts do.
+    fn assign_arrival(&mut self, arrival: u32) {
+        for lane in &mut self.lanes {
+            let mut position = arrival;
+            for insert in &mut lane.inserts {
+                insert.arrival_latency = position;
+                if let InsertProcessor::Container(container) = &mut insert.effect {
+                    container.assign_arrival(position);
+                }
+                position = position.saturating_add(insert.effect.latency_samples());
+            }
+        }
+    }
+
+    fn process(
+        &mut self,
+        left: &mut [f32],
+        right: &mut [f32],
+        start: u64,
+        beats_per_sample: f64,
+        context: &BlockContext,
+    ) -> Result<()> {
+        let count = left.len();
+        // A rule change fades within the block; run every lane that is fed
+        // at either end of it.
+        let fed_before = self.router.lanes();
+        for index in 0..count {
+            let input = [left[index], right[index]];
+            let parts = self.router.split(input);
+            for (lane, part) in self.lanes.iter_mut().zip(parts) {
+                lane.left[index] = part[0];
+                lane.right[index] = part[1];
+            }
+            self.dry[index] = self.dry_delay.process(input);
+        }
+        let fed = fed_before.max(self.router.lanes()).min(self.lanes.len());
+        for lane in &mut self.lanes[..fed] {
+            for insert in &mut lane.inserts {
+                process_insert(
+                    insert,
+                    [&mut lane.left, &mut lane.right],
+                    [&mut lane.scratch_left, &mut lane.scratch_right],
+                    count,
+                    start,
+                    beats_per_sample,
+                    context,
+                )?;
+            }
+            for index in 0..count {
+                [lane.left[index], lane.right[index]] =
+                    lane.delay.process([lane.left[index], lane.right[index]]);
+            }
+        }
+        for index in 0..count {
+            let mut parts = [[0.0; 2]; MAX_LANES];
+            for (part, lane) in parts.iter_mut().zip(&self.lanes[..fed]) {
+                *part = [lane.left[index], lane.right[index]];
+            }
+            [left[index], right[index]] = self.router.merge(&parts, self.dry[index]);
+        }
+        Ok(())
+    }
+
+    fn reset(&mut self) {
+        self.router.reset();
+        self.dry_delay.reset();
+        for lane in &mut self.lanes {
+            lane.delay.reset();
+        }
+    }
+}
+
+/// Resets a container and everything in its lanes, keeping parameters.
+fn reset_container(container: &mut ContainerProcessor) -> Result<()> {
+    container.reset();
+    for lane in &mut container.lanes {
+        for insert in &mut lane.inserts {
+            insert.main_delay.reset();
+            for parameter in &mut insert.parameters {
+                parameter.previous = None;
+            }
+            match &mut insert.effect {
+                InsertProcessor::Vst(effect) => effect.reset().with_context(|| {
+                    format!(
+                        "Resetting effect \"{}\" ({})",
+                        effect.info().name,
+                        effect.info().path.display()
+                    )
+                })?,
+                InsertProcessor::Builtin(device) => device.reset(),
+                InsertProcessor::Container(nested) => reset_container(nested)?,
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Every insert, nested ones included, depth first.
+fn visit_inserts(inserts: &[Insert], visit: &mut impl FnMut(&Insert)) {
+    for insert in inserts {
+        visit(insert);
+        if let InsertProcessor::Container(container) = &insert.effect {
+            for lane in &container.lanes {
+                visit_inserts(&lane.inserts, visit);
+            }
+        }
+    }
+}
+
+fn visit_inserts_mut(inserts: &mut [Insert], visit: &mut impl FnMut(&mut Insert)) {
+    for insert in inserts {
+        visit(insert);
+        if let InsertProcessor::Container(container) = &mut insert.effect {
+            for lane in &mut container.lanes {
+                visit_inserts_mut(&mut lane.inserts, visit);
+            }
+        }
+    }
+}
+
+fn find_insert_mut(inserts: &mut [Insert], id: u64) -> Option<&mut Insert> {
+    for insert in inserts {
+        if insert.id == id {
+            return Some(insert);
+        }
+        if let InsertProcessor::Container(container) = &mut insert.effect {
+            for lane in &mut container.lanes {
+                if let Some(found) = find_insert_mut(&mut lane.inserts, id) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Every selected native input pair has one retained, double-precision sum.
@@ -1304,108 +1778,15 @@ impl RenderTrack {
             self.right[index] = self.mix_right[index] as f32 * gain;
         }
         for insert in &mut self.inserts {
-            let Insert {
-                effect,
-                parameters,
-                inputs,
-                main_delay,
-                arrival_latency,
-                ..
-            } = insert;
-            let position = if context.timeline {
-                start as i64 - i64::from(*arrival_latency)
-            } else {
-                start as i64
-            };
-            for index in 0..count {
-                let frame = main_delay.process([self.left[index], self.right[index]]);
-                self.left[index] = frame[0];
-                self.right[index] = frame[1];
-            }
-            match effect {
-                InsertProcessor::Builtin(device) => {
-                    apply_plugin_automation(
-                        parameters,
-                        position as f64 * beats_per_sample,
-                        |id, value| {
-                            device.set_parameter(id, value);
-                            Ok(())
-                        },
-                    )?;
-                    let transport = daw_devices::ProcessContext {
-                        tempo: context.tempo,
-                        beat: position as f64 * beats_per_sample,
-                        playing: context.timeline,
-                    };
-                    for input in inputs.iter_mut() {
-                        input.prepare(count);
-                    }
-                    // A built-in has one sidechain pair; every route to it
-                    // is already summed there.
-                    let sidechain = inputs
-                        .first()
-                        .map(|input| (&input.left[..count], &input.right[..count]));
-                    device.process_effect(
-                        &transport,
-                        &mut self.left[..count],
-                        &mut self.right[..count],
-                        sidechain,
-                    )?;
-                }
-                InsertProcessor::Vst(effect) => {
-                    for input in inputs.iter_mut() {
-                        input.prepare(count);
-                    }
-                    let mut borrowed = [StereoBusInput {
-                        bus: 0,
-                        first_channel: 0,
-                        left: &[],
-                        right: &[],
-                    }; 129];
-                    borrowed[0] = StereoBusInput {
-                        bus: effect
-                            .main_input_bus()
-                            .context("Effect lost its primary input bus")?,
-                        first_channel: 0,
-                        left: &self.left[..count],
-                        right: &self.right[..count],
-                    };
-                    for (destination, input) in borrowed[1..].iter_mut().zip(inputs.iter()) {
-                        *destination = input.borrowed(count);
-                    }
-                    let process = apply_plugin_automation(
-                        parameters,
-                        position as f64 * beats_per_sample,
-                        |id, value| effect.queue_parameter_for_block(id, value),
-                    )
-                    .and_then(|()| {
-                        effect.queue_transport_for_block(
-                            position,
-                            position as f64 * beats_per_sample,
-                            context.tempo,
-                            context.timeline,
-                        )
-                    })
-                    .and_then(|()| {
-                        effect.process_bus_inputs(&borrowed[..inputs.len() + 1], count)?;
-                        effect.copy_output_pair(
-                            effect.main_output_bus(),
-                            0,
-                            &mut self.insert_left[..count],
-                            &mut self.insert_right[..count],
-                        )
-                    });
-                    process.with_context(|| {
-                        format!(
-                            "Processing effect \"{}\" ({})",
-                            effect.info().name,
-                            effect.info().path.display()
-                        )
-                    })?;
-                    std::mem::swap(&mut self.left, &mut self.insert_left);
-                    std::mem::swap(&mut self.right, &mut self.insert_right);
-                }
-            }
+            process_insert(
+                insert,
+                [&mut self.left, &mut self.right],
+                [&mut self.insert_left, &mut self.insert_right],
+                count,
+                start,
+                beats_per_sample,
+                &context,
+            )?;
         }
         let fader = self
             .gain
@@ -1555,11 +1936,15 @@ impl Renderer {
             if let Processor::Vst(plugin) = &mut track.processor {
                 plugin.set_block_transport(policy)?;
             }
-            for insert in &mut track.inserts {
-                if let InsertProcessor::Vst(effect) = &mut insert.effect {
-                    effect.set_block_transport(policy)?;
+            let mut result = Ok(());
+            visit_inserts_mut(&mut track.inserts, &mut |insert| {
+                if let InsertProcessor::Vst(effect) = &mut insert.effect
+                    && result.is_ok()
+                {
+                    result = effect.set_block_transport(policy);
                 }
-            }
+            });
+            result?;
         }
         Ok(())
     }
@@ -1577,11 +1962,11 @@ impl Renderer {
             if let Processor::Vst(plugin) = &track.processor {
                 add(plugin.ipc_stats());
             }
-            for insert in &track.inserts {
+            visit_inserts(&track.inserts, &mut |insert| {
                 if let InsertProcessor::Vst(effect) = &insert.effect {
                     add(effect.ipc_stats());
                 }
-            }
+            });
         }
         total
     }
@@ -1931,89 +2316,23 @@ impl Renderer {
             let note_capacity = content.notes.len();
             let mut inserts = Vec::new();
             let mut latency = track.latency_samples.saturating_add(plugin_latency);
+            let build = InsertBuild {
+                project,
+                track,
+                sample_rate,
+                processing_mode,
+                check_cancelled: &check_cancelled,
+            };
             for slot in &track.inserts {
                 check_cancelled()?;
                 if !enabled || !channel_active || !slot.enabled {
                     continue;
                 }
-                inserts.push(match &slot.effect {
-                    Effect::Vst3 { path, class_id } => {
-                        let mut effect = VstEffect::load_class_with_mode(
-                            Path::new(path),
-                            class_id.as_deref(),
-                            sample_rate as f64,
-                            BLOCK,
-                            processing_mode,
-                        )
-                        .with_context(|| {
-                            format!("Loading insert {} on {}", slot.name, track.name)
-                        })?;
-                        check_cancelled()?;
-                        if !slot.state.is_empty() {
-                            effect.load_state(&slot.state)?;
-                        }
-                        for parameter in &slot.parameters {
-                            check_cancelled()?;
-                            effect.set_parameter(parameter.id, parameter.value)?;
-                        }
-                        let input_buses: Vec<_> =
-                            slot.inputs.iter().map(|route| route.bus as usize).collect();
-                        effect.configure_audio_buses(&input_buses, &[])?;
-                        let inputs = aux_inputs(
-                            &slot.inputs,
-                            &effect.audio_bus_layout(),
-                            effect.main_input_bus(),
-                        )?;
-                        check_cancelled()?;
-                        latency = latency.saturating_add(effect.latency_samples());
-                        local_tail += (effect.tail_samples() as u64).min(sample_rate as u64 * 30);
-                        let mut parameters = plugin_automation(project, track.id, Some(slot.id));
-                        initialize_automation_defaults(&mut parameters, || effect.parameters())?;
-                        Insert {
-                            id: slot.id,
-                            effect: InsertProcessor::Vst(Box::new(effect)),
-                            parameters,
-                            inputs,
-                            arrival_latency: 0,
-                            main_delay: CompensationDelay::new(0),
-                        }
-                    }
-                    Effect::Builtin { device } => {
-                        // An ID this version does not know passes audio
-                        // through; the app shows it as an unknown device.
-                        let Some(descriptor) = daw_devices::descriptor(device) else {
-                            continue;
-                        };
-                        let inputs = aux_inputs(
-                            &slot.inputs,
-                            &crate::builtin::bus_layout(descriptor),
-                            Some(0),
-                        )
-                        .with_context(|| {
-                            format!("Routing inputs of insert {} on {}", slot.name, track.name)
-                        })?;
-                        let Some(device) = crate::builtin::BuiltinDevice::create(
-                            device,
-                            sample_rate,
-                            BLOCK,
-                            &slot.parameters,
-                        ) else {
-                            continue;
-                        };
-                        latency = latency.saturating_add(device.latency_samples());
-                        local_tail += (device.tail_samples() as u64).min(sample_rate as u64 * 30);
-                        let mut parameters = plugin_automation(project, track.id, Some(slot.id));
-                        initialize_builtin_defaults(&mut parameters, slot.effect.builtin_device());
-                        Insert {
-                            id: slot.id,
-                            effect: InsertProcessor::Builtin(Box::new(device)),
-                            parameters,
-                            inputs,
-                            arrival_latency: 0,
-                            main_delay: CompensationDelay::new(0),
-                        }
-                    }
-                });
+                if let Some((insert, tail)) = build_insert(&build, slot)? {
+                    latency = latency.saturating_add(insert.effect.latency_samples());
+                    local_tail += tail;
+                    inserts.push(insert);
+                }
             }
             let mut routes = Vec::new();
             if enabled && unmuted_channel(project, track) {
@@ -2277,6 +2596,9 @@ impl Renderer {
                         .unwrap_or(0),
                 );
                 *main_delay = CompensationDelay::new((*arrival_latency - arrival) as usize);
+                if let InsertProcessor::Container(container) = effect {
+                    container.assign_arrival(*arrival_latency);
+                }
                 arrival = arrival_latency.saturating_add(effect.latency_samples());
             }
             track.latency = arrival.saturating_add(track.delay.latency_samples() as u32);
@@ -2484,11 +2806,11 @@ impl Renderer {
             if let Processor::Builtin(device) = &track.processor {
                 out.push(((track.id, None), device.telemetry()));
             }
-            for insert in &track.inserts {
+            visit_inserts(&track.inserts, &mut |insert| {
                 if let InsertProcessor::Builtin(device) = &insert.effect {
                     out.push(((track.id, Some(insert.id)), device.telemetry()));
                 }
-            }
+            });
         }
     }
 
@@ -2546,10 +2868,7 @@ impl Renderer {
         if let Some(effect_id) = effect_id {
             let Insert {
                 effect, parameters, ..
-            } = track
-                .inserts
-                .iter_mut()
-                .find(|insert| matches!(insert, Insert { id, .. } if *id == effect_id))
+            } = find_insert_mut(&mut track.inserts, effect_id)
                 .context("Insert is not active in the render graph")?;
             apply_plugin_parameter_change(
                 parameters,
@@ -2566,6 +2885,10 @@ impl Renderer {
                     }),
                     InsertProcessor::Builtin(device) => {
                         device.set_parameter(id, value);
+                        Ok(())
+                    }
+                    InsertProcessor::Container(container) => {
+                        container.router.set_parameter(id, value as f32);
                         Ok(())
                     }
                 }
@@ -2669,6 +2992,21 @@ impl Renderer {
                             InsertProcessor::Vst(effect) => effect,
                             InsertProcessor::Builtin(device) => {
                                 device.reset();
+                                continue;
+                            }
+                            InsertProcessor::Container(container) => {
+                                if let Err(error) = reset_container(container) {
+                                    if !self.tolerate_plugin_failure {
+                                        return Err(error);
+                                    }
+                                    track.channel_failed = true;
+                                    track.channel_active = false;
+                                    track.pending_error = Some(format!(
+                                        "Plugin reset failed on \"{}\"\n\n{error:#}",
+                                        track.name
+                                    ));
+                                    self.plugin_errors += 1;
+                                }
                                 continue;
                             }
                         };

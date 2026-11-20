@@ -1359,7 +1359,9 @@ impl DawApp {
 pub(crate) fn effect_model(catalog: &[CatalogEntry], effect: &Effect) -> String {
     match effect {
         Effect::Vst3 { path, class_id } => plugin_model(catalog, path, class_id),
-        Effect::Builtin { device } => crate::builtin_devices::model(device),
+        Effect::Builtin { device } | Effect::Container { device, .. } => {
+            crate::builtin_devices::model(device)
+        }
     }
 }
 

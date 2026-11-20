@@ -13,6 +13,14 @@ impl Effect {
                 crate::model::validate_plugin_class_id(path, class_id.as_deref())
             }
             Self::Builtin { device } => crate::model::validate_device_id(device),
+            Self::Container { device, lanes } => {
+                ensure!(
+                    lanes.len() <= crate::MAX_EFFECT_LANES,
+                    "A container holds at most {} lanes",
+                    crate::MAX_EFFECT_LANES
+                );
+                crate::model::validate_device_id(device)
+            }
         }
     }
 }
@@ -25,9 +33,7 @@ impl Project {
         let slot = candidate
             .track_mut(track_id)
             .context("Track not found")?
-            .inserts
-            .iter_mut()
-            .find(|slot| slot.id == effect_id)
+            .effect_mut(effect_id)
             .context("Insert not found")?;
         if slot.effect != effect {
             slot.effect = effect;

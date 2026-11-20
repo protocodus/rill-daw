@@ -382,14 +382,15 @@ impl DawApp {
     fn editor_plugin(&self, target: EditorTarget) -> Option<Instrument> {
         let track = self.project.track(target.track)?;
         if let Some(id) = target.effect {
-            let slot = track.inserts.iter().find(|slot| slot.id == id)?;
+            let slot = track.effect(id)?;
             // The editor shows an insert the same way as an instrument.
             Some(match &slot.effect {
                 daw_core::Effect::Vst3 { path, class_id } => Instrument::Vst3 {
                     path: path.clone(),
                     class_id: class_id.clone(),
                 },
-                daw_core::Effect::Builtin { device } => Instrument::builtin(device.clone()),
+                daw_core::Effect::Builtin { device }
+                | daw_core::Effect::Container { device, .. } => Instrument::builtin(device.clone()),
             })
         } else {
             // The editor shows the device, whatever recordings it holds: a
@@ -404,7 +405,7 @@ impl DawApp {
     fn editor_state(&self, target: EditorTarget) -> Option<(&[u8], &[PluginParameterValue])> {
         let track = self.project.track(target.track)?;
         if let Some(id) = target.effect {
-            let slot = track.inserts.iter().find(|slot| slot.id == id)?;
+            let slot = track.effect(id)?;
             Some((&slot.state, &slot.parameters))
         } else {
             Some((&track.instrument_state, &track.instrument_parameters))
@@ -417,7 +418,7 @@ impl DawApp {
     ) -> Option<(&mut Vec<u8>, &mut Vec<PluginParameterValue>)> {
         let track = self.project.track_mut(target.track)?;
         if let Some(id) = target.effect {
-            let slot = track.inserts.iter_mut().find(|slot| slot.id == id)?;
+            let slot = track.effect_mut(id)?;
             Some((&mut slot.state, &mut slot.parameters))
         } else {
             Some((
@@ -1228,7 +1229,7 @@ impl DawApp {
         let name = track.name.clone();
         let effect_name = target
             .effect
-            .and_then(|effect| track.inserts.iter().find(|slot| slot.id == effect))
+            .and_then(|effect| track.effect(effect))
             .map(|slot| slot.name.clone());
         let title = effect_name
             .as_ref()
@@ -1404,12 +1405,7 @@ impl DawApp {
                                 self.begin_edit();
                                 let track = self.project.track_mut(track_id).unwrap();
                                 if let Some(effect) = target.effect {
-                                    track
-                                        .inserts
-                                        .iter_mut()
-                                        .find(|slot| slot.id == effect)
-                                        .unwrap()
-                                        .name = device_name.clone();
+                                    track.effect_mut(effect).unwrap().name = device_name.clone();
                                 } else {
                                     track.instrument_name = device_name.clone();
                                 }

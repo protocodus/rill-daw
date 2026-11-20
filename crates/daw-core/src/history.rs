@@ -300,7 +300,7 @@ pub(crate) fn snapshot_bytes(project: &Project) -> usize {
             }
             Instrument::None => {}
         }
-        for effect in &track.inserts {
+        for effect in crate::effect_slots(&track.inserts) {
             bytes += size_of_val(effect)
                 + effect.name.len()
                 + effect.state.len()
@@ -311,6 +311,9 @@ pub(crate) fn snapshot_bytes(project: &Project) -> usize {
                     path.len() + class_id.as_ref().map_or(0, String::len)
                 }
                 Effect::Builtin { device } => device.len(),
+                Effect::Container { device, lanes } => {
+                    device.len() + lanes.len() * size_of::<crate::EffectLane>()
+                }
             };
         }
         if let Some(lane) = &track.automation {

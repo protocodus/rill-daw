@@ -131,6 +131,7 @@ impl DawApp {
                             let location = match &slot.effect {
                                 Effect::Vst3 { path, .. } => path.as_str(),
                                 Effect::Builtin { .. } => "Built-in device",
+                                Effect::Container { .. } => "Built-in container",
                             };
                             changed |= row.inner.0.on_hover_text(location).changed();
                             if let Some(payload) =
