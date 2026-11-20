@@ -543,3 +543,36 @@ r1-drums 499 pad15.bits "Bit depth" choice Clean|12-bit|8-bit
 r1-drums 500 pad15.velocity_pitch "Soft hit pitch" linear -12 12
 r1-drums 531 pad16.bits "Bit depth" choice Clean|12-bit|8-bit
 r1-drums 532 pad16.velocity_pitch "Soft hit pitch" linear -12 12
+r1-drums 2 humanize "Humanize" linear 0 100
+r1-drums 53 pad1.velocity_tone "Soft hit tone" linear 0 100
+r1-drums 54 pad1.punch "Punch" linear 0 100
+r1-drums 85 pad2.velocity_tone "Soft hit tone" linear 0 100
+r1-drums 86 pad2.punch "Punch" linear 0 100
+r1-drums 117 pad3.velocity_tone "Soft hit tone" linear 0 100
+r1-drums 118 pad3.punch "Punch" linear 0 100
+r1-drums 149 pad4.velocity_tone "Soft hit tone" linear 0 100
+r1-drums 150 pad4.punch "Punch" linear 0 100
+r1-drums 181 pad5.velocity_tone "Soft hit tone" linear 0 100
+r1-drums 182 pad5.punch "Punch" linear 0 100
+r1-drums 213 pad6.velocity_tone "Soft hit tone" linear 0 100
+r1-drums 214 pad6.punch "Punch" linear 0 100
+r1-drums 245 pad7.velocity_tone "Soft hit tone" linear 0 100
+r1-drums 246 pad7.punch "Punch" linear 0 100
+r1-drums 277 pad8.velocity_tone "Soft hit tone" linear 0 100
+r1-drums 278 pad8.punch "Punch" linear 0 100
+r1-drums 309 pad9.velocity_tone "Soft hit tone" linear 0 100
+r1-drums 310 pad9.punch "Punch" linear 0 100
+r1-drums 341 pad10.velocity_tone "Soft hit tone" linear 0 100
+r1-drums 342 pad10.punch "Punch" linear 0 100
+r1-drums 373 pad11.velocity_tone "Soft hit tone" linear 0 100
+r1-drums 374 pad11.punch "Punch" linear 0 100
+r1-drums 405 pad12.velocity_tone "Soft hit tone" linear 0 100
+r1-drums 406 pad12.punch "Punch" linear 0 100
+r1-drums 437 pad13.velocity_tone "Soft hit tone" linear 0 100
+r1-drums 438 pad13.punch "Punch" linear 0 100
+r1-drums 469 pad14.velocity_tone "Soft hit tone" linear 0 100
+r1-drums 470 pad14.punch "Punch" linear 0 100
+r1-drums 501 pad15.velocity_tone "Soft hit tone" linear 0 100
+r1-drums 502 pad15.punch "Punch" linear 0 100
+r1-drums 533 pad16.velocity_tone "Soft hit tone" linear 0 100
+r1-drums 534 pad16.punch "Punch" linear 0 100

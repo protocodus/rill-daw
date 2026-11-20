@@ -148,7 +148,8 @@ fn note(pad: usize, offset: u32) -> Event {
 }
 
 /// R1 Drums: every pad at once, once a second, so sixteen hits sound all
-/// the time, plain and with each pad's filter and drive on; and a busy
+/// the time, plain, with each pad's filter and drive on and with its feel
+/// controls on too; and a busy
 /// pattern of sixteenth notes at 120 BPM.
 fn measure_drums(descriptor: &daw_devices::DeviceDescriptor) {
     let blocks_per_second = (RATE / BLOCK as f32).round() as usize;
@@ -174,6 +175,16 @@ fn measure_drums(descriptor: &daw_devices::DeviceDescriptor) {
         .collect();
     run_drums(descriptor, "16 pads", &[], &together);
     run_drums(descriptor, "16 shaped", &shaped, &together);
+    // The same with every hit darkened (velocity 0.8), punched and humanized.
+    let mut felt = shaped.clone();
+    felt.push((drums::HUMANIZE, 50.0));
+    felt.extend((0..drums::PADS).flat_map(|pad| {
+        [
+            (drums::id(pad, drums::VELOCITY_TONE), 100.0),
+            (drums::id(pad, drums::PUNCH), 50.0),
+        ]
+    }));
+    run_drums(descriptor, "16 shaped + feel", &felt, &together);
     // Sixteenth notes at 120 BPM: 0.125 s a step.
     let step_frames = (RATE * 0.125) as usize;
     let pattern = |block: usize| -> Vec<Event> {

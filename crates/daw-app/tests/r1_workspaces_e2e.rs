@@ -498,10 +498,11 @@ fn the_selected_drum_pad_shows_its_entire_signal_path_and_silent_level() {
     for stage in [
         "TRIGGER",
         "REGION",
-        "TUNING",
-        "PITCH ENV",
+        "PITCH",
         "AMP ENVELOPE",
+        "VELOCITY",
         "TONE",
+        "Humanize",
     ] {
         visible_in_window(&before, label(&before, stage));
     }
@@ -515,7 +516,7 @@ fn the_selected_drum_pad_shows_its_entire_signal_path_and_silent_level() {
         "{}",
         edited["tool_result"]
     );
-    visible_in_window(&edited, label(&edited, "PITCH ENV"));
+    visible_in_window(&edited, label(&edited, "VELOCITY"));
     let volume = label(&edited, "Pad volume");
     let hovered = pointer(
         &mut app,
@@ -525,7 +526,7 @@ fn the_selected_drum_pad_shows_its_entire_signal_path_and_silent_level() {
     visible_in_window(&hovered, label(&hovered, "−∞ dB"));
     let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(undone["project"], before["project"]);
-    visible_in_window(&undone, label(&undone, "PITCH ENV"));
+    visible_in_window(&undone, label(&undone, "VELOCITY"));
     app.quit();
 }
 

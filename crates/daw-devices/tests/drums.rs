@@ -643,3 +643,66 @@ fn a_choke_cuts_every_leaf_of_a_layered_hit() {
     assert!(rms(span(&played, 0.02, 0.09)) > 0.15);
     assert!(rms(span(&played, 0.14, 0.5)) < 1e-6);
 }
+
+#[test]
+fn soft_hit_tone_darkens_soft_hits_and_leaves_hard_ones_open() {
+    let level = |tone: f32, velocity: f32, hz: f32| {
+        let sample = sine(RATE, 0.5, hz, 0.5);
+        let mut device = kit(&[(0, sample)], &[(id(0, VELOCITY_TONE), tone)]);
+        let (left, _) = render(&mut *device, 0.4, &[(0.0, hit_with(0, velocity))]);
+        db(rms(span(&left, 0.1, 0.35)) / (0.5 / 2f64.sqrt()))
+    };
+    // Off, or at full velocity, a hit passes untouched.
+    assert!(level(0.0, 0.25, 8000.0).abs() < 0.05);
+    assert!(level(100.0, 1.0, 8000.0).abs() < 0.05);
+    // A soft hit loses its highs but keeps its body.
+    assert!(level(100.0, 0.25, 8000.0) < -12.0);
+    assert!(level(100.0, 0.25, 100.0) > -1.0);
+    // Halfway is darker than open and brighter than full.
+    let half = level(50.0, 0.25, 8000.0);
+    assert!(
+        half < -1.0 && half > level(100.0, 0.25, 8000.0) + 3.0,
+        "{half}"
+    );
+}
+
+#[test]
+fn punch_boosts_the_first_milliseconds_of_a_hit_only() {
+    let sample = sine(RATE, 0.5, 400.0, 0.5);
+    let play = |punch: f32| {
+        let mut device = kit(&[(0, Arc::clone(&sample))], &[(id(0, PUNCH), punch)]);
+        render(&mut *device, 0.4, &[(0.0, hit(0))]).0
+    };
+    let (clean, punched) = (play(0.0), play(100.0));
+    let onset = db(rms(span(&punched, 0.0, 0.005)) / rms(span(&clean, 0.0, 0.005)));
+    assert!(onset > 3.0, "{onset}");
+    let body = db(rms(span(&punched, 0.1, 0.35)) / rms(span(&clean, 0.1, 0.35)));
+    assert!(body.abs() < 0.05, "{body}");
+    assert!(largest_step(&punched) < 0.1);
+}
+
+#[test]
+fn humanize_varies_each_hit_a_little_and_repeats_after_reset() {
+    let sample = sine(RATE, 0.1, 1000.0, 0.5);
+    let hits: Vec<_> = (0..8).map(|n| (0.15 * n as f32, hit(0))).collect();
+    let levels = |device: &mut dyn Device| {
+        let (left, _) = render(device, 1.2, &hits);
+        (0..8)
+            .map(|n| {
+                let from = 0.15 * n as f32 + 0.02;
+                db(rms(span(&left, from, from + 0.05)) / (0.5 / 2f64.sqrt()))
+            })
+            .collect::<Vec<_>>()
+    };
+    let mut steady = kit(&[(0, Arc::clone(&sample))], &[]);
+    assert!(levels(&mut *steady).iter().all(|level| level.abs() < 0.05));
+
+    let mut human = kit(&[(0, Arc::clone(&sample))], &[(HUMANIZE, 100.0)]);
+    let first = levels(&mut *human);
+    let spread = first.iter().fold(0.0_f32, |m, l| m.max(l.abs()));
+    assert!(spread > 0.5 && spread <= 3.05, "{first:?}");
+    assert!(first.windows(2).any(|pair| (pair[0] - pair[1]).abs() > 0.2));
+    // The same hits after a reset vary the same way, so renders repeat.
+    human.reset();
+    assert_eq!(levels(&mut *human), first);
+}
