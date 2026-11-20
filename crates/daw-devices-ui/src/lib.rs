@@ -1337,10 +1337,14 @@ fn response(
         .map(|index| daw_ui::log_grid_frequency(index, points))
         .collect();
     let selected = state.selected.filter(|node| *node < view.nodes.len());
-    let (mut db, mut own) = (vec![0.0; points], vec![0.0; points]);
+    let (mut db, mut own, mut side) = (vec![0.0; points], vec![0.0; points], vec![0.0; points]);
     let (range, edits) = {
         let values = |id: u32| host.value(id);
         (view.curve)(&values, rate, &frequencies, &mut db);
+        let split = view
+            .side_curve
+            .is_some_and(|curve| curve(&values, rate, &frequencies, &mut side));
+        let scale = view.gain_scale.map_or(1.0, |scale| scale(&values));
         let mut curves = Vec::new();
         if let (Some(curve), Some(node)) = (view.node_curve, selected) {
             curve(&values, node, rate, &frequencies, &mut own);
@@ -1348,12 +1352,22 @@ fn response(
                 db: &own,
                 emphasis: false,
                 low: None,
+                label: None,
+            });
+        }
+        if split {
+            curves.push(daw_ui::FrequencyCurve {
+                db: &side,
+                emphasis: false,
+                low: None,
+                label: Some("Side"),
             });
         }
         curves.push(daw_ui::FrequencyCurve {
             db: &db,
             emphasis: true,
             low: None,
+            label: split.then_some("Mid"),
         });
         let plain = |id: u32| {
             descriptor
@@ -1372,10 +1386,12 @@ fn response(
                 let gain = node.gain.filter(|id| (layout.visible)(*id, &values));
                 daw_ui::FrequencyNode {
                     frequency: plain(node.frequency).unwrap_or(1000.0),
-                    gain_db: gain.and_then(plain).unwrap_or(0.0),
+                    gain_db: gain.and_then(plain).unwrap_or(0.0) * scale,
                     selected: selected == Some(index),
                     color: None,
-                    gain_editable: gain.is_some(),
+                    // At no scale every gain draws flat; a drag could not
+                    // say which it means.
+                    gain_editable: gain.is_some() && scale > 0.01,
                     label: node.label,
                     enabled: node.enable.is_none_or(|id| values(id) >= 0.5),
                     readout: readout.as_deref(),
@@ -1427,7 +1443,7 @@ fn response(
             edits.push(
                 normalized(node.frequency, drag.frequency)
                     .into_iter()
-                    .chain(gain.and_then(|id| normalized(id, drag.gain_db)))
+                    .chain(gain.and_then(|id| normalized(id, drag.gain_db / scale)))
                     .collect(),
             );
         }

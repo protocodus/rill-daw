@@ -1429,12 +1429,13 @@ Six bands: a high-pass, four parametric bands, a low-pass.
 
 | Band | Parameter | Range / choices | Default |
 | --- | --- | --- | --- |
-| HP | On, Frequency, Slope | 20 Hz – 2 kHz; 12, 24, 48 dB/oct | off, 30 Hz, 12 dB/oct |
-| 1 – 4 | On, Type, Frequency, Gain, Q | Bell, Low shelf, High shelf, Notch; 20 Hz – 20 kHz; ±24 dB; Q 0.1 – 18 | on, 0 dB; band 1 low shelf 100 Hz, band 2 bell 400 Hz, band 3 bell 2.5 kHz, band 4 high shelf 8 kHz |
-| LP | On, Frequency, Slope | 200 Hz – 20 kHz; same slopes | off, 18 kHz, 12 dB/oct |
+| HP | On, Frequency, Slope, Placement | 20 Hz – 2 kHz; 12, 24, 48 dB/oct; Stereo, Mid, Side | off, 30 Hz, 12 dB/oct, Stereo |
+| 1 – 4 | On, Type, Frequency, Gain, Q, Placement | Bell, Low shelf, High shelf, Notch; 20 Hz – 20 kHz; ±24 dB; Q 0.1 – 18; Stereo, Mid, Side | on, 0 dB, Stereo; band 1 low shelf 100 Hz, band 2 bell 400 Hz, band 3 bell 2.5 kHz, band 4 high shelf 8 kHz |
+| LP | On, Frequency, Slope, Placement | 200 Hz – 20 kHz; same slopes and placements | off, 18 kHz, 12 dB/oct, Stereo |
 | Global | Mode | Digital, Analog | Digital |
 | | Auto gain | toggle | off |
 | | Analyzer | Off, Input, Output | Output |
+| | Gain scale | 0 – 200 % | 100 % |
 
 **DSP.** A serial chain of matched second-order sections (`daw_dsp::matched`),
 each run as a state-variable filter with `f64` state. *Digital*:
@@ -1452,40 +1453,53 @@ overshoot; changing a band's type fades it out and back in. Zero latency in
 both modes. A band at 0 dB gain is skipped. Auto gain is static, from the
 curve of the four parametric bands. A guard clamps the output at +36 dBFS.
 
-**Panel** (987 points, about 590 high), top to bottom in signal order. The
-effect window shows about 630 points of a panel in the app's default
-window, and at 610 points of width this one needed 750:
+**Placement** puts a band on the whole signal (Stereo), on what left and
+right share (Mid, (L + R) / 2) or on what differs between them (Side,
+(L − R) / 2); the other half passes untouched. It is the mastering and
+bus move artists ask for most after the bands themselves: a side high-pass
+folds the bass to mono, a side shelf widens the top, a mid bell brings a
+centred voice forward. A band on Mid or Side filters both halves and keeps
+of each what its placement says, so moving it is a 10 ms crossfade of two
+weights, with no fade of the filter and no click. Its state is converted
+into mid and side when it leaves Stereo and back once it is plainly stereo
+again (the filter is linear, so the state converts exactly): a stereo band
+costs nothing extra, a placed one an encode and decode per sample. Auto gain
+follows the mid: most of a mix's level sits there, and widening must not
+turn the centre down.
 
-- **Response**, 200 points high: the summed curve the audio path computes
+**Gain scale** multiplies the gain of the four parametric bands: 50 % is
+half the curve in decibels, 0 % takes every band out of the path, 200 %
+doubles it. One automatable amount for the whole curve, as on mastering
+equalizers; the cut filters are corrective and do not scale.
+
+**Panel** (987 points), top to bottom:
+
+- **Band** picker (**HP**, **1**–**4**, **LP**) with Mode (Digital, Analog)
+  and Analyzer (Off, Input, Output) beside it.
+- **Response**, 212 points high: the summed curve the audio path computes
   (`response_db`), the selected band's own curve filled behind it, and the
   spectrum of the input or output behind both, drawn from the telemetry ring
   with a 4.5 dB/octave tilt and sixth-octave smoothing and falling away when the
-  signal stops. The scale is ±12 dB and widens to ±24 dB while an enabled
-  band exceeds it. Six nodes, **HP**, **1**–**4**, **LP**: drag for
-  frequency and gain (cuts and notches: frequency only), Shift for fine,
-  wheel for Q (slope on the cuts), double-click to switch the band on or
-  off, right-click for type and **Reset band**. A band that is off keeps a
-  hollow node, so it can be placed before it is switched on. The node shows
-  its values while it is hovered or dragged.
-- **Bands**: a table with one column per band in the same order and the
-  selected band's column marked. Each column has an enable lamp, the type
-  as drawn shapes (bell, low shelf, high shelf, notch) or the slope (12,
-  24, 48), then Frequency, Gain and Q as inline dials on shared lines;
-  cells a band does not have stay empty, and a notch keeps its Gain
-  disabled in place. The table is the plain-click path to everything the
-  plot does by dragging.
-- **Global**, beside the table on the last third of the width: Mode
-  (Digital, Analog) and Analyzer (Off, Input, Output) on one line, the Auto
-  gain switch with the compensation it applies and the Output knob on the
-  next. The table's five lines are spaced to the height of these two, so
-  both cards end on the same line.
+  signal stops. While any band sits on Mid or Side, the curve is the mid's
+  and a thinner muted line draws the side's (`side_response_db`), named in a
+  legend in the corner; with every band on Stereo there is one curve and no
+  legend. Nodes are drawn at their gain after Gain scale, and a drag sets
+  the gain that lands where it is dropped. The scale is ±12 dB and widens to
+  ±24 dB while an enabled band exceeds it. Six nodes, **HP**, **1**–**4**,
+  **LP**: drag for frequency and gain (cuts and notches: frequency only),
+  Shift for fine, wheel for Q (slope on the cuts), double-click to switch
+  the band on or off, right-click for type and **Reset band**. A band that
+  is off keeps a hollow node, so it can be placed before it is switched on.
+  The node shows its values, and its placement unless Stereo, while it is
+  hovered or dragged.
+- The selected band's card, its lamp in the title: Type (or Slope),
+  Frequency, Gain and Q, and Placement last on all twelve columns; the
+  cuts keep the same columns, with nothing where Gain and Q would be.
+- Gain scale, Auto gain (with the compensation it applies) and Output on
+  the last line.
 
-The graph is the point of an equalizer, so it has the height; the table
-replaced the first draft's row of knob columns because thirty knobs do not
-fit the panel at a readable size, while a table of values does and can be
-compared across bands. The controls it needed are shared `daw-ui`
-components (`inline_knob`, `glyph_toggle`, `column_highlight`, the extended
-`frequency_plot` and `Spectrum`), described in [UI.md](UI.md).
+The graph is the point of an equalizer, so it has the height; one band's
+card at a time keeps every control at a readable size.
 
 ### R1 Filter
 

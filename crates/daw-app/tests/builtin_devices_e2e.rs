@@ -416,6 +416,14 @@ fn r1_equalizer_shapes_audio_loads_presets_and_edits_from_its_plot() {
     assert_eq!(redone["project"], moved["project"]);
     assert!(high_band_db(&mut app) > flat.1 + 1.0);
 
+    // The dragged band (3) is selected; its Placement is one click in its
+    // card, one Undo step.
+    let placed = app.click("Side");
+    assert_eq!(value(&placed, 35), 1.0, "{}", placed["project"]);
+    assert_eq!(placed["history"]["undo"][0], "Effect parameter");
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], moved["project"]);
+
     // Save and reopen: the boost comes back as stored.
     let path = app.directory.path().join("equalized.rill");
     app.command(json!({"command":"save","path":path}));
@@ -425,6 +433,52 @@ fn r1_equalizer_shapes_audio_loads_presets_and_edits_from_its_plot() {
         moved["project"]["tracks"][0]["inserts"]
     );
     assert!(high_band_db(&mut app) > flat.1 + 1.0);
+
+    // Mid/side: a steep high-pass on the side leaves the centred noise
+    // whole; moved to Stereo it takes the lows. Gain scale 0 % flattens the
+    // boost from the plot.
+    let cut = json!([
+        {"parameter":"hp.on","value":true},
+        {"parameter":"hp.frequency","value":"2 kHz"},
+        {"parameter":"hp.slope","value":"48 dB"},
+        {"parameter":"hp.placement","value":"side"}]);
+    let side = set_parameters(&mut app, track, &insert, cut);
+    assert_eq!(
+        side["tool_result"]["result"]["parameters"][3]["value"],
+        "Side"
+    );
+    let lows = band_db(&mut app, "below_250_hz");
+    assert!(
+        (lows - flat.0).abs() < 0.5,
+        "flat {} dB, side cut {lows} dB",
+        flat.0
+    );
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"hp.placement","value":"stereo"}]),
+    );
+    let lows = band_db(&mut app, "below_250_hz");
+    assert!(
+        lows < flat.0 - 6.0,
+        "flat {} dB, stereo cut {lows} dB",
+        flat.0
+    );
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([
+        {"parameter":"hp.on","value":false},
+        {"parameter":"gain_scale","value":0}]),
+    );
+    let highs = high_band_db(&mut app);
+    assert!(
+        (highs - flat.1).abs() < 0.2,
+        "flat {} dB, unscaled {highs} dB",
+        flat.1
+    );
     app.quit();
 }
 

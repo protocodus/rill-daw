@@ -412,12 +412,14 @@ pub(crate) fn modulation(
                 db: high,
                 emphasis: false,
                 low: None,
+                label: None,
             });
         }
         curves.push(daw_ui::FrequencyCurve {
             db: &left.1,
             emphasis: true,
             low: Some(&left.0),
+            label: None,
         });
         let (from, to) = (place(-1.0), place(1.0));
         let readout = format!(

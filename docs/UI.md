@@ -1612,6 +1612,9 @@ with its level over it and its number under it, against a decibel scale down
 to `floor_db`; bars are centered and capped in width, and `harmonic_bars`
 returns their rectangles.
 
+A `FrequencyCurve` with a `label` is named in a legend in the plot's top
+right corner (R1 Equalizer: Mid and Side), with a short stroke of its line.
+
 `frequency_plot` also draws what moves. A `FrequencyCurve` with `low` is a
 band filled between `low` and `db` with the upper edge as its line, for a
 response finer than a pixel (a comb's teeth); `spans` shade frequency

@@ -89,6 +89,13 @@ r1-equalizer 60 mode "Mode" choice Digital|Analog
 r1-equalizer 61 auto_gain "Auto gain" toggle
 r1-equalizer 62 analyzer "Analyzer" choice Off|Input|Output
 r1-equalizer 63 output "Output" linear -24 24
+r1-equalizer 4 hp.placement "Placement" choice Stereo|Mid|Side
+r1-equalizer 15 band1.placement "Placement" choice Stereo|Mid|Side
+r1-equalizer 25 band2.placement "Placement" choice Stereo|Mid|Side
+r1-equalizer 35 band3.placement "Placement" choice Stereo|Mid|Side
+r1-equalizer 45 band4.placement "Placement" choice Stereo|Mid|Side
+r1-equalizer 53 lp.placement "Placement" choice Stereo|Mid|Side
+r1-equalizer 64 gain_scale "Gain scale" linear 0 200
 r1-saturator 1 model "Model" choice Transistor|Tube|Tape
 r1-saturator 2 drive "Drive" linear 0 36
 r1-saturator 3 character "Character" linear 0 100

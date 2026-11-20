@@ -20,6 +20,7 @@ use std::sync::Arc;
 pub const HP_ON: u32 = 1;
 pub const HP_FREQUENCY: u32 = 2;
 pub const HP_SLOPE: u32 = 3;
+pub const HP_PLACEMENT: u32 = 4;
 /// First ID of each parametric band; add the `BAND_*` offsets.
 pub const BANDS: [u32; 4] = [10, 20, 30, 40];
 pub const BAND_ON: u32 = 0;
@@ -27,13 +28,16 @@ pub const BAND_TYPE: u32 = 1;
 pub const BAND_FREQUENCY: u32 = 2;
 pub const BAND_GAIN: u32 = 3;
 pub const BAND_Q: u32 = 4;
+pub const BAND_PLACEMENT: u32 = 5;
 pub const LP_ON: u32 = 50;
 pub const LP_FREQUENCY: u32 = 51;
 pub const LP_SLOPE: u32 = 52;
+pub const LP_PLACEMENT: u32 = 53;
 pub const MODE: u32 = 60;
 pub const AUTO_GAIN: u32 = 61;
 pub const ANALYZER: u32 = 62;
 pub const OUTPUT: u32 = 63;
+pub const GAIN_SCALE: u32 = 64;
 
 /// Telemetry value slot: the sample rate the device runs at, which the panel
 /// needs to draw the curve it hears and to place the analyzer's bins.
@@ -44,6 +48,8 @@ pub const TYPES: &[&str] = &["Bell", "Low shelf", "High shelf", "Notch"];
 pub const SLOPES: &[&str] = &["12 dB", "24 dB", "48 dB"];
 pub const MODES: &[&str] = &["Digital", "Analog"];
 pub const ANALYZERS: &[&str] = &["Off", "Input", "Output"];
+/// Which part of the stereo image a band changes.
+pub const PLACEMENTS: &[&str] = &["Stereo", "Mid", "Side"];
 
 const fn toggle(
     id: u32,
@@ -136,7 +142,11 @@ const fn q(id: u32, key: &'static str, group: &'static str, default: f32) -> Par
     )
 }
 
-pub static PARAMETERS: [ParamSpec; 30] = [
+const fn placement(id: u32, key: &'static str, group: &'static str) -> ParamSpec {
+    choice(id, key, "Placement", group, PLACEMENTS, 0.0)
+}
+
+pub static PARAMETERS: [ParamSpec; 37] = [
     toggle(HP_ON, "hp.on", "On", "High-pass", false),
     frequency(
         HP_FREQUENCY,
@@ -147,26 +157,31 @@ pub static PARAMETERS: [ParamSpec; 30] = [
         30.0,
     ),
     choice(HP_SLOPE, "hp.slope", "Slope", "High-pass", SLOPES, 0.0),
+    placement(HP_PLACEMENT, "hp.placement", "High-pass"),
     toggle(10, "band1.on", "On", "Band 1", true),
     choice(11, "band1.type", "Type", "Band 1", TYPES, 1.0),
     frequency(12, "band1.frequency", "Band 1", 20.0, 20_000.0, 100.0),
     decibels(13, "band1.gain", "Gain", "Band 1"),
     q(14, "band1.q", "Band 1", 0.71),
+    placement(15, "band1.placement", "Band 1"),
     toggle(20, "band2.on", "On", "Band 2", true),
     choice(21, "band2.type", "Type", "Band 2", TYPES, 0.0),
     frequency(22, "band2.frequency", "Band 2", 20.0, 20_000.0, 400.0),
     decibels(23, "band2.gain", "Gain", "Band 2"),
     q(24, "band2.q", "Band 2", 1.0),
+    placement(25, "band2.placement", "Band 2"),
     toggle(30, "band3.on", "On", "Band 3", true),
     choice(31, "band3.type", "Type", "Band 3", TYPES, 0.0),
     frequency(32, "band3.frequency", "Band 3", 20.0, 20_000.0, 2500.0),
     decibels(33, "band3.gain", "Gain", "Band 3"),
     q(34, "band3.q", "Band 3", 1.0),
+    placement(35, "band3.placement", "Band 3"),
     toggle(40, "band4.on", "On", "Band 4", true),
     choice(41, "band4.type", "Type", "Band 4", TYPES, 2.0),
     frequency(42, "band4.frequency", "Band 4", 20.0, 20_000.0, 8000.0),
     decibels(43, "band4.gain", "Gain", "Band 4"),
     q(44, "band4.q", "Band 4", 0.71),
+    placement(45, "band4.placement", "Band 4"),
     toggle(LP_ON, "lp.on", "On", "Low-pass", false),
     frequency(
         LP_FREQUENCY,
@@ -177,10 +192,23 @@ pub static PARAMETERS: [ParamSpec; 30] = [
         18_000.0,
     ),
     choice(LP_SLOPE, "lp.slope", "Slope", "Low-pass", SLOPES, 0.0),
+    placement(LP_PLACEMENT, "lp.placement", "Low-pass"),
     choice(MODE, "mode", "Mode", "Global", MODES, 0.0),
     toggle(AUTO_GAIN, "auto_gain", "Auto gain", "Global", false),
     choice(ANALYZER, "analyzer", "Analyzer", "Global", ANALYZERS, 2.0),
     decibels(OUTPUT, "output", "Output", "Output"),
+    param(
+        GAIN_SCALE,
+        "gain_scale",
+        "Gain scale",
+        "Global",
+        "%",
+        ParamRange::Linear {
+            min: 0.0,
+            max: 200.0,
+        },
+        100.0,
+    ),
 ];
 
 pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
@@ -203,9 +231,14 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-equalizer/analog-smile.rillpreset"),
         include_str!("../../presets/r1-equalizer/telephone.rillpreset"),
         include_str!("../../presets/r1-equalizer/hum-notch-50-hz.rillpreset"),
+        include_str!("../../presets/r1-equalizer/mono-lows.rillpreset"),
+        include_str!("../../presets/r1-equalizer/wide-air.rillpreset"),
+        include_str!("../../presets/r1-equalizer/vocal-focus.rillpreset"),
     ],
     legacy_labels: &[],
-    fixed_on_roll: &[],
+    // A roll reshapes the curve; where it works in the image and how much of
+    // it applies stay the user's choice.
+    fixed_on_roll: &["placement", "gain_scale"],
     latency: |_, _| 0,
     create: || Box::new(Equalizer::new()),
 };
@@ -245,11 +278,51 @@ pub enum Analyzer {
     Output,
 }
 
+/// The part of the stereo image a band filters; the rest passes untouched.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Placement {
+    Stereo,
+    /// What left and right share: (L + R) / 2.
+    Mid,
+    /// What differs between them: (L − R) / 2.
+    Side,
+}
+
+impl Placement {
+    fn from_index(index: usize) -> Self {
+        match index {
+            1 => Self::Mid,
+            2 => Self::Side,
+            _ => Self::Stereo,
+        }
+    }
+
+    /// How much of the filtered mid and side the band keeps.
+    fn weights(self) -> [f64; 2] {
+        match self {
+            Self::Stereo => [1.0, 1.0],
+            Self::Mid => [1.0, 0.0],
+            Self::Side => [0.0, 1.0],
+        }
+    }
+
+    /// Whether a band placed here changes the mid (`side` false) or the
+    /// side signal.
+    pub fn reaches(self, side: bool) -> bool {
+        match self {
+            Self::Stereo => true,
+            Self::Mid => !side,
+            Self::Side => side,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CutSettings {
     pub on: bool,
     pub frequency: f32,
     pub slope: Slope,
+    pub placement: Placement,
 }
 
 impl CutSettings {
@@ -264,8 +337,10 @@ pub struct BandSettings {
     pub on: bool,
     pub kind: BandType,
     pub frequency: f32,
+    /// After Gain scale.
     pub gain_db: f32,
     pub q: f32,
+    pub placement: Placement,
 }
 
 impl BandSettings {
@@ -285,6 +360,8 @@ pub struct Settings {
     pub auto_gain: bool,
     pub analyzer: Analyzer,
     pub output_db: f32,
+    /// Gain scale as a factor: 1 at 100 %.
+    pub gain_scale: f32,
 }
 
 impl Settings {
@@ -295,7 +372,8 @@ impl Settings {
             spec.to_plain(value(id))
         };
         let on = |id: u32| plain(id) >= 0.5;
-        let cut = |on_id: u32, frequency: u32, slope: u32| CutSettings {
+        let gain_scale = plain(GAIN_SCALE) / 100.0;
+        let cut = |on_id: u32, frequency: u32, slope: u32, placement: u32| CutSettings {
             on: on(on_id),
             frequency: plain(frequency),
             slope: match plain(slope) as usize {
@@ -303,9 +381,10 @@ impl Settings {
                 2 => Slope::Db48,
                 _ => Slope::Db12,
             },
+            placement: Placement::from_index(plain(placement) as usize),
         };
         Self {
-            hp: cut(HP_ON, HP_FREQUENCY, HP_SLOPE),
+            hp: cut(HP_ON, HP_FREQUENCY, HP_SLOPE, HP_PLACEMENT),
             bands: BANDS.map(|base| BandSettings {
                 on: on(base + BAND_ON),
                 kind: match plain(base + BAND_TYPE) as usize {
@@ -315,10 +394,11 @@ impl Settings {
                     _ => BandType::Bell,
                 },
                 frequency: plain(base + BAND_FREQUENCY),
-                gain_db: plain(base + BAND_GAIN),
+                gain_db: plain(base + BAND_GAIN) * gain_scale,
                 q: plain(base + BAND_Q),
+                placement: Placement::from_index(plain(base + BAND_PLACEMENT) as usize),
             }),
-            lp: cut(LP_ON, LP_FREQUENCY, LP_SLOPE),
+            lp: cut(LP_ON, LP_FREQUENCY, LP_SLOPE, LP_PLACEMENT),
             mode: if plain(MODE) as usize == 1 {
                 Mode::Analog
             } else {
@@ -331,6 +411,38 @@ impl Settings {
                 _ => Analyzer::Output,
             },
             output_db: plain(OUTPUT),
+            gain_scale,
+        }
+    }
+
+    /// Whether any band filters mid and side differently.
+    pub fn splits_mid_side(&self) -> bool {
+        self.placements()
+            .any(|(_, placement)| placement != Placement::Stereo)
+    }
+
+    /// The placement of every section in the signal path, by section index.
+    fn placements(&self) -> impl Iterator<Item = (usize, Placement)> + '_ {
+        let cut = |cut: &CutSettings, first: usize| {
+            let placement = cut.placement;
+            (first..first + cut.sections()).map(move |index| (index, placement))
+        };
+        cut(&self.hp, HP_SECTION)
+            .chain(
+                self.bands
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, band)| band.active())
+                    .map(|(index, band)| (BAND_SECTION + index, band.placement)),
+            )
+            .chain(cut(&self.lp, LP_SECTION))
+    }
+
+    fn placement(&self, section: usize) -> Placement {
+        match section {
+            HP_SECTION..BAND_SECTION => self.hp.placement,
+            BAND_SECTION..LP_SECTION => self.bands[section - BAND_SECTION].placement,
+            _ => self.lp.placement,
         }
     }
 }
@@ -514,11 +626,38 @@ fn magnitudes_db(
     }
 }
 
-/// Small-signal magnitude response in dB of the whole equalizer, without
-/// auto gain and Output: the curve the panel draws. Uses the coefficients
-/// the audio path runs.
+/// The sections that change the mid (`side` false) or the side signal.
+fn channel_sections(
+    settings: &Settings,
+    designer: &MatchedDesigner,
+    side: bool,
+) -> [Option<SvfMix<f64>>; SECTIONS] {
+    let mut sections = design(settings, designer);
+    for (index, section) in sections.iter_mut().enumerate() {
+        if !settings.placement(index).reaches(side) {
+            *section = None;
+        }
+    }
+    sections
+}
+
+/// Small-signal magnitude response in dB of the whole equalizer for the mid
+/// signal (all of a centred, mono source; with every band on Stereo, of
+/// any source), without auto gain and Output: the curve the panel draws.
+/// Uses the coefficients the audio path runs.
 pub fn response_db(settings: &Settings, sample_rate: f32, frequencies: &[f32], out: &mut [f32]) {
-    let sections = design(settings, &MatchedDesigner::new(sample_rate));
+    let sections = channel_sections(settings, &MatchedDesigner::new(sample_rate), false);
+    magnitudes_db(&sections, sample_rate, frequencies, out);
+}
+
+/// The same for the side signal: what differs between left and right.
+pub fn side_response_db(
+    settings: &Settings,
+    sample_rate: f32,
+    frequencies: &[f32],
+    out: &mut [f32],
+) {
+    let sections = channel_sections(settings, &MatchedDesigner::new(sample_rate), true);
     magnitudes_db(&sections, sample_rate, frequencies, out);
 }
 
@@ -548,11 +687,13 @@ const AUTO_GAIN_LIMIT_DB: f64 = 12.0;
 /// is the level change of a pink spectrum. Derived from the curve, not the
 /// signal, so it never pumps. The cut filters are left out: they are
 /// corrective, and boosting what a low-pass leaves is not a level match.
+/// Side bands are left out too: most of a mix's level is in the mid, and
+/// widening must not turn the centre down.
 fn compensation_db(settings: &Settings, designer: &MatchedDesigner) -> f32 {
     if !settings.auto_gain {
         return 0.0;
     }
-    let sections = design(settings, designer);
+    let sections = channel_sections(settings, designer, false);
     let bands = &sections[BAND_SECTION..LP_SECTION];
     let power: f64 = (0..AUTO_GAIN_POINTS)
         .map(|point| {
@@ -650,7 +791,17 @@ struct Section {
     /// Leaving the path to come back with coefficients that no ramp leads
     /// to: those of another band type.
     swap: bool,
+    /// How much of the filtered mid and side is kept; both 1 on Stereo.
+    weights: [LinearRamp<f64>; 2],
+    /// The state holds mid and side instead of left and right. Only while
+    /// the placement is not Stereo or is moving, so a stereo band costs
+    /// nothing extra.
+    mid_side: bool,
 }
+
+/// Left and right into mid and side, and back.
+const ENCODE: [[f64; 2]; 2] = [[0.5, 0.5], [0.5, -0.5]];
+const DECODE: [[f64; 2]; 2] = [[1.0, 1.0], [1.0, -1.0]];
 
 impl Section {
     fn new() -> Self {
@@ -663,6 +814,37 @@ impl Section {
             fit: Fit::Fitted,
             fresh: false,
             swap: false,
+            weights: [LinearRamp::new(1.0), LinearRamp::new(1.0)],
+            mid_side: false,
+        }
+    }
+
+    /// Moves the band to another part of the stereo image by crossfading
+    /// what it keeps of mid and side; the filter itself runs on.
+    fn place(&mut self, placement: Placement, samples: u32) {
+        let quiet = self.idle();
+        for (weight, target) in self.weights.iter_mut().zip(placement.weights()) {
+            if weight.target() != target {
+                weight.set_target(target, if quiet { 0 } else { samples });
+            }
+        }
+        if !self.mid_side && placement != Placement::Stereo {
+            self.state.mix_channels(ENCODE);
+            self.mid_side = true;
+        }
+        self.settle_placement();
+    }
+
+    /// Back to left and right once the band is plainly stereo again.
+    fn settle_placement(&mut self) {
+        if self.mid_side
+            && self
+                .weights
+                .iter()
+                .all(|weight| weight.settled() && weight.value() == 1.0)
+        {
+            self.state.mix_channels(DECODE);
+            self.mid_side = false;
         }
     }
 
@@ -722,13 +904,15 @@ impl Section {
     }
 
     /// Settles at once, for `reset`.
-    fn set(&mut self, target: Option<(SvfMix<f64>, Fit)>) {
+    fn set(&mut self, target: Option<(SvfMix<f64>, Fit)>, placement: Placement) {
         let (mix, fit) = target.unwrap_or((SvfMix::identity(), Fit::Fitted));
         *self = Self {
             ramp: SvfMixRamp::new(mix),
             wet: LinearRamp::new(if target.is_some() { 1.0 } else { 0.0 }),
             identity: mix.is_identity(),
             fit,
+            weights: placement.weights().map(LinearRamp::new),
+            mid_side: placement != Placement::Stereo,
             ..Self::new()
         };
     }
@@ -737,7 +921,9 @@ impl Section {
         if self.idle() {
             return;
         }
-        if self.ramp.done() && self.wet.settled() && self.wet.value() == 1.0 {
+        if self.mid_side {
+            self.process_mid_side(stereo);
+        } else if self.ramp.done() && self.wet.settled() && self.wet.value() == 1.0 {
             let mix = self.ramp.mix();
             for frame in stereo {
                 *frame = self.state.tick(*frame, mix);
@@ -763,6 +949,32 @@ impl Section {
                 self.clear();
             }
         }
+    }
+
+    /// The general path in mid and side: filter both, keep of each what the
+    /// placement and the fade say, and decode.
+    fn process_mid_side(&mut self, stereo: &mut [[f64; 2]]) {
+        for frame in stereo {
+            let mix = self.ramp.advance();
+            let wet = if self.wet.settled() {
+                self.wet.value()
+            } else {
+                self.wet.next()
+            };
+            let input = [0.5 * (frame[0] + frame[1]), 0.5 * (frame[0] - frame[1])];
+            let filtered = self.state.tick(input, mix);
+            let mid = input[0] + wet * self.weights[0].next() * (filtered[0] - input[0]);
+            let side = input[1] + wet * self.weights[1].next() * (filtered[1] - input[1]);
+            *frame = [mid + side, mid - side];
+        }
+        self.leave();
+        if self.idle() {
+            self.clear();
+            for weight in &mut self.weights {
+                weight.snap();
+            }
+        }
+        self.settle_placement();
     }
 }
 
@@ -909,12 +1121,20 @@ impl Equalizer {
                 section.swap = true;
                 section.switch(false, fade);
             }
+            if target.placement != previous.placement {
+                section.place(target.placement, fade);
+            }
         }
         for (cut, target, previous, first) in [
             (&mut self.hp, &new.hp, &old.hp, HP_SECTION),
             (&mut self.lp, &new.lp, &old.lp, LP_SECTION),
         ] {
             cut.frequency.set_target(target.frequency.log2());
+            if target.placement != previous.placement {
+                for section in &mut self.sections[first..first + 4] {
+                    section.place(target.placement, fade);
+                }
+            }
             if target.sections() != previous.sections() {
                 cut.dirty = true;
                 // Sections the slope keeps take its Q in a crossfade; the
@@ -1172,23 +1392,26 @@ impl Device for Equalizer {
                     )
                 })
             };
-            section.set(match index {
-                HP_SECTION..BAND_SECTION => cut(&settings.hp, true, index - HP_SECTION),
-                BAND_SECTION..LP_SECTION => {
-                    let band = &settings.bands[index - BAND_SECTION];
-                    band.on.then(|| {
-                        band_target(
-                            designer,
-                            band.kind,
-                            f64::from(band.frequency),
-                            f64::from(band.gain_db),
-                            f64::from(band.q),
-                            settings.mode,
-                        )
-                    })
-                }
-                _ => cut(&settings.lp, false, index - LP_SECTION),
-            });
+            section.set(
+                match index {
+                    HP_SECTION..BAND_SECTION => cut(&settings.hp, true, index - HP_SECTION),
+                    BAND_SECTION..LP_SECTION => {
+                        let band = &settings.bands[index - BAND_SECTION];
+                        band.on.then(|| {
+                            band_target(
+                                designer,
+                                band.kind,
+                                f64::from(band.frequency),
+                                f64::from(band.gain_db),
+                                f64::from(band.q),
+                                settings.mode,
+                            )
+                        })
+                    }
+                    _ => cut(&settings.lp, false, index - LP_SECTION),
+                },
+                settings.placement(index),
+            );
         }
         self.saturation = LinearRamp::new(if settings.mode == Mode::Analog {
             1.0

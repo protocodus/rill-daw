@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "device": "r1-equalizer",
+  "name": "Mono Lows",
+  "author": "Rill",
+  "category": "Master",
+  "tags": ["mid/side", "bass", "mono"],
+  "description": "Folds everything below 120 Hz to mono; the centre is untouched.",
+  "parameters": {
+    "hp.on": true,
+    "hp.frequency": 120.0,
+    "hp.slope": "24 dB",
+    "hp.placement": "Side"
+  }
+}
