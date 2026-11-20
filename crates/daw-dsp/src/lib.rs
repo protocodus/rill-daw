@@ -7,6 +7,7 @@
 mod allpass;
 mod biquad;
 mod complex;
+mod crossover;
 mod cutoff;
 mod delay;
 mod dynamics;
@@ -34,6 +35,7 @@ mod svf;
 pub use allpass::{AbsorbentAllpass, Allpass1, AllpassChain, DelayAllpass};
 pub use biquad::Biquad;
 pub use complex::Complex;
+pub use crossover::BandSplitter;
 pub use cutoff::CutoffGlide;
 pub use delay::{
     AllpassInterp, DelayLine, FadeTap, SincTable, StaticDelay, StaticDelayStereo, glide_length,

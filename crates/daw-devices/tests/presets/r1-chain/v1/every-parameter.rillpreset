@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "device": "r1-chain",
+  "name": "Every parameter",
+  "description": "Every parameter key of this version, so a removed or renamed key is caught.",
+  "parameters": {
+    "mix": 62.0,
+    "output": 3.5
+  }
+}

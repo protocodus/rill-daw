@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "device": "r1-chain",
+  "name": "Master Glue",
+  "author": "Rill",
+  "category": "Mastering",
+  "tags": [
+    "bus"
+  ],
+  "description": "Gentle bus compression into a safe limiter.",
+  "lanes": [
+    {
+      "effects": [
+        {
+          "device": "r1-compressor",
+          "parameters": {
+            "character": "Tube",
+            "threshold": -16.0,
+            "ratio": 2.0,
+            "attack": 30.0,
+            "release": 200.0,
+            "makeup": 2.0
+          }
+        },
+        {
+          "device": "r1-compressor",
+          "parameters": {
+            "mode": "Limiter",
+            "ceiling": -1.0
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -543,3 +543,36 @@ r1-drums 499 pad15.bits "Bit depth" choice Clean|12-bit|8-bit
 r1-drums 500 pad15.velocity_pitch "Soft hit pitch" linear -12 12
 r1-drums 531 pad16.bits "Bit depth" choice Clean|12-bit|8-bit
 r1-drums 532 pad16.velocity_pitch "Soft hit pitch" linear -12 12
+r1-chain 40 mix "Mix" linear 0 100
+r1-chain 41 output "Output" linear -24 24
+r1-split 1 rule "Split" choice All|Bands|Mid/Side|Left/Right
+r1-split 4 bands "Bands" integer 2 4
+r1-split 2 crossover.1 "Crossover 1" log 20 20000
+r1-split 3 crossover.2 "Crossover 2" log 20 20000
+r1-split 5 crossover.3 "Crossover 3" log 20 20000
+r1-split 10 lane1.gain "Lane 1 gain" linear -24 24
+r1-split 11 lane2.gain "Lane 2 gain" linear -24 24
+r1-split 12 lane3.gain "Lane 3 gain" linear -24 24
+r1-split 13 lane4.gain "Lane 4 gain" linear -24 24
+r1-split 14 lane5.gain "Lane 5 gain" linear -24 24
+r1-split 15 lane6.gain "Lane 6 gain" linear -24 24
+r1-split 16 lane7.gain "Lane 7 gain" linear -24 24
+r1-split 17 lane8.gain "Lane 8 gain" linear -24 24
+r1-split 20 lane1.mute "Lane 1 mute" toggle
+r1-split 21 lane2.mute "Lane 2 mute" toggle
+r1-split 22 lane3.mute "Lane 3 mute" toggle
+r1-split 23 lane4.mute "Lane 4 mute" toggle
+r1-split 24 lane5.mute "Lane 5 mute" toggle
+r1-split 25 lane6.mute "Lane 6 mute" toggle
+r1-split 26 lane7.mute "Lane 7 mute" toggle
+r1-split 27 lane8.mute "Lane 8 mute" toggle
+r1-split 30 lane1.solo "Lane 1 solo" toggle
+r1-split 31 lane2.solo "Lane 2 solo" toggle
+r1-split 32 lane3.solo "Lane 3 solo" toggle
+r1-split 33 lane4.solo "Lane 4 solo" toggle
+r1-split 34 lane5.solo "Lane 5 solo" toggle
+r1-split 35 lane6.solo "Lane 6 solo" toggle
+r1-split 36 lane7.solo "Lane 7 solo" toggle
+r1-split 37 lane8.solo "Lane 8 solo" toggle
+r1-split 40 mix "Mix" linear 0 100
+r1-split 41 output "Output" linear -24 24

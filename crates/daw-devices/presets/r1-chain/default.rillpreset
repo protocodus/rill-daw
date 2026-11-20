@@ -1,0 +1,13 @@
+{
+  "format": 1,
+  "device": "r1-chain",
+  "name": "Default",
+  "author": "Rill",
+  "category": "Utility",
+  "description": "An empty chain.",
+  "lanes": [
+    {
+      "effects": []
+    }
+  ]
+}

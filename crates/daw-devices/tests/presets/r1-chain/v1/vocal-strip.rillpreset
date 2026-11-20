@@ -1,0 +1,45 @@
+{
+  "format": 1,
+  "device": "r1-chain",
+  "name": "Vocal Strip",
+  "author": "Rill",
+  "category": "Vocals",
+  "tags": [
+    "strip"
+  ],
+  "description": "Low cut and presence, a leveling compressor, then a short room.",
+  "lanes": [
+    {
+      "effects": [
+        {
+          "device": "r1-equalizer",
+          "parameters": {
+            "hp.on": true,
+            "hp.frequency": 90.0,
+            "band3.on": true,
+            "band3.frequency": 3500.0,
+            "band3.gain": 2.5
+          }
+        },
+        {
+          "device": "r1-compressor",
+          "parameters": {
+            "character": "Opto",
+            "threshold": -22.0,
+            "ratio": 3.0,
+            "makeup": 4.0
+          }
+        },
+        {
+          "device": "r1-spacer",
+          "parameters": {
+            "echo.on": false,
+            "reverb.on": true,
+            "reverb.model": "Room",
+            "reverb.decay": 0.8
+          }
+        }
+      ]
+    }
+  ]
+}

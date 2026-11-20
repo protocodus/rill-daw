@@ -27,7 +27,67 @@ pub struct Preset {
     pub parameters: Map<String, Value>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub samples: Vec<PresetSample>,
+    /// A container's lanes (R1 Split, R1 Chain), first lane first. Loading
+    /// such a preset replaces what every lane holds.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lanes: Vec<PresetLane>,
 }
+
+/// The effects of one container lane, in processing order.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PresetLane {
+    #[serde(default)]
+    pub effects: Vec<PresetEffect>,
+}
+
+/// One effect inside a container lane: a built-in device with its
+/// parameters by key in plain units, as in a top-level preset, or a hosted
+/// plug-in with its opaque state.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PresetEffect {
+    /// Built-in device ID; empty for a hosted plug-in.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub device: String,
+    /// The effect's name in the lane; the device's name when empty.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
+    #[serde(default = "enabled", skip_serializing_if = "is_enabled")]
+    pub enabled: bool,
+    /// Built-ins: key → plain value. Plug-ins: parameter ID → normalized.
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub parameters: Map<String, Value>,
+    /// Lanes of a nested container.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lanes: Vec<PresetLane>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<PresetPlugin>,
+}
+
+/// A hosted plug-in inside a preset. Opening it needs the same plug-in
+/// installed at the same path.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PresetPlugin {
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub class_id: Option<String>,
+    /// Opaque plug-in state, as lowercase hexadecimal.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub state: String,
+}
+
+fn enabled() -> bool {
+    true
+}
+
+fn is_enabled(enabled: &bool) -> bool {
+    *enabled
+}
+
+/// How deep containers may nest: a container at the top level is depth 1.
+pub const MAX_CONTAINER_DEPTH: usize = 4;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -74,6 +134,22 @@ impl Preset {
         if preset.name.trim().is_empty() || preset.name.len() > 128 {
             return Err(PresetError("Preset name must be 1–128 characters".into()));
         }
+        fn depth(lanes: &[PresetLane]) -> usize {
+            lanes
+                .iter()
+                .flat_map(|lane| &lane.effects)
+                .map(|effect| 1 + depth(&effect.lanes))
+                .max()
+                .unwrap_or(0)
+        }
+        if !preset.lanes.is_empty() && 1 + depth(&preset.lanes) > MAX_CONTAINER_DEPTH {
+            return Err(PresetError(format!(
+                "Containers nest at most {MAX_CONTAINER_DEPTH} deep"
+            )));
+        }
+        if preset.lanes.len() > crate::devices::container::MAX_LANES {
+            return Err(PresetError("A container holds at most 8 lanes".into()));
+        }
         Ok(preset)
     }
 
@@ -112,6 +188,28 @@ impl Preset {
             description: String::new(),
             parameters,
             samples: Vec::new(),
+            lanes: Vec::new(),
+        }
+    }
+
+    /// The built-in effect a preset lane entry describes, as a preset of its
+    /// own, so its parameters resolve the way a top-level preset's do.
+    pub fn nested(effect: &PresetEffect) -> Self {
+        Self {
+            format: PRESET_FORMAT,
+            device: effect.device.clone(),
+            name: if effect.name.is_empty() {
+                effect.device.clone()
+            } else {
+                effect.name.clone()
+            },
+            author: String::new(),
+            category: String::new(),
+            tags: Vec::new(),
+            description: String::new(),
+            parameters: effect.parameters.clone(),
+            samples: Vec::new(),
+            lanes: effect.lanes.clone(),
         }
     }
 
