@@ -534,7 +534,7 @@ const fn per_pad<const N: usize>(offsets: [u32; N]) -> [[u32; N]; drums::PADS] {
 }
 
 static DRUM_AMP_FADERS: [[u32; 4]; drums::PADS] =
-    per_pad([drums::ATTACK, drums::HOLD, drums::DECAY, drums::VELOCITY]);
+    per_pad([drums::ATTACK, drums::PUNCH, drums::HOLD, drums::DECAY]);
 static DRUM_DIALS: [[u32; 2]; drums::PADS] = per_pad([drums::CHOKE, drums::BITS]);
 
 /// Captions of every pad's controls where the card names the rest.
@@ -579,7 +579,11 @@ fn drums_layout(mut layout: Layout, pad: usize) -> Layout {
             3,
             &[
                 &[C(at(PITCH), 1), C(at(FINE), 1), C(at(VELOCITY_PITCH), 1)],
-                &[C(at(PITCH_ENV), 2), C(at(ENV_DECAY), 1)],
+                &[
+                    C(at(PITCH_ENV), 1),
+                    C(at(ENV_DECAY), 1),
+                    C(at(VELOCITY_TONE), 1),
+                ],
             ],
         ),
         cells("Amp envelope", 0, 2, &[&[Faders(&DRUM_AMP_FADERS[pad], 2)]]),
@@ -596,7 +600,12 @@ fn drums_layout(mut layout: Layout, pad: usize) -> Layout {
                     C(at(DRIVE), 1),
                     C(at(BITS), 1),
                 ],
-                &[C(at(LEVEL), 2), C(at(PAN), 1), C(at(MUTE), 1)],
+                &[
+                    C(at(LEVEL), 1),
+                    C(at(PAN), 1),
+                    C(at(MUTE), 1),
+                    C(at(VELOCITY), 1),
+                ],
             ],
         ),
     ];

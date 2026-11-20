@@ -1938,8 +1938,9 @@ fn drums_places_every_parameter_once_across_its_pads() {
         panel_width(&drums::DESCRIPTOR),
         daw_ui::tokens::POPUP_WIDTH_LG + daw_ui::DEVICE_FRAME_INSET
     );
-    // The kit's Volume stands beside the pads; each pad's own in the cards.
-    let mut ids = vec![drums::VOLUME];
+    // The kit's Volume and Humanize stand beside the pads; each pad's own
+    // in the cards.
+    let mut ids = vec![drums::VOLUME, drums::HUMANIZE];
     for pad in 0..drums::PADS {
         let layout = panels::layout_for(&drums::DESCRIPTOR, pad);
         assert!(layout.cells && layout.keep_inactive);
@@ -2005,14 +2006,17 @@ fn drum_inspector_captions_fit_on_one_line_at_popup_width() {
         "Reverse",
         "Pitch",
         "Fine",
-        "Soft hit pitch",
         "Trigger",
         "Choke",
-        "Amount",
-        "Decay",
+        "Env",
+        "Env decay",
         "Attack",
+        "Punch",
         "Hold",
-        "Vel",
+        "Decay",
+        "Level",
+        "Tone",
+        "Humanize",
         "Filter",
         "Reso",
         "Drive",

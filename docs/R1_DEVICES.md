@@ -1849,12 +1849,15 @@ per pad tuned for one-shots. Existing projects retain their one-sample behavior.
 | Drive | 0 – 24 dB (Saturator kernel, Transistor model) | 0 dB |
 | Velocity → Level | 0 – 100 % | 80 % |
 | Soft hit pitch | −12 to +12 semitones at the softest hit | 0 |
+| Soft hit tone | 0 – 100 % | 0 % |
+| Punch | 0 – 100 % | 0 % |
 | Bit depth | Clean, 12-bit, 8-bit | Clean |
 | Choke group | Off, 1 – 4 | Off |
 | Gain, Pan | −∞ – +12 dB, L – R | 0 dB, center |
 | Mute | toggle | off |
 
-Each pad owns a fixed block of 32 parameter IDs. Volume controls the whole kit.
+Each pad owns a fixed block of 32 parameter IDs. Volume and Humanize
+(0 – 100 %, default 0 %) control the whole kit.
 
 **DSP.** The Sampler's playback kernel without looping; attack/hold/decay
 envelope; one SVF; optional drive at 2×; choke groups fade the choked pad over
@@ -1874,9 +1877,11 @@ Rill ships no factory samples. An empty pad shows **Drop a sample** and the
 empty Sampler shows **Load sample…**; a kit preset can bring its own samples
 ([Presets](#presets)).
 
-**As built.** The 337 parameters comprise the kit's Volume (ID 1) and 21 per
-pad. Pad `n` starts at ID `32 n`. Bit depth and Soft hit pitch use offsets
-19 and 20 with keys `padN.bits` and `padN.velocity_pitch`.
+**As built.** The 370 parameters comprise the kit's Volume (ID 1) and
+Humanize (ID 2, key `humanize`) and 23 per pad. Pad `n` starts at ID `32 n`.
+Bit depth, Soft hit pitch, Soft hit tone and Punch use offsets 19 – 22 with
+keys `padN.bits`, `padN.velocity_pitch`, `padN.velocity_tone` and
+`padN.punch`.
 
 - *Resonance.* A nineteenth pad parameter, 0 – 100 % (Q 0.707 to about 8),
   for the filter: a sweep without it cannot peak the way drum filters are
@@ -1908,6 +1913,18 @@ pad. Pad `n` starts at ID `32 n`. Bit depth and Soft hit pitch use offsets
 - *Soft hit pitch.* Each hit adds `amount × (1 − velocity)` semitones to its
   pad tuning and pitch envelope, using velocity from 0 to 1. At full velocity
   the pad plays at its set tuning. All layers in a hit share the offset.
+- *Soft hit tone.* Each hit runs through a one-pole low-pass at
+  20 kHz · 2^(−6 · amount · (1 − velocity)): at 100 % the softest hit is
+  darkened to about 300 Hz, a half-strength hit to about 2.5 kHz, and a full
+  hit stays open, as a softly struck drum has fewer overtones. The cutoff is
+  fixed per hit; an open hit skips the filter.
+- *Punch.* Each hit's gain is multiplied by 1 + amount · e^(−t / 6 ms): up to
+  +6 dB at the onset, back within 0.3 dB after 20 ms, so the transient
+  sharpens without the body getting louder. It follows the attack.
+- *Humanize.* The kit's one control for played-sounding repeats: each hit
+  takes a random pitch offset of up to ±0.5 semitone and a level offset of up
+  to ±3 dB, scaled by the amount. The random sequence restarts on reset, so a
+  render repeats exactly. Two random numbers per hit; nothing per sample.
 - *Bit depth.* Clean passes the pad signal through at full precision. The
   12-bit and 8-bit settings round each channel of the summed pad signal to
   signed PCM levels and clip peaks at full scale. Filter and Drive follow
@@ -1923,13 +1940,18 @@ pad. Pad `n` starts at ID `32 n`. Bit depth and Soft hit pitch use offsets
   pads cut each other.
 - *Telemetry.* Per pad the loudest envelope of its hits (the pad flash) and
   the playhead of its latest hit; the number of hits sounding.
-- *Panel.* The **Kit** grid sits beside the selected pad’s waveform. The
-  **Sample** tab groups Region, Tuning (including Soft hit pitch), and Trigger
-  with its Choke group. **Shape** groups the pitch and amp envelopes with
-  Tone (Bit depth, Filter, Resonance and Drive). Pad volume, Pan, Mute and
-  Kit volume stay accessible on both tabs. Click higher on a pad for a
+- *Panel.* The **Kit** grid sits beside the selected pad’s waveform. Below
+  the waveform, two rows of three cards on shared columns: **Trigger ·
+  Region · Pitch** (Pitch, Fine, and the pitch envelope's Env and Env
+  decay) above **Amp envelope** (Attack, Punch, Hold, Decay) · **Velocity**
+  (Level, Pitch, Tone: what a soft hit changes) · **Tone** (Bit depth,
+  Filter, Reso, Drive). Pad volume, Pan, Mute, Humanize and Kit volume stay
+  below. Click higher on a pad for a
   harder hit, or drop a sample onto it to load it. The waveform shows the
   draggable Start and End markers, amp envelope and latest hit’s playhead.
+- *Presets.* Default, GM Kit, Tight Kit (with Punch on kick and snare),
+  Boom Bap, Electro, Lo-Fi and Live Feel (Soft hit tone 60 %, Velocity
+  90 %, Humanize 25 %, a little Punch on kick and snare).
 - *Tools.* No new tools: `set_device_sample` and `document_action` import
   take `slot` 0 – 15 for R1 Drums.
 
@@ -1940,7 +1962,9 @@ block (5 – 6 % of real time); the same with every pad's filter, resonance,
 drive and pitch envelope on, 330 – 400 µs (6 – 7.5 %); a busy pattern of
 sixteenth notes at 120 BPM with chokes (12.5 hits sounding on average),
 230 – 270 µs (4.3 – 5 %). About 65 ns per hit and output sample, most of it
-the 48-tap read.
+the 48-tap read. Turning Soft hit tone, Punch and Humanize on as well
+("16 shaped + feel", every hit at velocity 0.8 so the tone filter runs)
+adds about 1 % to "16 shaped".
 
 ## Verification
 

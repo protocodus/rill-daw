@@ -10,6 +10,8 @@
   ],
   "description": "Every hit held briefly and cut short, for busy patterns that must not smear; cymbals ring a little longer.",
   "parameters": {
+    "pad1.punch": 40.0,
+    "pad3.punch": 30.0,
     "pad7.choke": "1",
     "pad9.choke": "1",
     "pad11.choke": "1",

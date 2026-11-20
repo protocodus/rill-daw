@@ -141,12 +141,31 @@ fn slot(state: &Value, track: u64, slot: u64) -> Value {
 }
 
 fn label_center(state: &Value, label: &str) -> (f64, f64) {
-    let rect = state["label_rects"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|entry| entry["text"] == label)
-        .unwrap_or_else(|| panic!("Missing {label}: {}", state["visible_labels"]));
+    label_center_where(state, label, |rects| rects.next())
+}
+
+/// The lowest of several labels reading `label`: the Velocity card's
+/// "Pitch" sits below the Pitch card's.
+fn lowest_label_center(state: &Value, label: &str) -> (f64, f64) {
+    label_center_where(state, label, |rects| {
+        let top = |rect: &Value| rect["min"][1].as_f64().unwrap();
+        rects.max_by(|a, b| top(a).total_cmp(&top(b)))
+    })
+}
+
+fn label_center_where<'a>(
+    state: &'a Value,
+    label: &str,
+    pick: impl FnOnce(&mut dyn Iterator<Item = &'a Value>) -> Option<&'a Value>,
+) -> (f64, f64) {
+    let rect = pick(
+        &mut state["label_rects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry["text"] == label),
+    )
+    .unwrap_or_else(|| panic!("Missing {label}: {}", state["visible_labels"]));
     (
         (rect["min"][0].as_f64().unwrap() + rect["max"][0].as_f64().unwrap()) * 0.5,
         (rect["min"][1].as_f64().unwrap() + rect["max"][1].as_f64().unwrap()) * 0.5,
@@ -407,7 +426,7 @@ fn soft_hit_pitch_and_bit_depth_shape_only_the_selected_pad_and_survive_reopen()
     common::wait_visible(&mut app, "Snare");
     app.click("Snare");
     common::wait_visible(&mut app, "PAD 3");
-    let (x, caption_y) = label_center(&app.inspect(), "Soft hit pitch");
+    let (x, caption_y) = lowest_label_center(&app.inspect(), "Pitch");
     let y = caption_y + 29.0;
     let pitched = app.command(json!({"command":"pointer","phase":"drag","x":x,"y":y,
         "to_x":x,"to_y":y-200.0}));
@@ -441,5 +460,96 @@ fn soft_hit_pitch_and_bit_depth_shape_only_the_selected_pad_and_survive_reopen()
         (12.0..20.0).contains(&ratio),
         "8-bit/12-bit noise ratio: {ratio}"
     );
+    app.quit();
+}
+
+/// Drags the knob under `caption` all the way up and returns the state.
+fn turn_up(app: &mut Harness, (x, caption_y): (f64, f64)) -> Value {
+    let y = caption_y + 29.0;
+    app.command(json!({"command":"pointer","phase":"drag","x":x,"y":y,
+        "to_x":x,"to_y":y-200.0}))
+}
+
+#[test]
+fn soft_hit_tone_and_humanize_shape_hits_from_the_panel_and_survive_reopen() {
+    let mut app = Harness::new();
+    // Shorter than the gap between hits, so they never overlap.
+    let path = app.directory.path().join("bright.wav");
+    AudioData {
+        sample_rate: 44_100,
+        channels: 1,
+        samples: (0..22_050)
+            .map(|n| 0.5 * (std::f32::consts::TAU * 6000.0 * n as f32 / 44_100.0).sin())
+            .collect(),
+    }
+    .write_wav(&path)
+    .unwrap();
+    // Two hard and two soft hits of the same bright recording.
+    let notes = [(36, 0.0, 127), (36, 2.0, 127), (36, 4.0, 40), (36, 6.0, 40)];
+    let (mut project, track, _) = project(&[], &notes);
+    project
+        .load_device_sample(
+            track,
+            DeviceSample {
+                slot: 0,
+                name: "Bright".into(),
+                path: path.to_string_lossy().into_owned(),
+            },
+        )
+        .unwrap();
+    open(&mut app, &project);
+    let clean = export(&mut app, "clean.wav");
+    // Each hit's 6 kHz level, a beat being half a second at 120 BPM.
+    let levels = |audio: &AudioData| -> Vec<f32> {
+        [0.0, 1.0, 2.0, 3.0]
+            .iter()
+            .map(|at| tone(audio, 6000.0, at + 0.1, at + 0.4))
+            .collect()
+    };
+    let before = levels(&clean);
+    assert!((before[0] - before[1]).abs() < 1e-4, "{before:?}");
+
+    app.command(json!({"command":"viewport","width":1600,"height":1400,"pixels_per_point":1.0}));
+    app.click("Beat");
+    app.click("Window");
+    app.click("Instrument");
+    common::wait_visible(&mut app, "PAD 1");
+    let caption = lowest_label_center(&app.inspect(), "Tone");
+    let toned = turn_up(&mut app, caption);
+    assert_eq!(toned["history"]["undo"][0], "Instrument parameter");
+    let dark = levels(&export(&mut app, "dark.wav"));
+    // Hard hits keep their highs; soft ones lose most of them.
+    for hard in [0, 1] {
+        assert!((dark[hard] / before[hard] - 1.0).abs() < 0.02, "{dark:?}");
+    }
+    for soft in [2, 3] {
+        assert!(dark[soft] < before[soft] * 0.25, "{dark:?} {before:?}");
+    }
+
+    // The output strip puts each knob to the right of its caption.
+    let state = app.inspect();
+    let (_, y) = label_center(&state, "Humanize");
+    let caption = state["label_rects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["text"] == "Humanize")
+        .unwrap();
+    let x = caption["max"][0].as_f64().unwrap() + 24.0;
+    let undo = toned["history"]["undo"].as_array().unwrap().len();
+    let humanized = app.command(json!({"command":"pointer","phase":"drag","x":x,"y":y,
+        "to_x":x,"to_y":y-200.0}));
+    assert_eq!(
+        humanized["history"]["undo"].as_array().unwrap().len(),
+        undo + 1
+    );
+    let save = app.directory.path().join("drum-feel.rill");
+    app.command(json!({"command":"save","path":save}));
+    app.command(json!({"command":"open","path":save}));
+    let first = levels(&export(&mut app, "human.wav"));
+    // Identical hard hits now differ, and an export repeats exactly.
+    assert!((first[0] - first[1]).abs() > 1e-3, "{first:?}");
+    assert_eq!(levels(&export(&mut app, "human-again.wav")), first);
+    assert!(first[2] < before[2] * 0.5, "Soft hit tone lost on reopen");
     app.quit();
 }

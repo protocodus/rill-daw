@@ -364,20 +364,33 @@ fn sampler_workspace(mut layout: Layout, page: usize) -> Workspace {
     }
 }
 
-static PAD_CAPTIONS: [(u32, &str); 1 + 5 * drums::PADS] = {
-    let mut out = [(0, ""); 1 + 5 * drums::PADS];
+/// Captions where the card names the rest: the Velocity card reads
+/// "Velocity: Level, Pitch, Tone", the Pitch card "Env" for its envelope.
+static PAD_CAPTIONS: [(u32, &str); 1 + PER_PAD * drums::PADS] = {
+    let mut out = [(0, ""); 1 + PER_PAD * drums::PADS];
     out[0] = (drums::VOLUME, "Kit volume");
     let mut pad = 0;
     while pad < drums::PADS {
-        out[1 + pad * 5] = (drums::id(pad, drums::LEVEL), "Pad volume");
-        out[2 + pad * 5] = (drums::id(pad, drums::PITCH_ENV), "Amount");
-        out[3 + pad * 5] = (drums::id(pad, drums::ENV_DECAY), "Decay");
-        out[4 + pad * 5] = (drums::id(pad, drums::RESONANCE), "Reso");
-        out[5 + pad * 5] = (drums::id(pad, drums::VELOCITY), "Vel");
+        let captions = [
+            (drums::LEVEL, "Pad volume"),
+            (drums::PITCH_ENV, "Env"),
+            (drums::ENV_DECAY, "Env decay"),
+            (drums::RESONANCE, "Reso"),
+            (drums::VELOCITY, "Level"),
+            (drums::VELOCITY_PITCH, "Pitch"),
+            (drums::VELOCITY_TONE, "Tone"),
+        ];
+        let mut index = 0;
+        while index < PER_PAD {
+            let (offset, caption) = captions[index];
+            out[1 + pad * PER_PAD + index] = (drums::id(pad, offset), caption);
+            index += 1;
+        }
         pad += 1;
     }
     out
 };
+const PER_PAD: usize = 7;
 
 fn drums_workspace(mut layout: Layout, pad: usize) -> Workspace {
     use Slot::{Control as C, Faders};
@@ -390,6 +403,9 @@ fn drums_workspace(mut layout: Layout, pad: usize) -> Workspace {
     layout.toggle_columns = &[];
     layout.picture = Some(Picture::Drums { height: 304.0 });
     layout.picture_place = PicturePlace::Above;
+    // Two rows of three cards on shared columns, in signal order: what
+    // plays, then how it is shaped. Velocity sits beside the amplifier it
+    // mostly drives.
     layout.sections = vec![
         cells("Trigger", 0, 10, &[&[C(at(TRIGGER), 7), C(at(CHOKE), 3)]]),
         cells(
@@ -399,25 +415,39 @@ fn drums_workspace(mut layout: Layout, pad: usize) -> Workspace {
             &[&[C(at(START), 2), C(at(END), 2), C(at(REVERSE), 3)]],
         ),
         cells(
-            "Tuning",
+            "Pitch",
             0,
             9,
-            &[&[C(at(PITCH), 2), C(at(FINE), 2), C(at(VELOCITY_PITCH), 5)]],
+            &[&[
+                C(at(PITCH), 2),
+                C(at(FINE), 2),
+                C(at(PITCH_ENV), 2),
+                C(at(ENV_DECAY), 3),
+            ]],
         ),
         cells(
-            "Pitch env",
+            "Amp envelope",
             1,
-            6,
-            &[&[C(at(PITCH_ENV), 3), C(at(ENV_DECAY), 3)]],
+            10,
+            &[&[Faders(&DRUM_AMP_FADERS[pad], 10)]],
         ),
-        cells("Amp envelope", 1, 9, &[&[Faders(&DRUM_AMP_FADERS[pad], 9)]]),
+        cells(
+            "Velocity",
+            1,
+            7,
+            &[&[
+                C(at(VELOCITY), 3),
+                C(at(VELOCITY_PITCH), 2),
+                C(at(VELOCITY_TONE), 2),
+            ]],
+        ),
         cells(
             "Tone",
             1,
-            10,
+            9,
             &[&[
                 C(at(BITS), 3),
-                C(at(FILTER), 3),
+                C(at(FILTER), 2),
                 C(at(RESONANCE), 2),
                 C(at(DRIVE), 2),
             ]],
@@ -434,9 +464,16 @@ fn drums_workspace(mut layout: Layout, pad: usize) -> Workspace {
             });
         }
         match drums::pad_of(id).map(|(_, offset)| offset) {
+            Some(VELOCITY) => Some(
+                "How much quieter soft hits are. 0 % plays every hit at full level.",
+            ),
             Some(VELOCITY_PITCH) => Some(
                 "Pitch shift at the softest velocity. Harder hits shift less, reaching the pad's tuned pitch at full velocity.",
             ),
+            Some(VELOCITY_TONE) => Some(
+                "Darkens soft hits, as a softly struck drum sounds. Full velocity stays bright.",
+            ),
+            Some(PUNCH) => Some("Boosts the first milliseconds of each hit for a sharper attack."),
             Some(CHOKE) => {
                 Some("Pads in the same choke group stop each other's hits. Off lets hits overlap.")
             }
@@ -445,12 +482,15 @@ fn drums_workspace(mut layout: Layout, pad: usize) -> Workspace {
             }
             _ => None,
         }
+        .or((id == HUMANIZE).then_some(
+            "Varies each hit's pitch and level a little at random, so repeated hits sound played.",
+        ))
     };
     Workspace {
         layout,
-        output: vec![at(LEVEL), at(PAN), at(MUTE), VOLUME],
+        output: vec![at(LEVEL), at(PAN), at(MUTE), HUMANIZE, VOLUME],
         toolbar: vec![],
-        body_height: 410.0,
+        body_height: 425.0,
     }
 }
 

@@ -3,7 +3,9 @@
 //! A hit reads its selected recordings through `daw_dsp`'s
 //! band-limited mip-map at the pitch set by its tune, velocity and pitch
 //! envelope. It walks the pad's start and end markers with the shared
-//! playhead and shapes the sound with an attack, hold and decay. Each pad
+//! playhead and shapes the sound with an attack, hold and decay. A hit can
+//! be darkened when soft (Soft hit tone), stray a little at random
+//! (the kit's Humanize) and have its transient boosted (Punch). Each pad
 //! sums its voices before optional bit reduction, a one-knob filter
 //! (low-pass left, high-pass right, bypassed at center), drive, pan and level.
 //! Up to four hits of one pad overlap. A choke group or Gate cuts them in 5 ms.
@@ -34,8 +36,10 @@ pub const FIRST_NOTE: u8 = 36;
 /// without renumbering another.
 pub const PAD_BLOCK: u32 = 32;
 
-/// The kit's own parameter, below the first pad's block.
+/// The kit's own parameters, below the first pad's block.
 pub const VOLUME: u32 = 1;
+pub const HUMANIZE: u32 = 2;
+const KIT_PARAMETERS: usize = 2;
 
 /// Offsets of a pad's parameters in its block; [`id`] gives the ID.
 pub const START: u32 = 0;
@@ -59,8 +63,10 @@ pub const PAN: u32 = 17;
 pub const MUTE: u32 = 18;
 pub const BITS: u32 = 19;
 pub const VELOCITY_PITCH: u32 = 20;
+pub const VELOCITY_TONE: u32 = 21;
+pub const PUNCH: u32 = 22;
 /// Parameters of one pad.
-pub const PAD_PARAMETERS: u32 = 21;
+pub const PAD_PARAMETERS: u32 = 23;
 
 /// Telemetry value slots. Activity: one per pad from
 /// [`TELEMETRY_ACTIVITY`], the loudest envelope of its hits, 0–1.
@@ -97,6 +103,15 @@ const TAIL_MS: f32 = 100.0;
 const RING_MS: f32 = 1000.0;
 /// Below this an envelope that only decays is over (−80 dB).
 const SILENT: f32 = 1e-4;
+/// Punch's boost falls by 1/e over this long: a transient, not the body.
+const PUNCH_MS: f32 = 6.0;
+/// At full Humanize a hit strays up to this far either way.
+const HUMANIZE_SEMITONES: f32 = 0.5;
+const HUMANIZE_DB: f32 = 3.0;
+/// At full Soft hit tone the softest hit's low-pass sits this many octaves
+/// below [`TONE_OPEN_HZ`].
+const TONE_OCTAVES: f32 = 6.0;
+const TONE_OPEN_HZ: f32 = 20_000.0;
 
 /// The ID of parameter `offset` of pad `pad` (0–15).
 pub const fn id(pad: usize, offset: u32) -> u32 {
@@ -119,10 +134,10 @@ pub fn pad_of_note(pitch: f32) -> Option<usize> {
 /// Where a parameter's value sits in [`PARAMETERS`] and in a device's
 /// values.
 fn index(id: u32) -> Option<usize> {
-    if id == VOLUME {
-        return Some(0);
+    if (VOLUME..=HUMANIZE).contains(&id) {
+        return Some((id - VOLUME) as usize);
     }
-    pad_of(id).map(|(pad, offset)| 1 + pad * PAD_PARAMETERS as usize + offset as usize)
+    pad_of(id).map(|(pad, offset)| KIT_PARAMETERS + pad * PAD_PARAMETERS as usize + offset as usize)
 }
 
 /// Parameter `offset` of pad `number` (1–16), with its persisted key.
@@ -165,6 +180,8 @@ const fn pad_parameter(
         MUTE => ("Mute", "", ParamRange::Toggle, 0.0),
         BITS => ("Bit depth", "", ParamRange::Choice(BIT_DEPTHS), 0.0),
         VELOCITY_PITCH => ("Soft hit pitch", "st", linear(-12.0, 12.0), 0.0),
+        VELOCITY_TONE => ("Soft hit tone", "%", linear(0.0, 100.0), 0.0),
+        PUNCH => ("Punch", "%", linear(0.0, 100.0), 0.0),
         _ => panic!("unknown drum parameter"),
     };
     param(
@@ -192,6 +209,15 @@ macro_rules! parameters {
                 ParamRange::Linear { min: -36.0, max: 6.0 },
                 -6.0,
             ),
+            param(
+                HUMANIZE,
+                "humanize",
+                "Humanize",
+                "Kit",
+                "%",
+                ParamRange::Linear { min: 0.0, max: 100.0 },
+                0.0,
+            ),
             $(
                 pad_parameter($n, START, concat!("pad", $n, ".start"), concat!("Pad ", $n)),
                 pad_parameter($n, END, concat!("pad", $n, ".end"), concat!("Pad ", $n)),
@@ -214,12 +240,14 @@ macro_rules! parameters {
                 pad_parameter($n, MUTE, concat!("pad", $n, ".mute"), concat!("Pad ", $n)),
                 pad_parameter($n, BITS, concat!("pad", $n, ".bits"), concat!("Pad ", $n)),
                 pad_parameter($n, VELOCITY_PITCH, concat!("pad", $n, ".velocity_pitch"), concat!("Pad ", $n)),
+                pad_parameter($n, VELOCITY_TONE, concat!("pad", $n, ".velocity_tone"), concat!("Pad ", $n)),
+                pad_parameter($n, PUNCH, concat!("pad", $n, ".punch"), concat!("Pad ", $n)),
             )*
         ]
     };
 }
 
-pub static PARAMETERS: [ParamSpec; 1 + PADS * PAD_PARAMETERS as usize] =
+pub static PARAMETERS: [ParamSpec; KIT_PARAMETERS + PADS * PAD_PARAMETERS as usize] =
     parameters!(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16);
 
 pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
@@ -238,6 +266,7 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-drums/boom-bap.rillpreset"),
         include_str!("../../presets/r1-drums/electro.rillpreset"),
         include_str!("../../presets/r1-drums/lo-fi.rillpreset"),
+        include_str!("../../presets/r1-drums/live-feel.rillpreset"),
     ],
     legacy_labels: &[],
     // Where a roll lands on these, the kit stops being the kit: what of a
@@ -258,6 +287,10 @@ pub struct Pad {
     pub pitch: f32,
     /// Extra semitones on the softest hit, falling to zero at full velocity.
     pub velocity_pitch: f32,
+    /// 0–1: how much darker the softest hit sounds than the hardest.
+    pub velocity_tone: f32,
+    /// 0–1: how much the first milliseconds of a hit are boosted.
+    pub punch: f32,
     /// Semitones at the hit, falling to none over `env_decay_ms`.
     pub pitch_env: f32,
     pub env_decay_ms: f32,
@@ -289,6 +322,8 @@ pub struct Pad {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Settings {
     pub volume_db: f32,
+    /// 0–1: how far each hit's pitch and level stray at random.
+    pub humanize: f32,
     pub pads: [Pad; PADS],
 }
 
@@ -307,6 +342,8 @@ impl Pad {
             reverse: plain(REVERSE) >= 0.5,
             pitch: plain(PITCH) + plain(FINE) / 100.0,
             velocity_pitch: plain(VELOCITY_PITCH),
+            velocity_tone: plain(VELOCITY_TONE) / 100.0,
+            punch: plain(PUNCH) / 100.0,
             pitch_env: plain(PITCH_ENV),
             env_decay_ms: plain(ENV_DECAY),
             attack_ms: plain(ATTACK),
@@ -382,6 +419,7 @@ impl Settings {
     pub fn from_normalized(value: impl Fn(u32) -> f32) -> Self {
         Self {
             volume_db: PARAMETERS[0].to_plain(value(VOLUME)),
+            humanize: PARAMETERS[1].to_plain(value(HUMANIZE)) / 100.0,
             pads: std::array::from_fn(|pad| Pad::from_normalized(&value, pad)),
         }
     }
@@ -454,6 +492,14 @@ struct Voice {
     gain: f32,
     /// The hit's input velocity, independent of its amplitude response.
     velocity: f32,
+    /// Humanize's random pitch offset, semitones.
+    detune: f32,
+    /// One-pole low-pass of Soft hit tone: its coefficient (1 is open) and
+    /// state per channel.
+    tone: f32,
+    tone_state: [f32; 2],
+    /// Punch's extra gain, falling from its amount toward 0.
+    punch: f32,
     layers: [LayerVoice; LAYERS],
     layer_count: usize,
     amp: Adsr,
@@ -529,6 +575,8 @@ pub struct Drums {
     volume: Smoothed,
     countdown: usize,
     age: u64,
+    /// Xorshift state for Humanize, reseeded on reset so renders repeat.
+    seed: u32,
     telemetry: Arc<Telemetry>,
 }
 
@@ -539,6 +587,7 @@ impl Default for Drums {
 }
 
 const KIT: u32 = 1 << PADS;
+const SEED: u32 = 0x9E37_79B9;
 const ALL: u32 = (KIT << 1) - 1;
 
 impl Drums {
@@ -559,6 +608,7 @@ impl Drums {
             volume: Smoothed::new(0.0),
             countdown: 0,
             age: 0,
+            seed: SEED,
             telemetry: Arc::new(Telemetry::meter_only()),
         };
         drums.prepare(48_000.0, 0);
@@ -569,11 +619,22 @@ impl Drums {
         &self.settings
     }
 
+    /// Uniform in −1–1.
+    fn random(&mut self) -> f32 {
+        let mut x = self.seed;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        self.seed = x;
+        (x >> 8) as f32 / (1 << 23) as f32 - 1.0
+    }
+
     fn update_settings(&mut self) {
         let values = self.values;
         let value = |id: u32| values[index(id).unwrap()];
         if self.dirty & KIT != 0 {
             self.settings.volume_db = PARAMETERS[0].to_plain(value(VOLUME));
+            self.settings.humanize = PARAMETERS[1].to_plain(value(HUMANIZE)) / 100.0;
             self.volume.set_target(db_to_gain(self.settings.volume_db));
         }
         let rate = self.sample_rate;
@@ -745,14 +806,28 @@ impl Drums {
                     .min_by(|(_, a), (_, b)| a.level().total_cmp(&b.level()))
                     .map_or(0, |(slot, _)| slot)
             });
+        let amount = self.settings.humanize;
+        let (detune, stray_db) = if amount > 0.0 {
+            (
+                amount * HUMANIZE_SEMITONES * self.random(),
+                amount * HUMANIZE_DB * self.random(),
+            )
+        } else {
+            (0.0, 0.0)
+        };
         self.age += 1;
         let rate = self.sample_rate;
-        let voice = &mut own[slot];
+        let voice = &mut self.voices[pad * SLOTS_PER_PAD + slot];
         voice.active = true;
         voice.note = note;
         voice.age = self.age;
-        voice.gain = p.velocity_gain(velocity);
-        voice.velocity = velocity.clamp(0.0, 1.0);
+        let velocity = velocity.clamp(0.0, 1.0);
+        voice.velocity = velocity;
+        voice.gain = p.velocity_gain(velocity) * db_to_gain(stray_db);
+        voice.detune = detune;
+        voice.tone = tone_coefficient(p.velocity_tone * (1.0 - velocity), rate);
+        voice.tone_state = [0.0; 2];
+        voice.punch = p.punch;
         voice.fade = 1.0;
         voice.fading = false;
         voice.sweep = 1.0;
@@ -814,8 +889,12 @@ impl Drums {
     /// Adds `left.len()` samples (at most one control period) of every pad.
     fn render(&mut self, left: &mut [f32], right: &mut [f32]) {
         let frames = left.len();
-        let fade_step = 1.0 / (CHOKE_FADE_MS * 0.001 * self.sample_rate);
-        let end_fade = f64::from(END_FADE_MS * 0.001 * self.sample_rate);
+        let rate = self.sample_rate;
+        let fades = Fades {
+            fade: 1.0 / (CHOKE_FADE_MS * 0.001 * rate),
+            end_fade: f64::from(END_FADE_MS * 0.001 * rate),
+            punch_fall: (-1.0 / (PUNCH_MS * 0.001 * rate)).exp(),
+        };
         let bank = self.bank;
         for pad in 0..PADS {
             let chain = &mut self.chains[pad];
@@ -826,15 +905,7 @@ impl Drums {
             let mut pad_right = [0.0_f32; CONTROL];
             let (pad_left, pad_right) = (&mut pad_left[..frames], &mut pad_right[..frames]);
             let voices = &mut self.voices[pad * SLOTS_PER_PAD..(pad + 1) * SLOTS_PER_PAD];
-            render_voices(
-                voices,
-                &self.samples,
-                bank,
-                pad_left,
-                pad_right,
-                fade_step,
-                end_fade,
-            );
+            render_voices(voices, &self.samples, bank, pad_left, pad_right, &fades);
             if let Some(scale) = self.settings.pads[pad].quantize_scale {
                 let step = scale.recip();
                 for sample in pad_left.iter_mut().chain(pad_right.iter_mut()) {
@@ -882,6 +953,16 @@ impl Drums {
     }
 }
 
+/// The one-pole coefficient of Soft hit tone for a hit `darkness` (0–1)
+/// toward its darkest; 1 leaves the hit open.
+fn tone_coefficient(darkness: f32, rate: f32) -> f32 {
+    let hertz = TONE_OPEN_HZ * (-TONE_OCTAVES * darkness).exp2();
+    if darkness <= 0.0 || hertz >= 0.45 * rate {
+        return 1.0;
+    }
+    1.0 - (-std::f32::consts::TAU * hertz / rate).exp()
+}
+
 /// Attack, hold and decay; Decay is also the release of a gate.
 fn set_envelope(amp: &mut Adsr, pad: &Pad, rate: f32) {
     amp.set(pad.attack_ms, pad.decay_ms, 0.0, pad.decay_ms, rate);
@@ -898,8 +979,10 @@ fn voice_control(
     sweep: f32,
     start: bool,
 ) {
-    let semitones =
-        pad.pitch + pad.velocity_pitch * (1.0 - voice.velocity) + pad.pitch_env * voice.sweep;
+    let semitones = pad.pitch
+        + voice.detune
+        + pad.velocity_pitch * (1.0 - voice.velocity)
+        + pad.pitch_env * voice.sweep;
     voice.sweep *= sweep;
     let ratio = (semitones / 12.0).exp2() / rate;
     for playing in &mut voice.layers[..voice.layer_count] {
@@ -919,6 +1002,16 @@ fn voice_control(
     }
 }
 
+/// Per-sample rates of a hit's fades at the current sample rate.
+struct Fades {
+    /// A choked or stolen hit's fall per sample.
+    fade: f32,
+    /// Samples a hit fades over at its end marker.
+    end_fade: f64,
+    /// Punch's factor per sample.
+    punch_fall: f32,
+}
+
 /// Adds layered hits before the pad's shared bit reduction, filter, drive and output.
 fn render_voices(
     voices: &mut [Voice],
@@ -926,8 +1019,7 @@ fn render_voices(
     bank: &SincBank,
     left: &mut [f32],
     right: &mut [f32],
-    fade_step: f32,
-    end_fade: f64,
+    fades: &Fades,
 ) {
     for voice in voices {
         if !voice.active {
@@ -959,14 +1051,23 @@ fn render_voices(
                 let gain = level * playing.sample.gain;
                 sum_left += l * gain;
                 sum_right += r * gain;
-                playing.playhead.advance(&playing.region, step, end_fade);
+                playing
+                    .playhead
+                    .advance(&playing.region, step, fades.end_fade);
                 playing.active = !playing.playhead.is_done();
                 sounding |= playing.active;
             }
-            if voice.fading {
-                voice.fade = (voice.fade - fade_step).max(0.0);
+            if voice.tone < 1.0 {
+                let [l, r] = &mut voice.tone_state;
+                *l += voice.tone * (sum_left - *l);
+                *r += voice.tone * (sum_right - *r);
+                (sum_left, sum_right) = (*l, *r);
             }
-            let gain = voice.amp.next_value() * voice.fade * voice.gain;
+            if voice.fading {
+                voice.fade = (voice.fade - fades.fade).max(0.0);
+            }
+            let gain = voice.amp.next_value() * voice.fade * voice.gain * (1.0 + voice.punch);
+            voice.punch *= fades.punch_fall;
             *out_left += sum_left * gain;
             *out_right += sum_right * gain;
             if !sounding || voice.fade == 0.0 {
@@ -1131,6 +1232,7 @@ impl Device for Drums {
         self.volume.snap();
         self.countdown = 0;
         self.age = 0;
+        self.seed = SEED;
         for player in self.players.iter_mut().flatten() {
             player.reset();
         }
@@ -1155,7 +1257,8 @@ impl Device for Drums {
                 let Some(sample) = &self.samples[leaf.slot as usize] else {
                     return;
                 };
-                let lowest = p.pitch + p.velocity_pitch.min(0.0) + p.pitch_env.min(0.0);
+                let lowest = p.pitch + p.velocity_pitch.min(0.0) + p.pitch_env.min(0.0)
+                    - self.settings.humanize * HUMANIZE_SEMITONES;
                 let played =
                     (p.end - p.start).abs() * (leaf.end - leaf.start) * sample.frames() as f32
                         / sample.sample_rate()
