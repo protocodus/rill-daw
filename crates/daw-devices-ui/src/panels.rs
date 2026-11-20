@@ -208,11 +208,19 @@ pub enum Tap {
 /// Fills dB values for one node (by index), the frequencies and the rate.
 pub type NodeCurve = fn(Values<'_>, usize, f32, &[f32], &mut [f32]);
 
+/// Fills the curves the device sounds now, one per channel, where its
+/// modulation has moved them away from the set curve, and returns how many
+/// it filled (0–2); `None` while nothing is set to move them.
+pub type LiveCurve =
+    fn(Values<'_>, &daw_devices::Telemetry, f32, &[f32], &mut [Vec<f32>; 2]) -> Option<usize>;
+
 pub struct ResponseView {
     /// Fills dB values for the given frequencies at the given sample rate.
     pub curve: fn(Values<'_>, f32, &[f32], &mut [f32]),
     /// The same for one node alone, drawn muted for the selected node.
     pub node_curve: Option<NodeCurve>,
+    /// The modulated curves, drawn muted behind the set one.
+    pub live: Option<LiveCurve>,
     pub nodes: &'static [NodeView],
     /// A node's values in words, shown beside it under the pointer.
     pub readout: Option<fn(usize, Values<'_>) -> String>,
@@ -296,7 +304,7 @@ pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
     if descriptor.id == filter::DESCRIPTOR.id {
         use filter::*;
         // The filter on top, its character before its frequency; below it
-        // the modulation sources, and the output last. Eleven cells hold
+        // the modulation sources, and the output last. Twelve cells hold
         // both rows without a hole.
         use Slot::Control as C;
         layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
@@ -305,7 +313,7 @@ pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
             cells(
                 "Filter",
                 0,
-                11,
+                12,
                 &[&[
                     C(MODEL, 2),
                     C(TYPE, 4),
@@ -314,6 +322,7 @@ pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
                     C(RESONANCE, 1),
                     C(DRIVE, 1),
                     C(MORPH, 1),
+                    C(SPREAD, 1),
                 ]],
             ),
             cells(
@@ -331,13 +340,19 @@ pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
             cells(
                 "Envelope",
                 1,
-                3,
-                &[&[C(ENV_AMOUNT, 1), C(ENV_ATTACK, 1), C(ENV_RELEASE, 1)]],
+                4,
+                &[&[
+                    C(ENV_SIDECHAIN, 1),
+                    C(ENV_ATTACK, 1),
+                    C(ENV_RELEASE, 1),
+                    C(ENV_AMOUNT, 1),
+                ]],
             ),
             cells("Output", 1, 2, &[&[C(MIX, 1), C(OUTPUT, 1)]]),
         ];
         layout.hero = Some(CUTOFF);
-        layout.toggle_columns = &[(SLOPE, 1)];
+        layout.toggle_columns = &[(SLOPE, 1), (ENV_SIDECHAIN, 1)];
+        layout.sidechain = Some(ENV_SIDECHAIN);
         // A control that leaves with the model would move its neighbours.
         layout.keep_inactive = true;
         layout.visible = |id, values| applies(id, &filter_settings(values));
@@ -346,15 +361,16 @@ pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
         layout.picture = Some(Picture::Response(ResponseView {
             curve: |values, rate, frequencies, out| {
                 let settings = filter_settings(values);
-                // The drawn curve is static; the sounding cutoff also moves with the LFO and envelope.
+                // The set curve; `live` draws where modulation has moved it.
                 response_db(&settings, settings.cutoff, rate, frequencies, out);
             },
             node_curve: None,
+            live: Some(filter_live_curves),
             nodes: &[NodeView {
                 label: None,
                 frequency: CUTOFF,
                 gain: None,
-                wheel: None,
+                wheel: Some(RESONANCE),
                 enable: None,
                 menu: None,
             }],
@@ -913,6 +929,7 @@ fn equalizer_layout(mut layout: Layout) -> Layout {
         curve: |values, rate, frequencies, out| {
             response_db(&equalizer_settings(values), rate, frequencies, out);
         },
+        live: None,
         node_curve: Some(|values, node, rate, frequencies, out| {
             band_response_db(&equalizer_settings(values), node, rate, frequencies, out);
         }),
@@ -1369,6 +1386,41 @@ fn mini_settings(values: Values<'_>) -> mini::Settings {
 
 fn filter_settings(values: Values<'_>) -> filter::Settings {
     filter::Settings::from_normalized(|id| values(id) as f32)
+}
+
+/// Where the LFO, the envelope and Spread have taken each channel's cutoff.
+fn filter_live_curves(
+    values: Values<'_>,
+    telemetry: &daw_devices::Telemetry,
+    rate: f32,
+    frequencies: &[f32],
+    out: &mut [Vec<f32>; 2],
+) -> Option<usize> {
+    use filter::*;
+    let settings = filter_settings(values);
+    if settings.lfo_depth == 0.0 && settings.env_amount == 0.0 && settings.spread == 0.0 {
+        return None;
+    }
+    let cutoffs = [
+        telemetry.value(TELEMETRY_CUTOFF_LEFT),
+        telemetry.value(TELEMETRY_CUTOFF_RIGHT),
+    ];
+    // Nothing processed yet, or a hundredth of an octave from the set
+    // cutoff: the set curve says it.
+    let moved = |cutoff: f32| cutoff > 0.0 && (cutoff / settings.cutoff).log2().abs() > 0.01;
+    if !cutoffs.iter().any(|cutoff| moved(*cutoff)) {
+        return Some(0);
+    }
+    let count = if (cutoffs[0] / cutoffs[1]).log2().abs() > 0.01 {
+        2
+    } else {
+        1
+    };
+    for (cutoff, curve) in cutoffs.iter().zip(out.iter_mut()).take(count) {
+        curve.resize(frequencies.len(), 0.0);
+        response_db(&settings, *cutoff, rate, frequencies, curve);
+    }
+    Some(count)
 }
 
 /// Groups in the order their first parameter appears in the descriptor,

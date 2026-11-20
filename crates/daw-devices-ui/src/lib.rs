@@ -1338,10 +1338,28 @@ fn response(
         .collect();
     let selected = state.selected.filter(|node| *node < view.nodes.len());
     let (mut db, mut own) = (vec![0.0; points], vec![0.0; points]);
+    let mut live: [Vec<f32>; 2] = Default::default();
     let (range, edits) = {
         let values = |id: u32| host.value(id);
         (view.curve)(&values, rate, &frequencies, &mut db);
         let mut curves = Vec::new();
+        // While anything modulates the curve, follow it at the spectrum's pace.
+        let moving = view
+            .live
+            .zip(telemetry.as_ref())
+            .and_then(|(curve, telemetry)| {
+                curve(&values, telemetry, rate, &frequencies, &mut live)
+            });
+        if moving.is_some() {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_secs_f32(1.0 / SPECTRUM_REFRESH));
+        }
+        let moving = moving.unwrap_or(0);
+        curves.extend(live[..moving].iter().map(|db| daw_ui::FrequencyCurve {
+            db,
+            emphasis: false,
+            low: None,
+        }));
         if let (Some(curve), Some(node)) = (view.node_curve, selected) {
             curve(&values, node, rate, &frequencies, &mut own);
             curves.push(daw_ui::FrequencyCurve {

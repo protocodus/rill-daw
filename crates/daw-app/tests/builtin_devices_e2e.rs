@@ -1469,3 +1469,62 @@ fn builtin_devices_show_metadata_and_preview_in_the_device_browser() {
     builtin_details(&mut app, "R1 Filter", "rill:r1-filter", false);
     app.quit();
 }
+
+#[test]
+fn r1_filter_opens_under_a_routed_sidechain_and_names_its_source() {
+    let mut app = Harness::new();
+    let (track, trigger) = tone_project(&mut app, "filter-key.rill", 1000.0, true);
+    let tone = |app: &mut Harness| {
+        let state = song_tool(
+            app,
+            "audio_analyze",
+            json!({"start_beat":0.0,"end_beat":2.0,"track_id":track}),
+        );
+        band(&state["tool_result"]["result"], "250_to_4000_hz")
+    };
+    let (_, insert) = insert_device(&mut app, track, "R1 Filter", "r1-filter");
+    let described = song_tool(
+        &mut app,
+        "plugin_describe_parameters",
+        json!({"track_id":track,"insert_id":insert,"query":"sidechain"}),
+    );
+    let result = &described["tool_result"]["result"];
+    assert_eq!(
+        result["parameters"][0]["key"], "env.sidechain",
+        "{described}"
+    );
+    assert_eq!(result["sidechain_input"]["bus"], 1, "{described}");
+
+    // Shut at 100 Hz until the envelope opens it five octaves; listening
+    // to the sidechain with nothing routed there, it stays shut.
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"cutoff","value":"100 Hz"},{"parameter":"resonance","value":0},
+            {"parameter":"env.amount","value":5},{"parameter":"env.sidechain","value":"External"}]),
+    );
+    let shut = tone(&mut app);
+    let routed = apply_edits(
+        &mut app,
+        json!([{"op":"set_plugin_inputs","track":track,"effect":insert,"inputs":[
+            {"source_track":trigger,"bus":1,"first_channel":0,"gain":1.0,"pre_fader":false}]}]),
+    );
+    assert_eq!(routed["tool_result"]["ok"], true, "{routed}");
+    let opened = tone(&mut app);
+    assert!(opened > shut + 10.0, "shut {shut} dB, opened {opened} dB");
+
+    // The panel names the source under Sidechain, and Spread sits with
+    // the filter.
+    open_effect_editor(&mut app, "Pad tone", "Cutoff");
+    let state = app.inspect();
+    for label in ["External", "Trigger", "Spread"] {
+        assert!(
+            visible(&state, label),
+            "{label}: {}",
+            state["visible_labels"]
+        );
+    }
+    assert_signal_row(&state, &["Drive", "Cutoff", "Resonance", "Spread"]);
+    app.quit();
+}

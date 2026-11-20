@@ -6,14 +6,23 @@ pub(super) fn build(mut layout: Layout, descriptor: &DeviceDescriptor, band: usi
     layout.picture_place = PicturePlace::Above;
     if descriptor.id == filter::DESCRIPTOR.id {
         use filter::*;
-        layout.toggle_columns = &[(TYPE, 2), (SLOPE, 1)];
+        layout.toggle_columns = &[(TYPE, 2), (SLOPE, 1), (ENV_SIDECHAIN, 1)];
+        // Nine cells a row, so every caption fits beside its neighbours in a
+        // narrow window.
         layout.sections = vec![
-            cells("Circuit", 0, 5, &[&[C(MODEL, 2), C(TYPE, 2), C(SLOPE, 1)]]),
+            // A model has a Type or a Morph, never both: Morph is the type of
+            // the morphing models, so it takes the same place.
+            cells(
+                "Circuit",
+                0,
+                5,
+                &[&[C(MODEL, 2), Slot::Swap(&[TYPE, MORPH], 2), C(SLOPE, 1)]],
+            ),
             cells(
                 "Filter",
                 0,
                 4,
-                &[&[C(DRIVE, 1), C(CUTOFF, 1), C(RESONANCE, 1), C(MORPH, 1)]],
+                &[&[C(DRIVE, 1), C(CUTOFF, 1), C(RESONANCE, 1), C(SPREAD, 1)]],
             ),
             // Both sources move the same cutoff. Keep the source timings and
             // modulation amounts accessible while adjusting the filter.
@@ -29,11 +38,18 @@ pub(super) fn build(mut layout: Layout, descriptor: &DeviceDescriptor, band: usi
                     C(LFO_STEREO, 1),
                 ]],
             ),
+            // What the follower hears, how fast, then how far it moves the
+            // cutoff.
             cells(
                 "Envelope follower",
                 1,
                 4,
-                &[&[C(ENV_ATTACK, 1), C(ENV_RELEASE, 2), C(ENV_AMOUNT, 1)]],
+                &[&[
+                    C(ENV_SIDECHAIN, 1),
+                    C(ENV_ATTACK, 1),
+                    C(ENV_RELEASE, 1),
+                    C(ENV_AMOUNT, 1),
+                ]],
             ),
         ];
         if let Some(Picture::Response(view)) = &mut layout.picture {
@@ -42,15 +58,18 @@ pub(super) fn build(mut layout: Layout, descriptor: &DeviceDescriptor, band: usi
                 label: Some("Cutoff"),
                 frequency: CUTOFF,
                 gain: None,
-                wheel: None,
+                wheel: Some(RESONANCE),
                 enable: None,
                 menu: None,
             }];
             view.readout = Some(|_, values| {
-                DESCRIPTOR
-                    .parameter(CUTOFF)
-                    .unwrap()
-                    .format(values(CUTOFF) as f32)
+                let text = |id: u32| {
+                    DESCRIPTOR
+                        .parameter(id)
+                        .map(|spec| spec.format(values(id) as f32))
+                        .unwrap_or_default()
+                };
+                format!("{}   Res {}", text(CUTOFF), text(RESONANCE))
             });
         }
         layout.hint = |id, values| {
@@ -59,7 +78,6 @@ pub(super) fn build(mut layout: Layout, descriptor: &DeviceDescriptor, band: usi
             }
             Some(match id {
                 LFO_RATE => "Choose Off for Sync to set a free-running rate.",
-                MORPH => "Morph is available for State variable, Comb and Vowel models.",
                 TYPE => "This model has a fixed filter type.",
                 SLOPE => "This model has a fixed filter slope.",
                 _ => "This control is inactive for the selected model.",

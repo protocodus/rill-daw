@@ -1498,11 +1498,13 @@ components (`inline_knob`, `glyph_toggle`, `column_highlight`, the extended
 | Resonance | 0 – 100 % | 20 % |
 | Drive | 0 – 24 dB | 0 dB |
 | Morph | 0 – 100 % (State Variable: LP → notch → HP; Vowel: A-E-I-O-U; Comb: feedback damping) | 0 % |
+| Spread | 0 – 2 octaves between the channels' cutoffs, left below, right above | 0 |
 | LFO rate, Sync, Shape | 0.01 – 20 Hz; sine, triangle, saw, square, S&H | 1 Hz, sine |
 | LFO depth | ±5 octaves | 0 |
 | LFO stereo | 0 – 180° | 0° |
 | Envelope amount | ±5 octaves | 0 |
 | Envelope attack / release | 0.1 – 100 ms / 10 ms – 2 s | 5 ms / 150 ms |
+| Envelope sidechain | Internal, External (the follower listens to the sidechain input; silence while nothing is routed) | Internal |
 
 **DSP.** The device is `daw_dsp::filter::FilterKernel` plus the LFO,
 envelope and mix. *Clean*: linear ZDF state-variable filter, transparent and
@@ -1523,9 +1525,17 @@ low-pass/notch/high-pass morph, smooth resonance. *Comb*: tuned feedback
 delay, Cutoff sets the pitch, Resonance the (signed) feedback. *Vowel*: three
 parallel formant band-passes morphing between vowels. The five circuit models
 run at 2×. The same kernel is the filter inside Mini, Maxi and Sampler.
+Spread runs each channel's filter at its own cutoff through the same
+asymmetric path as the stereo LFO, so it costs nothing at 0. With Sidechain
+on External the follower reads the sidechain input (bus 1, as on R1
+Compressor): a routed kick opens or, with a negative Amount, pulls shut the
+filter of another track.
 
-**Panel.** `frequency_plot` with one node (drag = cutoff and resonance) whose
-curve moves with the modulated cutoff from telemetry. Model as a
+**Panel.** `frequency_plot` with one node (drag = cutoff, wheel =
+resonance). While the LFO, the envelope or Spread move the cutoff, the
+curves each channel sounds at, from telemetry, are drawn muted behind the
+set one and followed at 30 frames a second; nothing redraws while nothing
+modulates. Model as a
 `stepped_selector`; hero Cutoff knob; Resonance, Drive, Morph; an LFO
 `device_section` with `lfo_view`; an Envelope section. At 987 points the controls form
 two rows of cards on a grid of eleven cells, each on one line. The Filter
@@ -1536,6 +1546,16 @@ Depth, Stereo, in the order of R1 Mini's and R1 Sampler's) and Envelope
 (Amount, Attack, Release), and Output (Mix, Output) at the right end. A
 control the model does not have (Morph, Slope, Type) or that Sync replaces
 (Rate) stays in its cell, disabled.
+
+The panel opens as a workspace on nine cells a row, so every caption fits
+at 800 points. Circuit (Model on two cells, Type on two, Slope) and Filter
+(Drive, Cutoff, Resonance, Spread) on top; LFO (Shape, Sync, Rate, Depth,
+Stereo) and Envelope follower (Sidechain, Attack, Release, Amount) below;
+Mix and Output in the strip under every task. A model has a Type or a
+Morph, never both, so Morph takes Type's place for State Variable, Comb and
+Vowel; the Transistor Ladder has neither and keeps Type there, disabled.
+With Sidechain on External the value line under it names the routed source
+and opens Routing, as on R1 Compressor.
 
 ## Instruments
 

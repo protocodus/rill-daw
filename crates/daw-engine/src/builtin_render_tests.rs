@@ -316,7 +316,7 @@ mod sidechain {
         project.track_mut(target).unwrap().inserts[0].inputs[0].bus = 0;
         assert!(error(&project).contains("cannot replace an insert's main input"));
         // A device without a sidechain has only its main input.
-        let mut slot = builtin(&filter::DESCRIPTOR, &[]);
+        let mut slot = builtin(&saturator::DESCRIPTOR, &[]);
         slot.inputs.push(route(key, 1));
         project.track_mut(target).unwrap().inserts[0] = slot;
         let message = error(&project);
@@ -324,7 +324,7 @@ mod sidechain {
             message.contains("Plug-in input bus is unavailable"),
             "{message}"
         );
-        assert!(message.contains("R1 Filter"), "{message}");
+        assert!(message.contains("R1 Saturator"), "{message}");
     }
 
     /// Two tracks with the same click, one through `slot`: the frames of the
