@@ -74,32 +74,44 @@ pub(super) fn build(mut layout: Layout, descriptor: &DeviceDescriptor, band: usi
     } else {
         use equalizer::*;
         let band = band.min(5);
-        // Shape or slope first, then the same frequency dial for every band.
-        // Cut filters share the other bands' geometry when gain and Q disappear.
+        // Shape or slope first, then the same frequency dial for every band
+        // and where in the stereo image it works last. Cut filters share the
+        // other bands' geometry when gain and Q disappear.
         let mut inspector = match band {
             0 => cells(
                 "High-pass",
                 0,
-                9,
-                &[&[C(HP_SLOPE, 3), C(HP_FREQUENCY, 2), Slot::Blank(4)]],
+                12,
+                &[&[
+                    C(HP_SLOPE, 3),
+                    C(HP_FREQUENCY, 2),
+                    Slot::Blank(4),
+                    C(HP_PLACEMENT, 3),
+                ]],
             ),
             5 => cells(
                 "Low-pass",
                 0,
-                9,
-                &[&[C(LP_SLOPE, 3), C(LP_FREQUENCY, 2), Slot::Blank(4)]],
+                12,
+                &[&[
+                    C(LP_SLOPE, 3),
+                    C(LP_FREQUENCY, 2),
+                    Slot::Blank(4),
+                    C(LP_PLACEMENT, 3),
+                ]],
             ),
             _ => {
                 let base = BANDS[band - 1];
                 cells(
                     ["Band 1", "Band 2", "Band 3", "Band 4"][band - 1],
                     0,
-                    9,
+                    12,
                     &[&[
                         C(base + BAND_TYPE, 3),
                         C(base + BAND_FREQUENCY, 2),
                         C(base + BAND_GAIN, 2),
                         C(base + BAND_Q, 2),
+                        C(base + BAND_PLACEMENT, 3),
                     ]],
                 )
             }
@@ -126,7 +138,7 @@ pub(super) fn build(mut layout: Layout, descriptor: &DeviceDescriptor, band: usi
         };
         Workspace {
             layout,
-            output: vec![AUTO_GAIN, OUTPUT],
+            output: vec![GAIN_SCALE, AUTO_GAIN, OUTPUT],
             toolbar: vec![MODE, ANALYZER],
             body_height: 0.0,
         }

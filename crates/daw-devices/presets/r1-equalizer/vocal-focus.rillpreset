@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "device": "r1-equalizer",
+  "name": "Vocal Focus",
+  "author": "Rill",
+  "category": "Master",
+  "tags": ["mid/side", "vocal", "presence"],
+  "description": "Brings a centred voice forward in a finished mix: presence on the mid, a little less of it on the sides.",
+  "parameters": {
+    "band3.type": "Bell",
+    "band3.frequency": 3000.0,
+    "band3.gain": 2.0,
+    "band3.q": 0.9,
+    "band3.placement": "Mid",
+    "band2.type": "Bell",
+    "band2.frequency": 2500.0,
+    "band2.gain": -1.5,
+    "band2.q": 0.9,
+    "band2.placement": "Side"
+  }
+}

@@ -139,6 +139,21 @@ impl<T: Real> SvfStereo<T> {
         *self = Self::default();
     }
 
+    /// The state for inputs mixed by `matrix` (`[l, r]` becomes
+    /// `[m00·l + m01·r, m10·l + m11·r]`), for example into mid and side. The
+    /// filter is linear, so its state mixes the same way and the output
+    /// continues without a step.
+    pub fn mix_channels(&mut self, matrix: [[T; 2]; 2]) {
+        let mix = |state: [T; 2]| {
+            [
+                matrix[0][0] * state[0] + matrix[0][1] * state[1],
+                matrix[1][0] * state[0] + matrix[1][1] * state[1],
+            ]
+        };
+        self.ic1 = mix(self.ic1);
+        self.ic2 = mix(self.ic2);
+    }
+
     #[inline]
     pub fn process_coeffs(&mut self, input: [T; 2], coeffs: SvfCoeffs<T>) -> SvfOutputsStereo<T> {
         let v3 = [input[0] - self.ic2[0], input[1] - self.ic2[1]];

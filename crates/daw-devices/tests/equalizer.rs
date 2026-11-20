@@ -1410,3 +1410,172 @@ fn settings_and_curves_follow_the_parameters() {
         ))
     );
 }
+
+const MID: f32 = 1.0;
+const SIDE: f32 = 2.0;
+
+/// The gain in dB at `frequency` for a signal only in the mid (left and
+/// right equal) and one only in the side (opposite), and the largest part of
+/// the other that either brings out: the halves of the image never mix.
+fn mid_side_db(values: &[(u32, f32)], frequency: f32) -> ([f32; 2], f64) {
+    let rate = 48_000.0;
+    let input = sine(f64::from(frequency), 0.25, rate, 48_000);
+    let skip = 24_000;
+    let mut gains = [0.0; 2];
+    let mut leak = 0.0_f64;
+    for (index, sign) in [1.0_f32, -1.0].into_iter().enumerate() {
+        let mut device = device(rate as f32, values);
+        let mut left = input.clone();
+        let mut right: Vec<f32> = input.iter().map(|x| sign * x).collect();
+        run(&mut *device, &mut left, &mut right);
+        let (wanted, other): (Vec<f32>, Vec<f32>) = left
+            .iter()
+            .zip(&right)
+            .map(|(l, r)| (0.5 * (l + sign * r), 0.5 * (l - sign * r)))
+            .unzip();
+        let reference = fit(&input[skip..], f64::from(frequency), rate);
+        gains[index] = db(fit(&wanted[skip..], f64::from(frequency), rate) / reference);
+        leak = leak.max(f64::from(peak(&other[skip..])) / reference);
+    }
+    (gains, leak)
+}
+
+#[test]
+fn placement_filters_only_its_part_of_the_image() {
+    let b = BANDS[1];
+    let cases: [(Values, u32, f32); 4] = [
+        (band(1, BELL, 1000.0, 9.0, 1.0), b + BAND_PLACEMENT, 1000.0),
+        (
+            band(1, LOW_SHELF, 200.0, -12.0, 0.71),
+            b + BAND_PLACEMENT,
+            80.0,
+        ),
+        (high_pass(2000.0, DB24), HP_PLACEMENT, 500.0),
+        (low_pass(500.0, DB48), LP_PLACEMENT, 2000.0),
+    ];
+    for (case, placement_id, frequency) in cases {
+        for placement in [0.0, MID, SIDE] {
+            let values = [case.clone(), vec![(placement_id, placement)]].concat();
+            let settings = settings(&values);
+            let mut drawn = [[0.0_f32]; 2];
+            response_db(&settings, 48_000.0, &[frequency], &mut drawn[0]);
+            side_response_db(&settings, 48_000.0, &[frequency], &mut drawn[1]);
+            let (measured, leak) = mid_side_db(&values, frequency);
+            for (part, (measured, drawn)) in measured.iter().zip(drawn).enumerate() {
+                assert!(
+                    (measured - drawn[0]).abs() <= 0.1,
+                    "{values:?} part {part}: measured {measured}, drawn {}",
+                    drawn[0]
+                );
+            }
+            // The other part is untouched, and the case shows something.
+            let (affected, untouched) = match placement {
+                MID => (0, Some(1)),
+                SIDE => (1, Some(0)),
+                _ => (0, None),
+            };
+            assert!(measured[affected].abs() > 3.0, "{values:?} shows nothing");
+            if let Some(untouched) = untouched {
+                assert!(measured[untouched].abs() < 0.01, "{values:?}: {measured:?}");
+            }
+            assert!(leak < 1e-5, "{values:?}: {leak}");
+        }
+    }
+}
+
+#[test]
+fn all_stereo_draws_one_curve() {
+    let b = BANDS[2];
+    let stereo = settings(&band(2, BELL, 1000.0, 6.0, 1.0));
+    assert!(!stereo.splits_mid_side());
+    let mut values = band(2, BELL, 1000.0, 6.0, 1.0);
+    values.push((b + BAND_PLACEMENT, SIDE));
+    assert!(settings(&values).splits_mid_side());
+    // A band that does nothing does not split the picture.
+    values.push((b + BAND_GAIN, 0.0));
+    assert!(!settings(&values).splits_mid_side());
+}
+
+#[test]
+fn moving_a_band_in_the_image_is_click_free() {
+    let rate = 48_000.0;
+    let tone = MODULATION_TONE as f32;
+    let b = BANDS[1];
+    for (name, base, id) in [
+        ("bell", band(1, BELL, tone, 24.0, 18.0), b + BAND_PLACEMENT),
+        ("high-pass", high_pass(tone, DB48), HP_PLACEMENT),
+    ] {
+        // Left and right differ, so both mid and side carry signal.
+        let frames = 2 * rate as usize;
+        let left = Noise(5).block(0.25, frames);
+        let right = sine(f64::from(tone), 0.25, f64::from(rate), frames);
+        let block = (rate * 0.025) as usize;
+        let placements = [0.0, MID, SIDE, 0.0, SIDE, MID];
+        let ends: Vec<(f32, f32)> = placements
+            .iter()
+            .map(|&placement| {
+                let mut device = device(rate, &[base.clone(), vec![(id, placement)]].concat());
+                let (mut l, mut r) = (left.clone(), right.clone());
+                run(&mut *device, &mut l, &mut r);
+                let (a, b) = (
+                    peak_and_step(&l[frames / 10..]),
+                    peak_and_step(&r[frames / 10..]),
+                );
+                (a.0.max(b.0), a.1.max(b.1))
+            })
+            .collect();
+        let peak_bound = ends.iter().map(|end| end.0).fold(0.0, f32::max);
+        let step_bound = ends.iter().map(|end| end.1).fold(0.0, f32::max);
+        let mut device = device(rate, &base);
+        let (mut l, mut r) = (left.clone(), right.clone());
+        for (index, (l, r)) in l.chunks_mut(block).zip(r.chunks_mut(block)).enumerate() {
+            set(&mut *device, &[(id, placements[index % placements.len()])]);
+            run(&mut *device, l, r);
+        }
+        for output in [&l, &r] {
+            let (peak, step) = peak_and_step(&output[frames / 10..]);
+            assert!(
+                peak <= 2.0 * peak_bound,
+                "{name}: peak {peak}, steady {peak_bound}"
+            );
+            assert!(
+                step <= 1.5 * step_bound + 0.02,
+                "{name}: step {step}, steady {step_bound}"
+            );
+        }
+    }
+}
+
+#[test]
+fn gain_scale_scales_every_band() {
+    let values = [
+        band(1, BELL, 1000.0, 12.0, 1.0),
+        band(2, HIGH_SHELF, 6000.0, -8.0, 0.71),
+    ]
+    .concat();
+    for scale in [50.0, 150.0] {
+        let scaled = [values.clone(), vec![(GAIN_SCALE, scale)]].concat();
+        let measured = measured_db(&scaled, 48_000.0, &[1000.0, 16_000.0], 0.25, 0.1);
+        let expected = drawn(&values, &[1000.0, 16_000.0]);
+        for (measured, expected) in measured.iter().zip(expected) {
+            assert!(
+                (measured - expected * scale / 100.0).abs() < 0.15,
+                "at {scale} %: measured {measured}, full {expected}"
+            );
+        }
+    }
+    // At no scale the bands are out of the path altogether.
+    let input = sine(1000.0, 0.25, 48_000.0, 4800);
+    let mut device = device(48_000.0, &[values, vec![(GAIN_SCALE, 0.0)]].concat());
+    assert_eq!(run_mono(&mut *device, &input), input);
+}
+
+#[test]
+fn mono_lows_folds_the_bass_to_mono() {
+    let values = preset(include_str!("../presets/r1-equalizer/mono-lows.rillpreset"));
+    let ([mid, side], _) = mid_side_db(&values, 50.0);
+    assert!(mid.abs() < 0.01, "mid {mid}");
+    assert!(side < -20.0, "side {side}");
+    let ([mid, side], _) = mid_side_db(&values, 2000.0);
+    assert!(mid.abs() < 0.01 && side.abs() < 0.1, "{mid} {side}");
+}

@@ -146,11 +146,13 @@ pub fn show(ui: &mut egui::Ui, state: &mut State) {
                     db: &state.comb.0,
                     emphasis: false,
                     low: Some(&state.comb.1),
+                    label: None,
                 },
                 FrequencyCurve {
                     db: &state.response,
                     emphasis: true,
                     low: None,
+                    label: None,
                 },
             ],
             spectrum: Some(Spectrum {

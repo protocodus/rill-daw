@@ -234,6 +234,9 @@ pub struct FrequencyCurve<'a> {
     /// a response with detail finer than a point of width (a comb) is the
     /// span it covers there, filled, with the line along its top.
     pub low: Option<&'a [f32]>,
+    /// Names the curve where several stand for different signals (mid and
+    /// side), in a legend in the top right corner.
+    pub label: Option<&'a str>,
 }
 
 /// A mark on the 0 dB line that only shows: where something stands now.
@@ -513,6 +516,24 @@ pub fn frequency_plot(ui: &mut Ui, plot: &FrequencyPlot<'_>) -> FrequencyPlotOut
                     },
                 ),
             ));
+        }
+        // A legend in the top right corner, right to left: a short stroke
+        // of each named curve, then its name.
+        let mut right = inner.right() - 6.0;
+        for curve in plot.curves.iter().rev() {
+            let Some(text) = curve.label else {
+                continue;
+            };
+            let y = inner.top() + 10.0;
+            let name = backed_label(painter, pos2(right, y), Align2::RIGHT_CENTER, text);
+            let stroke = if curve.emphasis {
+                Stroke::new(2.0_f32, colors.accent)
+            } else {
+                Stroke::new(1.0_f32, colors.muted)
+            };
+            let swatch = name.left() - 4.0;
+            painter.line_segment([pos2(swatch - 14.0, y), pos2(swatch, y)], stroke);
+            right = swatch - 14.0 - 12.0;
         }
         for marker in plot.markers {
             let at = pos2(x_of(marker.frequency), gain_y(0.0));

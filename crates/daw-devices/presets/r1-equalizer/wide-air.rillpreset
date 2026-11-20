@@ -1,0 +1,24 @@
+{
+  "format": 1,
+  "device": "r1-equalizer",
+  "name": "Wide Air",
+  "author": "Rill",
+  "category": "Master",
+  "tags": ["mid/side", "air", "width"],
+  "description": "Opens the top of the sides and clears their low mids; the centre keeps its focus.",
+  "parameters": {
+    "hp.on": true,
+    "hp.frequency": 150.0,
+    "hp.placement": "Side",
+    "band2.type": "Bell",
+    "band2.frequency": 350.0,
+    "band2.gain": -2.0,
+    "band2.q": 0.8,
+    "band2.placement": "Side",
+    "band4.type": "High shelf",
+    "band4.frequency": 9000.0,
+    "band4.gain": 3.0,
+    "band4.q": 0.6,
+    "band4.placement": "Side"
+  }
+}

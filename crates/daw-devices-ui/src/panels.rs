@@ -207,12 +207,20 @@ pub enum Tap {
 
 /// Fills dB values for one node (by index), the frequencies and the rate.
 pub type NodeCurve = fn(Values<'_>, usize, f32, &[f32], &mut [f32]);
+/// Fills dB values like a curve and says whether there is one to draw.
+pub type SideCurve = fn(Values<'_>, f32, &[f32], &mut [f32]) -> bool;
 
 pub struct ResponseView {
     /// Fills dB values for the given frequencies at the given sample rate.
     pub curve: fn(Values<'_>, f32, &[f32], &mut [f32]),
     /// The same for one node alone, drawn muted for the selected node.
     pub node_curve: Option<NodeCurve>,
+    /// The response of the side signal, where it differs from `curve`
+    /// (which then shows the mid): fills it and returns true.
+    pub side_curve: Option<SideCurve>,
+    /// A factor on every node's gain as drawn: the curve is scaled, so the
+    /// nodes are, and a drag sets the gain that lands where it is dropped.
+    pub gain_scale: Option<fn(Values<'_>) -> f32>,
     pub nodes: &'static [NodeView],
     /// A node's values in words, shown beside it under the pointer.
     pub readout: Option<fn(usize, Values<'_>) -> String>,
@@ -350,6 +358,8 @@ pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
                 response_db(&settings, settings.cutoff, rate, frequencies, out);
             },
             node_curve: None,
+            side_curve: None,
+            gain_scale: None,
             nodes: &[NodeView {
                 label: None,
                 frequency: CUTOFF,
@@ -819,6 +829,19 @@ static EQUALIZER_NODES: [NodeView; 6] = {
     ]
 };
 
+/// The Placement of each node of [`EQUALIZER_NODES`].
+const EQUALIZER_PLACEMENTS: [u32; 6] = {
+    use equalizer::*;
+    [
+        HP_PLACEMENT,
+        BANDS[0] + BAND_PLACEMENT,
+        BANDS[1] + BAND_PLACEMENT,
+        BANDS[2] + BAND_PLACEMENT,
+        BANDS[3] + BAND_PLACEMENT,
+        LP_PLACEMENT,
+    ]
+};
+
 /// Width of a Bands column's toggle track: four type glyphs or three slopes.
 const BAND_TRACK: f32 = 84.0;
 
@@ -846,13 +869,14 @@ fn equalizer_layout(mut layout: Layout) -> Layout {
                 line(C(HP_FREQUENCY, 1), band(BAND_FREQUENCY), C(LP_FREQUENCY, 1)),
                 line(Blank(1), band(BAND_GAIN), Blank(1)),
                 line(Blank(1), band(BAND_Q), Blank(1)),
+                line(C(HP_PLACEMENT, 1), band(BAND_PLACEMENT), C(LP_PLACEMENT, 1)),
             ],
             row: 0,
             span: 8,
             table: Some(Table {
                 // "Frequency" would take the room of a column, and the columns
                 // need theirs: "20.00 kHz" beside its arc is 88 points of 98.
-                captions: &["", "", "Freq", "Gain", "Q"],
+                captions: &["", "", "Freq", "Gain", "Q", ""],
                 caption_width: 36.0,
                 // Five lines as tall as Global's two lines of controls.
                 line_gap: 22.0,
@@ -860,7 +884,12 @@ fn equalizer_layout(mut layout: Layout) -> Layout {
             enable: None,
             choice: None,
         },
-        section("Global", 0, 4, &[&[MODE, ANALYZER], &[AUTO_GAIN, OUTPUT]]),
+        section(
+            "Global",
+            0,
+            4,
+            &[&[MODE, ANALYZER], &[AUTO_GAIN, GAIN_SCALE, OUTPUT]],
+        ),
     ];
     layout.leds = &[
         (HP_ON, "HP"),
@@ -916,8 +945,17 @@ fn equalizer_layout(mut layout: Layout) -> Layout {
         node_curve: Some(|values, node, rate, frequencies, out| {
             band_response_db(&equalizer_settings(values), node, rate, frequencies, out);
         }),
+        side_curve: Some(|values, rate, frequencies, out| {
+            let settings = equalizer_settings(values);
+            settings.splits_mid_side() && {
+                side_response_db(&settings, rate, frequencies, out);
+                true
+            }
+        }),
+        gain_scale: Some(|values| equalizer_settings(values).gain_scale),
         nodes: &EQUALIZER_NODES,
         readout: Some(|node, values| {
+            let placement = EQUALIZER_PLACEMENTS[node];
             let node = &EQUALIZER_NODES[node];
             let text = |id: u32| {
                 DESCRIPTOR
@@ -926,13 +964,19 @@ fn equalizer_layout(mut layout: Layout) -> Layout {
                     .unwrap_or_default()
             };
             let frequency = text(node.frequency);
-            match (node.gain, node.wheel) {
+            let values = match (node.gain, node.wheel) {
                 (Some(gain), Some(q)) if applies(gain, &equalizer_settings(values)) => {
                     format!("{frequency}   {}   Q {}", text(gain), text(q))
                 }
                 (Some(_), Some(q)) => format!("{frequency}   Q {}", text(q)),
                 (_, Some(slope)) => format!("{frequency}   {}/oct", text(slope)),
                 _ => frequency,
+            };
+            let placement = text(placement);
+            if placement == PLACEMENTS[0] {
+                values
+            } else {
+                format!("{values}   {placement}")
             }
         }),
         spectrum: |values| match equalizer_settings(values).analyzer {
