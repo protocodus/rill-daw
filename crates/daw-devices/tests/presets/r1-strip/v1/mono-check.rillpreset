@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Mono Check",
+  "author": "Rill",
+  "category": "Utility",
+  "tags": ["utility"],
+  "description": "Folds to mono to check what survives on one speaker.",
+  "parameters": {
+    "width": 0.0
+  }
+}

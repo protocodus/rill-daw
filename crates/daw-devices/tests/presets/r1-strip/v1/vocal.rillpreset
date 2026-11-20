@@ -1,0 +1,25 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Vocal",
+  "author": "Rill",
+  "category": "Vocal",
+  "tags": ["vocal"],
+  "description": "Low cut, less mud, more presence and steady leveling.",
+  "parameters": {
+    "hp.on": true,
+    "hp.frequency": 90.0,
+    "hp.slope": "24 dB",
+    "mid.frequency": 350.0,
+    "mid.gain": -2.5,
+    "mid.q": 1.2,
+    "high.frequency": 6000.0,
+    "high.gain": 3.0,
+    "comp.on": true,
+    "comp.threshold": -20.0,
+    "comp.ratio": 3.0,
+    "comp.attack": 8.0,
+    "comp.release": 100.0,
+    "comp.makeup": 4.0
+  }
+}
