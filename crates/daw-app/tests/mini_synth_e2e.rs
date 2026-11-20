@@ -286,3 +286,92 @@ fn panel_keyboard_and_wheels_play_the_track_and_let_go_when_the_panel_closes() {
     assert!(wheels[2].as_f64().unwrap() > 0.2, "{wheels}");
     app.quit();
 }
+
+fn correlation(app: &mut Harness) -> f64 {
+    let analysis = song_tool(
+        app,
+        "audio_analyze",
+        json!({"start_beat":0.0,"end_beat":4.0}),
+    );
+    analysis["tool_result"]["result"]["stereo_correlation"]
+        .as_f64()
+        .unwrap_or_else(|| panic!("{analysis}"))
+}
+
+#[test]
+fn unison_spreads_r1_mini_across_the_stereo_field_and_its_new_controls_have_places() {
+    let mut app = Harness::new();
+    app.key("Escape");
+    let added = menu(&mut app, "Track", "Add MIDI track");
+    let track = added["project"]["tracks"][0]["id"].as_u64().unwrap();
+    let clip = added["project"]["tracks"][0]["clips"][0]["id"]
+        .as_u64()
+        .unwrap();
+    app.key("Escape");
+    let (id, revision) = session(&added);
+    song_tool(
+        &mut app,
+        "apply_edits",
+        json!({"session_id":id,"expected_revision":revision,"label":"Phrase","edits":[
+            {"op":"add_notes","track":track,"clip":clip,
+             "notes":[{"pitch":57,"start":0.0,"length":3.5,"velocity":100}]}]}),
+    );
+    // One voice a note: the same on both sides.
+    let mono = correlation(&mut app);
+    assert!(mono > 0.999, "mono correlation {mono}");
+
+    // Stacked and spread, the sides differ; the factory preset does the same.
+    let state = app.inspect();
+    let (id, revision) = session(&state);
+    song_tool(
+        &mut app,
+        "set_device_parameters",
+        json!({"session_id":id,"expected_revision":revision,"track_id":track,
+            "parameters":[{"parameter":"voice.unison","value":4},
+                          {"parameter":"voice.spread","value":"100 %"},
+                          {"parameter":"filter.type","value":"high-pass"}]}),
+    );
+    let wide = correlation(&mut app);
+    assert!(wide < 0.8, "spread correlation {wide}");
+    let presets = song_tool(
+        &mut app,
+        "list_device_presets",
+        json!({"track_id":track,"query":"unison"}),
+    );
+    let (id, revision) = session(&presets);
+    let loaded = song_tool(
+        &mut app,
+        "load_device_preset",
+        json!({"name":"unison lead","track_id":track,"session_id":id,"expected_revision":revision}),
+    );
+    assert_eq!(loaded["tool_result"]["result"]["skipped"], json!([]));
+    assert!(correlation(&mut app) < 0.95);
+
+    // Each new control has a place on the task it belongs to.
+    app.command(json!({"command":"viewport","width":1600,"height":1400,"pixels_per_point":1.0}));
+    menu(&mut app, "Window", "Instrument");
+    common::wait_visible(&mut app, "OSCILLATOR 1");
+    for (task, labels) in [
+        ("Oscillators", &["SOURCE MIX", "Drive"][..]),
+        ("Filter & amp", &["FILTER", "Type"][..]),
+        (
+            "Modulation",
+            &["Fade in", "FILTER ENVELOPE", "Osc 2 pitch"][..],
+        ),
+        ("Voices", &["UNISON", "Unison", "Spread"][..]),
+    ] {
+        let state = app.click(task);
+        for label in labels {
+            assert!(
+                state["visible_labels"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|visible| visible == label),
+                "{task}: missing {label}: {}",
+                state["visible_labels"]
+            );
+        }
+    }
+    app.quit();
+}

@@ -1,13 +1,14 @@
 //! R1 Mini: two circuit-modelled oscillators (VCO or DCO), sub and noise into
 //! the shared saturating filter, two envelopes and one LFO, up to eight
-//! voices. Each voice runs at 2× from the oscillators to the filter, so the
-//! oscillator edges, the overdriven mixer and the filter's saturation do not
-//! alias. See `docs/R1_DEVICES.md#r1-mini`.
+//! notes of up to eight stacked unison voices each, spread in pitch and
+//! across the stereo field. Each voice runs at 2× from the oscillators to
+//! the filter, so the oscillator edges, the overdriven mixer and the
+//! filter's saturation do not alias. See `docs/R1_DEVICES.md#r1-mini`.
 use super::param;
 use crate::dsp::filter::{self, FilterKernel, FilterModel, FilterShape, FilterType};
 use crate::dsp::oscillator::Corrector;
 use crate::dsp::{
-    Adsr, Drift, Lfo, LfoShape, OnePole, Oscillator, OscillatorModel, Oversampler2x, Random,
+    Adsr, Drift, Lfo, LfoShape, OnePole, Oscillator, OscillatorModel, Oversampler2xStereo, Random,
     Smoothed, Stage, SubOscillator, Waveform, db_to_gain, prewarp,
 };
 use crate::{
@@ -37,10 +38,12 @@ pub const RESONANCE: u32 = 32;
 pub const FILTER_ENV: u32 = 33;
 pub const KEY_TRACKING: u32 = 34;
 pub const DRIVE: u32 = 35;
+pub const FILTER_TYPE: u32 = 36;
 pub const FENV_ATTACK: u32 = 40;
 pub const FENV_DECAY: u32 = 41;
 pub const FENV_SUSTAIN: u32 = 42;
 pub const FENV_RELEASE: u32 = 43;
+pub const FENV_PITCH: u32 = 44;
 pub const AENV_ATTACK: u32 = 50;
 pub const AENV_DECAY: u32 = 51;
 pub const AENV_SUSTAIN: u32 = 52;
@@ -52,6 +55,7 @@ pub const LFO_PITCH: u32 = 63;
 pub const LFO_CUTOFF: u32 = 64;
 pub const LFO_WIDTH: u32 = 65;
 pub const LFO_WHEEL: u32 = 66;
+pub const LFO_FADE: u32 = 67;
 pub const VELOCITY_AMP: u32 = 70;
 pub const VELOCITY_CUTOFF: u32 = 71;
 pub const VOICE_MODE: u32 = 80;
@@ -60,13 +64,21 @@ pub const GLIDE: u32 = 82;
 pub const BEND_RANGE: u32 = 83;
 pub const DRIFT: u32 = 84;
 pub const VOLUME: u32 = 85;
+pub const UNISON: u32 = 86;
+pub const SPREAD: u32 = 87;
 
 /// Telemetry value slots.
 pub const TELEMETRY_VOICES: usize = 0;
 pub const TELEMETRY_LFO_PHASE: usize = 1;
 pub const TELEMETRY_CUTOFF: usize = 2;
 
+/// Notes a poly patch plays at once (the Voices control).
 pub const MAX_VOICES: usize = 8;
+/// Voices stacked on one note (the Unison control).
+pub const MAX_UNISON: usize = 8;
+/// Voices that run at once: eight notes without unison, or fewer notes of
+/// stacked voices, so a fat patch costs at most twice a plain one.
+const POOL: usize = 16;
 /// Oscillator cores, named after their circuit, never a manufacturer.
 pub const MODELS: &[&str] = &["VCO", "DCO"];
 /// The saturating models of the shared filter kernel, low-pass.
@@ -77,6 +89,9 @@ pub const FILTER_MODELS: &[&str] = &[
     "OTA Multimode",
     "Diode Pair",
 ];
+/// The filter types every model but the ladder offers some of, in the
+/// kernel's order, so a model's `type_count` cuts the list.
+pub const FILTER_TYPES: &[&str] = &["Low-pass", "High-pass", "Band-pass"];
 pub const MODES: &[&str] = &["Poly", "Mono", "Legato"];
 pub const SYNC: &[&str] = super::filter::SYNC;
 
@@ -93,11 +108,15 @@ const LFO_WIDTH_RANGE: f32 = 0.45;
 const STEAL_FADE_MS: f32 = 5.0;
 /// Below this, glide is off.
 const GLIDE_OFF_MS: f32 = 1.0;
+/// Below this, the LFO reaches each note at once.
+const FADE_OFF_MS: f32 = 1.0;
+/// Detune of the outermost unison voices at full Spread, in semitones.
+const UNISON_DETUNE: f32 = 0.25;
 /// Coupling capacitor between the mixer and the filter.
 const COUPLING_HZ: f32 = 8.0;
 const HELD_NOTES: usize = 16;
 
-pub static PARAMETERS: [ParamSpec; 44] = [
+pub static PARAMETERS: [ParamSpec; 49] = [
     param(
         OSC1_MODEL,
         "osc1.model",
@@ -324,6 +343,15 @@ pub static PARAMETERS: [ParamSpec; 44] = [
         0.0,
     ),
     param(
+        FILTER_TYPE,
+        "filter.type",
+        "Type",
+        "Filter",
+        "",
+        ParamRange::Choice(FILTER_TYPES),
+        0.0,
+    ),
+    param(
         FENV_ATTACK,
         "fenv.attack",
         "Attack",
@@ -370,6 +398,18 @@ pub static PARAMETERS: [ParamSpec; 44] = [
             max: 10_000.0,
         },
         300.0,
+    ),
+    param(
+        FENV_PITCH,
+        "fenv.pitch",
+        "Osc 2 pitch",
+        "Filter envelope",
+        "st",
+        ParamRange::Linear {
+            min: -24.0,
+            max: 24.0,
+        },
+        0.0,
     ),
     param(
         AENV_ATTACK,
@@ -495,6 +535,18 @@ pub static PARAMETERS: [ParamSpec; 44] = [
         100.0,
     ),
     param(
+        LFO_FADE,
+        "lfo.fade",
+        "Fade in",
+        "LFO",
+        "ms",
+        ParamRange::Log {
+            min: FADE_OFF_MS,
+            max: 5000.0,
+        },
+        FADE_OFF_MS,
+    ),
+    param(
         VELOCITY_AMP,
         "velocity.amp",
         "Amp",
@@ -581,6 +633,30 @@ pub static PARAMETERS: [ParamSpec; 44] = [
         },
         -6.0,
     ),
+    param(
+        UNISON,
+        "voice.unison",
+        "Unison",
+        "Voice",
+        "",
+        ParamRange::Integer {
+            min: 1,
+            max: MAX_UNISON as i32,
+        },
+        1.0,
+    ),
+    param(
+        SPREAD,
+        "voice.spread",
+        "Spread",
+        "Voice",
+        "%",
+        ParamRange::Linear {
+            min: 0.0,
+            max: 100.0,
+        },
+        50.0,
+    ),
 ];
 
 pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
@@ -601,6 +677,8 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-mini/glass-keys.rillpreset"),
         include_str!("../../presets/r1-mini/brass-stab.rillpreset"),
         include_str!("../../presets/r1-mini/noise-sweep.rillpreset"),
+        include_str!("../../presets/r1-mini/unison-lead.rillpreset"),
+        include_str!("../../presets/r1-mini/hollow-pluck.rillpreset"),
     ],
     legacy_labels: &[],
     fixed_on_roll: &[],
@@ -642,8 +720,12 @@ pub struct Settings {
     /// 0–1.
     pub key_tracking: f32,
     pub drive_db: f32,
+    /// The type the model runs: low-pass where the model has no choice.
+    pub filter_type: FilterType,
     /// Attack, decay, release in ms; sustain 0–1.
     pub filter_envelope: [f32; 4],
+    /// Filter envelope → oscillator 2 pitch, in semitones.
+    pub fenv_pitch: f32,
     pub amp_envelope: [f32; 4],
     pub lfo_rate: f32,
     pub lfo_sync_beats: Option<f64>,
@@ -654,6 +736,8 @@ pub struct Settings {
     pub lfo_width: f32,
     /// How much the mod wheel controls the LFO depth, 0–1.
     pub lfo_wheel: f32,
+    /// Time the LFO takes to reach full depth after a note starts; 0 for at once.
+    pub lfo_fade_ms: f32,
     /// 0–1.
     pub velocity_amp: f32,
     pub velocity_cutoff: f32,
@@ -664,6 +748,10 @@ pub struct Settings {
     /// 0–1.
     pub drift: f32,
     pub volume_db: f32,
+    /// Voices per note, 1–8.
+    pub unison: usize,
+    /// Unison detune and stereo width, 0–1.
+    pub spread: f32,
 }
 
 impl Settings {
@@ -682,6 +770,13 @@ impl Settings {
             }
         };
         let sync = super::filter::SYNC_BEATS[index(LFO_SYNC).min(SYNC.len() - 1)];
+        let filter_model = match index(FILTER_MODEL) {
+            1 => FilterModel::OtaCascade,
+            2 => FilterModel::SallenKey,
+            3 => FilterModel::OtaMultimode,
+            4 => FilterModel::DiodePair,
+            _ => FilterModel::TransistorLadder,
+        };
         let envelope = |attack, decay, sustain, release| {
             [
                 plain(attack),
@@ -709,12 +804,13 @@ impl Settings {
             ],
             sync: plain(OSC2_SYNC) >= 0.5,
             mix: [MIX_OSC1, MIX_OSC2, MIX_SUB, MIX_NOISE].map(|id| plain(id) / 100.0),
-            filter_model: match index(FILTER_MODEL) {
-                1 => FilterModel::OtaCascade,
-                2 => FilterModel::SallenKey,
-                3 => FilterModel::OtaMultimode,
-                4 => FilterModel::DiodePair,
-                _ => FilterModel::TransistorLadder,
+            filter_model,
+            // A type the model lacks, left over from another model, falls
+            // back to the model's last type, as on R1 Filter.
+            filter_type: match index(FILTER_TYPE).min(filter_model.type_count().saturating_sub(1)) {
+                1 => FilterType::HighPass,
+                2 => FilterType::BandPass,
+                _ => FilterType::LowPass,
             },
             cutoff: plain(CUTOFF),
             resonance: plain(RESONANCE) / 100.0,
@@ -722,6 +818,7 @@ impl Settings {
             key_tracking: plain(KEY_TRACKING) / 100.0,
             drive_db: plain(DRIVE),
             filter_envelope: envelope(FENV_ATTACK, FENV_DECAY, FENV_SUSTAIN, FENV_RELEASE),
+            fenv_pitch: plain(FENV_PITCH),
             amp_envelope: envelope(AENV_ATTACK, AENV_DECAY, AENV_SUSTAIN, AENV_RELEASE),
             lfo_rate: plain(LFO_RATE),
             lfo_sync_beats: (sync > 0.0).then_some(sync),
@@ -730,6 +827,10 @@ impl Settings {
             lfo_cutoff: plain(LFO_CUTOFF),
             lfo_width: plain(LFO_WIDTH) / 100.0,
             lfo_wheel: plain(LFO_WHEEL) / 100.0,
+            lfo_fade_ms: match plain(LFO_FADE) {
+                ms if ms <= FADE_OFF_MS => 0.0,
+                ms => ms,
+            },
             velocity_amp: plain(VELOCITY_AMP) / 100.0,
             velocity_cutoff: plain(VELOCITY_CUTOFF),
             mode: match index(VOICE_MODE) {
@@ -742,14 +843,25 @@ impl Settings {
             bend_range: plain(BEND_RANGE),
             drift: plain(DRIFT) / 100.0,
             volume_db: plain(VOLUME),
+            unison: (plain(UNISON) as usize).clamp(1, MAX_UNISON),
+            spread: plain(SPREAD) / 100.0,
         }
+    }
+
+    /// Notes that sound at once, and the voices each takes from the pool.
+    pub fn groups(&self) -> (usize, usize) {
+        let notes = match self.mode {
+            VoiceMode::Poly => self.voices.min(POOL / self.unison),
+            VoiceMode::Mono | VoiceMode::Legato => 1,
+        };
+        (notes, self.unison)
     }
 
     /// The filter as the voices run it. 24 dB where the model has a choice.
     pub fn filter_shape(&self) -> FilterShape {
         FilterShape {
             model: self.filter_model,
-            filter_type: FilterType::LowPass,
+            filter_type: self.filter_type,
             steep: true,
             drive_db: self.drive_db,
         }
@@ -768,6 +880,8 @@ pub fn applies(id: u32, settings: &Settings) -> bool {
             .any(|osc| osc.waveform == Waveform::Pulse),
         LFO_RATE => settings.lfo_sync_beats.is_none(),
         VOICES => settings.mode == VoiceMode::Poly,
+        FILTER_TYPE => settings.filter_model.type_count() > 0,
+        SPREAD => settings.unison > 1,
         _ => true,
     }
 }
@@ -832,8 +946,8 @@ const RAMP_VELOCITY: usize = 6;
 #[derive(Clone, Copy, Debug, Default)]
 struct Modulation {
     lfo: f32,
-    /// LFO depth scale from the mod wheel.
-    depth: f32,
+    /// Mod wheel position, 0–1; a note's pressure opens the LFO the same way.
+    wheel: f32,
     bend: f32,
     cutoff_octaves: f32,
     resonance: f32,
@@ -843,6 +957,10 @@ struct Modulation {
     lfo_pitch: f32,
     lfo_cutoff: f32,
     lfo_width: f32,
+    /// How far each control period takes the LFO's fade in, 0–1.
+    lfo_fade_step: f32,
+    fenv_pitch: f32,
+    spread: f32,
     widths: [f32; 2],
     glide: f32,
 }
@@ -875,6 +993,16 @@ struct Voice {
     filter_envelope: Adsr,
     cutoff_drift: Drift,
     note: Note,
+    /// Place in its unison stack, −1 to 1; 0 alone.
+    position: f32,
+    /// Level of each voice of its stack, so a stack sounds as loud as one.
+    stack_gain: f32,
+    /// Left and right gains.
+    pan: [f32; 2],
+    /// How far the LFO has faded in on this note, 0–1.
+    lfo_fade: f32,
+    /// The note's pressure, 0–1.
+    pressure: f32,
     /// Current pitch while gliding, in semitones.
     pitch: f32,
     /// The key is down.
@@ -906,6 +1034,11 @@ impl Voice {
             filter_envelope: Adsr::default(),
             cutoff_drift: Drift::new(seed + 4),
             note: Note::default(),
+            position: 0.0,
+            stack_gain: 1.0,
+            pan: [1.0; 2],
+            lfo_fade: 1.0,
+            pressure: 0.0,
             pitch: 60.0,
             held: false,
             sustained: false,
@@ -957,7 +1090,7 @@ pub struct Mini {
     settings: Settings,
     dirty: bool,
     sample_rate: f32,
-    voices: [Voice; MAX_VOICES],
+    voices: [Voice; POOL],
     held: [Note; HELD_NOTES],
     held_count: usize,
     sustain: bool,
@@ -978,6 +1111,8 @@ pub struct Mini {
     lfo_pitch: Smoothed,
     lfo_cutoff: Smoothed,
     lfo_width: Smoothed,
+    fenv_pitch: Smoothed,
+    spread: Smoothed,
     widths: [Smoothed; 2],
     mix: [Smoothed; 4],
     drive: Smoothed,
@@ -985,14 +1120,14 @@ pub struct Mini {
     volume: Smoothed,
     /// Every voice's amplifier works at the oversampled rate, so their sum
     /// comes down through one filter instead of one per voice.
-    downsampler: Oversampler2x,
+    downsampler: Oversampler2xStereo,
     /// Samples since a voice last sounded, up to [`DOWNSAMPLER_SPAN`].
     silent: usize,
     telemetry: Arc<Telemetry>,
 }
 
 /// Samples of silence after which the downsampler holds nothing but silence.
-const DOWNSAMPLER_SPAN: usize = Oversampler2x::LATENCY as usize + 1;
+const DOWNSAMPLER_SPAN: usize = Oversampler2xStereo::LATENCY as usize + 1;
 
 impl Default for Mini {
     fn default() -> Self {
@@ -1035,12 +1170,14 @@ impl Mini {
             lfo_pitch: Smoothed::new(0.0),
             lfo_cutoff: Smoothed::new(0.0),
             lfo_width: Smoothed::new(0.0),
+            fenv_pitch: Smoothed::new(0.0),
+            spread: Smoothed::new(0.0),
             widths: [Smoothed::new(0.5), Smoothed::new(0.5)],
             mix: std::array::from_fn(|_| Smoothed::new(0.0)),
             drive: Smoothed::new(0.0),
             velocity_amp: Smoothed::new(0.0),
             volume: Smoothed::new(0.0),
-            downsampler: Oversampler2x::new(),
+            downsampler: Oversampler2xStereo::new(),
             silent: DOWNSAMPLER_SPAN,
             telemetry: Arc::new(Telemetry::meter_only()),
         };
@@ -1052,7 +1189,7 @@ impl Mini {
         &self.settings
     }
 
-    fn control_smoothers(&mut self) -> [&mut Smoothed; 17] {
+    fn control_smoothers(&mut self) -> [&mut Smoothed; 19] {
         let [w1, w2] = &mut self.widths;
         let [m1, m2, m3, m4] = &mut self.mix;
         [
@@ -1066,6 +1203,8 @@ impl Mini {
             &mut self.lfo_pitch,
             &mut self.lfo_cutoff,
             &mut self.lfo_width,
+            &mut self.fenv_pitch,
+            &mut self.spread,
             w1,
             w2,
             m1,
@@ -1081,9 +1220,10 @@ impl Mini {
         let settings = Settings::from_normalized(|id| {
             values[PARAMETERS.iter().position(|spec| spec.id == id).unwrap()]
         });
-        if settings.mode != self.settings.mode {
+        if settings.mode != self.settings.mode || settings.unison != self.settings.unison {
             // Voices held under the old mode would never see their note-off,
-            // and a steal under way would replace the new mode's note.
+            // and a steal under way would replace the new mode's note; a new
+            // stack size regroups the voices the same way.
             for voice in &mut self.voices {
                 voice.held = false;
                 voice.sustained = false;
@@ -1096,7 +1236,8 @@ impl Mini {
         }
         // Voices beyond a lowered limit release; one fading for a steal
         // drops its note when the fade ends (checked there).
-        for voice in &mut self.voices[settings.voices..] {
+        let (notes, unison) = settings.groups();
+        for voice in &mut self.voices[notes * unison..] {
             voice.held = false;
             voice.sustained = false;
             voice.release();
@@ -1116,6 +1257,8 @@ impl Mini {
         self.lfo_pitch.set_target(s.lfo_pitch);
         self.lfo_cutoff.set_target(s.lfo_cutoff);
         self.lfo_width.set_target(s.lfo_width);
+        self.fenv_pitch.set_target(s.fenv_pitch);
+        self.spread.set_target(s.spread);
         for (smoothed, osc) in self.widths.iter_mut().zip(s.osc) {
             smoothed.set_target(osc.width);
         }
@@ -1156,11 +1299,10 @@ impl Mini {
                 self.lfo.advance(hz * CONTROL as f64 / f64::from(rate));
             }
         }
-        let wheel = self.wheel.next_value();
         let glide_samples = s.glide_ms * 0.001 * rate / CONTROL as f32;
         self.modulation = Modulation {
             lfo: self.lfo.value(s.lfo_shape, 0.0),
-            depth: 1.0 - s.lfo_wheel * (1.0 - wheel),
+            wheel: self.wheel.next_value(),
             bend: self.bend.next_value() * s.bend_range,
             cutoff_octaves: self.cutoff.next_value(),
             resonance: self.resonance.next_value(),
@@ -1170,6 +1312,13 @@ impl Mini {
             lfo_pitch: self.lfo_pitch.next_value(),
             lfo_cutoff: self.lfo_cutoff.next_value(),
             lfo_width: self.lfo_width.next_value(),
+            lfo_fade_step: if s.lfo_fade_ms > 0.0 {
+                CONTROL as f32 / (s.lfo_fade_ms * 0.001 * rate)
+            } else {
+                1.0
+            },
+            fenv_pitch: self.fenv_pitch.next_value(),
+            spread: self.spread.next_value(),
             widths: [self.widths[0].next_value(), self.widths[1].next_value()],
             // Exponential like an RC portamento; 99 % of the way in the set time.
             glide: if s.glide_ms <= GLIDE_OFF_MS {
@@ -1220,6 +1369,15 @@ impl Mini {
         let voice = &mut self.voices[index];
         let was_active = voice.amp.is_active();
         voice.note = note;
+        let unison = s.unison;
+        voice.position = if unison == 1 {
+            0.0
+        } else {
+            2.0 * (index % unison) as f32 / (unison - 1) as f32 - 1.0
+        };
+        voice.stack_gain = (unison as f32).sqrt().recip();
+        voice.lfo_fade = 0.0;
+        voice.pressure = 0.0;
         voice.held = true;
         voice.sustained = false;
         voice.age = self.age;
@@ -1245,46 +1403,60 @@ impl Mini {
             self.mono_note_on(note, glide_from);
             return;
         }
-        let count = self.settings.voices;
-        // The same key again retriggers its voice.
-        if let Some(index) = self.voices[..count].iter().position(|voice| {
+        let (notes, unison) = self.settings.groups();
+        // The same key again retriggers its voices.
+        if let Some(group) = (0..notes).find(|&group| {
+            let voice = &self.voices[group * unison];
             voice.amp.is_active() && voice.note.id == id && voice.pending.is_none()
         }) {
-            self.start(index, note, glide_from);
+            self.start_group(group, note, glide_from);
             return;
         }
-        if let Some(index) = self.voices[..count]
-            .iter()
-            .position(|voice| !voice.active())
-        {
-            self.start(index, note, glide_from);
-            return;
-        }
-        // Steal the quietest releasing voice, else the oldest, after a short fade.
-        let releasing = self.voices[..count]
-            .iter()
-            .enumerate()
-            .filter(|(_, voice)| voice.pending.is_none() && voice.releasing())
-            .min_by(|(_, a), (_, b)| a.amp.level().total_cmp(&b.amp.level()))
-            .map(|(index, _)| index);
-        let index = releasing.unwrap_or_else(|| {
-            self.voices[..count]
+        if let Some(group) = (0..notes).find(|&group| {
+            self.voices[group * unison..(group + 1) * unison]
                 .iter()
-                .enumerate()
-                .min_by_key(|(_, voice)| voice.age)
-                .map_or(0, |(index, _)| index)
+                .all(|voice| !voice.active())
+        }) {
+            self.start_group(group, note, glide_from);
+            return;
+        }
+        // Steal the quietest releasing note, else the oldest, after a short
+        // fade. The first voice of a stack speaks for all of it.
+        let releasing = (0..notes)
+            .filter(|&group| {
+                self.voices[group * unison].pending.is_none()
+                    && self.voices[group * unison].releasing()
+            })
+            .min_by(|&a, &b| {
+                self.voices[a * unison]
+                    .amp
+                    .level()
+                    .total_cmp(&self.voices[b * unison].amp.level())
+            });
+        let group = releasing.unwrap_or_else(|| {
+            (0..notes)
+                .min_by_key(|&group| self.voices[group * unison].age)
+                .unwrap_or(0)
         });
-        let voice = &mut self.voices[index];
-        // A voice already fading takes the newer note instead.
-        voice.pending = Some(Pending {
-            note: Some(note),
-            held: true,
-            glide_from,
-        });
-        voice.held = false;
-        voice.sustained = false;
         self.age += 1;
-        voice.age = self.age;
+        for voice in &mut self.voices[group * unison..(group + 1) * unison] {
+            // A voice already fading takes the newer note instead.
+            voice.pending = Some(Pending {
+                note: Some(note),
+                held: true,
+                glide_from,
+            });
+            voice.held = false;
+            voice.sustained = false;
+            voice.age = self.age;
+        }
+    }
+
+    fn start_group(&mut self, group: usize, note: Note, glide_from: f32) {
+        let unison = self.settings.unison;
+        for index in group * unison..(group + 1) * unison {
+            self.start(index, note, glide_from);
+        }
     }
 
     fn mono_note_on(&mut self, note: Note, glide_from: f32) {
@@ -1297,32 +1469,35 @@ impl Mini {
         self.held[self.held_count] = note;
         self.held_count += 1;
         let legato = self.settings.mode == VoiceMode::Legato;
-        let voice = &mut self.voices[0];
-        if let Some(pending) = &mut voice.pending {
-            // Still fading out a note from before a mode change: this note
-            // starts when the fade ends.
-            *pending = Pending {
-                note: Some(note),
-                held: true,
-                glide_from: if legato { note.pitch } else { glide_from },
-            };
-            return;
-        }
-        if !voice.amp.is_active() {
-            self.start(0, note, if legato { note.pitch } else { glide_from });
-            return;
-        }
-        // Already sounding: Mono glides and retriggers; Legato glides between
-        // overlapping notes and otherwise starts afresh at the new pitch.
-        voice.note = note;
-        voice.held = true;
-        voice.sustained = false;
-        if !legato || !overlapping {
-            voice.amp.gate_on();
-            voice.filter_envelope.gate_on();
-        }
-        if legato && !overlapping {
-            voice.pitch = note.pitch;
+        for index in 0..self.settings.unison {
+            let voice = &mut self.voices[index];
+            if let Some(pending) = &mut voice.pending {
+                // Still fading out a note from before a mode change: this note
+                // starts when the fade ends.
+                *pending = Pending {
+                    note: Some(note),
+                    held: true,
+                    glide_from: if legato { note.pitch } else { glide_from },
+                };
+                continue;
+            }
+            if !voice.amp.is_active() {
+                self.start(index, note, if legato { note.pitch } else { glide_from });
+                continue;
+            }
+            // Already sounding: Mono glides and retriggers; Legato glides between
+            // overlapping notes and otherwise starts afresh at the new pitch.
+            voice.note = note;
+            voice.held = true;
+            voice.sustained = false;
+            if !legato || !overlapping {
+                voice.amp.gate_on();
+                voice.filter_envelope.gate_on();
+                voice.lfo_fade = 0.0;
+            }
+            if legato && !overlapping {
+                voice.pitch = note.pitch;
+            }
         }
     }
 
@@ -1341,19 +1516,23 @@ impl Mini {
         let mono = self.settings.mode != VoiceMode::Poly;
         if mono {
             self.remove_held(id);
-            let voice = &mut self.voices[0];
             if self.held_count > 0 {
                 // Back to the most recent key still held, without retrigger,
                 // also for a note still waiting on a steal fade.
                 let back = self.held[self.held_count - 1];
-                if let Some(pending) = &mut voice.pending
-                    && pending.note.is_some_and(|note| note.id == id)
-                {
-                    pending.note = Some(back);
-                    return;
+                let mut moved = false;
+                for voice in &mut self.voices[..self.settings.unison] {
+                    if let Some(pending) = &mut voice.pending
+                        && pending.note.is_some_and(|note| note.id == id)
+                    {
+                        pending.note = Some(back);
+                        moved = true;
+                    } else if voice.note.id == id {
+                        voice.note = back;
+                        moved = true;
+                    }
                 }
-                if voice.note.id == id {
-                    voice.note = back;
+                if moved {
                     return;
                 }
             }
@@ -1405,13 +1584,19 @@ impl Mini {
             EventKind::PitchBend(value) => self.bend.set_target(value.clamp(-1.0, 1.0)),
             EventKind::ModWheel(value) => self.wheel.set_target(value.clamp(0.0, 1.0)),
             EventKind::Sustain(on) => self.set_sustain(on),
-            EventKind::Pressure { .. } => {}
+            EventKind::Pressure { note, value } => {
+                for voice in &mut self.voices {
+                    if voice.note.id == note {
+                        voice.pressure = value.clamp(0.0, 1.0);
+                    }
+                }
+            }
         }
     }
 
-    /// Renders `frames` samples of every voice into `out`, starting at
-    /// oversampled step 0 of the shared ramps.
-    fn render(&mut self, out: &mut [f32]) {
+    /// Renders `frames` samples of every voice into `left` and `right`,
+    /// starting at oversampled step 0 of the shared ramps.
+    fn render(&mut self, left: &mut [f32], right: &mut [f32]) {
         let context = TickContext {
             settings: self.settings,
             shared: self.shared,
@@ -1420,17 +1605,18 @@ impl Mini {
             fade_step: 1.0 / (STEAL_FADE_MS * 0.001 * self.sample_rate),
             coupling: coupling_g(self.sample_rate),
         };
-        let sounding: [bool; MAX_VOICES] = std::array::from_fn(|index| self.voices[index].active());
+        let sounding: [bool; POOL] = std::array::from_fn(|index| self.voices[index].active());
         let any_sounding = sounding.contains(&true);
         if !any_sounding && self.silent >= DOWNSAMPLER_SPAN {
             return;
         }
-        let steps = 2 * out.len();
-        debug_assert!(out.len() <= CONTROL);
+        let frames = left.len();
+        let steps = 2 * frames;
+        debug_assert!(frames <= CONTROL);
         // In three passes over the span, so the filters, each a serial chain
         // of saturating stages, run for all voices in one tight loop where the
         // processor can overlap the independent chains.
-        let mut signal = [[0.0_f32; 2 * CONTROL]; MAX_VOICES];
+        let mut signal = [[0.0_f32; 2 * CONTROL]; POOL];
         for ((voice, signal), _) in self
             .voices
             .iter_mut()
@@ -1457,7 +1643,8 @@ impl Mini {
                         .circuit_prepared(signal[step], &prepared, voice.g.at(step));
             }
         }
-        let mut mixed = [0.0_f32; 2 * CONTROL];
+        // Both oversampled steps of each frame, left and right.
+        let mut mixed = [[[0.0_f32; 2]; 2]; CONTROL];
         for ((voice, signal), _) in self
             .voices
             .iter_mut()
@@ -1465,18 +1652,21 @@ impl Mini {
             .zip(&sounding)
             .filter(|(_, sounding)| **sounding)
         {
+            let [pan_left, pan_right] = voice.pan;
             for (frame, (mixed, signal)) in mixed
-                .as_chunks_mut::<2>()
-                .0
                 .iter_mut()
                 .zip(signal.as_chunks::<2>().0)
-                .take(out.len())
+                .take(frames)
                 .enumerate()
             {
                 let from = voice.gain;
                 let gain = voice.amplifier(frame, &context);
-                mixed[0] += signal[0] * 0.5 * (from + gain);
-                mixed[1] += signal[1] * gain;
+                let first = signal[0] * 0.5 * (from + gain);
+                let second = signal[1] * gain;
+                mixed[0][0] += first * pan_left;
+                mixed[0][1] += first * pan_right;
+                mixed[1][0] += second * pan_left;
+                mixed[1][1] += second * pan_right;
             }
         }
         // Only frames after the last sounding span count: the filter must
@@ -1486,19 +1676,21 @@ impl Mini {
         }
         let flushing = self.silent;
         let makeup = &context.shared.ramps[RAMP_MAKEUP];
-        for (frame, (sample, mixed)) in out.iter_mut().zip(mixed.as_chunks::<2>().0).enumerate() {
+        for (frame, mixed) in mixed.iter().take(frames).enumerate() {
             if flushing + frame >= DOWNSAMPLER_SPAN {
                 break;
             }
-            *sample = self.downsampler.downsample([
-                mixed[0] * makeup.at(2 * frame),
-                mixed[1] * makeup.at(2 * frame + 1),
+            let [first, second] = [makeup.at(2 * frame), makeup.at(2 * frame + 1)];
+            [left[frame], right[frame]] = self.downsampler.downsample([
+                mixed[0].map(|sample| sample * first),
+                mixed[1].map(|sample| sample * second),
             ]);
         }
         if !sounding.contains(&true) {
-            self.silent = (self.silent + out.len()).min(DOWNSAMPLER_SPAN);
+            self.silent = (self.silent + frames).min(DOWNSAMPLER_SPAN);
         }
-        for index in 0..MAX_VOICES {
+        let (notes, unison) = self.settings.groups();
+        for index in 0..POOL {
             let voice = &mut self.voices[index];
             for ramp in voice.widths.iter_mut().chain([&mut voice.g]) {
                 ramp.advance(steps);
@@ -1510,7 +1702,7 @@ impl Mini {
                 voice.fade = 1.0;
                 voice.amp.reset();
                 voice.filter_envelope.reset();
-                let Some(note) = pending.note.filter(|_| index < self.settings.voices) else {
+                let Some(note) = pending.note.filter(|_| index < notes * unison) else {
                     continue;
                 };
                 self.start(index, note, pending.glide_from);
@@ -1569,7 +1761,8 @@ impl Voice {
     fn amplifier(&mut self, frame: usize, c: &TickContext) -> f32 {
         self.filter_envelope.next_value();
         let velocity = c.shared.ramps[RAMP_VELOCITY].at(2 * frame);
-        let gain = self.amp.next_value() * (1.0 - velocity * (1.0 - self.note.velocity));
+        let gain =
+            self.amp.next_value() * (1.0 - velocity * (1.0 - self.note.velocity)) * self.stack_gain;
         if self.pending.is_some() {
             self.fade = (self.fade - c.fade_step).max(0.0);
         }
@@ -1588,14 +1781,20 @@ fn coupling_g(sample_rate: f32) -> f32 {
 fn voice_control(voice: &mut Voice, s: &Settings, m: &Modulation, rate: f32, start: bool) {
     let steps = 2 * CONTROL;
     voice.pitch += (voice.note.pitch - voice.pitch) * m.glide;
-    let lfo = m.lfo * m.depth;
-    let pitch = voice.pitch + m.bend + lfo * m.lfo_pitch;
-    for (oscillator, osc) in voice.oscillators.iter_mut().zip(s.osc) {
+    voice.lfo_fade = (voice.lfo_fade + m.lfo_fade_step).min(1.0);
+    let depth = 1.0 - s.lfo_wheel * (1.0 - m.wheel.max(voice.pressure));
+    let lfo = m.lfo * depth * voice.lfo_fade;
+    let spread = voice.position * m.spread;
+    let pitch = voice.pitch + m.bend + lfo * m.lfo_pitch + spread * UNISON_DETUNE;
+    let sweep = [0.0, m.fenv_pitch * voice.filter_envelope.level()];
+    for ((oscillator, osc), sweep) in voice.oscillators.iter_mut().zip(s.osc).zip(sweep) {
         oscillator.set_frequency(
-            frequency(pitch + osc.transpose),
+            frequency(pitch + osc.transpose + sweep),
             if start { 1 } else { steps as u32 },
         );
     }
+    // Balance, not constant power: a centred voice keeps unity in both.
+    voice.pan = [(1.0 - spread).min(1.0), (1.0 + spread).min(1.0)];
     let drift = voice.cutoff_drift.next_value() * s.drift * CUTOFF_DRIFT_OCTAVES;
     let octaves = m.cutoff_octaves
         + m.filter_env * voice.filter_envelope.level()
@@ -1670,6 +1869,7 @@ impl Device for Mini {
         let frames = left.len().min(right.len());
         let (left, right) = (&mut left[..frames], &mut right[..frames]);
         left.fill(0.0);
+        right.fill(0.0);
         let mut event = 0;
         let mut frame = 0;
         while frame < frames {
@@ -1691,17 +1891,21 @@ impl Device for Mini {
                 .countdown
                 .min(frames - frame)
                 .min(next_event.saturating_sub(frame).max(1));
-            self.render(&mut left[frame..frame + span]);
+            self.render(
+                &mut left[frame..frame + span],
+                &mut right[frame..frame + span],
+            );
             for ramp in &mut self.shared.ramps {
                 ramp.advance(2 * span);
             }
             self.countdown -= span;
             frame += span;
         }
-        for sample in left.iter_mut() {
-            *sample *= self.volume.next_value();
+        for (left, right) in left.iter_mut().zip(right.iter_mut()) {
+            let volume = self.volume.next_value();
+            *left *= volume;
+            *right *= volume;
         }
-        right.copy_from_slice(left);
         self.telemetry.record_output(left, right);
     }
 
@@ -1748,4 +1952,4 @@ impl Device for Mini {
 
 /// The edge corrections and the downsampler's half-band filter, in base-rate
 /// samples (16.5, rounded down).
-pub const LATENCY: u32 = (Corrector::LATENCY + Oversampler2x::LATENCY) / 2;
+pub const LATENCY: u32 = (Corrector::LATENCY + Oversampler2xStereo::LATENCY) / 2;

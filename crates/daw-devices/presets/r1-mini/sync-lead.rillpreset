@@ -5,7 +5,7 @@
   "author": "Rill",
   "category": "Lead",
   "tags": ["mono", "sync", "bright"],
-  "description": "Oscillator 2 synced an octave and a fifth up; the mod wheel adds vibrato.",
+  "description": "Oscillator 2 synced an octave and a fifth up; the filter envelope sweeps it for the classic sync rip, and the mod wheel adds vibrato.",
   "parameters": {
     "osc2.octave": 1,
     "osc2.semitones": 7,
@@ -19,6 +19,7 @@
     "filter.drive": 4.0,
     "fenv.decay": 900.0,
     "fenv.sustain": 40.0,
+    "fenv.pitch": 12.0,
     "aenv.attack": 3.0,
     "aenv.sustain": 90.0,
     "aenv.release": 180.0,
