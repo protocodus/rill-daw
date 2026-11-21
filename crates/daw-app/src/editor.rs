@@ -183,6 +183,8 @@ impl DawApp {
         let mut channel_target = None;
         let mut arranger_target = None;
         let mut device_target = None;
+        let mut strip_target = None;
+        let mut strip_diagnostics = Vec::new();
         let mut instrument_target = None;
         let mut insert_target = None;
         let mut device_diagnostics = Vec::new();
@@ -426,56 +428,78 @@ impl DawApp {
             - daw_ui::tokens::BORDER_WIDTH
             - ui.available_rect_before_wrap().top()
             - MIXER_PADDING.sum().y;
-        let compact = workspace_height < 740.0;
-        let control = if compact {
-            daw_ui::tokens::COMPACT_HEIGHT
-        } else {
-            daw_ui::tokens::CONTROL_HEIGHT
-        };
-        let section_gap = if compact {
-            daw_ui::tokens::SPACE_SM
-        } else {
-            daw_ui::MIXER_SECTION_GAP
-        };
-        let role_height = if channel_indices
+        let has_bus = channel_indices
             .iter()
-            .any(|index| self.project.tracks[*index].kind == TrackKind::Bus)
-        {
-            control
-        } else {
-            0.0
-        };
+            .any(|index| self.project.tracks[*index].kind == TrackKind::Bus);
         let pan_row_height = daw_ui::MIXER_PAN_ROW_HEIGHT;
         let send_area_height = 2.0 * daw_ui::MIXER_SEND_ROW_HEIGHT + spacing;
-        // The same identity band sits above every processing/fader row. Bus
-        // names remain lower beneath their role icon, without changing gain
-        // travel or meter calibration compared with ordinary channels.
-        let footer_height = daw_ui::tokens::COMPACT_HEIGHT
-            + spacing
-            + section_gap
-            + control
-            + section_gap
-            + send_area_height
-            + spacing
-            + daw_ui::MIXER_SEND_ROW_HEIGHT;
-        let mut fixed_height = 2.0 * daw_ui::MIXER_CHANNEL_MARGIN
-            + 3.0 * control
-            + spacing
-            + spacing
-            + role_height
-            + section_gap
-            // Polarity and input gain; width sits with pan after the inserts.
-            + control
-            + spacing
-            + daw_ui::tokens::COMPACT_HEIGHT
-            + section_gap
-            + spacing
-            + section_gap
-            + pan_row_height
-            + section_gap
-            + control
-            + spacing
-            + footer_height;
+        let notice_reserve = daw_ui::tokens::CONTROL_HEIGHT + 2.0 * daw_ui::tokens::SPACE_SM;
+        // The rows every channel holds besides its inserts and fader, at full
+        // size or compact: (control, section gap, role, footer, all of them).
+        let rows = |compact: bool| {
+            let control = if compact {
+                daw_ui::tokens::COMPACT_HEIGHT
+            } else {
+                daw_ui::tokens::CONTROL_HEIGHT
+            };
+            let section_gap = if compact {
+                daw_ui::tokens::SPACE_SM
+            } else {
+                daw_ui::MIXER_SECTION_GAP
+            };
+            let role_height = if has_bus { control } else { 0.0 };
+            // The same identity band sits above every processing/fader row. Bus
+            // names remain lower beneath their role icon, without changing gain
+            // travel or meter calibration compared with ordinary channels.
+            let footer_height = daw_ui::tokens::COMPACT_HEIGHT
+                + spacing
+                + section_gap
+                + control
+                + section_gap
+                + send_area_height
+                + spacing
+                + daw_ui::MIXER_SEND_ROW_HEIGHT;
+            let fixed_height = 2.0 * daw_ui::MIXER_CHANNEL_MARGIN
+                + 3.0 * control
+                + spacing
+                + spacing
+                + role_height
+                + section_gap
+                // Polarity and input gain; width sits with pan after the inserts.
+                + control
+                + spacing
+                + daw_ui::tokens::COMPACT_HEIGHT
+                + section_gap
+                // The channel strip: filter knobs, then its stage buttons.
+                + daw_ui::tokens::COMPACT_HEIGHT
+                + spacing
+                + daw_ui::tokens::COMPACT_HEIGHT
+                + spacing
+                + spacing
+                + section_gap
+                + pan_row_height
+                + section_gap
+                + control
+                + spacing
+                + footer_height;
+            (
+                control,
+                section_gap,
+                role_height,
+                footer_height,
+                fixed_height,
+            )
+        };
+        let full_size = rows(false);
+        // Compact once the full-size channel, its shortest fader, the routing
+        // overview and a notice no longer fit the window.
+        let compact = workspace_height
+            - (2.0 * daw_ui::MIXER_ROUTE_LANE + daw_ui::tokens::SPACE_SM)
+            - notice_reserve
+            - group_header_height
+            < full_size.4 + daw_ui::MIXER_SLOT_HEIGHT + daw_ui::tokens::MIXER_FADER_MIN;
+        let (control, section_gap, role_height, footer_height, mut fixed_height) =
+            if compact { rows(true) } else { full_size };
         // Routing remains available in its own scrollable overview. A short
         // workspace uses shorter lanes; the complete channel Routing view and all
         // send controls retain their existing one-click entry points.
@@ -486,7 +510,6 @@ impl DawApp {
         };
         let routing_overview_height = 2.0 * route_lane_height + daw_ui::tokens::SPACE_SM;
         let route_height = route_rows.min(2) as f32 * route_lane_height + daw_ui::tokens::SPACE_SM;
-        let notice_reserve = daw_ui::tokens::CONTROL_HEIGHT + 2.0 * daw_ui::tokens::SPACE_SM;
         let device_rows = self
             .project
             .tracks
@@ -865,7 +888,12 @@ impl DawApp {
                             automation_overrides.push((input_target, AutomationParameter::TrackInputGain.normalize(input_gain)));
                         }
                         changed |= polarity.changed();
-                        let input_section = name.rect.union(source.response.rect).union(input_gain_response.rect).union(polarity.rect);
+                        let strip = crate::channel_strip::mixer_controls(ui, track, content_width, panning);
+                        // The strip's filters and stages belong to the input, as on a console.
+                        let input_section = name.rect.union(source.response.rect).union(input_gain_response.rect).union(polarity.rect).union(strip.rect);
+                        changed |= strip.changed;
+                        if strip.open { strip_target = Some(track.id); }
+                        strip_diagnostics.push(strip.diagnostics);
                         ui.add_space(section_gap - spacing);
                         let effects = daw_ui::mixer_processing_row(ui, content_width,
                             track.inserts.len(), track.inserts.iter().filter(|slot| slot.enabled).count());
@@ -1147,7 +1175,11 @@ impl DawApp {
                             automation_overrides.push((input_target, AutomationParameter::TrackInputGain.normalize(input_gain)));
                         }
                         changed |= polarity.changed();
-                        let input_section = name.rect.union(source.response.rect).union(input.rect).union(polarity.rect);
+                        let strip = crate::channel_strip::mixer_controls(ui, master_track, content_width, panning);
+                        let input_section = name.rect.union(source.response.rect).union(input.rect).union(polarity.rect).union(strip.rect);
+                        changed |= strip.changed;
+                        if strip.open { strip_target = Some(master_id); }
+                        strip_diagnostics.push(strip.diagnostics);
                         ui.add_space(section_gap - spacing);
                         let effects = daw_ui::mixer_processing_row(ui, content_width, master_track.inserts.len(), master_track.inserts.iter().filter(|slot| slot.enabled).count());
                         if effects.clicked() { self.selected_track = Some(master_id); popup = Some(PopupKind::Effects); }
@@ -1378,6 +1410,9 @@ impl DawApp {
                 self.open_popup(PopupKind::Instrument);
             }
         }
+        if let Some(track) = strip_target {
+            self.open_channel_strip(track);
+        }
         if let Some(track) = insert_target {
             self.selected_track = Some(track);
             self.open_effect_library(track, false);
@@ -1390,6 +1425,12 @@ impl DawApp {
             data.insert_temp(
                 egui::Id::new("mixer_device_diagnostics"),
                 serde_json::json!(device_diagnostics),
+            )
+        });
+        ui.ctx().data_mut(|data| {
+            data.insert_temp(
+                egui::Id::new("mixer_strip_diagnostics"),
+                serde_json::json!(strip_diagnostics),
             )
         });
     }

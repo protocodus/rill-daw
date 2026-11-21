@@ -151,7 +151,11 @@ pub fn mixer_route_choices(
         );
         ui.separator();
         let mut choice = None;
-        let height = (ui.ctx().content_rect().height() - 233.0).clamp(68.0, 377.0);
+        // The destinations scroll inside the menu's own body, under the title
+        // and above the footer's two actions, so those never scroll away.
+        let chrome = 4.0 * tokens::CONTROL_HEIGHT;
+        let height =
+            (crate::widgets::menu_body_height(ui.ctx(), ui.style()) - chrome).clamp(68.0, 377.0);
         crate::scroll_area(ui, "mixer_route_destinations", [false, true])
             .max_height(height)
             .min_scrolled_height(0.0)

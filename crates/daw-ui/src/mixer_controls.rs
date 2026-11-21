@@ -881,3 +881,137 @@ fn channel_peak_indicator_inner(
         ),
     )
 }
+
+pub struct MixerFilterResponse {
+    pub high_pass: Response,
+    pub low_pass: Response,
+}
+
+/// The channel strip's two cut filters as small knobs side by side, each a
+/// position 0–1 along its frequency range: the high-pass is off at its
+/// lowest, the low-pass at its highest, so one gesture both sets and
+/// switches a filter. `texts` are their short readouts, which name the
+/// filter ("HP", "LP") while it is off.
+pub fn mixer_filter_row(
+    ui: &mut Ui,
+    width: f32,
+    high_pass: &mut f32,
+    low_pass: &mut f32,
+    texts: [&str; 2],
+) -> MixerFilterResponse {
+    let height = crate::tokens::COMPACT_HEIGHT;
+    ui.allocate_ui_with_layout(
+        Vec2::new(width, height),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.set_min_size(Vec2::new(width, height));
+            ui.set_max_height(height);
+            ui.spacing_mut().interact_size.y = height;
+            ui.spacing_mut().item_spacing.x = 0.0;
+            let half = width / 2.0;
+            let knob = |ui: &mut Ui, caption: &str, value: &mut f32, off: f32, text: &str| {
+                ui.allocate_ui_with_layout(
+                    Vec2::new(half, height),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        ui.set_min_size(Vec2::new(half, height));
+                        // A caption beside each knob does not fit half a
+                        // channel; the readout names the filter while it is off.
+                        let knob_width = (crate::inline_knob_width(ui, "8.8k") + 2.0).min(half);
+                        let mut edited = f64::from(*value);
+                        let mut response = ui.add(
+                            crate::inline_knob(caption, &mut edited, 0.0..=1.0, text)
+                                .width(knob_width),
+                        );
+                        if response.changed() {
+                            *value = edited as f32;
+                        }
+                        if response.double_clicked() && *value != off {
+                            *value = off;
+                            response.mark_changed();
+                        }
+                        response
+                    },
+                )
+                .inner
+            };
+            let high_pass = knob(ui, "HP", high_pass, 0.0, texts[0]);
+            let high_pass = crate::hover_text(
+                high_pass,
+                format!(
+                    "High-pass · {} · off at its lowest\nDouble-click to switch off",
+                    texts[0]
+                ),
+            );
+            let low_pass = knob(ui, "LP", low_pass, 1.0, texts[1]);
+            let low_pass = crate::hover_text(
+                low_pass,
+                format!(
+                    "Low-pass · {} · off at its highest\nDouble-click to switch off",
+                    texts[1]
+                ),
+            );
+            MixerFilterResponse {
+                high_pass,
+                low_pass,
+            }
+        },
+    )
+    .inner
+}
+
+/// The channel strip's stages that open its window: a lit button is a
+/// stage that is on. Each response is a click. They share the filter row's
+/// compact height, so the strip costs the console little of its fader.
+pub fn mixer_strip_buttons<const N: usize>(
+    ui: &mut Ui,
+    width: f32,
+    stages: [(&str, bool, &str); N],
+) -> [Response; N] {
+    let height = crate::tokens::COMPACT_HEIGHT;
+    ui.allocate_ui_with_layout(
+        Vec2::new(width, height),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.set_min_size(Vec2::new(width, height));
+            ui.spacing_mut().item_spacing.x = crate::tokens::SPACE_XS;
+            let each = (width - crate::tokens::SPACE_XS * (N as f32 - 1.0)) / N as f32;
+            let colors = crate::theme::palette(ui.ctx());
+            stages.map(|(caption, on, hint)| {
+                // Painted, not a button widget: three must share the strip's
+                // width exactly, whatever their captions measure.
+                let (rect, response) =
+                    ui.allocate_exact_size(Vec2::new(each, height), Sense::click());
+                let fill = if on {
+                    colors.accent
+                } else if response.hovered() {
+                    colors.control_hover
+                } else {
+                    colors.control_fill
+                };
+                ui.painter().rect_filled(rect, crate::tokens::RADIUS, fill);
+                ui.painter().text(
+                    rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    caption,
+                    egui::FontId::proportional(crate::tokens::FONT_CAPTION),
+                    if on {
+                        crate::theme::contrast_text(colors.accent)
+                    } else {
+                        colors.text
+                    },
+                );
+                response.widget_info(|| {
+                    egui::WidgetInfo::selected(
+                        egui::WidgetType::Button,
+                        ui.is_enabled(),
+                        on,
+                        caption,
+                    )
+                });
+                crate::hover_text(response, hint)
+            })
+        },
+    )
+    .inner
+}

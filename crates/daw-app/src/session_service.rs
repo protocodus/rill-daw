@@ -1074,11 +1074,24 @@ impl ToolHost for DawApp {
                     expected_revision: u64,
                     track_id: u64,
                     insert_id: Option<u64>,
+                    #[serde(default)]
+                    channel_strip: bool,
                     parameters: Vec<Parameter>,
                 }
                 let args: Args = parse_arguments(arguments)?;
                 self.check_tool_revision(args.session_id, args.expected_revision)?;
-                let descriptor = self.tool_device(args.track_id, args.insert_id)?;
+                let descriptor = if args.channel_strip {
+                    if args.insert_id.is_some() {
+                        return Err(ToolError::new(
+                            "invalid_arguments",
+                            "Give insert_id or channel_strip, not both",
+                        ));
+                    }
+                    self.channel_strip_track(args.track_id)?;
+                    &daw_devices::devices::strip::DESCRIPTOR
+                } else {
+                    self.tool_device(args.track_id, args.insert_id)?
+                };
                 if args.parameters.is_empty() || args.parameters.len() > descriptor.parameters.len()
                 {
                     return Err(ToolError::new(
@@ -1108,14 +1121,33 @@ impl ToolHost for DawApp {
                             ),
                         )
                     })?;
+                    if args.channel_strip
+                        && daw_devices::devices::strip::CHANNEL_FIELDS.contains(&spec.id)
+                    {
+                        return Err(ToolError::new(
+                            "invalid_arguments",
+                            format!(
+                                "{} is the channel's own control; set it with the channel mix edit",
+                                spec.name
+                            ),
+                        ));
+                    }
                     let normalized =
                         crate::builtin_devices::normalized_from_tool(spec, &parameter.value)
                             .map_err(|message| ToolError::new("invalid_arguments", message))?;
                     values.push((spec, normalized));
                 }
                 let mut candidate = self.project.clone();
+                let stored = if args.channel_strip {
+                    &mut candidate
+                        .track_mut(args.track_id)
+                        .expect("checked above")
+                        .strip
+                } else {
+                    device_parameters_mut(&mut candidate, args.track_id, args.insert_id)?
+                };
                 store_values(
-                    device_parameters_mut(&mut candidate, args.track_id, args.insert_id)?,
+                    stored,
                     values
                         .iter()
                         .map(|(spec, normalized)| (spec.id, *normalized)),
@@ -1129,7 +1161,8 @@ impl ToolHost for DawApp {
                     .collect();
                 Ok(
                     json!({"session_id":self.song_session.id,"revision":self.song_session.revision,
-                    "track_id":args.track_id,"insert_id":args.insert_id,"parameters":parameters}),
+                    "track_id":args.track_id,"insert_id":args.insert_id,
+                    "channel_strip":args.channel_strip,"parameters":parameters}),
                 )
             }
             "set_device_sample" => {
@@ -1468,6 +1501,24 @@ impl DawApp {
     }
 
     /// The built-in device assigned as this track's instrument or insert.
+    /// A channel that has a strip: not a folder or an automation track.
+    fn channel_strip_track(&self, track_id: u64) -> Result<(), ToolError> {
+        let track = self
+            .project
+            .track(track_id)
+            .ok_or_else(|| ToolError::new("not_found", "Track not found"))?;
+        if matches!(
+            track.kind,
+            daw_core::TrackKind::Folder | daw_core::TrackKind::Automation
+        ) {
+            return Err(ToolError::new(
+                "invalid_arguments",
+                "Folders and automation tracks have no channel strip",
+            ));
+        }
+        Ok(())
+    }
+
     fn tool_device(
         &self,
         track_id: u64,

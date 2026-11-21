@@ -32,7 +32,13 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
         );
         app.click("Mixer");
         let state = app.command(json!({"command":"inspect","paint":true}));
-        for channel in state["mixer"]["channels"].as_array().unwrap() {
+        for (index, channel) in state["mixer"]["channels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .enumerate()
+        {
+            let controls = &state["mixer_strips"][index]["strip"];
             let sections = channel["sections"].as_array().unwrap();
             assert_eq!(
                 sections
@@ -54,8 +60,14 @@ fn signal_flow_panels_are_ordered_painted_and_keep_controls_editable() {
                     &channel["input_gain"],
                     source_role_space + f64::from(daw_ui::MIXER_SECTION_GAP),
                 ),
+                // The strip's filters and stages close the input section.
                 (
                     &channel["input_gain"],
+                    &controls["high_pass"],
+                    f64::from(daw_ui::MIXER_ROW_GAP),
+                ),
+                (
+                    &controls["comp"],
                     &sections[1]["rect"],
                     f64::from(daw_ui::MIXER_SECTION_GAP),
                 ),

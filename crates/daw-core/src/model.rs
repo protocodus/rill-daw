@@ -210,6 +210,12 @@ pub struct Track {
     pub clips: Vec<Clip>,
     /// Additional path latency, added to latency reported by the instrument.
     pub latency_samples: u32,
+    /// The channel's R1 Strip (filters, gate, equalizer and compressor),
+    /// which runs after the input gain and before the inserts: normalized
+    /// values by parameter ID, a missing one at its default. The strip's
+    /// trim, polarity, width, pan and output are this track's own fields.
+    #[serde(default)]
+    pub strip: Vec<PluginParameterValue>,
     #[serde(default)]
     pub inserts: Vec<EffectSlot>,
     #[serde(default)]
@@ -1008,6 +1014,7 @@ impl Track {
             instrument_output: None,
             clips: Vec::new(),
             latency_samples: 0,
+            strip: Vec::new(),
             inserts: Vec::new(),
             sends: Vec::new(),
             output_bus: None,
@@ -1882,6 +1889,18 @@ impl Project {
                     || (track.kind == TrackKind::Midi && track.instrument.is_processor()),
                 "Only MIDI instruments may contain saved state or parameter overrides"
             );
+            let mut strip_ids = HashSet::new();
+            for parameter in &track.strip {
+                ensure!(
+                    parameter.value.is_finite() && (0.0..=1.0).contains(&parameter.value),
+                    "Channel strip values are normalized 0-1"
+                );
+                ensure!(
+                    strip_ids.insert(parameter.id),
+                    "Channel strip parameter {} is set twice",
+                    parameter.id
+                );
+            }
             ensure!(
                 container_depth(&track.inserts) <= MAX_CONTAINER_DEPTH,
                 "Containers nest at most {MAX_CONTAINER_DEPTH} deep"

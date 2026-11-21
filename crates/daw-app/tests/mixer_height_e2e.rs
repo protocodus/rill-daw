@@ -223,16 +223,16 @@ fn mixer_fills_height_and_resizes_faders_without_losing_channel_controls() {
         // growth independently of the compact/regular control breakpoint.
         // The short sizes below separately exercise compact scrolling.
         app.command(
-            json!({"command":"viewport", "width":1100, "height":1000, "pixels_per_point":density}),
+            json!({"command":"viewport", "width":1100, "height":1100, "pixels_per_point":density}),
         );
         app.click("Mixer");
         let initial = painted(&mut app);
-        let initial_height = assert_layout(&initial, 1000.0);
+        let initial_height = assert_layout(&initial, 1100.0);
         let original_project = initial["project"].clone();
 
-        app.command(json!({"command":"viewport", "width":1440, "height":1400}));
+        app.command(json!({"command":"viewport", "width":1440, "height":1500}));
         let tall = painted(&mut app);
-        let tall_height = assert_layout(&tall, 1400.0);
+        let tall_height = assert_layout(&tall, 1500.0);
         assert!(
             tall_height > initial_height + 300.0,
             "extra window height must extend faders and meters, not create empty space"
@@ -260,9 +260,9 @@ fn mixer_fills_height_and_resizes_faders_without_losing_channel_controls() {
         assert_eq!(effects["selected_track"], project.tracks[0].id);
         app.key("Escape");
 
-        app.command(json!({"command":"viewport", "width":1100, "height":1000}));
+        app.command(json!({"command":"viewport", "width":1100, "height":1100}));
         let resized = painted(&mut app);
-        assert!((assert_layout(&resized, 1000.0) - initial_height).abs() < 1.0);
+        assert!((assert_layout(&resized, 1100.0) - initial_height).abs() < 1.0);
         assert_eq!(resized["project"], original_project);
         let fader = Bounds::from(&resized["mixer"]["channels"][0]["fader_scale"]["rail"]);
         let x = (fader.left + fader.right) * 0.5;

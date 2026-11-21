@@ -615,6 +615,8 @@ RILL_TEST_PLUGIN_BUNDLE=/usr/lib/lv2/calf.lv2 cargo test --locked -p daw-plugins
 
 `workspace_switch_e2e` exercises the persistent Arranger/Mixer switch from both workspaces, Clip Editor, and contextual utilities, including selecting the already active caller to dismiss a popup. It checks bounds at 800×600 and 1100×720, both appearances and densities, and preserves project/history/selection. `channel_properties_e2e` verifies separate Clip/Track/Channel scopes, audio-only clip gain, channel gain/pan, and navigation among Mixer, Channel, Effects, Instrument, and Routing. `instrument_context_e2e` checks concise native-editor overviews, the on-demand **Automate…** parameter page, contextual titles, effect-editor-to-instrument navigation, and clean failure of metadata-only plugin fixtures.
 
+`channel_strip_e2e` sets a channel's R1 Strip through `set_device_parameters` with `channel_strip` and hears its high-pass, checks that the tool refuses the channel's own controls, turns the mixer's **LP** knob down and hears the highs go, switches it off with a double-click, and opens the channel strip window from **Comp**, where the stage's lamp switches the compressor.
+
 `cursor_visibility_e2e` places the cursor through the mouse in the arranger,
 MIDI editor and audio editor, in both themes at 1×/2× density. It verifies the
 actual opaque cursor line and wider translucent glow, contrast against the

@@ -314,6 +314,7 @@ impl Project {
                     track.output_bus.is_none()
                         && track.sends.is_empty()
                         && track.inserts.is_empty()
+                        && track.strip.is_empty()
                         && track.clips.is_empty()
                         && track.instrument_inputs.is_empty()
                         && track.instrument_output.is_none()

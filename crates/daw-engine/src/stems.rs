@@ -118,6 +118,7 @@ fn file_component(name: &str, fallback: &str) -> String {
 /// meant to pass through it.
 fn without_master_processing(mut project: Project) -> Project {
     project.master.inserts.clear();
+    project.master.strip.clear();
     project.master.mute = false;
     project.master.input_gain = 1.0;
     project.master.invert_polarity = false;
