@@ -1,0 +1,71 @@
+{
+  "format": 1,
+  "device": "r1-split",
+  "name": "OTT Style",
+  "author": "Rill",
+  "category": "Dynamics",
+  "tags": [
+    "multiband",
+    "loud"
+  ],
+  "description": "Three bands at 88 Hz and 2.5 kHz, each squashed hard and lifted, blended under the dry signal. Downward only, so it approximates the classic upward-and-downward sound.",
+  "parameters": {
+    "rule": "Bands",
+    "bands": "3",
+    "crossover.1": 88.0,
+    "crossover.2": 2500.0,
+    "lane1.gain": -1.5,
+    "lane3.gain": 1.5,
+    "mix": 70.0
+  },
+  "lanes": [
+    {
+      "effects": [
+        {
+          "device": "r1-compressor",
+          "parameters": {
+            "character": "Digital",
+            "threshold": -36.0,
+            "ratio": 8.0,
+            "knee": 6.0,
+            "attack": 10.0,
+            "release": 180.0,
+            "makeup": 10.0
+          }
+        }
+      ]
+    },
+    {
+      "effects": [
+        {
+          "device": "r1-compressor",
+          "parameters": {
+            "character": "Digital",
+            "threshold": -34.0,
+            "ratio": 8.0,
+            "knee": 6.0,
+            "attack": 4.0,
+            "release": 120.0,
+            "makeup": 9.0
+          }
+        }
+      ]
+    },
+    {
+      "effects": [
+        {
+          "device": "r1-compressor",
+          "parameters": {
+            "character": "Digital",
+            "threshold": -38.0,
+            "ratio": 8.0,
+            "knee": 6.0,
+            "attack": 1.0,
+            "release": 80.0,
+            "makeup": 11.0
+          }
+        }
+      ]
+    }
+  ]
+}

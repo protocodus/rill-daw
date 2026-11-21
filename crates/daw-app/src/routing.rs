@@ -99,7 +99,10 @@ impl DawApp {
                                 index,
                                 count,
                                 enabled: slot.enabled,
-                                has_parameters: !matches!(slot.effect, Effect::Builtin { .. }),
+                                has_parameters: !matches!(
+                                    slot.effect,
+                                    Effect::Builtin { .. } | Effect::Container { .. }
+                                ),
                             };
                             let row = widgets::effect_slot(
                                 ui,
@@ -131,6 +134,7 @@ impl DawApp {
                             let location = match &slot.effect {
                                 Effect::Vst3 { path, .. } => path.as_str(),
                                 Effect::Builtin { .. } => "Built-in device",
+                                Effect::Container { .. } => "Built-in container",
                             };
                             changed |= row.inner.0.on_hover_text(location).changed();
                             if let Some(payload) =
@@ -189,6 +193,7 @@ impl DawApp {
             self.open_effect_chooser(crate::library::LibraryTarget::Insert {
                 track: track_id,
                 anchor: insert_anchor,
+                lane: None,
             });
         }
         if let Some(effect) = edit_effect {

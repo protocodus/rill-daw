@@ -1,0 +1,46 @@
+{
+  "format": 1,
+  "device": "r1-split",
+  "name": "Multiband Drive",
+  "author": "Rill",
+  "category": "Distortion",
+  "tags": [
+    "multiband"
+  ],
+  "description": "Clean lows, tube warmth in the mids and tape on the top.",
+  "parameters": {
+    "rule": "Bands",
+    "bands": "3",
+    "crossover.1": 150.0,
+    "crossover.2": 3000.0
+  },
+  "lanes": [
+    {
+      "effects": []
+    },
+    {
+      "effects": [
+        {
+          "device": "r1-saturator",
+          "parameters": {
+            "model": "Tube",
+            "drive": 12.0,
+            "character": 40.0
+          }
+        }
+      ]
+    },
+    {
+      "effects": [
+        {
+          "device": "r1-saturator",
+          "parameters": {
+            "model": "Tape",
+            "drive": 8.0,
+            "mix": 60.0
+          }
+        }
+      ]
+    }
+  ]
+}

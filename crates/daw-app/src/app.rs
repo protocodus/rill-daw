@@ -631,7 +631,7 @@ impl DawApp {
                     .is_some_and(|(track, effect)| {
                         self.project
                             .track(track)
-                            .is_none_or(|track| !track.inserts.iter().any(|slot| slot.id == effect))
+                            .is_none_or(|track| track.effect(effect).is_none())
                     })
             {
                 continue;

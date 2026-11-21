@@ -181,7 +181,7 @@ impl ToolScope {
             Self::Instrument { .. } => {
                 track.kind == TrackKind::Midi && !matches!(track.instrument, Instrument::None)
             }
-            Self::Effect { effect_id, .. } => track.inserts.iter().any(|e| e.id == effect_id),
+            Self::Effect { effect_id, .. } => track.effect(effect_id).is_some(),
             Self::EffectChain { .. } | Self::Channel { .. } | Self::Routing { .. } => matches!(
                 track.kind,
                 TrackKind::Audio | TrackKind::Midi | TrackKind::Bus
@@ -308,7 +308,7 @@ impl ToolScope {
                 matches!(target.parameter, AutomationParameter::VstParameter { effect: Some(id), .. } if id == effect_id)
             }
             Self::EffectChain { track_id } => {
-                matches!(target.parameter, AutomationParameter::VstParameter { effect: Some(id), .. } if project.track(track_id).is_some_and(|t| t.inserts.iter().any(|e|e.id == id)))
+                matches!(target.parameter, AutomationParameter::VstParameter { effect: Some(id), .. } if project.track(track_id).is_some_and(|t| t.effect(id).is_some()))
             }
             Self::Channel { .. } => matches!(
                 target.parameter,
@@ -433,7 +433,7 @@ impl ToolScope {
             Self::EffectChain { track_id } => effect.is_some_and(|id| {
                 project
                     .track(track_id)
-                    .is_some_and(|t| t.inserts.iter().any(|e| e.id == id))
+                    .is_some_and(|t| t.effect(id).is_some())
             }),
             _ => false,
         };
@@ -594,14 +594,19 @@ impl ToolScope {
                     track.instrument_parameters = old.instrument_parameters.clone()
                 }
                 Self::Effect { effect_id, .. } => {
-                    let source = old.inserts.iter().find(|e| e.id == effect_id).unwrap();
+                    let source = old.effect(effect_id).unwrap();
                     let effect = track
-                        .inserts
-                        .iter_mut()
-                        .find(|e| e.id == effect_id)
+                        .effect_mut(effect_id)
                         .ok_or_else(|| denied("The pinned effect cannot be replaced"))?;
                     effect.parameters = source.parameters.clone();
                     effect.enabled = source.enabled;
+                    // A pinned container's lanes are its contents.
+                    if matches!(
+                        (&effect.effect, &source.effect),
+                        (Effect::Container { device: a, .. }, Effect::Container { device: b, .. }) if a == b
+                    ) {
+                        effect.effect = source.effect.clone();
+                    }
                 }
                 Self::EffectChain { .. } => track.inserts = old.inserts.clone(),
                 Self::Channel { .. } => {
@@ -741,7 +746,7 @@ impl ToolScope {
                 "Effect · {name} / {}",
                 short_label(
                     track
-                        .and_then(|t| t.inserts.iter().find(|e| e.id == effect_id))
+                        .and_then(|t| t.effect(effect_id))
                         .map(|e| e.name.as_str())
                         .unwrap_or("Unavailable")
                 )
@@ -814,9 +819,7 @@ impl ToolScope {
             let effect = project
                 .track(*track_id)
                 .unwrap()
-                .inserts
-                .iter()
-                .find(|e| e.id == *effect_id)
+                .effect(*effect_id)
                 .unwrap();
             value["inserts"] = json!([{"id":effect.id,"name":crate::bounded_text(&effect.name),"enabled":effect.enabled,"total_parameters":effect.parameters.len(),"parameters_offset":q.offset,"parameters":effect.parameters.iter().skip(q.offset).take(q.limit).collect::<Vec<_>>() }]);
         }

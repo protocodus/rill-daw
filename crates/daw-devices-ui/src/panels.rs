@@ -293,6 +293,11 @@ pub fn layout(descriptor: &DeviceDescriptor) -> Layout {
 /// one pad at a time; the same as [`layout`] for any other.
 pub fn layout_for(descriptor: &DeviceDescriptor, pad: usize) -> Layout {
     let mut layout = generic(descriptor);
+    if descriptor.id == daw_devices::devices::container::SPLIT.id {
+        // Up to four lanes side by side, each wide enough for a row of
+        // effect names and their actions.
+        layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
+    }
     if descriptor.id == filter::DESCRIPTOR.id {
         use filter::*;
         // The filter on top, its character before its frequency; below it

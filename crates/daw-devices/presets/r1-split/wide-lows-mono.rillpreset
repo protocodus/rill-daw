@@ -1,0 +1,31 @@
+{
+  "format": 1,
+  "device": "r1-split",
+  "name": "Tight Low End",
+  "author": "Rill",
+  "category": "Utility",
+  "tags": [
+    "mid/side"
+  ],
+  "description": "High-passes the side signal so the low end stays mono.",
+  "parameters": {
+    "rule": "Mid/Side"
+  },
+  "lanes": [
+    {
+      "effects": []
+    },
+    {
+      "effects": [
+        {
+          "device": "r1-equalizer",
+          "parameters": {
+            "hp.on": true,
+            "hp.frequency": 150.0,
+            "hp.slope": "24 dB"
+          }
+        }
+      ]
+    }
+  ]
+}

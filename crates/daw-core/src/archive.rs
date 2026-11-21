@@ -235,11 +235,11 @@ fn save_with_options(
         if let Instrument::Vst3 { path, .. } = &mut track.instrument {
             absolute_plugin(path, &base);
         }
-        for slot in &mut track.inserts {
+        crate::visit_effect_slots_mut(&mut track.inserts, &mut |slot| {
             if let Effect::Vst3 { path, .. } = &mut slot.effect {
                 absolute_plugin(path, &base);
             }
-        }
+        });
     }
     // A single traversal keeps clips, instrument layers and the project
     // sample collection on the same deduplicating asset pipeline.

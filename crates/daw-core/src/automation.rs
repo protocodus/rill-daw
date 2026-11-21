@@ -72,9 +72,7 @@ impl AutomationTarget {
         );
         let effect = |id| {
             track
-                .inserts
-                .iter()
-                .find(|slot| slot.id == id)
+                .effect(id)
                 .map(|slot| &slot.effect)
                 .context("Automation target insert is missing")
         };
@@ -148,11 +146,7 @@ impl AutomationTarget {
             }
             AutomationParameter::VstParameter { effect, id } => {
                 let parameters = if let Some(effect) = effect {
-                    &track
-                        .inserts
-                        .iter()
-                        .find(|slot| slot.id == effect)?
-                        .parameters
+                    &track.effect(effect)?.parameters
                 } else {
                     &track.instrument_parameters
                 };
@@ -853,12 +847,9 @@ impl Project {
     pub fn remove_insert(&mut self, track: u64, effect: u64) -> Result<EffectSlot> {
         let mut candidate = self.clone();
         let channel = candidate.track_mut(track).context("Track not found")?;
-        let index = channel
-            .inserts
-            .iter()
-            .position(|slot| slot.id == effect)
+        let (slots, index) = crate::effect_slot_list_mut(&mut channel.inserts, effect)
             .context("Insert not found")?;
-        let removed = channel.inserts.remove(index);
+        let removed = slots.remove(index);
         candidate.prune_automation();
         candidate.validate()?;
         *self = candidate;

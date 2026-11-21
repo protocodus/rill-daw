@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "device": "r1-split",
+  "name": "Default",
+  "author": "Rill",
+  "category": "Utility",
+  "description": "Three empty bands at 120 Hz and 2.5 kHz.",
+  "parameters": {
+    "rule": "Bands",
+    "bands": "3"
+  },
+  "lanes": [
+    {
+      "effects": []
+    },
+    {
+      "effects": []
+    },
+    {
+      "effects": []
+    }
+  ]
+}

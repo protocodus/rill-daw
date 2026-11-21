@@ -314,15 +314,176 @@ pub enum Effect {
     /// A built-in R1 device by registry ID (`r1-filter`). An ID this version
     /// does not know loads, stays unchanged and renders silence.
     Builtin { device: String },
+    /// A built-in container (`r1-split`, `r1-chain`): its own parameters
+    /// divide the signal between lanes, and each lane is a serial chain of
+    /// effects, containers included. An ID this version does not know
+    /// passes audio through.
+    Container {
+        device: String,
+        #[serde(default)]
+        lanes: Vec<EffectLane>,
+    },
 }
 
+/// One lane of a container: effects in processing order.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct EffectLane {
+    #[serde(default)]
+    pub inserts: Vec<EffectSlot>,
+}
+
+/// Lanes a container holds at most.
+pub const MAX_EFFECT_LANES: usize = 8;
+/// Containers nest at most this deep; one at the top level is depth 1.
+pub const MAX_CONTAINER_DEPTH: usize = 4;
+/// Effects inside all of one track's containers, together.
+pub const MAX_NESTED_EFFECTS: usize = 256;
+
 impl Effect {
+    /// The built-in device ID, of a device or a container.
     pub fn builtin_device(&self) -> Option<&str> {
         match self {
-            Self::Builtin { device } => Some(device),
+            Self::Builtin { device } | Self::Container { device, .. } => Some(device),
             Self::Vst3 { .. } => None,
         }
     }
+
+    /// A container's lanes; none for anything else.
+    pub fn lanes(&self) -> &[EffectLane] {
+        match self {
+            Self::Container { lanes, .. } => lanes,
+            _ => &[],
+        }
+    }
+
+    pub fn lanes_mut(&mut self) -> Option<&mut Vec<EffectLane>> {
+        match self {
+            Self::Container { lanes, .. } => Some(lanes),
+            _ => None,
+        }
+    }
+
+    /// The effect without what its lanes hold: what decides the shape of
+    /// the processor, apart from nested effects.
+    pub fn same_kind(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Container {
+                    device: a,
+                    lanes: a_lanes,
+                },
+                Self::Container {
+                    device: b,
+                    lanes: b_lanes,
+                },
+            ) => a == b && a_lanes.len() == b_lanes.len(),
+            _ => self == other,
+        }
+    }
+}
+
+/// Every effect in `slots` and, depth first, in their containers' lanes.
+pub fn effect_slots(slots: &[EffectSlot]) -> EffectSlots<'_> {
+    EffectSlots {
+        stack: vec![slots.iter()],
+    }
+}
+
+pub struct EffectSlots<'a> {
+    stack: Vec<std::slice::Iter<'a, EffectSlot>>,
+}
+
+impl<'a> Iterator for EffectSlots<'a> {
+    type Item = &'a EffectSlot;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let top = self.stack.last_mut()?;
+            match top.next() {
+                Some(slot) => {
+                    for lane in slot.effect.lanes().iter().rev() {
+                        self.stack.push(lane.inserts.iter());
+                    }
+                    return Some(slot);
+                }
+                None => {
+                    self.stack.pop();
+                }
+            }
+        }
+    }
+}
+
+/// Calls `visit` for every effect, depth first, as [`effect_slots`] orders
+/// them.
+pub fn visit_effect_slots_mut(slots: &mut [EffectSlot], visit: &mut impl FnMut(&mut EffectSlot)) {
+    for slot in slots {
+        visit(slot);
+        if let Some(lanes) = slot.effect.lanes_mut() {
+            for lane in lanes {
+                visit_effect_slots_mut(&mut lane.inserts, visit);
+            }
+        }
+    }
+}
+
+pub fn find_effect_slot(slots: &[EffectSlot], id: u64) -> Option<&EffectSlot> {
+    effect_slots(slots).find(|slot| slot.id == id)
+}
+
+pub fn find_effect_slot_mut(slots: &mut [EffectSlot], id: u64) -> Option<&mut EffectSlot> {
+    for slot in slots {
+        if slot.id == id {
+            return Some(slot);
+        }
+        if let Some(lanes) = slot.effect.lanes_mut() {
+            for lane in lanes {
+                if let Some(found) = find_effect_slot_mut(&mut lane.inserts, id) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// The list holding effect `id` (the track's inserts or a lane), with the
+/// effect's index in it.
+pub fn effect_slot_list_mut(
+    slots: &mut Vec<EffectSlot>,
+    id: u64,
+) -> Option<(&mut Vec<EffectSlot>, usize)> {
+    if let Some(index) = slots.iter().position(|slot| slot.id == id) {
+        return Some((slots, index));
+    }
+    for slot in slots.iter_mut() {
+        if let Some(lanes) = slot.effect.lanes_mut() {
+            for lane in lanes {
+                if let Some(found) = effect_slot_list_mut(&mut lane.inserts, id) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Container nesting of `slots`: 0 without containers.
+pub fn container_depth(slots: &[EffectSlot]) -> usize {
+    slots
+        .iter()
+        .filter_map(|slot| match &slot.effect {
+            Effect::Container { lanes, .. } => Some(
+                1 + lanes
+                    .iter()
+                    .map(|lane| container_depth(&lane.inserts))
+                    .max()
+                    .unwrap_or(0),
+            ),
+            _ => None,
+        })
+        .max()
+        .unwrap_or(0)
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -793,6 +954,15 @@ impl Clip {
 }
 
 impl Track {
+    /// An insert by ID, also inside containers.
+    pub fn effect(&self, id: u64) -> Option<&EffectSlot> {
+        find_effect_slot(&self.inserts, id)
+    }
+
+    pub fn effect_mut(&mut self, id: u64) -> Option<&mut EffectSlot> {
+        find_effect_slot_mut(&mut self.inserts, id)
+    }
+
     /// Every audio source the track plays: its audio clips' and the samples
     /// of its instrument.
     pub fn audio_paths(&self) -> impl Iterator<Item = &str> {
@@ -1712,9 +1882,34 @@ impl Project {
                     || (track.kind == TrackKind::Midi && track.instrument.is_processor()),
                 "Only MIDI instruments may contain saved state or parameter overrides"
             );
-            for slot in &track.inserts {
+            ensure!(
+                container_depth(&track.inserts) <= MAX_CONTAINER_DEPTH,
+                "Containers nest at most {MAX_CONTAINER_DEPTH} deep"
+            );
+            ensure!(
+                effect_slots(&track.inserts).count() <= track.inserts.len() + MAX_NESTED_EFFECTS,
+                "At most {MAX_NESTED_EFFECTS} effects inside containers on one channel"
+            );
+            for slot in track.inserts.iter().flat_map(|slot| {
+                slot.effect
+                    .lanes()
+                    .iter()
+                    .flat_map(|lane| effect_slots(&lane.inserts))
+            }) {
+                ensure!(
+                    slot.inputs.is_empty(),
+                    "Effects inside a container cannot take extra inputs: {}",
+                    slot.name
+                );
+            }
+            for slot in effect_slots(&track.inserts) {
                 check_id(slot.id)?;
                 slot.effect.validate()?;
+                ensure!(
+                    slot.inputs.is_empty() || !matches!(slot.effect, Effect::Container { .. }),
+                    "A container takes no extra inputs: {}",
+                    slot.name
+                );
                 ensure!(
                     slot.effect.builtin_device().is_none() || slot.state.is_empty(),
                     "Built-in effects keep their state in parameters"
@@ -2096,12 +2291,12 @@ impl Project {
             for sample in track.instrument.samples_mut() {
                 absolutize(&mut sample.path, base);
             }
-            for slot in &mut track.inserts {
+            visit_effect_slots_mut(&mut track.inserts, &mut |slot| {
                 max_id = max_id.max(slot.id);
                 if resolve_plugin_paths && let Effect::Vst3 { path, .. } = &mut slot.effect {
                     absolutize(path, base);
                 }
-            }
+            });
             for clip in &mut track.clips {
                 max_id = max_id
                     .max(clip.id)

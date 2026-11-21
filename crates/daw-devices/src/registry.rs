@@ -12,6 +12,8 @@ static REGISTRY: &[&DeviceDescriptor] = &[
     &devices::modulator::DESCRIPTOR,
     &devices::spacer::DESCRIPTOR,
     &devices::strip::DESCRIPTOR,
+    &devices::container::CHAIN,
+    &devices::container::SPLIT,
 ];
 
 pub fn registry() -> &'static [&'static DeviceDescriptor] {

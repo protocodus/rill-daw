@@ -83,7 +83,7 @@ impl DawApp {
     fn io_configuration(&self, target: IoTarget) -> Option<Configuration> {
         let channel = self.project.track(target.track)?;
         let (path, class_id, state, parameters) = if let Some(id) = target.effect {
-            let effect = channel.inserts.iter().find(|effect| effect.id == id)?;
+            let effect = channel.effect(id)?;
             // Built-in devices have one fixed stereo input and output.
             let Effect::Vst3 { path, class_id } = &effect.effect else {
                 return None;
@@ -133,7 +133,7 @@ impl DawApp {
             return false;
         };
         let (path, class_id, state, parameters) = if let Some(id) = target.effect {
-            let Some(effect) = channel.inserts.iter().find(|effect| effect.id == id) else {
+            let Some(effect) = channel.effect(id) else {
                 return false;
             };
             let Effect::Vst3 { path, class_id } = &effect.effect else {
@@ -303,12 +303,7 @@ impl DawApp {
         // A built-in device's buses are known without asking a process.
         let builtin = self.project.track(track).and_then(|channel| {
             let device = match effect {
-                Some(id) => channel
-                    .inserts
-                    .iter()
-                    .find(|slot| slot.id == id)?
-                    .effect
-                    .builtin_device(),
+                Some(id) => channel.effect(id)?.effect.builtin_device(),
                 None => channel.instrument.builtin_device(),
             }?;
             Some(crate::builtin_devices::inspection_for_device(device))
@@ -338,13 +333,7 @@ impl DawApp {
             .track(track)
             .map(|channel| {
                 effect
-                    .and_then(|id| {
-                        channel
-                            .inserts
-                            .iter()
-                            .find(|effect| effect.id == id)
-                            .map(|effect| effect.inputs.clone())
-                    })
+                    .and_then(|id| channel.effect(id).map(|effect| effect.inputs.clone()))
                     .unwrap_or_else(|| channel.instrument_inputs.clone())
             })
             .unwrap_or_default();

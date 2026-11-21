@@ -328,6 +328,22 @@ fn factory_presets_load_without_skipped_keys() {
                 preset.name,
                 resolved.skipped
             );
+            // Effects inside a container's lanes resolve as cleanly.
+            let mut nested: Vec<_> = preset.lanes.iter().flat_map(|lane| &lane.effects).collect();
+            while let Some(effect) = nested.pop() {
+                let inner = daw_devices::descriptor(&effect.device)
+                    .unwrap_or_else(|| panic!("{}: unknown {}", preset.name, effect.device));
+                let resolved = Preset::nested(effect).resolve(inner).unwrap();
+                assert!(
+                    resolved.skipped.is_empty(),
+                    "{} preset \"{}\": {} skips {:?}",
+                    descriptor.id,
+                    preset.name,
+                    effect.device,
+                    resolved.skipped
+                );
+                nested.extend(effect.lanes.iter().flat_map(|lane| &lane.effects));
+            }
         }
         assert_eq!(
             factory_presets(descriptor).len(),
@@ -729,10 +745,12 @@ fn a_roll_stays_within_its_amount_and_keeps_the_output_level() {
                 }
             }
         }
-        // A full roll moves most of the device, choices included.
+        // A full roll moves most of the device, choices included. A
+        // container's sound is in its lanes; its own roll keeps the routing.
         let rolled = daw_devices::randomized(descriptor, defaults, 1.0, 7);
         assert!(
-            rolled.len() * 2 > descriptor.parameters.len(),
+            daw_devices::devices::container::is_container(descriptor.id)
+                || rolled.len() * 2 > descriptor.parameters.len(),
             "{}",
             descriptor.id
         );

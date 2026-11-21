@@ -228,6 +228,17 @@ a plug-in insert: its sidechain is `bus` 1, `first_channel` 0. Routes to
 another address, or on a device without a sidechain, are kept in the file but
 the song does not play until they are removed; the error names the insert.
 
+Containers (`r1-split`, `r1-chain`) are inserts of their own variant,
+`"Container": {"device": "r1-split", "lanes": [{"inserts": [ … ]}]}`, whose
+lanes hold ordinary insert slots (`id`, `name`, `enabled`, `effect`,
+`parameters`, `state`), containers included. A project holds at most 8 lanes
+per container, 4 levels of nesting and 256 nested inserts per track. Insert
+IDs are unique across a track's chain and every lane in it. Nested inserts
+and containers have no `inputs`. The container's own settings are its
+`parameters`, as for `"Builtin"`. Automation of a nested parameter names the
+nested insert's ID. An unknown container device passes audio through and its
+lanes do not play. Older Rill versions reject the variant.
+
 Sampling instruments may also store `sample_names` and `sample_players`, maps
 keyed by logical player slot: Sampler has slot 0, and Drums has pads 0–15.
 Names are independent of source filenames. A player node has a stable `id`, an

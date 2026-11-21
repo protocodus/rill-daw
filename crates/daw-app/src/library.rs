@@ -35,6 +35,8 @@ pub(crate) enum LibraryTarget {
     Insert {
         track: u64,
         anchor: Option<(u64, daw_ui::EffectInsertSide)>,
+        /// `(container, lane)` when the effect goes into a container lane.
+        lane: Option<(u64, usize)>,
     },
     Send(u64),
 }
@@ -642,6 +644,7 @@ impl DawApp {
             LibraryTarget::Insert {
                 track,
                 anchor: None,
+                lane: None,
             }
         });
     }
@@ -870,6 +873,7 @@ impl DawApp {
                 DeviceAction::Instrument => "Add instrument track",
                 DeviceAction::Assign if matches!(self.library_target, LibraryTarget::Instrument { name_new_track: true, .. }) => "Set instrument",
                 DeviceAction::Assign => "Replace instrument",
+                DeviceAction::Insert if matches!(self.library_target, LibraryTarget::Insert { lane: Some(_), .. }) => "Add to lane",
                 DeviceAction::Insert => "Add to effect chain", DeviceAction::Send => "Create send track",
             };
             let destination = match primary {
@@ -881,8 +885,11 @@ impl DawApp {
                 DeviceAction::Insert | DeviceAction::Send => source.and_then(|id| self.project.track(id)).map(|track| {
                     if primary == DeviceAction::Send {
                         if can_send { format!("Send from {}", track.name) } else { "Master cannot send to a return".into() }
+                    } else if let LibraryTarget::Insert { lane: Some((id, lane)), .. } = self.library_target {
+                        track.effect(id).map(|slot| format!("Lane {} of {} on {}", lane + 1, slot.name, track.name))
+                            .unwrap_or_else(|| "Container no longer available".into())
                     } else if let LibraryTarget::Insert { anchor: Some((id, side)), .. } = self.library_target {
-                        track.inserts.iter().find(|slot| slot.id == id).map(|slot| {
+                        track.effect(id).map(|slot| {
                             let position = if side == daw_ui::EffectInsertSide::Before { "Before" } else { "After" };
                             format!("{position} {} on {}", slot.name, track.name)
                         }).unwrap_or_else(|| "Insert no longer available".into())
@@ -1244,6 +1251,29 @@ impl DawApp {
             } else {
                 0
             };
+            if action == DeviceAction::Insert
+                && let LibraryTarget::Insert {
+                    lane: Some((container, lane)),
+                    ..
+                } = self.library_target
+            {
+                let slot = EffectSlot::new(&plugin.name, crate::builtin_devices::effect(&plugin));
+                let mut candidate = self.project.clone();
+                if let Err(error) = crate::containers::insert_into_lane(
+                    &mut candidate,
+                    source,
+                    container,
+                    lane,
+                    slot,
+                ) {
+                    self.message(Err(error), "");
+                    return;
+                }
+                self.commit_candidate(candidate, "Add effect to lane");
+                self.record_plugin_use(&plugin);
+                self.open_effect_editor(source, container);
+                return;
+            }
             self.begin_edit();
             let track = if action == DeviceAction::Send {
                 self.project.add_bus(format!("{} return", plugin.name))
@@ -1359,7 +1389,9 @@ impl DawApp {
 pub(crate) fn effect_model(catalog: &[CatalogEntry], effect: &Effect) -> String {
     match effect {
         Effect::Vst3 { path, class_id } => plugin_model(catalog, path, class_id),
-        Effect::Builtin { device } => crate::builtin_devices::model(device),
+        Effect::Builtin { device } | Effect::Container { device, .. } => {
+            crate::builtin_devices::model(device)
+        }
     }
 }
 

@@ -154,9 +154,20 @@ struct PanelHost<'a> {
     route: bool,
     samples: &'a [Option<(String, daw_devices_ui::SampleSummary)>],
     sample_request: Option<(u32, daw_devices_ui::SampleRequest)>,
+    lane_action: Option<daw_devices_ui::LaneAction>,
+    container_preset: Option<daw_devices::Preset>,
 }
 
 impl PanelHost<'_> {
+    /// The container effect this panel edits, if it edits one.
+    fn container(&self) -> Option<&daw_core::EffectSlot> {
+        self.app
+            .project
+            .track(self.target.track)?
+            .effect(self.target.effect?)
+            .filter(|slot| matches!(slot.effect, daw_core::Effect::Container { .. }))
+    }
+
     fn automation_target(&self, id: u32) -> AutomationTarget {
         AutomationTarget {
             track: self.target.track,
@@ -233,8 +244,25 @@ impl daw_devices_ui::DeviceHost for PanelHost<'_> {
     fn user_presets(&self) -> Vec<daw_devices::Preset> {
         self.user_presets.to_vec()
     }
-    fn save_preset(&mut self, preset: daw_devices::Preset) {
+    fn save_preset(&mut self, mut preset: daw_devices::Preset) {
+        if let Some(lanes) = self.container().map(|slot| slot.effect.lanes()) {
+            preset.lanes = crate::containers::preset_lanes(lanes);
+        }
         self.saved = Some(preset);
+    }
+    fn lanes(&self) -> Option<Vec<Vec<daw_devices_ui::LaneEffect>>> {
+        let slot = self.container()?;
+        crate::containers::lanes_view(self.app, self.target.track, slot.id)
+    }
+    fn lane_action(&mut self, action: daw_devices_ui::LaneAction) {
+        self.lane_action = Some(action);
+    }
+    fn load_container_preset(&mut self, preset: &daw_devices::Preset) -> bool {
+        if self.container().is_none() {
+            return false;
+        }
+        self.container_preset = Some(preset.clone());
+        true
     }
     fn audition(&mut self, note: Option<(u8, f32)>) {
         self.audition = Some(note);
@@ -382,14 +410,15 @@ impl DawApp {
     fn editor_plugin(&self, target: EditorTarget) -> Option<Instrument> {
         let track = self.project.track(target.track)?;
         if let Some(id) = target.effect {
-            let slot = track.inserts.iter().find(|slot| slot.id == id)?;
+            let slot = track.effect(id)?;
             // The editor shows an insert the same way as an instrument.
             Some(match &slot.effect {
                 daw_core::Effect::Vst3 { path, class_id } => Instrument::Vst3 {
                     path: path.clone(),
                     class_id: class_id.clone(),
                 },
-                daw_core::Effect::Builtin { device } => Instrument::builtin(device.clone()),
+                daw_core::Effect::Builtin { device }
+                | daw_core::Effect::Container { device, .. } => Instrument::builtin(device.clone()),
             })
         } else {
             // The editor shows the device, whatever recordings it holds: a
@@ -404,7 +433,7 @@ impl DawApp {
     fn editor_state(&self, target: EditorTarget) -> Option<(&[u8], &[PluginParameterValue])> {
         let track = self.project.track(target.track)?;
         if let Some(id) = target.effect {
-            let slot = track.inserts.iter().find(|slot| slot.id == id)?;
+            let slot = track.effect(id)?;
             Some((&slot.state, &slot.parameters))
         } else {
             Some((&track.instrument_state, &track.instrument_parameters))
@@ -417,7 +446,7 @@ impl DawApp {
     ) -> Option<(&mut Vec<u8>, &mut Vec<PluginParameterValue>)> {
         let track = self.project.track_mut(target.track)?;
         if let Some(id) = target.effect {
-            let slot = track.inserts.iter_mut().find(|slot| slot.id == id)?;
+            let slot = track.effect_mut(id)?;
             Some((&mut slot.state, &mut slot.parameters))
         } else {
             Some((
@@ -1228,8 +1257,13 @@ impl DawApp {
         let name = track.name.clone();
         let effect_name = target
             .effect
-            .and_then(|effect| track.inserts.iter().find(|slot| slot.id == effect))
+            .and_then(|effect| track.effect(effect))
             .map(|slot| slot.name.clone());
+        // An effect inside a container lane links back to its container.
+        let container = target
+            .effect
+            .and_then(|effect| crate::containers::parent(track, effect))
+            .and_then(|(id, lane)| Some((id, lane, track.effect(id)?.name.clone())));
         let title = effect_name
             .as_ref()
             .map(|effect| format!("{effect} of {name}"))
@@ -1263,6 +1297,7 @@ impl DawApp {
         let mut device_requests = None;
         let mut route_sidechain = false;
         let mut sample_request = None;
+        let mut container_requests = (None, None);
         // Panel keyboard note and wheels, applied after drawing.
         let mut panel_note: Option<Option<(u8, f32)>> = None;
         let mut panel_wheels: Option<(f32, f32)> = None;
@@ -1340,6 +1375,21 @@ impl DawApp {
                     self.open_context_assistant(scope);
                     return;
                 }
+                if let Some((id, lane, name)) = &container {
+                    let back = ui
+                        .horizontal(|ui| {
+                            let back = daw_ui::small_button(ui, format!("‹ {name}"))
+                                .on_hover_text("Open the container this effect sits in");
+                            daw_ui::text::note(ui, format!("Lane {}", lane + 1));
+                            back.clicked()
+                        })
+                        .inner;
+                    if back {
+                        self.cancel_parameter_picking();
+                        self.open_effect_editor(track_id, *id);
+                        return;
+                    }
+                }
                 let mut footer =
                     (!parameter_page).then(|| daw_ui::popup_footer(ui, "device_actions"));
                 let mut body = |ui: &mut egui::Ui| match &instrument {
@@ -1404,12 +1454,7 @@ impl DawApp {
                                 self.begin_edit();
                                 let track = self.project.track_mut(track_id).unwrap();
                                 if let Some(effect) = target.effect {
-                                    track
-                                        .inserts
-                                        .iter_mut()
-                                        .find(|slot| slot.id == effect)
-                                        .unwrap()
-                                        .name = device_name.clone();
+                                    track.effect_mut(effect).unwrap().name = device_name.clone();
                                 } else {
                                     track.instrument_name = device_name.clone();
                                 }
@@ -1472,6 +1517,8 @@ impl DawApp {
                                 route: false,
                                 samples: &summaries,
                                 sample_request: None,
+                                lane_action: None,
+                                container_preset: None,
                             };
                             daw_devices_ui::show(ui, descriptor, &mut host, &mut panel);
                             sample_request = host.sample_request.take();
@@ -1484,6 +1531,7 @@ impl DawApp {
                                 host.wheels.unwrap_or((panel.pitch_wheel, panel.mod_wheel)),
                             );
                             route_sidechain = host.route;
+                            container_requests = (host.lane_action.take(), host.container_preset.take());
                             device_requests =
                                 Some((host.updates, host.batch, host.navigation, host.saved));
                             self.instrument_ui.device_panel = panel;
@@ -1695,6 +1743,16 @@ impl DawApp {
         if let Some((updates, batch, navigation, saved)) = device_requests {
             self.apply_device_panel(target, updates, batch, navigation, saved);
         }
+        if let (Some(container), (action, preset)) = (target.effect, container_requests) {
+            if let Some(action) = action {
+                self.apply_lane_action(target.track, container, action);
+            }
+            if let Some(preset) = preset
+                && let Err(error) = self.load_container_preset(target.track, container, &preset)
+            {
+                self.message(Err(error), "");
+            }
+        }
         if let Some((slot, request)) = sample_request {
             self.apply_sample_request(target.track, slot, request);
         }
@@ -1759,6 +1817,8 @@ impl DawApp {
             route: false,
             samples: &summaries,
             sample_request: None,
+            lane_action: None,
+            container_preset: None,
         };
         daw_devices_ui::show_sample_player(ui, descriptor, group, &mut host, &mut panel);
         let request = host.sample_request.take();
@@ -1951,7 +2011,7 @@ impl DawApp {
             .find(|parameter| parameter.id == id && !parameter.read_only)?;
         let source = self.project.track(target.track)?;
         let name = if let Some(effect) = target.effect {
-            let effect = source.inserts.iter().find(|slot| slot.id == effect)?;
+            let effect = source.effect(effect)?;
             format!("{} · {} · {}", source.name, effect.name, parameter.name)
         } else {
             format!("{} · {}", source.name, parameter.name)

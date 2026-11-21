@@ -18,6 +18,7 @@ mod automation_state;
 mod builtin_devices;
 mod clip_actions;
 mod clip_navigation;
+mod containers;
 mod cpu_monitor;
 mod crossfade_ui;
 mod document_ui;

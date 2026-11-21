@@ -49,6 +49,8 @@ const PREVIEWS: &[(&str, &[u8])] = &[
         include_bytes!("../assets/r1-spacer-preview.png"),
     ),
     ("r1-strip", include_bytes!("../assets/r1-strip-preview.png")),
+    ("r1-split", include_bytes!("../assets/r1-split-preview.png")),
+    ("r1-chain", include_bytes!("../assets/r1-chain-preview.png")),
 ];
 
 /// Built-in devices as Library entries, in registry order.
@@ -101,9 +103,7 @@ pub(crate) fn is_builtin(plugin: &PluginInfo) -> bool {
 /// The insert a Library entry creates.
 pub(crate) fn effect(plugin: &PluginInfo) -> Effect {
     match descriptor_for(plugin) {
-        Some(descriptor) => Effect::Builtin {
-            device: descriptor.id.into(),
-        },
+        Some(descriptor) => crate::containers::new_effect(descriptor),
         None => Effect::Vst3 {
             path: plugin.path.to_string_lossy().into_owned(),
             class_id: plugin.class_id.clone(),

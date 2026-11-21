@@ -831,9 +831,9 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "assign_plugin",
-            "Assign a scanned catalog instrument, or add an insert when insert is true, to the current song. The host resolves plugin_id; paths and opaque plugin states are not accepted. An optional format must match the catalog entry's format.",
+            "Assign a scanned catalog instrument, or add an insert when insert is true, to the current song. With container_id and lane, the insert goes to the end of that lane of an R1 Split or R1 Chain insert (lanes count from 0) instead of the track's chain. The host resolves plugin_id; paths and opaque plugin states are not accepted. An optional format must match the catalog entry's format.",
             object(
-                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"plugin_id":string(),"format":choices(&["VST3","CLAP","LV2","AU"]),"insert":boolean()}),
+                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"plugin_id":string(),"format":choices(&["VST3","CLAP","LV2","AU"]),"insert":boolean(),"container_id":id(),"lane":{"type":"integer","minimum":0,"maximum":7}}),
                 &["session_id", "expected_revision", "track_id", "plugin_id"],
             ),
         ),
@@ -890,6 +890,20 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
             ),
         ),
         (
+            "edit_effect_lanes",
+            "Change the lanes of an R1 Split or R1 Chain insert (container_id), as one Undo step. add_lane appends an empty lane (at most 8; Split's All rule feeds every lane). remove_lane removes lane and its effects; later lanes keep their gain, mute and solo. move_effect moves effect_id, from the track's chain or any lane, to position index (default: the end) of lane. Lanes count from 0. Add effects to a lane with assign_plugin; bypass, remove and reorder them inside their lane with the insert edits of apply_edits. Containers nest up to 4 deep.",
+            object(
+                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"container_id":id(),"action":choices(&["add_lane","remove_lane","move_effect"]),"lane":{"type":"integer","minimum":0,"maximum":7},"effect_id":id(),"index":{"type":"integer","minimum":0}}),
+                &[
+                    "session_id",
+                    "expected_revision",
+                    "track_id",
+                    "container_id",
+                    "action",
+                ],
+            ),
+        ),
+        (
             "list_device_presets",
             "List the factory and user presets of the Rill built-in device on a track's instrument or an insert: name, category, tags, description and source. query filters by any of those.",
             object(
@@ -899,7 +913,7 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "load_device_preset",
-            "Load a preset by name (from list_device_presets) into the Rill built-in device on a track's instrument or an insert, as one Undo step. Reports preset keys the device skipped.",
+            "Load a preset by name (from list_device_presets) into the Rill built-in device on a track's instrument or an insert, as one Undo step. An R1 Split or R1 Chain preset with lanes also replaces the lanes and their effects. Reports preset keys the device skipped.",
             object(
                 json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"insert_id":id(),"name":{"type":"string","minLength":1,"maxLength":128}}),
                 &["session_id", "expected_revision", "track_id", "name"],
@@ -907,7 +921,7 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "store_device_preset",
-            "Save the current settings of the Rill built-in device on a track's instrument or an insert as a user preset under name, replacing a user preset of the same name. Factory presets are never changed and no path is accepted. The song is not changed.",
+            "Save the current settings of the Rill built-in device on a track's instrument or an insert as a user preset under name, replacing a user preset of the same name. An R1 Split or R1 Chain preset includes its lanes and their effects. Factory presets are never changed and no path is accepted. The song is not changed.",
             object(
                 json!({"track_id":integer(),"insert_id":id(),"name":{"type":"string","minLength":1,"maxLength":128}}),
                 &["track_id", "name"],

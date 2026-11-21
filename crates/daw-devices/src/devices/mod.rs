@@ -3,6 +3,7 @@
 use crate::{ParamRange, ParamSpec};
 
 pub mod compressor;
+pub mod container;
 pub mod drums;
 pub mod equalizer;
 pub mod filter;
