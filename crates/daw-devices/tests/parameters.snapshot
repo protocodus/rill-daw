@@ -108,9 +108,12 @@ r1-compressor 7 release "Release" log 5 2500
 r1-compressor 8 auto_release "Auto release" toggle
 r1-compressor 9 lookahead "Lookahead" linear 0 10
 r1-compressor 10 ceiling "Ceiling" linear -12 0
+r1-compressor 11 range "Range" linear 0 80
+r1-compressor 12 hold "Hold" linear 0 500
 r1-compressor 20 sidechain "Sidechain" choice Internal|External
 r1-compressor 21 sidechain.high_pass "Sidechain high-pass" log 20 500
 r1-compressor 22 stereo_link "Stereo link" linear 0 100
+r1-compressor 23 sidechain.listen "Sidechain listen" toggle
 r1-compressor 25 makeup "Makeup" linear -12 24
 r1-compressor 26 auto_makeup "Auto makeup" toggle
 r1-compressor 30 mix "Mix" linear 0 100
@@ -543,6 +546,8 @@ r1-drums 499 pad15.bits "Bit depth" choice Clean|12-bit|8-bit
 r1-drums 500 pad15.velocity_pitch "Soft hit pitch" linear -12 12
 r1-drums 531 pad16.bits "Bit depth" choice Clean|12-bit|8-bit
 r1-drums 532 pad16.velocity_pitch "Soft hit pitch" linear -12 12
+r1-compressor 13 upward.threshold "Upward threshold" linear -60 0
+r1-compressor 14 upward.ratio "Upward ratio" log 1 20
 r1-strip 1 trim "Trim" linear -24 24
 r1-strip 2 polarity "Invert polarity" toggle
 r1-strip 10 hp.on "On" toggle
@@ -573,6 +578,11 @@ r1-strip 45 comp.makeup "Makeup" linear -12 24
 r1-strip 50 width "Width" linear 0 200
 r1-strip 52 pan "Pan" linear -100 100
 r1-strip 51 output "Output" linear -24 24
+r1-strip 3 mode "Mode" choice Digital|Analog
+r1-strip 25 gate.range "Range" linear 0 80
+r1-strip 26 gate.hold "Hold" linear 0 500
+r1-strip 46 comp.upward.threshold "Upward threshold" linear -60 0
+r1-strip 47 comp.upward.ratio "Upward ratio" log 1 20
 r1-chain 40 mix "Mix" linear 0 100
 r1-chain 41 output "Output" linear -24 24
 r1-split 1 rule "Split" choice All|Bands|Mid/Side|Left/Right

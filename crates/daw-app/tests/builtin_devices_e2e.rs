@@ -796,6 +796,35 @@ fn r1_compressor_reduces_limits_and_ducks_under_a_routed_sidechain() {
         crushed < squeezed - 6.0,
         "default {squeezed} dB, -40 dB at 10:1 {crushed} dB"
     );
+    // Range caps the reduction however hard the curve pushes.
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"range","value":"3 dB"}]),
+    );
+    let capped = low(&mut app);
+    assert!(
+        (dry - 3.5..=dry - 2.0).contains(&capped),
+        "dry {dry} dB, capped at 3 dB {capped} dB"
+    );
+    app.command(json!({"command":"key","key":"Z","cmd":true}));
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], assigned["project"]);
+
+    // Upward compression lifts what is below its threshold: all of the tone
+    // here, by half its distance to 0 dB.
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"upward.threshold","value":"0 dB"},{"parameter":"upward.ratio","value":2}]),
+    );
+    let raised = low(&mut app);
+    assert!(
+        raised > squeezed + 3.0,
+        "default {squeezed} dB, upward {raised} dB"
+    );
     let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(undone["project"], assigned["project"]);
 
@@ -867,21 +896,44 @@ fn r1_compressor_reduces_limits_and_ducks_under_a_routed_sidechain() {
     );
     assert!((low(&mut app) - ducked).abs() < 0.2);
 
+    // Listening, the track plays what the detector hears: the trigger's
+    // noise instead of the tone.
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"sidechain.listen","value":true}]),
+    );
+    let listened = low(&mut app);
+    assert!(
+        listened < dry - 12.0,
+        "dry {dry} dB, listened {listened} dB"
+    );
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], reopened["project"]);
+
     // The panel names the source under Sidechain; clicking it opens Routing
     // on this device, where the mouse removes and adds sources.
     open_effect_editor(&mut app, "Pad tone", "Threshold");
     let state = app.inspect();
     assert!(visible(&state, "External"), "{}", state["visible_labels"]);
+    assert!(visible(&state, "UPWARD"), "{}", state["visible_labels"]);
     assert_signal_row(
         &state,
         &[
             "Source",
             "High-pass",
-            "Lookahead",
+            "Link",
+            "Listen",
+            // Threshold and Ratio here are the Upward card's, which share
+            // their captions with the Dynamics card's on its left.
+            "Knee",
+            "Range",
             "Threshold",
             "Ratio",
             "Attack",
             "Release",
+            "Lookahead",
         ],
     );
     assert_signal_row(&state, &["Makeup", "Auto makeup", "Mix", "Output"]);
@@ -1478,7 +1530,7 @@ fn builtin_devices_show_metadata_and_preview_in_the_device_browser() {
 
 #[test]
 fn r1_strip_filters_dynamics_and_width_run_in_order_and_switch_from_its_panel() {
-    use daw_devices::devices::strip::{COMP_ON, POLARITY};
+    use daw_devices::devices::strip::{COMP_ON, MODE, POLARITY};
     let mut app = Harness::new();
     let track = noise_project(&mut app, "strip.rill");
     let dry = analysis(&mut app);
@@ -1576,6 +1628,22 @@ fn r1_strip_filters_dynamics_and_width_run_in_order_and_switch_from_its_panel() 
         inverted["project"]
     );
     assert_eq!(inverted["history"]["undo"][0], "Effect parameter");
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], state["project"]);
+
+    // Analog, in the toolbar, colours the whole channel without changing
+    // its level: the transformer and console curves move tenths of a dB.
+    let digital = analysis(&mut app);
+    let analog = app.click("Analog");
+    assert_eq!(stored(&analog, MODE), Some(1.0), "{}", analog["project"]);
+    assert_eq!(analog["history"]["undo"][0], "Effect parameter");
+    let coloured = analysis(&mut app);
+    for name in ["below_250_hz", "above_4000_hz"] {
+        assert!(
+            (band(&coloured, name) - band(&digital, name)).abs() < 1.0,
+            "{name}: digital {digital}, analog {coloured}"
+        );
+    }
     let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(undone["project"], state["project"]);
     check_compact_output(&mut app);

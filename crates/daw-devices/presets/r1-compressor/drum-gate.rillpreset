@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "device": "r1-compressor",
+  "name": "Drum Gate",
+  "author": "Rill",
+  "category": "Gate",
+  "tags": ["gate", "drums"],
+  "description": "Tightens a tom or snare mic: holds through the hit, then dips the spill by 24 dB instead of muting it.",
+  "parameters": {
+    "mode": "Expander",
+    "threshold": -30.0,
+    "ratio": 20.0,
+    "knee": 3.0,
+    "attack": 0.2,
+    "release": 90.0,
+    "range": 24.0,
+    "hold": 40.0,
+    "lookahead": 1.0,
+    "sidechain.high_pass": 120.0
+  }
+}

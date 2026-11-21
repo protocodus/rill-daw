@@ -1003,9 +1003,9 @@ pub(crate) fn strip_stage(id: u32) -> Option<u32> {
     Some(match id {
         HP_FREQUENCY | HP_SLOPE => HP_ON,
         LP_FREQUENCY | LP_SLOPE => LP_ON,
-        GATE_THRESHOLD..=GATE_RELEASE => GATE_ON,
+        GATE_THRESHOLD..=GATE_HOLD => GATE_ON,
         LOW_FREQUENCY..=HIGH_GAIN => EQ_ON,
-        COMP_THRESHOLD..=COMP_MAKEUP => COMP_ON,
+        COMP_THRESHOLD..=COMP_UPWARD_RATIO => COMP_ON,
         _ => return None,
     })
 }
@@ -1046,11 +1046,13 @@ fn strip_layout(mut layout: Layout) -> Layout {
         stage(
             "Gate",
             0,
-            4,
+            6,
             &[&[
                 C(GATE_THRESHOLD, 1),
                 C(GATE_RATIO, 1),
+                C(GATE_RANGE, 1),
                 C(GATE_ATTACK, 1),
+                C(GATE_HOLD, 1),
                 C(GATE_RELEASE, 1),
             ]],
             GATE_ON,
@@ -1073,10 +1075,12 @@ fn strip_layout(mut layout: Layout) -> Layout {
         stage(
             "Compressor",
             1,
-            5,
+            7,
             &[&[
                 C(COMP_THRESHOLD, 1),
                 C(COMP_RATIO, 1),
+                C(COMP_UPWARD_THRESHOLD, 1),
+                C(COMP_UPWARD_RATIO, 1),
                 C(COMP_ATTACK, 1),
                 C(COMP_RELEASE, 1),
                 C(COMP_MAKEUP, 1),
@@ -1091,13 +1095,15 @@ fn strip_layout(mut layout: Layout) -> Layout {
         (MID_GAIN, "Gain"),
         (MID_Q, "Q"),
         (HIGH_GAIN, "Gain"),
+        (COMP_UPWARD_THRESHOLD, "Up thresh"),
+        (COMP_UPWARD_RATIO, "Up ratio"),
     ];
     layout.visible = |id, values| strip_stage(id).is_none_or(|on| values(on) >= 0.5);
     // A stage switched off keeps its controls in place, dimmed.
     layout.keep_inactive = true;
     layout.picture = Some(Picture::Response(ResponseView {
         curve: |values, rate, frequencies, out| {
-            equalizer::response_db(&strip_equalizer(values), rate, frequencies, out);
+            strip::response_db(|id| values(id) as f32, rate, frequencies, out);
         },
         node_curve: None,
         nodes: &STRIP_NODES,
@@ -1184,9 +1190,9 @@ fn saturator_layout(mut layout: Layout) -> Layout {
 fn compressor_layout(mut layout: Layout) -> Layout {
     use Slot::Control as C;
     use compressor::*;
-    // One row of four cards on a grid of eleven cells, read as the signal
-    // goes: the style; what the detector hears; threshold, ratio and knee
-    // over the timing; makeup and output last.
+    // One row of five cards on thirteen cells, read as the signal goes:
+    // the style; what the detector hears; the curve over the timing, with
+    // Range above Hold, the gate's pair; the upward curve; makeup and output last.
     layout.width = daw_ui::tokens::POPUP_WIDTH_LG;
     layout.cells = true;
     layout.sections = vec![
@@ -1196,23 +1202,36 @@ fn compressor_layout(mut layout: Layout) -> Layout {
             0,
             2,
             &[
-                &[C(SIDECHAIN, 2)],
+                &[C(SIDECHAIN, 1), C(LISTEN, 1)],
                 &[C(SIDECHAIN_HIGH_PASS, 1), C(STEREO_LINK, 1)],
             ],
         ),
         cells(
             "Dynamics",
             0,
-            4,
+            5,
             &[
-                &[C(THRESHOLD, 1), C(RATIO, 1), C(KNEE, 1), C(CEILING, 1)],
+                &[
+                    C(THRESHOLD, 1),
+                    C(RATIO, 1),
+                    C(KNEE, 1),
+                    C(RANGE, 1),
+                    C(CEILING, 1),
+                ],
                 &[
                     C(ATTACK, 1),
                     C(RELEASE, 1),
                     C(AUTO_RELEASE, 1),
+                    C(HOLD, 1),
                     C(LOOKAHEAD, 1),
                 ],
             ],
+        ),
+        cells(
+            "Upward",
+            0,
+            1,
+            &[&[C(UPWARD_THRESHOLD, 1)], &[C(UPWARD_RATIO, 1)]],
         ),
         cells(
             "Output",
@@ -1230,6 +1249,9 @@ fn compressor_layout(mut layout: Layout) -> Layout {
     layout.captions = &[
         (SIDECHAIN_HIGH_PASS, "High-pass"),
         (STEREO_LINK, "Link"),
+        (LISTEN, "Listen"),
+        (UPWARD_THRESHOLD, "Threshold"),
+        (UPWARD_RATIO, "Ratio"),
         (AUTO_RELEASE, "Auto"),
         (AUTO_MAKEUP, "Auto"),
     ];

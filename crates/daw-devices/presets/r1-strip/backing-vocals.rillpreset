@@ -1,0 +1,31 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Backing Vocals",
+  "author": "Rill",
+  "category": "Vocal",
+  "tags": [
+    "vocal",
+    "backing"
+  ],
+  "description": "Thinner and brighter than the lead, held steady so the stack sits behind it.",
+  "parameters": {
+    "mode": "Analog",
+    "hp.on": true,
+    "hp.frequency": 150.0,
+    "hp.slope": "24 dB",
+    "low.frequency": 250.0,
+    "low.gain": -2.0,
+    "mid.frequency": 2500.0,
+    "mid.gain": -1.5,
+    "mid.q": 1.0,
+    "high.frequency": 9000.0,
+    "high.gain": 2.5,
+    "comp.on": true,
+    "comp.threshold": -24.0,
+    "comp.ratio": 4.0,
+    "comp.attack": 10.0,
+    "comp.release": 120.0,
+    "comp.makeup": 4.0
+  }
+}

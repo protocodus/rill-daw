@@ -1,0 +1,38 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Toms",
+  "author": "Rill",
+  "category": "Drums",
+  "tags": [
+    "drums",
+    "toms",
+    "gate"
+  ],
+  "description": "Gated between hits without cutting the ring, with body and attack.",
+  "parameters": {
+    "mode": "Analog",
+    "hp.on": true,
+    "hp.frequency": 60.0,
+    "gate.on": true,
+    "gate.threshold": -32.0,
+    "gate.ratio": 10.0,
+    "gate.range": 25.0,
+    "gate.attack": 0.5,
+    "gate.hold": 80.0,
+    "gate.release": 220.0,
+    "low.frequency": 100.0,
+    "low.gain": 3.0,
+    "mid.frequency": 500.0,
+    "mid.gain": -4.0,
+    "mid.q": 1.4,
+    "high.frequency": 5000.0,
+    "high.gain": 2.0,
+    "comp.on": true,
+    "comp.threshold": -18.0,
+    "comp.ratio": 3.0,
+    "comp.attack": 20.0,
+    "comp.release": 120.0,
+    "comp.makeup": 2.0
+  }
+}

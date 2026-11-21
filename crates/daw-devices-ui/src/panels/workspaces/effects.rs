@@ -46,54 +46,82 @@ fn saturation(mut layout: Layout) -> Workspace {
 }
 
 fn dynamics(mut layout: Layout) -> Workspace {
-    use Slot::Control as C;
+    use Slot::{Control as C, Swap};
     use compressor::*;
     layout.knob = daw_ui::KnobSize::Standard;
     layout.sections = vec![
         cells(
             "Sidechain",
             0,
-            5,
+            4,
             &[&[
-                C(SIDECHAIN, 2),
+                C(SIDECHAIN, 1),
                 C(SIDECHAIN_HIGH_PASS, 1),
                 C(STEREO_LINK, 1),
-                C(LOOKAHEAD, 1),
+                C(LISTEN, 1),
             ]],
         ),
         cells(
             "Dynamics",
             0,
             4,
-            &[&[C(THRESHOLD, 1), C(RATIO, 1), C(KNEE, 1), C(CEILING, 1)]],
+            &[&[
+                // Never both in use: the level the curve's handle sets.
+                Swap(&[THRESHOLD, CEILING], 1),
+                C(RATIO, 1),
+                C(KNEE, 1),
+                C(RANGE, 1),
+            ]],
+        ),
+        // Lifts what is quiet toward the threshold, the mirror of the
+        // downward curve: with both, single-band OTT.
+        cells(
+            "Upward",
+            0,
+            2,
+            &[&[C(UPWARD_THRESHOLD, 1), C(UPWARD_RATIO, 1)]],
         ),
         cells(
             "Timing",
             0,
-            3,
-            &[&[C(ATTACK, 1), C(RELEASE, 1), C(AUTO_RELEASE, 1)]],
+            4,
+            &[&[
+                C(ATTACK, 1),
+                C(RELEASE, 1),
+                // Auto release never applies in Expander mode, Hold only there.
+                Swap(&[AUTO_RELEASE, HOLD], 1),
+                C(LOOKAHEAD, 1),
+            ]],
         ),
     ];
-    layout.toggle_columns = &[];
+    layout.toggle_columns = &[(SIDECHAIN, 1)];
     layout.captions = &[
+        (UPWARD_THRESHOLD, "Threshold"),
+        (UPWARD_RATIO, "Ratio"),
         (SIDECHAIN, "Source"),
         (SIDECHAIN_HIGH_PASS, "High-pass"),
-        (STEREO_LINK, "Stereo link"),
+        (STEREO_LINK, "Link"),
+        (LISTEN, "Listen"),
         (AUTO_RELEASE, "Auto"),
     ];
     layout.hint = |id, values| {
         let settings = compressor_settings(values);
         if !applies(id, &settings) {
             return Some(match id {
-                CHARACTER | AUTO_MAKEUP => "Available in Compressor mode.",
-                THRESHOLD | RATIO | ATTACK => {
+                CHARACTER | AUTO_MAKEUP | UPWARD_THRESHOLD | UPWARD_RATIO => {
+                    "Available in Compressor mode."
+                }
+                THRESHOLD | RATIO | ATTACK | RANGE => {
                     "Limiter uses its ceiling and automatic attack instead."
                 }
+                HOLD => "Available in Expander mode.",
                 CEILING => "Available in Limiter mode.",
                 RELEASE => "Auto release sets the release time. Turn it off to set a manual time.",
                 AUTO_RELEASE => "Expander uses the manual Release time.",
                 LOOKAHEAD => "Lookahead is available with Digital character, Limiter or Expander.",
-                SIDECHAIN | SIDECHAIN_HIGH_PASS => "Limiter detects the main input directly.",
+                SIDECHAIN | SIDECHAIN_HIGH_PASS | LISTEN => {
+                    "Limiter detects the main input directly."
+                }
                 _ => "Not used in the current mode.",
             });
         }
@@ -105,6 +133,12 @@ fn dynamics(mut layout: Layout) -> Workspace {
                 Some("Link the left and right detectors to keep the stereo image stable.")
             }
             LOOKAHEAD => Some("Listen ahead to catch transients; adds latency."),
+            LISTEN => Some("Hear what the detector hears, to tune the high-pass."),
+            RANGE => Some("The most the level is turned down: how deep a gate closes."),
+            UPWARD_RATIO => {
+                Some("Lifts what is below the upward threshold; 1:1 is off. At most +24 dB.")
+            }
+            HOLD => Some("Keeps the gate open this long after the signal falls."),
             AUTO_MAKEUP => Some("Compensate for compression; the readout shows the applied gain."),
             _ => None,
         }
@@ -125,16 +159,22 @@ fn channel(mut layout: Layout) -> Workspace {
     layout.picture_place = PicturePlace::Above;
     layout.hint = |id, values| match id {
         POLARITY => Some("Flip both channels, to fix a microphone that cancels another."),
+        MODE => Some(
+            "Analog adds console curves, soft headroom on loud peaks and a transformer's gentle low lift and soft top.",
+        ),
         WIDTH => Some("0 % is mono, 100 % leaves the image unchanged, 200 % doubles the sides."),
         _ if crate::panels::strip_stage(id).is_some_and(|on| values(on) < 0.5) => {
             Some("Switch this stage on with the lamp in its title.")
+        }
+        COMP_UPWARD_RATIO => {
+            Some("Lifts material below the upward threshold; with the ratio above, one-band OTT.")
         }
         _ => None,
     };
     Workspace {
         layout,
         output: vec![WIDTH, PAN, OUTPUT],
-        toolbar: vec![],
+        toolbar: vec![MODE],
         body_height: 0.0,
     }
 }

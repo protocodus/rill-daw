@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Synth Pad",
+  "author": "Rill",
+  "category": "Pad",
+  "tags": [
+    "synth",
+    "pad",
+    "wide"
+  ],
+  "description": "Out of the way of bass and vocal, and wider.",
+  "parameters": {
+    "hp.on": true,
+    "hp.frequency": 150.0,
+    "hp.slope": "24 dB",
+    "mid.frequency": 2500.0,
+    "mid.gain": -2.0,
+    "mid.q": 0.8,
+    "width": 140.0
+  }
+}

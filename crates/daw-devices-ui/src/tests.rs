@@ -829,10 +829,17 @@ fn compressor_controls_keep_their_places_in_every_mode() {
     assert!(panel.state.tab_rects.is_empty());
     assert!(panel.cell(SIDECHAIN).right() < panel.cell(THRESHOLD).left());
     assert!(panel.cell(THRESHOLD).right() < panel.cell(ATTACK).left());
+    let places = |rects: &[(u32, egui::Rect)]| rects.iter().map(|(_, r)| *r).collect::<Vec<_>>();
     for mode in [1.0, 2.0, 0.0] {
         panel.set(MODE, mode);
         assert_eq!(panel.frame(vec![]), used, "mode {mode}");
-        assert_eq!(panel.state.control_rects, before, "mode {mode}");
+        // A shared cell may show another control, never move one.
+        assert_eq!(
+            places(&panel.state.control_rects),
+            places(&before),
+            "mode {mode}"
+        );
+        let before = &panel.state.control_rects;
         let settings = panels::compressor_settings(&|id| panel.host.value(id));
         let mut off: Vec<u32> = before
             .iter()
@@ -848,13 +855,32 @@ fn compressor_controls_keep_their_places_in_every_mode() {
 fn compressor_disabled_controls_do_not_move() {
     use compressor::*;
     let mut panel = Panel::new(&DESCRIPTOR);
-    let ceiling = panel.cell(CEILING).center();
-    let before = panel.plain(CEILING);
-    panel.drag(ceiling, ceiling - vec2(0.0, 60.0));
-    assert_eq!(panel.plain(CEILING), before, "no ceiling on a compressor");
+    let range = panel.cell(RANGE).center();
+    let level = panel.cell(THRESHOLD).center();
+    let (threshold, ceiling) = (panel.plain(THRESHOLD), panel.plain(CEILING));
     panel.set(MODE, 1.0);
-    panel.drag(ceiling, ceiling + vec2(0.0, 60.0));
-    assert!(panel.plain(CEILING) < before, "a limiter's ceiling drags");
+    panel.frame(vec![]);
+    let before = panel.plain(RANGE);
+    panel.drag(range, range + vec2(0.0, 60.0));
+    assert_eq!(panel.plain(RANGE), before, "no range on a limiter");
+    // Threshold's cell is the ceiling in front of a limiter.
+    panel.drag(level, level + vec2(0.0, 60.0));
+    assert!(panel.plain(CEILING) < ceiling, "a limiter's ceiling drags");
+    assert_eq!(panel.plain(THRESHOLD), threshold);
+}
+
+#[test]
+fn compressor_hold_takes_auto_release_cell_in_an_expander() {
+    use compressor::*;
+    let mut panel = Panel::new(&DESCRIPTOR);
+    panel.frame(vec![]);
+    let auto = panel.cell(AUTO_RELEASE);
+    panel.set(MODE, 2.0);
+    panel.frame(vec![]);
+    assert_eq!(panel.cell(HOLD), auto);
+    let center = auto.center();
+    panel.drag(center, center - vec2(0.0, 60.0));
+    assert!(panel.plain(HOLD) > 0.0, "the gate's hold drags");
 }
 
 #[test]

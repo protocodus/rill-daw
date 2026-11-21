@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Overheads",
+  "author": "Rill",
+  "category": "Drums",
+  "tags": [
+    "drums",
+    "overheads",
+    "cymbals"
+  ],
+  "description": "The kit's picture: lows to the close mics, air on the cymbals, gently held.",
+  "parameters": {
+    "mode": "Analog",
+    "hp.on": true,
+    "hp.frequency": 150.0,
+    "hp.slope": "24 dB",
+    "mid.frequency": 800.0,
+    "mid.gain": -1.5,
+    "mid.q": 0.9,
+    "high.frequency": 10000.0,
+    "high.gain": 2.0,
+    "comp.on": true,
+    "comp.threshold": -18.0,
+    "comp.ratio": 2.0,
+    "comp.attack": 30.0,
+    "comp.release": 150.0,
+    "comp.makeup": 1.5
+  }
+}

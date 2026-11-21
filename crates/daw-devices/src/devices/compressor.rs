@@ -1,5 +1,6 @@
-//! R1 Compressor: compressor, brickwall limiter and downward expander with
-//! four detector characters, lookahead and an external sidechain. See
+//! R1 Compressor: compressor, brickwall limiter and downward expander (or
+//! gate) with four detector characters, lookahead, a reduction range, gate
+//! hold and an external sidechain that can be auditioned. See
 //! `docs/R1_DEVICES.md#r1-compressor`.
 use super::param;
 use crate::dsp::{
@@ -23,9 +24,14 @@ pub const RELEASE: u32 = 7;
 pub const AUTO_RELEASE: u32 = 8;
 pub const LOOKAHEAD: u32 = 9;
 pub const CEILING: u32 = 10;
+pub const RANGE: u32 = 11;
+pub const HOLD: u32 = 12;
+pub const UPWARD_THRESHOLD: u32 = 13;
+pub const UPWARD_RATIO: u32 = 14;
 pub const SIDECHAIN: u32 = 20;
 pub const SIDECHAIN_HIGH_PASS: u32 = 21;
 pub const STEREO_LINK: u32 = 22;
+pub const LISTEN: u32 = 23;
 pub const MAKEUP: u32 = 25;
 pub const AUTO_MAKEUP: u32 = 26;
 pub const MIX: u32 = 30;
@@ -99,7 +105,7 @@ const fn toggle(id: u32, key: &'static str, name: &'static str, group: &'static 
     param(id, key, name, group, "", ParamRange::Toggle, 0.0)
 }
 
-pub static PARAMETERS: [ParamSpec; 17] = [
+pub static PARAMETERS: [ParamSpec; 22] = [
     choice(MODE, "mode", "Mode", "Mode", MODES),
     choice(CHARACTER, "character", "Character", "Mode", CHARACTERS),
     linear(
@@ -150,6 +156,26 @@ pub static PARAMETERS: [ParamSpec; 17] = [
         (-12.0, 0.0),
         -0.3,
     ),
+    linear(RANGE, "range", "Range", "Dynamics", "dB", (0.0, 80.0), 80.0),
+    linear(HOLD, "hold", "Hold", "Dynamics", "ms", (0.0, 500.0), 0.0),
+    linear(
+        UPWARD_THRESHOLD,
+        "upward.threshold",
+        "Upward threshold",
+        "Dynamics",
+        "dB",
+        (-60.0, 0.0),
+        -40.0,
+    ),
+    log(
+        UPWARD_RATIO,
+        "upward.ratio",
+        "Upward ratio",
+        "Dynamics",
+        ":1",
+        (1.0, 20.0),
+        1.0,
+    ),
     choice(SIDECHAIN, "sidechain", "Sidechain", "Sidechain", SIDECHAINS),
     log(
         SIDECHAIN_HIGH_PASS,
@@ -169,6 +195,7 @@ pub static PARAMETERS: [ParamSpec; 17] = [
         (0.0, 100.0),
         100.0,
     ),
+    toggle(LISTEN, "sidechain.listen", "Sidechain listen", "Sidechain"),
     linear(
         MAKEUP,
         "makeup",
@@ -213,7 +240,9 @@ pub static DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
         include_str!("../../presets/r1-compressor/brickwall-limiter.rillpreset"),
         include_str!("../../presets/r1-compressor/loud-limiter.rillpreset"),
         include_str!("../../presets/r1-compressor/noise-gate.rillpreset"),
+        include_str!("../../presets/r1-compressor/drum-gate.rillpreset"),
         include_str!("../../presets/r1-compressor/gentle-expander.rillpreset"),
+        include_str!("../../presets/r1-compressor/single-band-ott.rillpreset"),
     ],
     legacy_labels: &[],
     fixed_on_roll: &[],
@@ -249,12 +278,19 @@ pub struct Settings {
     pub auto_release: bool,
     pub lookahead_ms: f32,
     pub ceiling_db: f32,
+    /// Largest reduction, in dB.
+    pub range_db: f32,
+    pub hold_ms: f32,
+    pub upward_threshold_db: f32,
+    /// 1 leaves quiet passages alone.
+    pub upward_ratio: f32,
     pub external: bool,
     pub high_pass_hz: f32,
     /// Off at the bottom of the range: the detector hears everything.
     pub high_pass_on: bool,
     /// 0–1.
     pub link: f32,
+    pub listen: bool,
     pub makeup_db: f32,
     pub auto_makeup: bool,
     /// 0–1.
@@ -290,10 +326,15 @@ impl Settings {
             auto_release: on(AUTO_RELEASE),
             lookahead_ms: plain(LOOKAHEAD),
             ceiling_db: plain(CEILING),
+            range_db: plain(RANGE),
+            hold_ms: plain(HOLD),
+            upward_threshold_db: plain(UPWARD_THRESHOLD),
+            upward_ratio: plain(UPWARD_RATIO),
             external: on(SIDECHAIN),
             high_pass_hz: plain(SIDECHAIN_HIGH_PASS),
             high_pass_on: value(SIDECHAIN_HIGH_PASS) > 0.0,
             link: plain(STEREO_LINK) / 100.0,
+            listen: on(LISTEN),
             makeup_db: plain(MAKEUP),
             auto_makeup: on(AUTO_MAKEUP),
             mix: plain(MIX) / 100.0,
@@ -322,6 +363,9 @@ pub struct Effective {
     pub attack_ms: f32,
     pub release_ms: f32,
     pub lookahead_ms: f32,
+    /// Largest reduction in dB; unbounded in Limiter mode, where a cap would
+    /// break the ceiling.
+    pub range_db: f32,
     /// Compressor and Expander: gain after the gain element, with Auto
     /// makeup. Limiter: the gain into it.
     pub makeup_db: f32,
@@ -358,6 +402,7 @@ pub fn effective(settings: &Settings) -> Effective {
             } else {
                 LIMITER_LOOKAHEAD_MS
             },
+            range_db: f32::INFINITY,
             makeup_db: s.makeup_db,
         },
         Mode::Expander => Effective {
@@ -371,6 +416,7 @@ pub fn effective(settings: &Settings) -> Effective {
             attack_ms: s.attack_ms,
             release_ms: s.release_ms,
             lookahead_ms: s.lookahead_ms,
+            range_db: s.range_db,
             makeup_db: s.makeup_db,
         },
         Mode::Compressor => {
@@ -404,6 +450,7 @@ pub fn effective(settings: &Settings) -> Effective {
                 } else {
                     0.0
                 },
+                range_db: s.range_db,
                 makeup_db: s.makeup_db
                     + if s.auto_makeup {
                         curve.auto_makeup_db()
@@ -449,24 +496,51 @@ pub fn applies(id: u32, settings: &Settings) -> bool {
     let compressor = s.mode == Mode::Compressor;
     let limiter = s.mode == Mode::Limiter;
     match id {
-        CHARACTER | AUTO_MAKEUP => compressor,
-        THRESHOLD | RATIO | ATTACK => !limiter,
+        CHARACTER | AUTO_MAKEUP | UPWARD_THRESHOLD | UPWARD_RATIO => compressor,
+        THRESHOLD | RATIO | ATTACK | RANGE => !limiter,
+        HOLD => s.mode == Mode::Expander,
         RELEASE => s.mode == Mode::Expander || !s.auto_release,
         AUTO_RELEASE => s.mode != Mode::Expander,
         LOOKAHEAD => !compressor || s.character == Character::Digital,
         CEILING => limiter,
-        SIDECHAIN | SIDECHAIN_HIGH_PASS => !limiter,
+        SIDECHAIN | SIDECHAIN_HIGH_PASS | LISTEN => !limiter,
         _ => true,
     }
 }
 
 /// The static curve as drawn: output level in dB for each input level,
-/// without makeup, mix or output. The same curve the detector uses.
+/// without makeup, mix or output. The same curve and range the detector
+/// uses.
 pub fn transfer_db(settings: &Settings, input_db: &[f32], out: &mut [f32]) {
-    let curve = effective(settings).curve;
+    let effective = effective(settings);
+    let upward = settings.mode == Mode::Compressor;
     for (input, out) in input_db.iter().zip(out) {
-        *out = curve.output_db(*input);
+        let boost = if upward {
+            upward_boost_db(*input, settings.upward_threshold_db, settings.upward_ratio)
+        } else {
+            0.0
+        };
+        *out = effective
+            .curve
+            .output_db(*input)
+            .max(input - effective.range_db)
+            + boost;
     }
+}
+
+/// The most upward compression lifts a quiet signal, so a noise floor
+/// stays a floor.
+pub const UPWARD_MAX_DB: f32 = 24.0;
+
+/// How far upward compression lifts a level below its threshold, in dB:
+/// the mirror of downward compression, pulling quiet passages up toward the
+/// threshold by `1 − 1/ratio` of the distance. Together with the downward
+/// curve above the main threshold, this is single-band "OTT".
+pub fn upward_boost_db(level_db: f32, threshold_db: f32, ratio: f32) -> f32 {
+    if ratio <= 1.0 {
+        return 0.0;
+    }
+    ((1.0 - 1.0 / ratio) * (threshold_db - level_db)).clamp(0.0, UPWARD_MAX_DB)
 }
 
 /// What Auto makeup adds in Compressor mode, whether or not it is on.
@@ -541,6 +615,10 @@ struct Detector {
     fast: Ballistics,
     /// Tube's second stage.
     second: Ballistics,
+    /// Expander: samples `level` stays at its peak before Release, and how
+    /// many are left.
+    hold_samples: u32,
+    held: u32,
     slow: ProgramRelease,
     hold: SlidingMax,
     box1: BoxSmoother,
@@ -552,6 +630,8 @@ impl Detector {
         self.level = other.level;
         self.fast = other.fast;
         self.second = other.second;
+        self.hold_samples = other.hold_samples;
+        self.held = other.held;
         self.slow = other.slow;
         self.hold.copy_from(&other.hold);
         self.box1.copy_from(&other.box1);
@@ -584,12 +664,23 @@ impl Detector {
         magnitude: f32,
         feedback_rise: f32,
         compress_foot: f32,
+        range: f32,
     ) -> f32 {
         // Always running, so entering Expander mode finds the level.
-        let level = self.level.process(magnitude);
+        let level = if magnitude >= self.level.value() {
+            self.held = self.hold_samples;
+            self.level.process(magnitude)
+        } else if self.held > 0 {
+            self.held -= 1;
+            self.level.value()
+        } else {
+            self.level.process(magnitude)
+        };
+        // Range caps the target, not the output, so release starts from
+        // the cap instead of first falling through what was cut off.
         match structure.path {
             Path::Expander => {
-                let target = curve.reduction_db(to_db(level));
+                let target = curve.reduction_db(to_db(level)).min(range);
                 let previous = self.fast.value();
                 let reduction = if target < previous {
                     let closed = reduction_gain(previous);
@@ -605,7 +696,7 @@ impl Detector {
                 let target = if magnitude <= compress_foot {
                     0.0
                 } else {
-                    curve.reduction_db(to_db(magnitude))
+                    curve.reduction_db(to_db(magnitude)).min(range)
                 };
                 let fast = self.fast.process(target);
                 self.slow.process(fast)
@@ -622,7 +713,7 @@ impl Detector {
                 } else {
                     let level_db = to_db(magnitude);
                     if structure.external {
-                        self.fast.process(curve.reduction_db(level_db))
+                        self.fast.process(curve.reduction_db(level_db).min(range))
                     } else {
                         let previous = self.fast.value();
                         let k = if curve.feedback_reduction_db(level_db - previous) > previous {
@@ -630,7 +721,11 @@ impl Detector {
                         } else {
                             self.fast.fall
                         };
-                        let solved = flush(curve.solve_feedback(level_db, (1.0 - k) * previous, k));
+                        let solved = flush(
+                            curve
+                                .solve_feedback(level_db, (1.0 - k) * previous, k)
+                                .min(range),
+                        );
                         self.fast.set(solved);
                         solved
                     }
@@ -722,6 +817,18 @@ pub struct Compressor {
     threshold: Smoothed,
     ratio: Smoothed,
     knee: Smoothed,
+    range: Smoothed,
+    upward_threshold: Smoothed,
+    upward_ratio: Smoothed,
+    /// Upward gain in dB per channel. A feed-forward stage of its own beside
+    /// the detectors, which only know reduction (gain ≤ 1).
+    boost: [f32; 2],
+    /// One-pole coefficients of the boost: falling with Attack as the
+    /// signal gets loud, rising with Release as it gets quiet.
+    boost_fall: f32,
+    boost_rise: f32,
+    /// 0 → 1 while Sidechain listen fades the detector signal in.
+    listen: LinearRamp,
     /// The linear ceiling for the threshold it was computed from.
     ceiling: (f32, f32),
     /// Cached `(threshold_db, knee_db, foot_linear_safe)` for fast foot bypass.
@@ -789,6 +896,13 @@ impl Compressor {
             threshold: Smoothed::new(effective.curve.threshold_db),
             ratio: Smoothed::new(settings.ratio),
             knee: Smoothed::new(effective.curve.knee_db),
+            range: Smoothed::new(settings.range_db),
+            upward_threshold: Smoothed::new(settings.upward_threshold_db),
+            upward_ratio: Smoothed::new(settings.upward_ratio),
+            boost: [0.0; 2],
+            boost_fall: 1.0,
+            boost_rise: 1.0,
+            listen: LinearRamp::new(0.0),
             ceiling: (0.0, 1.0),
             foot_cache: (f32::NAN, f32::NAN, 0.0),
             feedback_rise: 1.0,
@@ -833,7 +947,14 @@ impl Compressor {
             _ => (effective.attack_ms, effective.release_ms),
         };
         let (weight, charge, slow_release) = slow_cell(&settings, &effective);
+        let hold = if effective.path == Path::Expander {
+            (settings.hold_ms * 0.001 * rate).round() as u32
+        } else {
+            0
+        };
         for detector in &mut self.detectors {
+            detector.hold_samples = hold;
+            detector.held = detector.held.min(hold);
             detector.level.set_times(0.0, effective.release_ms, rate);
             if effective.path == Path::Expander {
                 // Closing follows the falling level; opening takes Attack.
@@ -855,6 +976,30 @@ impl Compressor {
         self.threshold.set_target(effective.curve.threshold_db);
         self.ratio.set_target(settings.ratio);
         self.knee.set_target(effective.curve.knee_db);
+        // Smoothed in its own range; the limiter's infinity is not.
+        if !limiter {
+            self.range.set_target(settings.range_db);
+        }
+        self.upward_threshold
+            .set_target(settings.upward_threshold_db);
+        // Outside Compressor mode the boost glides back to nothing.
+        self.upward_ratio
+            .set_target(if settings.mode == Mode::Compressor {
+                settings.upward_ratio
+            } else {
+                1.0
+            });
+        let coefficient = |ms: f32| 1.0 - (-1.0 / (ms.max(0.02) * 0.001 * rate)).exp();
+        self.boost_fall = coefficient(effective.attack_ms);
+        self.boost_rise = coefficient(effective.release_ms);
+        let listen = if settings.listen && !limiter {
+            1.0
+        } else {
+            0.0
+        };
+        if self.listen.target() != listen {
+            self.listen.set_target(listen, self.samples(SWITCH_SECONDS));
+        }
         self.hp_cutoff.set_target(
             settings.high_pass_hz.log2(),
             self.samples(SLOW_RAMP_SECONDS),
@@ -942,6 +1087,9 @@ impl Device for Compressor {
             &mut self.threshold,
             &mut self.ratio,
             &mut self.knee,
+            &mut self.range,
+            &mut self.upward_threshold,
+            &mut self.upward_ratio,
             &mut self.link,
             &mut self.drive,
             &mut self.makeup,
@@ -1018,19 +1166,23 @@ impl Device for Compressor {
             } else {
                 audio
             };
-            let magnitude = if limiter {
-                self.true_peak.process(audio)
-            } else if hp_mix > 0.0 {
+            // What the detector hears, and Sidechain listen plays.
+            let heard = if !limiter && hp_mix > 0.0 {
                 let high = self
                     .high_pass
                     .process_coeffs(source, SvfCoeffs::new(hp_g, std::f32::consts::SQRT_2))
                     .high;
                 [
-                    (source[0] - hp_mix * (source[0] - high[0])).abs(),
-                    (source[1] - hp_mix * (source[1] - high[1])).abs(),
+                    source[0] - hp_mix * (source[0] - high[0]),
+                    source[1] - hp_mix * (source[1] - high[1]),
                 ]
             } else {
-                [source[0].abs(), source[1].abs()]
+                source
+            };
+            let magnitude = if limiter {
+                self.true_peak.process(audio)
+            } else {
+                heard.map(f32::abs)
             };
             // The linked value is never below the channel's own, so the
             // limiter's guarantee survives a partial link.
@@ -1058,6 +1210,11 @@ impl Device for Compressor {
                 },
                 knee_db: self.knee.next_value(),
             };
+            let range = if limiter {
+                f32::INFINITY
+            } else {
+                self.range.next_value()
+            };
             if curve.threshold_db != self.foot_cache.0 || curve.knee_db != self.foot_cache.1 {
                 self.foot_cache = (
                     curve.threshold_db,
@@ -1073,6 +1230,7 @@ impl Device for Compressor {
                     linked[0],
                     self.feedback_rise,
                     compress_foot,
+                    range,
                 );
                 [r, r]
             } else {
@@ -1088,6 +1246,7 @@ impl Device for Compressor {
                         linked[0],
                         self.feedback_rise,
                         compress_foot,
+                        range,
                     ),
                     self.detectors[1].process(
                         &structure,
@@ -1095,6 +1254,7 @@ impl Device for Compressor {
                         linked[1],
                         self.feedback_rise,
                         compress_foot,
+                        range,
                     ),
                 ]
             };
@@ -1149,6 +1309,28 @@ impl Device for Compressor {
             let mix = self.mix.next_value();
             let output = self.output.next_value();
             let mut gain = [reduction_gain(reduction[0]), reduction_gain(reduction[1])];
+            let upward_ratio = self.upward_ratio.next_value();
+            let upward_threshold = self.upward_threshold.next_value();
+            if upward_ratio > 1.0 || self.boost != [0.0; 2] {
+                for channel in 0..2 {
+                    let target =
+                        upward_boost_db(to_db(linked[channel]), upward_threshold, upward_ratio);
+                    let boost = self.boost[channel];
+                    let coefficient = if target < boost {
+                        self.boost_fall
+                    } else {
+                        self.boost_rise
+                    };
+                    // Finish exactly, so an idle stage stops costing.
+                    let next = boost + coefficient * (target - boost);
+                    self.boost[channel] = if (next - target).abs() < 1e-4 {
+                        target
+                    } else {
+                        next
+                    };
+                    gain[channel] *= db_to_gain(self.boost[channel]);
+                }
+            }
             if fading {
                 gain[0] = self.frozen[0] + fade * (gain[0] - self.frozen[0]);
                 gain[1] = self.frozen[1] + fade * (gain[1] - self.frozen[1]);
@@ -1168,8 +1350,15 @@ impl Device for Compressor {
                 wet[0] = wet[0].clamp(-self.ceiling.1, self.ceiling.1);
                 wet[1] = wet[1].clamp(-self.ceiling.1, self.ceiling.1);
             }
-            let out0 = ((dry[0] + mix * (wet[0] - dry[0])) * output).clamp(-LIMIT, LIMIT);
-            let out1 = ((dry[1] + mix * (wet[1] - dry[1])) * output).clamp(-LIMIT, LIMIT);
+            let mut out0 = ((dry[0] + mix * (wet[0] - dry[0])) * output).clamp(-LIMIT, LIMIT);
+            let mut out1 = ((dry[1] + mix * (wet[1] - dry[1])) * output).clamp(-LIMIT, LIMIT);
+            // Not delayed by the lookahead: it is for tuning the detector
+            // by ear, and two more delay lines would run all the time.
+            let listen = self.listen.next();
+            if listen > 0.0 {
+                out0 += listen * (heard[0] - out0);
+                out1 += listen * (heard[1] - out1);
+            }
             let peak_in = input[0].abs().max(input[1].abs());
             let peak_out = out0.abs().max(out1.abs());
             left[index] = out0;
@@ -1202,10 +1391,14 @@ impl Device for Compressor {
         self.frozen = [1.0; 2];
         self.gain = [1.0; 2];
         self.reduction = [0.0; 2];
+        self.boost = [0.0; 2];
         for smoothed in [
             &mut self.threshold,
             &mut self.ratio,
             &mut self.knee,
+            &mut self.range,
+            &mut self.upward_threshold,
+            &mut self.upward_ratio,
             &mut self.link,
             &mut self.drive,
             &mut self.makeup,
@@ -1216,6 +1409,7 @@ impl Device for Compressor {
         }
         self.hp_cutoff.snap();
         self.hp_mix.snap();
+        self.listen.snap();
         self.hp_applied = self.hp_cutoff.value();
         self.hp_g = LinearRamp::new(prewarp(self.settings.high_pass_hz, self.sample_rate));
         let structure = self.active;
@@ -1223,6 +1417,7 @@ impl Device for Compressor {
         self.true_peak.reset();
         for detector in &mut self.detectors {
             detector.level.reset();
+            detector.held = 0;
             detector.enter(&structure, 0.0);
         }
         self.detectors_synced = true;

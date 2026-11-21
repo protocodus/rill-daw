@@ -1,0 +1,28 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Piano",
+  "author": "Rill",
+  "category": "Keys",
+  "tags": [
+    "keys",
+    "piano"
+  ],
+  "description": "Clear and even: the boom and boxiness out, the top opened up.",
+  "parameters": {
+    "mode": "Analog",
+    "hp.on": true,
+    "hp.frequency": 40.0,
+    "mid.frequency": 300.0,
+    "mid.gain": -2.0,
+    "mid.q": 1.0,
+    "high.frequency": 10000.0,
+    "high.gain": 1.5,
+    "comp.on": true,
+    "comp.threshold": -20.0,
+    "comp.ratio": 2.0,
+    "comp.attack": 25.0,
+    "comp.release": 200.0,
+    "comp.makeup": 2.0
+  }
+}

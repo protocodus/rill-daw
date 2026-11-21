@@ -597,6 +597,123 @@ fn expander_opens_in_its_attack_time() {
 }
 
 #[test]
+fn range_caps_the_reduction_in_every_character() {
+    let levels = rising_levels();
+    for range in [3.0, 12.0] {
+        // The drawn curve never cuts more than the range.
+        for mode in [COMPRESSOR, EXPANDER] {
+            let values = [mode, (THRESHOLD, -30.0), (RATIO, 20.0), (RANGE, range)];
+            for level in &levels {
+                let cut = level - curve_db(&values, *level);
+                assert!(cut <= range + 1e-4, "{level} dB cut by {cut}");
+            }
+        }
+        // Each detector settles on that curve.
+        for (character, name) in CHARACTER_NAMES {
+            let values = [
+                (CHARACTER, character),
+                (THRESHOLD, -40.0),
+                (RATIO, 20.0),
+                (KNEE, 0.0),
+                (RANGE, range),
+            ];
+            let reduction = settled_reduction(&values, &vec![0.5; 24_000]);
+            assert!(
+                (reduction - range).abs() < 0.05,
+                "{name}, range {range}: {reduction} dB"
+            );
+        }
+    }
+    // A gate whose range is its depth.
+    let values = [EXPANDER, (THRESHOLD, -20.0), (RATIO, 20.0), (RANGE, 18.0)];
+    let quiet = sine(1000.0, amplitude(-50.0), RATE, 24_000);
+    let output = run_mono(&mut *device(RATE as f32, &values), &quiet);
+    let depth = db(rms(&output[12_000..]) / rms(&quiet[12_000..]));
+    assert!((depth + 18.0).abs() < 0.1, "{depth} dB");
+    // The limiter ignores it: a cap would break the ceiling.
+    let limiter = settings(&[LIMITER, (RANGE, 0.0)]);
+    assert_eq!(effective(&limiter).range_db, f32::INFINITY);
+}
+
+#[test]
+fn hold_keeps_the_gate_open_after_the_hit() {
+    // A 50 ms burst, then silence-level hiss: how long the gate stays open.
+    let burst = (0.05 * RATE) as usize;
+    let mut input = sine(1000.0, 0.5, RATE, burst);
+    input.extend(sine(1000.0, amplitude(-60.0), RATE, (0.4 * RATE) as usize));
+    let open_for = |hold: f32| {
+        let values = [
+            EXPANDER,
+            (THRESHOLD, -30.0),
+            (RATIO, 20.0),
+            (RELEASE, 5.0),
+            (HOLD, hold),
+        ];
+        let output = run_mono(&mut *device(RATE as f32, &values), &input);
+        // The first 1 ms window after the burst that is 20 dB down.
+        let quiet = amplitude(-60.0 - 20.0) as f32;
+        output[burst..]
+            .chunks(48)
+            .position(|window| peak(window) < quiet)
+            .unwrap()
+    };
+    let (none, held) = (open_for(0.0), open_for(150.0));
+    assert!(none < 30, "closed after {none} ms without hold");
+    assert!(
+        (150..=150 + none + 2).contains(&held),
+        "closed after {held} ms with 150 ms hold"
+    );
+    // Only the expander holds.
+    assert_eq!(
+        settled_reduction(&[(HOLD, 500.0)], &vec![0.5; 24_000]),
+        settled_reduction(&[], &vec![0.5; 24_000])
+    );
+}
+
+#[test]
+fn listen_plays_what_the_detector_hears() {
+    let frames = 24_000;
+    let main = sine(1000.0, 0.1, RATE, frames);
+    let key = sine(100.0, 0.4, RATE, frames);
+    let render = |values: &[(u32, f32)]| {
+        let mut device = device(RATE as f32, values);
+        let (mut left, mut right) = (main.clone(), main.clone());
+        run_keyed(&mut *device, &mut left, &mut right, Some((&key, &key)));
+        left
+    };
+    // The external key, untouched by threshold, makeup or output.
+    let heard = render(&[EXTERNAL, (LISTEN, 1.0), (MAKEUP, 12.0), (OUTPUT, -12.0)]);
+    let tail = 12_000..;
+    let error = heard[tail.clone()]
+        .iter()
+        .zip(&key[tail.clone()])
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0, f32::max);
+    assert!(error < 1e-6, "{error}");
+    // Through the high-pass: the 100 Hz key at 400 Hz is well down.
+    let filtered = render(&[EXTERNAL, (LISTEN, 1.0), (SIDECHAIN_HIGH_PASS, 400.0)]);
+    let level = db(rms(&filtered[tail.clone()]) / rms(&key[tail.clone()]));
+    assert!(level < -20.0, "{level} dB");
+    // It fades in instead of jumping.
+    let mut device = device(RATE as f32, &[]);
+    let (mut left, mut right) = (main.clone(), main.clone());
+    run(&mut *device, &mut left[..4800], &mut right[..4800]);
+    set(&mut *device, &[EXTERNAL, (LISTEN, 1.0)]);
+    let mut keyed = (main[4800..].to_vec(), main[4800..].to_vec());
+    run_keyed(
+        &mut *device,
+        &mut keyed.0,
+        &mut keyed.1,
+        Some((&key[4800..], &key[4800..])),
+    );
+    assert!(largest_step(&keyed.0[..960]) < 0.05);
+    // The limiter has no detector to listen to.
+    assert!(!applies(LISTEN, &settings(&[LIMITER, (LISTEN, 1.0)])));
+    let limited = render(&[LIMITER, (LISTEN, 1.0)]);
+    assert!((rms(&limited[tail.clone()]) / rms(&main[tail]) - 1.0).abs() < 0.01);
+}
+
+#[test]
 fn one_huge_sample_is_forgotten() {
     let clean = sine(1000.0, 0.25, RATE, 4 * RATE as usize);
     let tail = clean.len() - RATE as usize / 2;
@@ -1133,9 +1250,9 @@ fn parameters_apply_per_mode() {
             .filter(|id| !applies(*id, &settings))
             .collect()
     };
-    assert_eq!(applying(&[COMPRESSOR]), [CEILING]);
-    assert_eq!(applying(&[(CHARACTER, OPTO)]), [LOOKAHEAD, CEILING]);
-    assert_eq!(applying(&[(AUTO_RELEASE, 1.0)]), [RELEASE, CEILING]);
+    assert_eq!(applying(&[COMPRESSOR]), [CEILING, HOLD]);
+    assert_eq!(applying(&[(CHARACTER, OPTO)]), [LOOKAHEAD, CEILING, HOLD]);
+    assert_eq!(applying(&[(AUTO_RELEASE, 1.0)]), [RELEASE, CEILING, HOLD]);
     assert_eq!(
         applying(&[LIMITER]),
         [
@@ -1143,14 +1260,26 @@ fn parameters_apply_per_mode() {
             THRESHOLD,
             RATIO,
             ATTACK,
+            RANGE,
+            HOLD,
+            UPWARD_THRESHOLD,
+            UPWARD_RATIO,
             SIDECHAIN,
             SIDECHAIN_HIGH_PASS,
+            LISTEN,
             AUTO_MAKEUP
         ]
     );
     assert_eq!(
         applying(&[EXPANDER, (AUTO_RELEASE, 1.0)]),
-        [CHARACTER, AUTO_RELEASE, CEILING, AUTO_MAKEUP]
+        [
+            CHARACTER,
+            AUTO_RELEASE,
+            CEILING,
+            UPWARD_THRESHOLD,
+            UPWARD_RATIO,
+            AUTO_MAKEUP
+        ]
     );
     // What the readouts show.
     let limiter = effective(&settings(&[LIMITER, (CHARACTER, FET), EXTERNAL]));
@@ -1220,6 +1349,8 @@ fn factory_presets_do_what_their_names_say() {
     let output = run_mono(&mut *device(RATE as f32, &gate), &hiss);
     assert!(db(rms(&output[12_000..]) / rms(&hiss[12_000..])) < -40.0);
     assert!(settings(&values("Sidechain Duck")).external);
+    let drum_gate = settings(&values("Drum Gate"));
+    assert!(drum_gate.hold_ms > 0.0 && drum_gate.range_db < 80.0);
     for text in compressor::DESCRIPTOR.factory_presets {
         let name = Preset::parse(text).unwrap().name;
         let values = values(&name);
@@ -1231,4 +1362,44 @@ fn factory_presets_do_what_their_names_say() {
             "{name}"
         );
     }
+}
+
+#[test]
+fn upward_compression_lifts_quiet_levels_to_the_drawn_curve() {
+    let values = [
+        COMPRESSOR,
+        (THRESHOLD, -12.0),
+        (UPWARD_THRESHOLD, -30.0),
+        (UPWARD_RATIO, 2.0),
+        (RELEASE, 50.0),
+    ];
+    let levels = [-70.0, -50.0, -40.0, -30.0, -20.0, -6.0];
+    let measured = settled_peaks_db(&values, &levels, 0.5, false);
+    for (level, measured) in levels.iter().zip(measured) {
+        let drawn = curve_db(&values, *level);
+        assert!(
+            (measured - drawn).abs() < 0.1,
+            "at {level}: {measured} against {drawn}"
+        );
+    }
+    // Half the distance to −30 dB, but never more than the cap.
+    assert!((curve_db(&values, -40.0) - -35.0).abs() < 1e-4);
+    assert!((curve_db(&values, -90.0) - (-90.0 + UPWARD_MAX_DB)).abs() < 1e-4);
+    // Above the upward threshold only the downward curve acts.
+    assert_eq!(curve_db(&values, -20.0), -20.0);
+}
+
+#[test]
+fn upward_compression_is_off_at_one_to_one_and_outside_compressor_mode() {
+    for values in [
+        vec![COMPRESSOR, (UPWARD_RATIO, 1.0)],
+        vec![EXPANDER, (UPWARD_RATIO, 8.0), (THRESHOLD, -80.0)],
+        vec![LIMITER, (UPWARD_RATIO, 8.0)],
+    ] {
+        assert_eq!(curve_db(&values, -50.0).round(), -50.0, "{values:?}");
+        let measured = settled_peaks_db(&values, &[-50.0], 0.3, false)[0];
+        assert!((measured + 50.0).abs() < 0.1, "{values:?}: {measured}");
+    }
+    let s = settings(&[EXPANDER]);
+    assert!(!applies(UPWARD_RATIO, &s) && !applies(UPWARD_THRESHOLD, &s));
 }

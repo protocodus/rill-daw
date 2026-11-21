@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Hi-Hat",
+  "author": "Rill",
+  "category": "Drums",
+  "tags": [
+    "drums",
+    "hi-hat",
+    "cymbals"
+  ],
+  "description": "Only the hat: bleed cut below, harshness tamed, a touch of sheen.",
+  "parameters": {
+    "hp.on": true,
+    "hp.frequency": 400.0,
+    "hp.slope": "24 dB",
+    "mid.frequency": 3000.0,
+    "mid.gain": -2.0,
+    "mid.q": 1.5,
+    "high.frequency": 12000.0,
+    "high.gain": 1.5,
+    "comp.on": true,
+    "comp.threshold": -20.0,
+    "comp.ratio": 2.0,
+    "comp.attack": 10.0,
+    "comp.release": 80.0,
+    "comp.makeup": 1.0
+  }
+}
