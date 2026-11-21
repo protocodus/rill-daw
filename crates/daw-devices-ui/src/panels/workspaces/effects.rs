@@ -53,9 +53,9 @@ fn dynamics(mut layout: Layout) -> Workspace {
         cells(
             "Sidechain",
             0,
-            5,
+            4,
             &[&[
-                C(SIDECHAIN, 2),
+                C(SIDECHAIN, 1),
                 C(SIDECHAIN_HIGH_PASS, 1),
                 C(STEREO_LINK, 1),
                 C(LISTEN, 1),
@@ -73,6 +73,14 @@ fn dynamics(mut layout: Layout) -> Workspace {
                 C(RANGE, 1),
             ]],
         ),
+        // Lifts what is quiet toward the threshold, the mirror of the
+        // downward curve: with both, single-band OTT.
+        cells(
+            "Upward",
+            0,
+            2,
+            &[&[C(UPWARD_THRESHOLD, 1), C(UPWARD_RATIO, 1)]],
+        ),
         cells(
             "Timing",
             0,
@@ -86,8 +94,10 @@ fn dynamics(mut layout: Layout) -> Workspace {
             ]],
         ),
     ];
-    layout.toggle_columns = &[];
+    layout.toggle_columns = &[(SIDECHAIN, 1)];
     layout.captions = &[
+        (UPWARD_THRESHOLD, "Threshold"),
+        (UPWARD_RATIO, "Ratio"),
         (SIDECHAIN, "Source"),
         (SIDECHAIN_HIGH_PASS, "High-pass"),
         (STEREO_LINK, "Link"),
@@ -98,7 +108,9 @@ fn dynamics(mut layout: Layout) -> Workspace {
         let settings = compressor_settings(values);
         if !applies(id, &settings) {
             return Some(match id {
-                CHARACTER | AUTO_MAKEUP => "Available in Compressor mode.",
+                CHARACTER | AUTO_MAKEUP | UPWARD_THRESHOLD | UPWARD_RATIO => {
+                    "Available in Compressor mode."
+                }
                 THRESHOLD | RATIO | ATTACK | RANGE => {
                     "Limiter uses its ceiling and automatic attack instead."
                 }
@@ -123,6 +135,9 @@ fn dynamics(mut layout: Layout) -> Workspace {
             LOOKAHEAD => Some("Listen ahead to catch transients; adds latency."),
             LISTEN => Some("Hear what the detector hears, to tune the high-pass."),
             RANGE => Some("The most the level is turned down: how deep a gate closes."),
+            UPWARD_RATIO => {
+                Some("Lifts what is below the upward threshold; 1:1 is off. At most +24 dB.")
+            }
             HOLD => Some("Keeps the gate open this long after the signal falls."),
             AUTO_MAKEUP => Some("Compensate for compression; the readout shows the applied gain."),
             _ => None,
@@ -144,16 +159,22 @@ fn channel(mut layout: Layout) -> Workspace {
     layout.picture_place = PicturePlace::Above;
     layout.hint = |id, values| match id {
         POLARITY => Some("Flip both channels, to fix a microphone that cancels another."),
+        MODE => Some(
+            "Analog adds console curves, soft headroom on loud peaks and a transformer's gentle low lift and soft top.",
+        ),
         WIDTH => Some("0 % is mono, 100 % leaves the image unchanged, 200 % doubles the sides."),
         _ if crate::panels::strip_stage(id).is_some_and(|on| values(on) < 0.5) => {
             Some("Switch this stage on with the lamp in its title.")
+        }
+        COMP_UPWARD_RATIO => {
+            Some("Lifts material below the upward threshold; with the ratio above, one-band OTT.")
         }
         _ => None,
     };
     Workspace {
         layout,
         output: vec![WIDTH, PAN, OUTPUT],
-        toolbar: vec![],
+        toolbar: vec![MODE],
         body_height: 0.0,
     }
 }

@@ -812,6 +812,22 @@ fn r1_compressor_reduces_limits_and_ducks_under_a_routed_sidechain() {
     let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(undone["project"], assigned["project"]);
 
+    // Upward compression lifts what is below its threshold: all of the tone
+    // here, by half its distance to 0 dB.
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"upward.threshold","value":"0 dB"},{"parameter":"upward.ratio","value":2}]),
+    );
+    let raised = low(&mut app);
+    assert!(
+        raised > squeezed + 3.0,
+        "default {squeezed} dB, upward {raised} dB"
+    );
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], assigned["project"]);
+
     // Limiter: nothing of the tone passes the ceiling, and the lookahead's
     // latency is compensated, so it still starts on the beat.
     set_parameters(
@@ -901,6 +917,7 @@ fn r1_compressor_reduces_limits_and_ducks_under_a_routed_sidechain() {
     open_effect_editor(&mut app, "Pad tone", "Threshold");
     let state = app.inspect();
     assert!(visible(&state, "External"), "{}", state["visible_labels"]);
+    assert!(visible(&state, "UPWARD"), "{}", state["visible_labels"]);
     assert_signal_row(
         &state,
         &[
@@ -908,10 +925,12 @@ fn r1_compressor_reduces_limits_and_ducks_under_a_routed_sidechain() {
             "High-pass",
             "Link",
             "Listen",
-            "Threshold",
-            "Ratio",
+            // Threshold and Ratio here are the Upward card's, which share
+            // their captions with the Dynamics card's on its left.
             "Knee",
             "Range",
+            "Threshold",
+            "Ratio",
             "Attack",
             "Release",
             "Lookahead",
@@ -1507,7 +1526,7 @@ fn builtin_devices_show_metadata_and_preview_in_the_device_browser() {
 
 #[test]
 fn r1_strip_filters_dynamics_and_width_run_in_order_and_switch_from_its_panel() {
-    use daw_devices::devices::strip::{COMP_ON, POLARITY};
+    use daw_devices::devices::strip::{COMP_ON, MODE, POLARITY};
     let mut app = Harness::new();
     let track = noise_project(&mut app, "strip.rill");
     let dry = analysis(&mut app);
@@ -1605,6 +1624,22 @@ fn r1_strip_filters_dynamics_and_width_run_in_order_and_switch_from_its_panel() 
         inverted["project"]
     );
     assert_eq!(inverted["history"]["undo"][0], "Effect parameter");
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], state["project"]);
+
+    // Analog, in the toolbar, colours the whole channel without changing
+    // its level: the transformer and console curves move tenths of a dB.
+    let digital = analysis(&mut app);
+    let analog = app.click("Analog");
+    assert_eq!(stored(&analog, MODE), Some(1.0), "{}", analog["project"]);
+    assert_eq!(analog["history"]["undo"][0], "Effect parameter");
+    let coloured = analysis(&mut app);
+    for name in ["below_250_hz", "above_4000_hz"] {
+        assert!(
+            (band(&coloured, name) - band(&digital, name)).abs() < 1.0,
+            "{name}: digital {digital}, analog {coloured}"
+        );
+    }
     let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(undone["project"], state["project"]);
     check_compact_output(&mut app);

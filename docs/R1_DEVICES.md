@@ -1276,6 +1276,8 @@ wide.
 | 10 | Ceiling (`ceiling`) | −12 – 0 dB (Limiter) | −0.3 dB |
 | 11 | Range (`range`) | 0 – 80 dB: the largest reduction (Compressor, Expander) | 80 dB |
 | 12 | Hold (`hold`) | 0 – 500 ms (Expander) | 0 ms |
+| 13 | Upward threshold (`upward.threshold`) | −60 – 0 dB (Compressor) | −40 dB |
+| 14 | Upward ratio (`upward.ratio`) | 1:1 – 20:1 (Compressor); 1:1 is off | 1:1 |
 | 20 | Sidechain (`sidechain`) | Internal, External | Internal |
 | 21 | Sidechain high-pass (`sidechain.high_pass`) | 20 – 500 Hz; Off at 20 Hz | 20 Hz |
 | 22 | Stereo link (`stereo_link`) | 0 – 100 % | 100 % |
@@ -1291,6 +1293,7 @@ place:
 | Character, Auto makeup | yes | no | no |
 | Threshold, Ratio, Attack, Range | yes | no (Ratio reads "∞:1") | yes |
 | Hold | no | no | yes |
+| Upward threshold, Upward ratio | yes | no | no |
 | Knee, Stereo link, Makeup, Mix, Output | yes | yes (Makeup is the gain into the limiter) | yes |
 | Release | unless Auto release | unless Auto release | yes |
 | Auto release | yes | yes | no |
@@ -1353,6 +1356,13 @@ differ in reality:
   high ratios act as a gate whose depth is Range (80 dB at most); Hold
   keeps the held peak for its time before Release begins, so a gate stays
   open through a drum's decay; Lookahead opens it ahead of the transient.
+- *Upward compression* (Compressor mode) lifts what is quieter than Upward
+  threshold by Upward ratio, up to 24 dB, so with the downward curve above
+  it one band of OTT is a single device. It is a feed-forward gain on top
+  of the reduction, read from the linked detector level and smoothed with
+  the effective attack (falling) and release (rising), so every character
+  keeps its own downward detector untouched. 1:1 is exactly off, and the
+  other modes ignore it. `transfer_db` draws both parts of the curve.
 - *Range* caps the reduction in Compressor and Expander mode: a gate that
   dips the spill instead of muting it, or a compressor that never takes more
   than a few dB. It caps the detector's target, not its output, so release
@@ -1414,7 +1424,7 @@ a sidechain arrived, the rate, and the level history.
 - `reduction_meter`, 48 points: the reduction now, its largest value as a
   line and a number; a click clears the hold.
 
-Below, one row of four cards of two lines each, on the grid of twelve
+Below, one row of five cards of two lines each, on a grid of thirteen
 cells so every control keeps its place in every mode. The cards read as the
 signal goes: the style, what the detector hears, what it does with it, and
 what follows the gain:
@@ -1424,12 +1434,13 @@ what follows the gain:
 | Mode (3) | Mode as toggle buttons | Character as toggle buttons |
 | Sidechain (2) | Internal / External, stacked, with the routed source under it; **Listen** switch | High-pass, Link |
 | Dynamics (5) | Threshold, Ratio, Knee, Range, Ceiling | Attack, Release, **Auto** release switch, Hold, Lookahead |
+| Upward (1) | Threshold | Ratio |
 | Output (2) | Makeup (**Gain** in Limiter mode), **Auto** makeup switch with what it adds while it is on | Mix, Output |
 
 The Effects workspace lays the same controls out on one line under the
-picture, in three cards: Sidechain (Source, High-pass, Link, Listen),
-Dynamics (Threshold, Ratio, Knee, Range) and Timing (Attack, Release, Auto,
-Lookahead). Two cells there are shared by controls that are never in use
+picture, in four cards: Sidechain (Source, High-pass, Link, Listen),
+Dynamics (Threshold, Ratio, Knee, Range), Upward (Threshold, Ratio) and
+Timing (Attack, Release, Auto, Lookahead). Two cells there are shared by controls that are never in use
 together: Threshold becomes **Ceiling** in Limiter mode, as the curve's
 handle does, and **Auto** release becomes **Hold** in Expander mode.
 
@@ -1443,7 +1454,7 @@ Ceiling or Lookahead would reflow the cards on every change of Mode.
 
 Factory presets: Default, Vocal Leveler, Drum Bus Glue, Bass Control, Snare
 Snap, FET Smash, Parallel Crush, Master Bus, Brickwall Limiter, Loud Limiter,
-Gentle Expander, Noise Gate, Drum Gate, Sidechain Duck.
+Gentle Expander, Noise Gate, Drum Gate, Sidechain Duck, Single-band OTT.
 
 ### R1 Equalizer
 
@@ -1516,12 +1527,12 @@ order it runs them, each with its own switch.
 
 | Stage | Parameter | Range / choices | Default |
 | --- | --- | --- | --- |
-| Input | Trim, Invert polarity | ±24 dB; toggle | 0 dB, off |
+| Input | Trim, Invert polarity, Mode | ±24 dB; toggle; Digital, Analog | 0 dB, off, Digital |
 | High-pass | On, Frequency, Slope | 20 Hz – 2 kHz; 12, 24, 48 dB/oct | off, 80 Hz, 12 dB/oct |
 | Low-pass | On, Frequency, Slope | 200 Hz – 20 kHz; same slopes | off, 18 kHz, 12 dB/oct |
-| Gate | On, Threshold, Ratio, Attack, Release | −60 – 0 dB; 1 – 20:1; 0.02 – 250 ms; 5 – 2500 ms | off, −50 dB, 10:1, 0.5 ms, 150 ms |
+| Gate | On, Threshold, Ratio, Range, Attack, Hold, Release | −60 – 0 dB; 1 – 20:1; 0 – 80 dB; 0.02 – 250 ms; 0 – 500 ms; 5 – 2500 ms | off, −50 dB, 10:1, 80 dB, 0.5 ms, 0 ms, 150 ms |
 | Equalizer | On; Low (shelf) frequency and gain; Mid (bell) frequency, gain and Q; High (shelf) frequency and gain | 20 Hz – 1 kHz; 100 Hz – 10 kHz; 1 – 20 kHz; ±24 dB; Q 0.1 – 18 | on and flat; 100 Hz, 1 kHz, 8 kHz |
-| Compressor | On, Threshold, Ratio, Attack, Release, Makeup | −60 – 0 dB; 1 – 20:1; 0.02 – 250 ms; 5 – 2500 ms; −12 – 24 dB | off, −18 dB, 4:1, 10 ms, 120 ms, 0 dB |
+| Compressor | On, Threshold, Ratio, Upward threshold, Upward ratio, Attack, Release, Makeup | −60 – 0 dB; 1 – 20:1; −60 – 0 dB; 1 – 20:1; 0.02 – 250 ms; 5 – 2500 ms; −12 – 24 dB | off, −18 dB, 4:1, −40 dB, 1:1 (off), 10 ms, 120 ms, 0 dB |
 | Output | Width, Pan, Output | 0 – 200 %; −100 – 100 %; ±24 dB | 100 %, center, 0 dB |
 
 **Order.** Trim and polarity, high-pass, low-pass, gate, equalizer,
@@ -1541,12 +1552,22 @@ mixer channel itself calls. Switching the gate or compressor crossfades
 over 5 ms; the filters and bands fade as R1 Equalizer's do. Zero latency.
 A guard clamps the output at +36 dBFS, like the inner devices'. The
 default is transparent; a test checks the strip against the four devices
-chained by hand, sample for sample.
+chained by hand, sample for sample, in both modes.
+
+**Analog mode** is what a good console adds, deterministically: no noise,
+hum, crosstalk or randomness. It sets the equalizer's R1 Equalizer to its
+own Analog mode, which gives the bands console curves (shelves with a
+slight dip on the far side, bells that narrow as their gain rises) and soft
+headroom, a bounded saturation that is inaudible at normal levels and
+strongest around +6 dBFS. It also switches in an input transformer on the
+filters' two spare bands: +0.6 dB at 40 Hz (bell, Q 0.8) and −0.6 dB from
+16 kHz (shelf). Digital leaves those bands off and the equalizer Digital,
+so it costs nothing. The drawn response includes the transformer.
 
 **Panel** (wide), in signal order: the summed response of the filters and
 bands (HP, L, M, H, LP nodes), then **Input**, **High-pass**, **Low-pass**
-and **Gate** on one row of twelve cells, **Equalizer** (seven cells) and
-**Compressor** (five) on the next, and Width, Pan and Output below every
+and **Gate** (six cells) on one row of fourteen cells, **Equalizer** (seven
+cells) and **Compressor** (seven) on the next, Mode in the toolbar, and Width, Pan and Output below every
 card. Each stage card has its switch as a lamp in its title; a stage that
 is off keeps its controls in place, dimmed.
 

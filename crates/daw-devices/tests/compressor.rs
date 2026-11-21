@@ -1262,6 +1262,8 @@ fn parameters_apply_per_mode() {
             ATTACK,
             RANGE,
             HOLD,
+            UPWARD_THRESHOLD,
+            UPWARD_RATIO,
             SIDECHAIN,
             SIDECHAIN_HIGH_PASS,
             LISTEN,
@@ -1270,7 +1272,14 @@ fn parameters_apply_per_mode() {
     );
     assert_eq!(
         applying(&[EXPANDER, (AUTO_RELEASE, 1.0)]),
-        [CHARACTER, AUTO_RELEASE, CEILING, AUTO_MAKEUP]
+        [
+            CHARACTER,
+            AUTO_RELEASE,
+            CEILING,
+            UPWARD_THRESHOLD,
+            UPWARD_RATIO,
+            AUTO_MAKEUP
+        ]
     );
     // What the readouts show.
     let limiter = effective(&settings(&[LIMITER, (CHARACTER, FET), EXTERNAL]));
@@ -1353,4 +1362,44 @@ fn factory_presets_do_what_their_names_say() {
             "{name}"
         );
     }
+}
+
+#[test]
+fn upward_compression_lifts_quiet_levels_to_the_drawn_curve() {
+    let values = [
+        COMPRESSOR,
+        (THRESHOLD, -12.0),
+        (UPWARD_THRESHOLD, -30.0),
+        (UPWARD_RATIO, 2.0),
+        (RELEASE, 50.0),
+    ];
+    let levels = [-70.0, -50.0, -40.0, -30.0, -20.0, -6.0];
+    let measured = settled_peaks_db(&values, &levels, 0.5, false);
+    for (level, measured) in levels.iter().zip(measured) {
+        let drawn = curve_db(&values, *level);
+        assert!(
+            (measured - drawn).abs() < 0.1,
+            "at {level}: {measured} against {drawn}"
+        );
+    }
+    // Half the distance to −30 dB, but never more than the cap.
+    assert!((curve_db(&values, -40.0) - -35.0).abs() < 1e-4);
+    assert!((curve_db(&values, -90.0) - (-90.0 + UPWARD_MAX_DB)).abs() < 1e-4);
+    // Above the upward threshold only the downward curve acts.
+    assert_eq!(curve_db(&values, -20.0), -20.0);
+}
+
+#[test]
+fn upward_compression_is_off_at_one_to_one_and_outside_compressor_mode() {
+    for values in [
+        vec![COMPRESSOR, (UPWARD_RATIO, 1.0)],
+        vec![EXPANDER, (UPWARD_RATIO, 8.0), (THRESHOLD, -80.0)],
+        vec![LIMITER, (UPWARD_RATIO, 8.0)],
+    ] {
+        assert_eq!(curve_db(&values, -50.0).round(), -50.0, "{values:?}");
+        let measured = settled_peaks_db(&values, &[-50.0], 0.3, false)[0];
+        assert!((measured + 50.0).abs() < 0.1, "{values:?}: {measured}");
+    }
+    let s = settings(&[EXPANDER]);
+    assert!(!applies(UPWARD_RATIO, &s) && !applies(UPWARD_THRESHOLD, &s));
 }

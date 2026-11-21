@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "device": "r1-strip",
+  "name": "Drum Bus Glue",
+  "author": "Rill",
+  "category": "Bus",
+  "tags": [
+    "drums",
+    "bus",
+    "glue"
+  ],
+  "description": "Slow attack and a little analog weight to make the kit one instrument.",
+  "parameters": {
+    "mode": "Analog",
+    "low.frequency": 60.0,
+    "low.gain": 1.0,
+    "high.frequency": 10000.0,
+    "high.gain": 1.0,
+    "comp.on": true,
+    "comp.threshold": -14.0,
+    "comp.ratio": 2.0,
+    "comp.attack": 30.0,
+    "comp.release": 120.0,
+    "comp.makeup": 2.0
+  }
+}
