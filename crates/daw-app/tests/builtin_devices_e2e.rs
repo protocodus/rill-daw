@@ -796,6 +796,19 @@ fn r1_compressor_reduces_limits_and_ducks_under_a_routed_sidechain() {
         crushed < squeezed - 6.0,
         "default {squeezed} dB, -40 dB at 10:1 {crushed} dB"
     );
+    // Range caps the reduction however hard the curve pushes.
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"range","value":"3 dB"}]),
+    );
+    let capped = low(&mut app);
+    assert!(
+        (dry - 3.5..=dry - 2.0).contains(&capped),
+        "dry {dry} dB, capped at 3 dB {capped} dB"
+    );
+    app.command(json!({"command":"key","key":"Z","cmd":true}));
     let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
     assert_eq!(undone["project"], assigned["project"]);
 
@@ -867,6 +880,22 @@ fn r1_compressor_reduces_limits_and_ducks_under_a_routed_sidechain() {
     );
     assert!((low(&mut app) - ducked).abs() < 0.2);
 
+    // Listening, the track plays what the detector hears: the trigger's
+    // noise instead of the tone.
+    set_parameters(
+        &mut app,
+        track,
+        &insert,
+        json!([{"parameter":"sidechain.listen","value":true}]),
+    );
+    let listened = low(&mut app);
+    assert!(
+        listened < dry - 12.0,
+        "dry {dry} dB, listened {listened} dB"
+    );
+    let undone = app.command(json!({"command":"key","key":"Z","cmd":true}));
+    assert_eq!(undone["project"], reopened["project"]);
+
     // The panel names the source under Sidechain; clicking it opens Routing
     // on this device, where the mouse removes and adds sources.
     open_effect_editor(&mut app, "Pad tone", "Threshold");
@@ -877,11 +906,15 @@ fn r1_compressor_reduces_limits_and_ducks_under_a_routed_sidechain() {
         &[
             "Source",
             "High-pass",
-            "Lookahead",
+            "Link",
+            "Listen",
             "Threshold",
             "Ratio",
+            "Knee",
+            "Range",
             "Attack",
             "Release",
+            "Lookahead",
         ],
     );
     assert_signal_row(&state, &["Makeup", "Auto makeup", "Mix", "Output"]);

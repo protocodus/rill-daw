@@ -1274,9 +1274,12 @@ wide.
 | 8 | Auto release (`auto_release`) | toggle | off |
 | 9 | Lookahead (`lookahead`) | 0 – 10 ms (Digital character, Expander and Limiter) | 0 ms; acts as 5 ms in Limiter |
 | 10 | Ceiling (`ceiling`) | −12 – 0 dB (Limiter) | −0.3 dB |
+| 11 | Range (`range`) | 0 – 80 dB: the largest reduction (Compressor, Expander) | 80 dB |
+| 12 | Hold (`hold`) | 0 – 500 ms (Expander) | 0 ms |
 | 20 | Sidechain (`sidechain`) | Internal, External | Internal |
 | 21 | Sidechain high-pass (`sidechain.high_pass`) | 20 – 500 Hz; Off at 20 Hz | 20 Hz |
 | 22 | Stereo link (`stereo_link`) | 0 – 100 % | 100 % |
+| 23 | Sidechain listen (`sidechain.listen`) | toggle (Compressor, Expander) | off |
 | 25 | Makeup (`makeup`) | −12 – +24 dB | 0 dB |
 | 26 | Auto makeup (`auto_makeup`) | toggle | off |
 
@@ -1286,13 +1289,14 @@ place:
 | Parameter | Compressor | Limiter | Expander |
 | --- | --- | --- | --- |
 | Character, Auto makeup | yes | no | no |
-| Threshold, Ratio, Attack | yes | no (Ratio reads "∞:1") | yes |
+| Threshold, Ratio, Attack, Range | yes | no (Ratio reads "∞:1") | yes |
+| Hold | no | no | yes |
 | Knee, Stereo link, Makeup, Mix, Output | yes | yes (Makeup is the gain into the limiter) | yes |
 | Release | unless Auto release | unless Auto release | yes |
 | Auto release | yes | yes | no |
 | Lookahead | Digital only | yes | yes |
 | Ceiling | no | yes | no |
-| Sidechain, Sidechain high-pass | yes | no | yes |
+| Sidechain, Sidechain high-pass, Sidechain listen | yes | no | yes |
 
 **Signal flow.**
 
@@ -1346,8 +1350,19 @@ differ in reality:
   otherwise swing to the floor at every zero crossing), so a steady signal
   sits on the drawn curve whatever the times. Release is closing; Attack is
   opening, smoothed in linear gain (63 % of the amplitude after the time);
-  high ratios act as a gate with an 80 dB floor; Lookahead opens it ahead
-  of the transient.
+  high ratios act as a gate whose depth is Range (80 dB at most); Hold
+  keeps the held peak for its time before Release begins, so a gate stays
+  open through a drum's decay; Lookahead opens it ahead of the transient.
+- *Range* caps the reduction in Compressor and Expander mode: a gate that
+  dips the spill instead of muting it, or a compressor that never takes more
+  than a few dB. It caps the detector's target, not its output, so release
+  starts from the cap instead of first falling through what was cut off; a
+  feedback loop settles on the capped curve, which `transfer_db` draws. The
+  limiter ignores it: a cap would break the ceiling.
+- *Sidechain listen* replaces the output with what the detector hears (the
+  internal or external source after the high-pass), faded over 10 ms, to
+  tune the high-pass by ear. It is not delayed by the lookahead, since that
+  would take two more delay lines running all the time.
 - *Limiter*: Ceiling is the threshold, the ratio is infinite, and Makeup is
   applied before the detector as the gain that drives it. The needed
   reduction is detected on 4× interpolated peaks, released by `Ballistics`,
@@ -1399,17 +1414,24 @@ a sidechain arrived, the rate, and the level history.
 - `reduction_meter`, 48 points: the reduction now, its largest value as a
   line and a number; a click clears the hold.
 
-Below, one row of four cards of two lines each, on a grid of eleven cells
-so every control keeps its place in every mode. The cards read as the
+Below, one row of four cards of two lines each, on the grid of twelve
+cells so every control keeps its place in every mode. The cards read as the
 signal goes: the style, what the detector hears, what it does with it, and
 what follows the gain:
 
-| Card (columns of 11) | Line 1 | Line 2 |
+| Card (columns of 12) | Line 1 | Line 2 |
 | --- | --- | --- |
 | Mode (3) | Mode as toggle buttons | Character as toggle buttons |
-| Sidechain (2) | Internal / External, stacked, with the routed source under it | High-pass, Link |
-| Dynamics (4) | Threshold, Ratio, Knee, Ceiling | Attack, Release, **Auto** release switch, Lookahead |
+| Sidechain (2) | Internal / External, stacked, with the routed source under it; **Listen** switch | High-pass, Link |
+| Dynamics (5) | Threshold, Ratio, Knee, Range, Ceiling | Attack, Release, **Auto** release switch, Hold, Lookahead |
 | Output (2) | Makeup (**Gain** in Limiter mode), **Auto** makeup switch with what it adds while it is on | Mix, Output |
+
+The Effects workspace lays the same controls out on one line under the
+picture, in three cards: Sidechain (Source, High-pass, Link, Listen),
+Dynamics (Threshold, Ratio, Knee, Range) and Timing (Attack, Release, Auto,
+Lookahead). Two cells there are shared by controls that are never in use
+together: Threshold becomes **Ceiling** in Limiter mode, as the curve's
+handle does, and **Auto** release becomes **Hold** in Expander mode.
 
 Value lines say what the device uses where that is not the knob's value:
 Ratio "∞:1" in Limiter mode, the attack or knee a character holds up,
@@ -1421,7 +1443,7 @@ Ceiling or Lookahead would reflow the cards on every change of Mode.
 
 Factory presets: Default, Vocal Leveler, Drum Bus Glue, Bass Control, Snare
 Snap, FET Smash, Parallel Crush, Master Bus, Brickwall Limiter, Loud Limiter,
-Gentle Expander, Noise Gate, Sidechain Duck.
+Gentle Expander, Noise Gate, Drum Gate, Sidechain Duck.
 
 ### R1 Equalizer
 

@@ -108,9 +108,12 @@ r1-compressor 7 release "Release" log 5 2500
 r1-compressor 8 auto_release "Auto release" toggle
 r1-compressor 9 lookahead "Lookahead" linear 0 10
 r1-compressor 10 ceiling "Ceiling" linear -12 0
+r1-compressor 11 range "Range" linear 0 80
+r1-compressor 12 hold "Hold" linear 0 500
 r1-compressor 20 sidechain "Sidechain" choice Internal|External
 r1-compressor 21 sidechain.high_pass "Sidechain high-pass" log 20 500
 r1-compressor 22 stereo_link "Stereo link" linear 0 100
+r1-compressor 23 sidechain.listen "Sidechain listen" toggle
 r1-compressor 25 makeup "Makeup" linear -12 24
 r1-compressor 26 auto_makeup "Auto makeup" toggle
 r1-compressor 30 mix "Mix" linear 0 100
