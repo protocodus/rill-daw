@@ -138,6 +138,7 @@ struct TrackEdit {
     polarity: f32,
     width: f32,
     pan: f32,
+    strip: Vec<daw_core::PluginParameterValue>,
     gain_lane: Option<CompiledAutomation>,
     input_gain_lane: Option<CompiledAutomation>,
     pan_lane: Option<CompiledAutomation>,
@@ -426,6 +427,7 @@ impl LiveEditPreparer {
                 polarity: crate::render::polarity_sign(track),
                 width: track.stereo_width,
                 pan: track.pan,
+                strip: track.strip.clone(),
                 gain_lane: active_automation_lane(project, id, AutomationParameter::TrackGain)
                     .map(CompiledAutomation::new),
                 input_gain_lane: active_automation_lane(
@@ -657,6 +659,7 @@ impl Renderer {
             track.polarity.set_manual(next.polarity, self.sample_rate);
             track.width.set_manual(next.width, self.sample_rate);
             track.pan.set_manual(next.pan, self.sample_rate);
+            crate::render::set_strip_values(&mut track.strip, &next.strip);
             std::mem::swap(&mut track.gain.lane, &mut next.gain_lane);
             std::mem::swap(&mut track.input_gain.lane, &mut next.input_gain_lane);
             std::mem::swap(&mut track.pan.lane, &mut next.pan_lane);

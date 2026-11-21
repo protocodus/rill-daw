@@ -1571,13 +1571,29 @@ cells) and **Compressor** (seven) on the next, Mode in the toolbar, and Width, P
 card. Each stage card has its switch as a lamp in its title; a stage that
 is off keeps its controls in place, dimmed.
 
-**Mixer.** Every mixer channel is to be an instance of this device applied
-to the track's output, with its own controls on the mixer strip (filters,
-width, pan, volume) so the full panel only opens for detail. The channel's
-inserts are one Chain effect in a slot between the compressor and the
-volume stage: `Strip::process_channel` runs trim through compressor,
-`Strip::process_output` runs width, pan and output, and `process` is the
-two back to back. That change is a follow-up.
+**Mixer.** Every mixer channel (not folders or automation tracks) is this
+device, in a console's order: input gain and polarity, then the strip's
+filters, gate, equalizer and compressor (`Strip::process_channel`), then the
+inserts, then width, volume and pan. The track stores the strip's values in
+`Track::strip`, normalized by parameter ID with missing ones at their
+defaults. Its trim, polarity, width, pan and output
+(`strip::CHANNEL_FIELDS`) are the channel's own input gain, polarity,
+width, pan and volume, with their automation, so the strip never stores
+them; the engine leaves them neutral in its instance. A flat strip costs
+next to nothing, since R1 Equalizer skips idle sections and the dynamics
+skip when off. Strip edits are live edits, without a graph rebuild. A test
+renders a channel with a strip against the same strip as its first insert,
+sample for sample.
+
+On the mixer the channel shows the filters as two knobs, each reading its
+frequency, or **HP** or **LP** while off (off at the end of their travel,
+so one gesture sets and switches a filter) and **EQ**, **Gate** and **Comp** buttons, lit while that stage
+works, which open the channel strip window: this panel, whose Trim,
+Invert, Width, Pan and Output edit the channel's own controls. Loading a
+preset there sets the processing, not the channel's place in the mix.
+`set_device_parameters` with `channel_strip: true` sets the strip by key
+and refuses the channel's own controls. Strip parameters are not
+automatable yet.
 
 ### R1 Filter
 

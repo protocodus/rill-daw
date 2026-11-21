@@ -53,6 +53,10 @@ pub const WIDTH: u32 = 50;
 pub const PAN: u32 = 52;
 pub const OUTPUT: u32 = 51;
 
+/// What a mixer channel does with its own controls, around its inserts:
+/// its strip never sets these.
+pub const CHANNEL_FIELDS: [u32; 5] = [TRIM, POLARITY, WIDTH, PAN, OUTPUT];
+
 const fn toggle(id: u32, key: &'static str, name: &'static str, group: &'static str) -> ParamSpec {
     param(id, key, name, group, "", ParamRange::Toggle, 0.0)
 }

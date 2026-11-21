@@ -529,3 +529,92 @@ fn a_missing_or_oversized_sample_fails_preparation_clearly() {
     let error = format!("{:#}", render(&project, RATE, 2.0).unwrap_err());
     assert!(error.contains("limited to 32 MiB"), "{error}");
 }
+
+mod channel_strip {
+    use super::*;
+    use daw_devices::devices::strip;
+
+    fn values() -> Vec<PluginParameterValue> {
+        let plain = |id: u32, value: f32| PluginParameterValue {
+            id,
+            value: f64::from(
+                strip::DESCRIPTOR
+                    .parameter(id)
+                    .unwrap()
+                    .to_normalized(value),
+            ),
+        };
+        vec![
+            plain(strip::MODE, 1.0),
+            plain(strip::HP_ON, 1.0),
+            plain(strip::HP_FREQUENCY, 300.0),
+            plain(strip::MID_GAIN, -6.0),
+            plain(strip::COMP_ON, 1.0),
+            plain(strip::COMP_THRESHOLD, -30.0),
+            plain(strip::COMP_RATIO, 6.0),
+        ]
+    }
+
+    #[test]
+    fn the_channel_runs_its_strip_before_the_inserts() {
+        let (mut project, track, _directory) = noise_project();
+        project.track_mut(track).unwrap().input_gain = 0.5;
+        project.track_mut(track).unwrap().stereo_width = 0.5;
+        project.track_mut(track).unwrap().pan = -0.3;
+        add_filter(&mut project, track, 2000.0);
+        let mut channel = project.clone();
+        channel.track_mut(track).unwrap().strip = values();
+        // The same strip as the first insert, its own fader stage neutral.
+        let mut slot = EffectSlot::new(
+            "R1 Strip",
+            Effect::Builtin {
+                device: "r1-strip".into(),
+            },
+        );
+        slot.parameters = values();
+        project.track_mut(track).unwrap().inserts.insert(0, slot);
+        let expected = render(&project, RATE, 4.0).unwrap();
+        let rendered = render(&channel, RATE, 4.0).unwrap();
+        let worst = rendered
+            .iter()
+            .zip(&expected)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0_f32, f32::max);
+        assert!(worst < 1e-6, "differs by {worst}");
+        assert!(high_band_ratio(&rendered) > 0.0);
+    }
+
+    #[test]
+    fn strip_values_change_live_without_allocating() {
+        let (mut project, track, _directory) = noise_project();
+        let mut renderer = Renderer::new(&project, RATE, true).unwrap();
+        let mut prepare = renderer.live_edit_preparer();
+        let mut output = [[0.0; 2]; BLOCK];
+        let mut positions = [0.0; BLOCK];
+        renderer.render(&mut output, &mut positions).unwrap();
+        // A low-pass at 300 Hz, set live.
+        let plain = |id: u32, value: f32| PluginParameterValue {
+            id,
+            value: f64::from(
+                strip::DESCRIPTOR
+                    .parameter(id)
+                    .unwrap()
+                    .to_normalized(value),
+            ),
+        };
+        project.track_mut(track).unwrap().strip =
+            vec![plain(strip::LP_ON, 1.0), plain(strip::LP_FREQUENCY, 300.0)];
+        let mut edit = prepare.prepare(&project).unwrap();
+        let allocations = crate::allocation_test_support::count_allocations(|| {
+            renderer.apply_live_edit(&mut edit).unwrap()
+        });
+        assert_eq!(allocations, 0);
+        let mut rendered = Vec::new();
+        for _ in 0..(RATE as usize * 2 / BLOCK) {
+            renderer.render(&mut output, &mut positions).unwrap();
+            rendered.extend(output.iter().flatten());
+        }
+        let dry = render(&noise_project().0, RATE, 4.0).unwrap();
+        assert!(high_band_ratio(&rendered) < high_band_ratio(&dry) * 0.1);
+    }
+}

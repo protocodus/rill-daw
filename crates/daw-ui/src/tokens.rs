@@ -102,7 +102,9 @@ pub const POPUP_WIDTH_MD: f32 = 610.0;
 pub const POPUP_BODY_MAX_DEFAULT_HEIGHT: f32 = 610.0;
 pub const POPUP_WIDTH_LG: f32 = 987.0;
 pub const MIXER_STRIP_WIDTH: f32 = 144.0;
-pub const MIXER_FADER_MIN: f32 = 144.0;
+/// The shortest fader travel, which a short window keeps so the whole
+/// channel strip, from input to output, stays on screen.
+pub const MIXER_FADER_MIN: f32 = 128.0;
 /// A stereo meter beside the fader: two bars and their gap.
 pub const MIXER_METER_WIDTH: f32 = SPACE_MD;
 pub const PIANO_KEYS_WIDTH: f32 = SPACE_XL + SPACE_LG + SPACE_XS;

@@ -146,6 +146,7 @@ pub fn freeze_track_wav(
         }
     }
     prepared.master.inserts.clear();
+    prepared.master.strip.clear();
     prepared.master.mute = false;
     prepared.master.input_gain = 1.0;
     prepared.master.invert_polarity = false;

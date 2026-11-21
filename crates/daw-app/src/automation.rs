@@ -1888,6 +1888,11 @@ impl Harness {
             .ctx
             .data(|data| data.get_temp::<Value>(egui::Id::new("mixer_device_diagnostics")))
             .unwrap_or(Value::Null);
+        state["mixer_strips"] = self
+            .ctx
+            .data(|data| data.get_temp::<Value>(egui::Id::new("mixer_strip_diagnostics")))
+            .unwrap_or(Value::Null);
+        state["popups"]["channel_strip"] = json!(self.app.channel_strip.open);
         state["file_dialog_pending"] = json!(self.app.next_document_dialog.is_some());
         state["project_title"] = json!(self.app.document_title());
         state["file_dialog_defaults"] = json!({

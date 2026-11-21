@@ -839,9 +839,9 @@ pub fn host_tool_specs() -> Vec<ToolSpec> {
         ),
         (
             "set_device_parameters",
-            "Set parameters of a Rill built-in device (catalog plugin_id rill:…) on a track's instrument or an insert, in the parameter's own units: a number in its unit (Hz, dB, %, ms, …), a choice label, true/false for a switch, or text such as \"1.2 kHz\". Name each parameter by the key or ID that plugin_describe_parameters returns. One Undo step; returns the values as stored.",
+            "Set parameters of a Rill built-in device (catalog plugin_id rill:…) on a track's instrument or an insert, or with channel_strip true of the channel's own R1 Strip (filters, gate, equalizer, compressor and mode, which run before the inserts; its trim, polarity, width, pan and output are the channel's input gain, polarity, width, pan and volume), in the parameter's own units: a number in its unit (Hz, dB, %, ms, …), a choice label, true/false for a switch, or text such as \"1.2 kHz\". Name each parameter by the key or ID that plugin_describe_parameters returns. One Undo step; returns the values as stored.",
             object(
-                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"insert_id":id(),"parameters":array(object(json!({"parameter":{"oneOf":[string(),integer()]},"value":{"oneOf":[number(),string(),boolean()]}}),&["parameter","value"]),256)}),
+                json!({"session_id":id(),"expected_revision":integer(),"track_id":integer(),"insert_id":id(),"channel_strip":boolean(),"parameters":array(object(json!({"parameter":{"oneOf":[string(),integer()]},"value":{"oneOf":[number(),string(),boolean()]}}),&["parameter","value"]),256)}),
                 &["session_id", "expected_revision", "track_id", "parameters"],
             ),
         ),

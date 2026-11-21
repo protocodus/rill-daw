@@ -423,6 +423,40 @@ pub(crate) fn polarity_sign(track: &daw_core::Track) -> f32 {
     if track.invert_polarity { -1.0 } else { 1.0 }
 }
 
+/// The channel's R1 Strip with the track's values. Its trim, polarity,
+/// width, pan and output stay neutral: the channel applies its own around
+/// the inserts, with automation.
+fn channel_strip(track: &daw_core::Track, sample_rate: u32) -> Box<ChannelStrip> {
+    use daw_devices::Device;
+    let mut strip = Box::new(ChannelStrip::new());
+    strip.prepare(sample_rate as f32, BLOCK);
+    set_strip_values(&mut strip, &track.strip);
+    strip.reset();
+    strip
+}
+
+/// Sets every strip parameter the channel owns, a missing one to its
+/// default. Allocation-free, for the audio thread's live edits.
+pub(crate) fn set_strip_values(
+    strip: &mut ChannelStrip,
+    values: &[daw_core::PluginParameterValue],
+) {
+    use daw_devices::Device;
+    use daw_devices::devices::strip;
+    for spec in &strip::PARAMETERS {
+        if strip::CHANNEL_FIELDS.contains(&spec.id) {
+            continue;
+        }
+        let value = values
+            .iter()
+            .find(|value| value.id == spec.id)
+            .map_or(spec.default_normalized(), |value| value.value as f32);
+        strip.set_parameter(spec.id, value);
+    }
+}
+
+pub(crate) use daw_devices::devices::strip::Strip as ChannelStrip;
+
 fn fader_factors(gain: f32, pan: f32) -> [f32; 2] {
     daw_devices::dsp::balance(pan).map(|side| gain * side)
 }
@@ -1353,6 +1387,9 @@ struct RenderTrack {
     mix_left: Vec<f64>,
     mix_right: Vec<f64>,
     input_gain: AutomatedValue,
+    /// Filters, gate, equalizer and compressor, between the input gain and
+    /// the inserts.
+    strip: Box<ChannelStrip>,
     // Manual-only values, smoothed so switching polarity or width cannot click.
     polarity: AutomatedValue,
     width: AutomatedValue,
@@ -1769,6 +1806,23 @@ impl RenderTrack {
             }) * polarity.unwrap_or_else(|| self.polarity.next_value(0.0));
             self.left[index] = self.mix_left[index] as f32 * gain;
             self.right[index] = self.mix_right[index] as f32 * gain;
+        }
+        // R1 stages silence a nonfinite block. A channel's own strip leaves an
+        // overflowed mix as it is, so a render still reports it.
+        if self.left[..count]
+            .iter()
+            .chain(&self.right[..count])
+            .all(|sample| sample.is_finite())
+        {
+            self.strip.process_channel(
+                &daw_devices::ProcessContext {
+                    tempo: context.tempo,
+                    beat: start as f64 * beats_per_sample,
+                    playing: context.timeline,
+                },
+                &mut self.left[..count],
+                &mut self.right[..count],
+            );
         }
         for insert in &mut self.inserts {
             process_insert(
@@ -2427,6 +2481,7 @@ impl Renderer {
                 mix_left: vec![0.0; BLOCK],
                 mix_right: vec![0.0; BLOCK],
                 input_gain: control(AutomationParameter::TrackInputGain, track.input_gain),
+                strip: channel_strip(track, sample_rate),
                 polarity: AutomatedValue::manual(polarity_sign(track)),
                 width: AutomatedValue::manual(track.stereo_width),
                 gain: control(AutomationParameter::TrackGain, track.gain),

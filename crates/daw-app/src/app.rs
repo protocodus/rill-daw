@@ -79,6 +79,7 @@ pub enum PopupKind {
     Analysis,
     MidiExpression,
     SamplePlayer,
+    ChannelStrip,
 }
 
 impl PopupKind {
@@ -231,6 +232,7 @@ pub struct DawApp {
     reset_views: bool,
     pub instrument_ui: crate::plugin_ui::InstrumentUi,
     pub(crate) sample_player_editor: crate::sample_player_ui::SamplePlayerEditor,
+    pub(crate) channel_strip: crate::channel_strip::ChannelStripWindow,
     pub effects_open: bool,
     pub routing_open: bool,
     pub automation_open: bool,
@@ -414,6 +416,7 @@ impl DawApp {
             reset_views: false,
             instrument_ui: Default::default(),
             sample_player_editor: Default::default(),
+            channel_strip: Default::default(),
             effects_open: false,
             routing_open: false,
             automation_open: false,
@@ -560,6 +563,7 @@ impl DawApp {
             (self.analysis.open, PopupKind::Analysis),
             (self.midi_expression_open, PopupKind::MidiExpression),
             (self.sample_player_editor.open, PopupKind::SamplePlayer),
+            (self.channel_strip.open, PopupKind::ChannelStrip),
         ] {
             if open {
                 return FocusedView::Popup(kind);
@@ -570,6 +574,7 @@ impl DawApp {
 
     fn hide_focused_view(&mut self) {
         self.sample_player_editor.open = false;
+        self.channel_strip.open = false;
         self.midi_expression_open = false;
         self.midi_expression = None;
         self.stop_signal_analysis();
@@ -712,6 +717,7 @@ impl DawApp {
             PopupKind::Analysis => self.analysis.open = true,
             PopupKind::MidiExpression => self.midi_expression_open = true,
             PopupKind::SamplePlayer => self.sample_player_editor.open = true,
+            PopupKind::ChannelStrip => self.channel_strip.open = true,
         }
     }
 
@@ -779,6 +785,7 @@ impl DawApp {
                     PopupKind::ExportMidi => "Export MIDI 1.0 copy",
                     PopupKind::MidiExpression => "Note expression",
                     PopupKind::SamplePlayer => "Sample player",
+                    PopupKind::ChannelStrip => "Channel strip",
                 };
                 self.selected_track
                     .and_then(|id| self.project.track(id))
@@ -954,6 +961,7 @@ impl DawApp {
             | PopupKind::Analysis
             | PopupKind::MidiExpression
             | PopupKind::SamplePlayer
+            | PopupKind::ChannelStrip
             | PopupKind::About => {}
         }
     }
@@ -2404,6 +2412,7 @@ impl DawApp {
             || self.analysis.open
             || self.midi_expression_open
             || self.sample_player_editor.open
+            || self.channel_strip.open
             || self.about_open
             || self.midi_editor.generate_active()
         {
@@ -4033,6 +4042,7 @@ impl DawApp {
         self.inspector(ctx);
         self.instrument_editor(ctx);
         self.sample_player_page(ctx);
+        self.channel_strip_page(ctx);
         self.channel_rack(ctx);
         self.routing_popup(ctx);
         self.automation_editor(ctx);
@@ -4256,6 +4266,17 @@ impl DawApp {
             }
             "instrument" => self.open_popup(PopupKind::Instrument),
             "rack" | "effects" => self.open_popup(PopupKind::Effects),
+            "channel-strip" => {
+                let target = self
+                    .project
+                    .tracks
+                    .iter()
+                    .find(|track| crate::channel_strip::has_strip(track))
+                    .map(|track| track.id);
+                if let Some(track) = target {
+                    self.open_channel_strip(track);
+                }
+            }
             "effect-editor" => {
                 let target =
                     self.project.tracks.iter().find_map(|track| {

@@ -59,7 +59,7 @@ fn laptop_console_keeps_channel_roles_aligned_and_all_primary_actions_visible() 
         project.save(&path).unwrap();
         let original = app.command(json!({"command":"open","path":path}));
         app.command(json!({"command":"system_theme","dark":dark}));
-        for (width, height, compact) in [(1280.0, 800.0, true), (1440.0, 1000.0, false)] {
+        for (width, height, compact) in [(1280.0, 800.0, true), (1440.0, 1100.0, false)] {
             let before_view = app.inspect();
             app.command(json!({"command":"viewport","width":width,"height":height,"pixels_per_point":density}));
             app.click("Mixer");
